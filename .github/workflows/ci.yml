@@ -28,11 +28,4 @@ jobs:
 
       - name: Estrutura do plugin
         run: |
-          python -c "
-          import json
-          with open('.claude-plugin/plugin.json', encoding='utf-8') as fh:
-              data = json.load(fh)
-          for campo in ('name', 'version', 'description'):
-              assert campo in data and data[campo], f'campo obrigatório ausente: {campo}'
-          print('plugin.json OK:', data['name'], data['version'])
-          "
+          python -c "import json; d=json.load(open('.claude-plugin/plugin.json', encoding='utf-8')); assert all(k in d and d[k] for k in ('name','version','description')), 'campos obrigatorios faltando'; print('plugin.json OK:', d['name'], d['version'])"
