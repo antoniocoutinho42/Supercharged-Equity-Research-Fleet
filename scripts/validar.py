@@ -27,7 +27,10 @@ Carregamento do documento a validar, por extensão:
                   como YAML.
 
 Saída: "VALIDO" em stdout e exit 0 se o documento é válido; senão, uma lista
-objetiva de erros em stderr (um por linha: caminho JSON + mensagem) e exit 1.
+objetiva de erros em stderr (um por linha: caminho JSON + mensagem PT-BR) e
+exit 1. Os tipos de erro mais comuns (type, required, enum,
+additionalProperties) são traduzidos para PT-BR preservando o caminho JSON;
+tipos não mapeados caem no texto original da lib, prefixado com o caminho.
 """
 import argparse
 import json
@@ -150,6 +153,66 @@ def _caminho_erro(erro):
     return ".".join(partes) if partes else "(raiz)"
 
 
+def _tipo_recebido(valor):
+    """Nome PT-BR do tipo de um valor JSON (para a mensagem 'recebido ...')."""
+    if valor is None:
+        return "nulo"
+    if isinstance(valor, bool):
+        return "booleano"
+    if isinstance(valor, int):
+        return "inteiro"
+    if isinstance(valor, float):
+        return "número"
+    if isinstance(valor, str):
+        return "texto"
+    if isinstance(valor, list):
+        return "lista"
+    if isinstance(valor, dict):
+        return "objeto"
+    return type(valor).__name__
+
+
+_TIPOS_PT = {
+    "string": "texto", "integer": "inteiro", "number": "número",
+    "boolean": "booleano", "array": "lista", "object": "objeto",
+    "null": "nulo",
+}
+
+
+def _mensagem_pt(erro):
+    """Traduz os tipos de erro mais comuns do jsonschema para PT-BR, sempre
+    preservando o caminho JSON. Tipos não mapeados caem no texto cru da lib
+    (prefixado com o caminho). Nunca levanta — se algo faltar, usa o fallback."""
+    caminho = _caminho_erro(erro)
+    validador = getattr(erro, "validator", None)
+    try:
+        if validador == "type":
+            esperado = erro.validator_value
+            if isinstance(esperado, (list, tuple)):
+                esperado_txt = " ou ".join(_TIPOS_PT.get(t, str(t)) for t in esperado)
+            else:
+                esperado_txt = _TIPOS_PT.get(esperado, str(esperado))
+            return f"{caminho}: esperado {esperado_txt}, recebido {_tipo_recebido(erro.instance)}"
+
+        if validador == "required":
+            m = re.search(r"'([^']+)'", erro.message)
+            prop = m.group(1) if m else erro.message
+            return f"{caminho}: campo obrigatório ausente: {prop}"
+
+        if validador == "enum":
+            permitidos = ", ".join(repr(v) for v in erro.validator_value)
+            return f"{caminho}: valor inválido; permitidos: {permitidos}"
+
+        if validador == "additionalProperties":
+            props = re.findall(r"'([^']+)'", erro.message)
+            alvo = ", ".join(props) if props else erro.message
+            return f"{caminho}: campo não permitido: {alvo}"
+    except Exception:
+        pass
+
+    return f"{caminho}: {erro.message}"
+
+
 def _construir_parser():
     parser = argparse.ArgumentParser(
         prog="validar.py",
@@ -197,7 +260,7 @@ def main(argv=None):
         return 0
 
     for e in erros:
-        print(f"{_caminho_erro(e)}: {e.message}", file=sys.stderr)
+        print(_mensagem_pt(e), file=sys.stderr)
     return 1
 
 

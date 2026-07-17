@@ -424,3 +424,57 @@ def test_validar_claims_json_tambem_funciona(tmp_path, capsys):
     codigo = validar.main([str(caminho), "--schema", "claims"])
     saida = capsys.readouterr()
     assert codigo == 0, saida.err
+
+
+# ---------------------------------------------------------------------------
+# Mensagens de erro em PT-BR (Fix 1: brief exige saída PT-BR)
+# ---------------------------------------------------------------------------
+
+def test_erro_required_em_pt_br(tmp_path, capsys):
+    """required -> 'campo obrigatório ausente: <prop>', com o caminho JSON."""
+    dados = _decisao_fnv_real()
+    del dados["confianca"]
+    caminho = _escreve_yaml(tmp_path, "decisao.yaml", dados)
+    codigo = validar.main([str(caminho), "--schema", "decisao"])
+    saida = capsys.readouterr()
+    assert codigo == 1
+    assert "campo obrigatório ausente" in saida.err
+    assert "confianca" in saida.err
+
+
+def test_erro_enum_em_pt_br(tmp_path, capsys):
+    """enum -> 'valor inválido; permitidos: ...'."""
+    dados = _decisao_fnv_real()
+    dados["confianca"] = "SUPER_ALTA"
+    caminho = _escreve_yaml(tmp_path, "decisao.yaml", dados)
+    codigo = validar.main([str(caminho), "--schema", "decisao"])
+    saida = capsys.readouterr()
+    assert codigo == 1
+    assert "valor inválido" in saida.err
+    assert "permitidos" in saida.err
+    assert "confianca" in saida.err
+
+
+def test_erro_type_em_pt_br(tmp_path, capsys):
+    """type -> 'esperado <tipo>, recebido <tipo>' (a regra crítica das listas)."""
+    dados = _decisao_fnv_real()
+    dados["ressalvas"] = "texto escalar"
+    caminho = _escreve_yaml(tmp_path, "decisao.yaml", dados)
+    codigo = validar.main([str(caminho), "--schema", "decisao"])
+    saida = capsys.readouterr()
+    assert codigo == 1
+    assert "ressalvas" in saida.err
+    assert "esperado lista" in saida.err
+    assert "recebido texto" in saida.err
+
+
+def test_erro_additional_properties_em_pt_br(tmp_path, capsys):
+    """additionalProperties -> 'campo não permitido: <prop>'."""
+    dados = _decisao_fnv_real()
+    dados["campo_intruso"] = "não deveria existir"
+    caminho = _escreve_yaml(tmp_path, "decisao.yaml", dados)
+    codigo = validar.main([str(caminho), "--schema", "decisao"])
+    saida = capsys.readouterr()
+    assert codigo == 1
+    assert "campo não permitido" in saida.err
+    assert "campo_intruso" in saida.err
