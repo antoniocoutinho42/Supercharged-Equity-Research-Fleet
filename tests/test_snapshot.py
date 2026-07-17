@@ -1,0 +1,178 @@
+# -*- coding: utf-8 -*-
+"""Testes de scripts/snapshot.py — runs/<hash8>/ imutáveis (Task 1.1).
+
+Importa scripts/snapshot.py dinamicamente via importlib (o script não faz parte
+de um pacote instalável) e chama snapshot.main(argv) diretamente, capturando
+stdout/stderr via capsys — evita subprocess (mais rápido, mais fácil de
+depurar) mantendo o comportamento idêntico ao uso via linha de comando.
+"""
+import hashlib
+import importlib.util
+import json
+import os
+import time
+
+import pytest
+import yaml
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SNAPSHOT_PATH = os.path.join(REPO_ROOT, "scripts", "snapshot.py")
+
+
+def _carregar_snapshot():
+    spec = importlib.util.spec_from_file_location("snapshot", SNAPSHOT_PATH)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+snapshot = _carregar_snapshot()
+
+
+def _montar_ns(tmp_path, ticker="TST", engine_versao="2.3.0", nome_dir="analise"):
+    """Monta um diretório de análise fake: inputs.yaml + saida_<TICKER>/resultados.json
+    com engine.hash_inputs calculado com o MESMO algoritmo do engine real
+    (sha256 do texto utf-8 de inputs.yaml, 16 chars hex)."""
+    ns = tmp_path / nome_dir
+    ns.mkdir()
+    inputs_texto = (
+        "meta:\n"
+        f"  ticker: {ticker}\n"
+        "  nome: \"Empresa Teste SA\"\n"
+        "  moeda: USD\n"
+    )
+    (ns / "inputs.yaml").write_text(inputs_texto, encoding="utf-8")
+    hash8 = hashlib.sha256(inputs_texto.encode("utf-8")).hexdigest()[:16]
+
+    saida = ns / f"saida_{ticker}"
+    saida.mkdir()
+    resultados = {
+        "engine": {
+            "versao": engine_versao,
+            "hash_inputs": hash8,
+            "gerado_em": "2026-07-17T12:00:00+00:00",
+        },
+        "meta": {"ticker": ticker},
+    }
+    (saida / "resultados.json").write_text(
+        json.dumps(resultados, ensure_ascii=False), encoding="utf-8"
+    )
+    return ns, hash8
+
+
+def test_cria_run_imutavel(tmp_path, capsys):
+    ns, hash8 = _montar_ns(tmp_path)
+
+    codigo = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo == 0
+    assert f"SNAPSHOT {hash8}" in saida.out
+
+    run_dir = ns / "runs" / hash8
+    assert run_dir.is_dir()
+    for nome in ("inputs.yaml", "resultados.json", "meta.yaml"):
+        assert (run_dir / nome).is_file(), f"{nome} ausente em {run_dir}"
+
+    # conteúdo copiado bate com a origem
+    assert (run_dir / "inputs.yaml").read_text(encoding="utf-8") == (
+        ns / "inputs.yaml"
+    ).read_text(encoding="utf-8")
+    resultados_copiado = json.loads((run_dir / "resultados.json").read_text(encoding="utf-8"))
+    assert resultados_copiado["engine"]["hash_inputs"] == hash8
+
+    meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
+    assert meta["hash"] == hash8
+    assert meta["engine_versao"] == "2.3.0"
+    assert "criado_em" in meta and meta["criado_em"]
+    assert "origem" in meta
+    assert "inputs" in meta["origem"]
+    assert "resultados" in meta["origem"]
+
+
+def test_idempotente(tmp_path, capsys):
+    ns, hash8 = _montar_ns(tmp_path)
+
+    codigo1 = snapshot.main([str(ns)])
+    capsys.readouterr()
+    assert codigo1 == 0
+
+    run_dir = ns / "runs" / hash8
+    mtime_antes = (run_dir / "meta.yaml").stat().st_mtime
+    time.sleep(0.05)
+
+    codigo2 = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo2 == 0
+    assert f"EXISTENTE {hash8}" in saida.out
+    mtime_depois = (run_dir / "meta.yaml").stat().st_mtime
+    assert mtime_antes == mtime_depois
+
+
+def test_hash_divergente(tmp_path, capsys):
+    ns, hash8 = _montar_ns(tmp_path)
+
+    # altera inputs.yaml DEPOIS que resultados.json já foi "gerado" pelo engine
+    (ns / "inputs.yaml").write_text(
+        "meta:\n  ticker: TST\n  nome: \"Mudou Depois\"\n  moeda: USD\n",
+        encoding="utf-8",
+    )
+
+    codigo = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo == 2
+    mensagem = saida.out + saida.err
+    assert "re-rode o engine" in mensagem
+    assert not (ns / "runs" / hash8).exists()
+
+
+def test_inputs_ausente(tmp_path, capsys):
+    ns = tmp_path / "vazio"
+    ns.mkdir()
+
+    codigo = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo == 1
+    assert (saida.out + saida.err).strip() != ""
+
+
+def test_resultados_ausente(tmp_path, capsys):
+    ns = tmp_path / "sem_saida"
+    ns.mkdir()
+    (ns / "inputs.yaml").write_text("meta:\n  ticker: TST\n", encoding="utf-8")
+
+    codigo = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo == 1
+    assert (saida.out + saida.err).strip() != ""
+
+
+def test_fallback_sem_ticker_usa_primeiro_saida(tmp_path, capsys):
+    """meta.ticker ausente/ilegível -> usa o primeiro diretório saida_* do ns."""
+    ns = tmp_path / "sem_ticker"
+    ns.mkdir()
+    inputs_texto = "meta:\n  nome: \"Sem ticker\"\n"
+    (ns / "inputs.yaml").write_text(inputs_texto, encoding="utf-8")
+    hash8 = hashlib.sha256(inputs_texto.encode("utf-8")).hexdigest()[:16]
+
+    saida = ns / "saida_XYZ"
+    saida.mkdir()
+    resultados = {"engine": {"versao": "9.9.9", "hash_inputs": hash8}}
+    (saida / "resultados.json").write_text(json.dumps(resultados), encoding="utf-8")
+
+    codigo = snapshot.main([str(ns)])
+    saida_captura = capsys.readouterr()
+
+    assert codigo == 0
+    assert f"SNAPSHOT {hash8}" in saida_captura.out
+    assert (ns / "runs" / hash8 / "meta.yaml").is_file()
+
+
+def test_ajuda_curta():
+    with pytest.raises(SystemExit) as excinfo:
+        snapshot.main(["--help"])
+    assert excinfo.value.code == 0
