@@ -27,7 +27,7 @@ import sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(AQUI))
 
-from engine import pl_justo, carregar_inputs, rodar  # noqa: E402
+from engine import pl_justo, cap_implicito, carregar_inputs, rodar  # noqa: E402
 
 FALHAS = []
 
@@ -64,6 +64,32 @@ chk("A4 DE=NDE=0,35 == base (g=8%,ROE=20%,CAP=12,Ke=10%)",
 # A5. DE > NDE (caixa líquido relativo) eleva o múltiplo quando g > 0
 chk_bool("A5 (DE-NDE)>0 eleva o multiplo, g>0",
          pl_justo(0.08, 0.20, 12, 0.10, de=0.50, nde=0.20) > pl_justo(0.08, 0.20, 12, 0.10))
+
+print("=" * 100)
+print("CAMADA A2 — m_terminal (v2.2.0, retrocompatibilidade dura)")
+print("=" * 100)
+# A6(a). m_terminal=1.0 explícito == baseline sem o parâmetro (retrocompat exata)
+_g, _roe, _cap, _ke = 0.08, 0.20, 12, 0.10
+_baseline = pl_justo(_g, _roe, _cap, _ke)
+chk("A6a pl_justo(...,m_terminal=1.0) == pl_justo(...) sem parametro",
+    pl_justo(_g, _roe, _cap, _ke, m_terminal=1.0), _baseline, 1e-12)
+# A6(b). m_terminal=M escala o termo terminal exatamente por (M-1)*xcap/roe
+_M = 2.5
+_xcap = ((1.0 + _g) / (1.0 + _ke)) ** _cap
+_delta_esperado = (_M - 1.0) * _xcap / _roe
+chk("A6b pl_justo(...,m_terminal=2.5) - baseline == (M-1)*xcap/roe",
+    pl_justo(_g, _roe, _cap, _ke, m_terminal=_M) - _baseline, _delta_esperado, 1e-9)
+# A6(c). m_terminal <= 0 levanta ValueError
+try:
+    pl_justo(_g, _roe, _cap, _ke, m_terminal=0.0)
+    chk_bool("A6c m_terminal<=0 levanta ValueError", False)
+except ValueError as exc:
+    chk_bool("A6c m_terminal<=0 levanta ValueError", "m_terminal" in str(exc))
+# A6(e). cap_implicito com m_terminal fixo recupera o CAP quando plugado de volta
+_preco_m = 1.0 * pl_justo(_g, _roe, _cap, _ke, m_terminal=_M)
+_cap_recuperado = cap_implicito(_preco_m, 1.0, _g, _roe, _ke, m_terminal=_M)
+chk("A6e cap_implicito(m_terminal=2.5) recupera CAP=12 do preco plugado de volta",
+    _cap_recuperado, _cap, 1e-6)
 
 print("=" * 100)
 print("CAMADA B — caso VRSK (golden) + blocos novos da v2")
@@ -165,6 +191,9 @@ espera_recusa("cap_confianca obrigatória",
               lambda i: i["premissas"].update(cap_confianca="X"), "cap_confianca")
 espera_recusa("justificativa_cenarios obrigatória",
               lambda i: i["premissas"].update(justificativa_cenarios=" "), "justificativa_cenarios")
+espera_recusa("m_terminal != 1.0 sem justificativa_m_terminal recusado",
+              lambda i: i["premissas"]["cenarios"]["base"].update(m_terminal=2.0),
+              "justificativa_m_terminal")
 
 print("=" * 100)
 if FALHAS:

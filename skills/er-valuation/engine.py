@@ -47,6 +47,9 @@ import sys
 from datetime import datetime, timezone
 
 # CHANGELOG
+# v2.2.0 (2026-07-15): m_terminal (multiplicador do termo terminal, default 1.0,
+#   retrocompatível): permite valor terminal por book econômico em vez de book
+#   contábil; exige justificativa_m_terminal quando != 1.0.
 # v2.1.0 (2026-07-15): transparência de premissas por cenário (comentários R2/R3/R4).
 #   (1) NOVO eco opcional em cap: justificativa_g e justificativa_roe (premissas.*),
 #       para o Modelador fundamentar g e ROE por cenário com a mesma disciplina do CAP.
@@ -76,19 +79,23 @@ from datetime import datetime, timezone
 # v1.1.0 (2026-07-12): Bracket com DE/NDE; sinal de entrada em 3 estados;
 #       gate renomeado para PROFUNDIDADE (SUMARIA | PADRAO | REFORCADA).
 # v1.0.0: versão inicial calibrada no caso VRSK.
-ENGINE_VERSION = "2.1.0"
+ENGINE_VERSION = "2.2.0"
 
 # ----------------------------------------------------------------------------
 # Núcleo matemático (inalterado desde v1.1.0 — coberto por golden tests)
 # ----------------------------------------------------------------------------
 
 def pl_justo(g: float, roe: float, cap: float, ke: float,
-             de: float = 0.0, nde: float = 0.0) -> float:
+             de: float = 0.0, nde: float = 0.0, m_terminal: float = 1.0) -> float:
     """Múltiplo P/L Justo (franchise-fade com reversão a book no fim do CAP).
     Bracket = (1 - g/ROE) + (DE - NDE) x (g/ROE), conforme fórmula imutável do mandato;
-    DE = dívida/PL e NDE = dívida líquida/PL, MEDIDOS; DE=NDE=0 é exceção declarada."""
+    DE = dívida/PL e NDE = dívida líquida/PL, MEDIDOS; DE=NDE=0 é exceção declarada.
+    m_terminal (v2.2.0): multiplicador do TERMO TERMINAL, default 1.0 (retrocompatível
+    byte-a-byte). Permite valor terminal por book econômico em vez de book contábil."""
     if roe <= 0 or ke <= 0 or cap <= 0:
         raise ValueError("roe, ke e cap devem ser > 0")
+    if m_terminal <= 0:
+        raise ValueError("m_terminal deve ser > 0")
     payout = (1.0 - g / roe) + (de - nde) * (g / roe)
     x = (1.0 + g) / (1.0 + ke)
     xcap = x ** cap
@@ -96,12 +103,12 @@ def pl_justo(g: float, roe: float, cap: float, ke: float,
         annuity = cap / (1.0 + ke)
     else:
         annuity = (1.0 - xcap) / (ke - g)
-    return payout * annuity + xcap / roe
+    return payout * annuity + m_terminal * xcap / roe
 
 
 def preco_justo(lpa: float, g: float, roe: float, cap: float, ke: float,
-                de: float = 0.0, nde: float = 0.0) -> float:
-    return lpa * pl_justo(g, roe, cap, ke, de, nde)
+                de: float = 0.0, nde: float = 0.0, m_terminal: float = 1.0) -> float:
+    return lpa * pl_justo(g, roe, cap, ke, de, nde, m_terminal)
 
 
 def _bisseccao(f, lo: float, hi: float, tol: float = 1e-10, maxit: int = 300):
@@ -125,19 +132,19 @@ def _bisseccao(f, lo: float, hi: float, tol: float = 1e-10, maxit: int = 300):
     return 0.5 * (lo + hi)
 
 
-def g_implicito(preco, lpa, roe, cap, ke, de=0.0, nde=0.0, lo=-0.20, hi=2.0):
+def g_implicito(preco, lpa, roe, cap, ke, de=0.0, nde=0.0, m_terminal=1.0, lo=-0.20, hi=2.0):
     alvo = preco / lpa
-    return _bisseccao(lambda g: pl_justo(g, roe, cap, ke, de, nde) - alvo, lo, hi)
+    return _bisseccao(lambda g: pl_justo(g, roe, cap, ke, de, nde, m_terminal) - alvo, lo, hi)
 
 
-def cap_implicito(preco, lpa, g, roe, ke, de=0.0, nde=0.0, lo=0.5, hi=400.0):
+def cap_implicito(preco, lpa, g, roe, ke, de=0.0, nde=0.0, m_terminal=1.0, lo=0.5, hi=400.0):
     alvo = preco / lpa
-    return _bisseccao(lambda c: pl_justo(g, roe, c, ke, de, nde) - alvo, lo, hi)
+    return _bisseccao(lambda c: pl_justo(g, roe, c, ke, de, nde, m_terminal) - alvo, lo, hi)
 
 
-def ke_implicito(preco, lpa, g, roe, cap, de=0.0, nde=0.0, lo=1e-6, hi=0.60):
+def ke_implicito(preco, lpa, g, roe, cap, de=0.0, nde=0.0, m_terminal=1.0, lo=1e-6, hi=0.60):
     alvo = preco / lpa
-    return _bisseccao(lambda k: pl_justo(g, roe, cap, k, de, nde) - alvo, lo, hi)
+    return _bisseccao(lambda k: pl_justo(g, roe, cap, k, de, nde, m_terminal) - alvo, lo, hi)
 
 
 def _de_nde(inp):
@@ -182,6 +189,19 @@ def bloco_validacao(inp):
             erros.append(f"CAPs fora de ordem (bear {caps['bear']} <= base {caps['base']} "
                          f"<= bull {caps['bull']} é obrigatório)")
 
+        # m_terminal (v2.2.0): validação dura (<=0, justificativa quando != 1.0) e
+        # branda (ordem bear <= base <= bull recomendada, mas não obrigatória).
+        m_terminais = {n: _m_terminal(cen[n]) for n in nomes}
+        for n in nomes:
+            if m_terminais[n] <= 0:
+                erros.append(f"cenário {n}: m_terminal ({m_terminais[n]}) deve ser > 0")
+        if any(abs(m_terminais[n] - 1.0) > 1e-12 for n in nomes):
+            if not str(p.get("justificativa_m_terminal", "")).strip():
+                erros.append("premissas.justificativa_m_terminal ausente: m_terminal != 1.0 "
+                             "exige justificativa registrada")
+        if not (m_terminais["bear"] <= m_terminais["base"] <= m_terminais["bull"]):
+            avisos.append("m_terminal fora de ordem (bear <= base <= bull recomendado)")
+
     if not str(p.get("justificativa_cap", "")).strip():
         erros.append("premissas.justificativa_cap ausente: o CAP exige justificativa "
                      "econômica escrita (duração dos retornos excedentes da companhia "
@@ -220,6 +240,12 @@ def _pond(cen, valores):
     return sum(cen[n]["prob"] * valores[n] for n in ("bear", "base", "bull"))
 
 
+def _m_terminal(c):
+    """m_terminal do cenário (v2.2.0): default 1.0 se ausente, retrocompatível."""
+    m = c.get("m_terminal", 1.0)
+    return 1.0 if m is None else float(m)
+
+
 def bloco_pl_justo(inp):
     p = inp["premissas"]
     lpa = inp["fatos"]["lpa_ajustado_fy"]
@@ -232,7 +258,7 @@ def bloco_pl_justo(inp):
         out = {}
         for nome in ("bear", "base", "bull"):
             c = cen[nome]
-            mult = pl_justo(c["g"], c["roe"], c["cap"], ke, de, nde)
+            mult = pl_justo(c["g"], c["roe"], c["cap"], ke, de, nde, _m_terminal(c))
             out[nome] = {"pl": round(mult, 4), "preco": round(lpa_base * mult, 2)}
         out["ponderado"] = round(_pond(cen, {n: out[n]["preco"] for n in ("bear", "base", "bull")}), 2)
         return out
@@ -263,7 +289,8 @@ def bloco_cap(inp):
     out = {
         "cenarios": {n: cen[n]["cap"] for n in ("bear", "base", "bull")},
         "premissas_cenarios": {n: {"prob": cen[n]["prob"], "g": cen[n]["g"],
-                                   "roe": cen[n]["roe"], "cap": cen[n]["cap"]}
+                                   "roe": cen[n]["roe"], "cap": cen[n]["cap"],
+                                   "m_terminal": _m_terminal(cen[n])}
                                for n in ("bear", "base", "bull")},
         "teto_defensavel": p["cap_teto_defensavel"],
         "confianca": str(p["cap_confianca"]).upper().replace("É", "E"),
@@ -276,6 +303,10 @@ def bloco_cap(inp):
         out["justificativa_g"] = p["justificativa_g"]
     if str(p.get("justificativa_roe", "")).strip():
         out["justificativa_roe"] = p["justificativa_roe"]
+    # eco opcional (v2.2.0): fundamentação do m_terminal (comentário item 6 do brief).
+    # ECO PURO — não entra em nenhuma conta. Ausente = campo omitido (retrocompatível).
+    if str(p.get("justificativa_m_terminal", "")).strip():
+        out["justificativa_m_terminal"] = p["justificativa_m_terminal"]
     return out
 
 
@@ -286,11 +317,12 @@ def bloco_reverse(inp, econ):
     base = p["cenarios"]["base"]
     ke_h, ke_mid = p["ke_hurdle"], econ["ke_central"]
     de, nde, _ = _de_nde(inp)
+    m_base = _m_terminal(base)  # reverse usa o m_terminal do cenário BASE (âncora central)
     r = {
-        "g_implicito_hurdle_base": g_implicito(preco, lpa, base["roe"], base["cap"], ke_h, de, nde),
-        "cap_implicito_econ_base": cap_implicito(preco, lpa, base["g"], base["roe"], ke_mid, de, nde),
+        "g_implicito_hurdle_base": g_implicito(preco, lpa, base["roe"], base["cap"], ke_h, de, nde, m_base),
+        "cap_implicito_econ_base": cap_implicito(preco, lpa, base["g"], base["roe"], ke_mid, de, nde, m_base),
         "ke_implicito_cap_teto": ke_implicito(preco, lpa, base["g"], base["roe"],
-                                              p["cap_teto_defensavel"], de, nde),
+                                              p["cap_teto_defensavel"], de, nde, m_base),
     }
     return {k: (round(v, 4) if v is not None else None) for k, v in r.items()}
 
@@ -302,11 +334,12 @@ def bloco_ladder(inp, econ):
     ke_mid = econ["ke_central"]
     central = econ["central_ponderado"]
     de, nde, _ = _de_nde(inp)
+    m_base = _m_terminal(cen)
     precos = [inp["meta"]["preco_atual"]] + list(p.get("ladder_precos", []))
     out = []
     for pr in precos:
-        ke_i = ke_implicito(pr, lpa, cen["g"], cen["roe"], cen["cap"], de, nde)
-        cap_i = cap_implicito(pr, lpa, cen["g"], cen["roe"], ke_mid, de, nde)
+        ke_i = ke_implicito(pr, lpa, cen["g"], cen["roe"], cen["cap"], de, nde, m_base)
+        cap_i = cap_implicito(pr, lpa, cen["g"], cen["roe"], ke_mid, de, nde, m_base)
         out.append({
             "preco": pr,
             "ke_implicito": round(ke_i, 4) if ke_i is not None else None,
@@ -321,15 +354,16 @@ def bloco_elasticidades(inp, econ):
     lpa = f["lpa_ajustado_fy"]
     base = p["cenarios"]["base"]
     de, nde, _ = _de_nde(inp)
+    m_base = _m_terminal(base)
 
     def elast(ke):
-        p0 = preco_justo(lpa, base["g"], base["roe"], base["cap"], ke, de, nde)
+        p0 = preco_justo(lpa, base["g"], base["roe"], base["cap"], ke, de, nde, m_base)
         return {
             "preco_base": round(p0, 2),
-            "mais_1a_cap": round(preco_justo(lpa, base["g"], base["roe"], base["cap"] + 1, ke, de, nde) - p0, 2),
-            "mais_1pp_g": round(preco_justo(lpa, base["g"] + 0.01, base["roe"], base["cap"], ke, de, nde) - p0, 2),
-            "mais_1pp_roe": round(preco_justo(lpa, base["g"], base["roe"] + 0.01, base["cap"], ke, de, nde) - p0, 2),
-            "menos_05pp_ke": round(preco_justo(lpa, base["g"], base["roe"], base["cap"], ke - 0.005, de, nde) - p0, 2),
+            "mais_1a_cap": round(preco_justo(lpa, base["g"], base["roe"], base["cap"] + 1, ke, de, nde, m_base) - p0, 2),
+            "mais_1pp_g": round(preco_justo(lpa, base["g"] + 0.01, base["roe"], base["cap"], ke, de, nde, m_base) - p0, 2),
+            "mais_1pp_roe": round(preco_justo(lpa, base["g"], base["roe"] + 0.01, base["cap"], ke, de, nde, m_base) - p0, 2),
+            "menos_05pp_ke": round(preco_justo(lpa, base["g"], base["roe"], base["cap"], ke - 0.005, de, nde, m_base) - p0, 2),
         }
     return {"hurdle": elast(p["ke_hurdle"]), "economico": elast(econ["ke_central"])}
 
