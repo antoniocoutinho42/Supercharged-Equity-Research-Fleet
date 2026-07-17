@@ -110,6 +110,54 @@ def test_idempotente(tmp_path, capsys):
     assert mtime_antes == mtime_depois
 
 
+def test_run_e_somente_leitura(tmp_path, capsys):
+    """Item 4 do contrato: os arquivos copiados ficam sem permissão de escrita.
+
+    Em NTFS o atributo read-only bloqueia escrita em ARQUIVO de forma
+    confiável; se a plataforma não bloquear (chmod best-effort sem efeito),
+    pula com motivo em vez de falhar."""
+    ns, hash8 = _montar_ns(tmp_path)
+
+    codigo = snapshot.main([str(ns)])
+    capsys.readouterr()
+    assert codigo == 0
+
+    run_dir = ns / "runs" / hash8
+    bloqueados = []
+    for nome in ("inputs.yaml", "resultados.json", "meta.yaml"):
+        caminho = run_dir / nome
+        try:
+            with open(caminho, "a", encoding="utf-8") as fh:
+                fh.write("x")
+            bloqueados.append((nome, False))
+        except PermissionError:
+            bloqueados.append((nome, True))
+
+    if not any(ok for _, ok in bloqueados):
+        pytest.skip(
+            "plataforma não bloqueia escrita via chmod read-only "
+            "(best-effort documentado no contrato, item 4)"
+        )
+    falhas = [nome for nome, ok in bloqueados if not ok]
+    assert not falhas, f"escrita permitida em arquivos do run: {falhas}"
+
+
+def test_resultados_malformado(tmp_path, capsys):
+    """resultados.json com JSON válido porém não-dict (ex.: lista) é arquivo
+    malformado -> exit 1 com mensagem própria, NÃO exit 2 de hash divergente."""
+    ns, hash8 = _montar_ns(tmp_path)
+    (ns / "saida_TST" / "resultados.json").write_text("[1, 2, 3]", encoding="utf-8")
+
+    codigo = snapshot.main([str(ns)])
+    saida = capsys.readouterr()
+
+    assert codigo == 1
+    mensagem = saida.out + saida.err
+    assert "re-rode o engine" not in mensagem
+    assert mensagem.strip() != ""
+    assert not (ns / "runs" / hash8).exists()
+
+
 def test_hash_divergente(tmp_path, capsys):
     ns, hash8 = _montar_ns(tmp_path)
 

@@ -139,7 +139,14 @@ def main(argv=None):
         return 1
 
     engine_info = resultados.get("engine") if isinstance(resultados, dict) else None
-    hash_resultados = engine_info.get("hash_inputs") if isinstance(engine_info, dict) else None
+    if not isinstance(engine_info, dict) or "hash_inputs" not in engine_info:
+        print(
+            f"erro: {caminho_resultados} malformado: esperado objeto JSON com "
+            "engine.hash_inputs (saída do engine)",
+            file=sys.stderr,
+        )
+        return 1
+    hash_resultados = engine_info.get("hash_inputs")
 
     if hash_resultados != hash8:
         print(
