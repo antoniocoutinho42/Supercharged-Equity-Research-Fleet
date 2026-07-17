@@ -1,0 +1,116 @@
+# inputs do valuation-engine v2 — exemplo canônico (VRSK, análise de 09-10/07/2026)
+# Este arquivo é o CONTRATO entre Analista (blocos meta e fatos) e Modelador (bloco premissas).
+# Regra: todo fato com fonte; toda premissa defendida no valuation.md.
+# NOVIDADES do schema v2 (vs. v1.x): fatos.multiplos_historicos e fatos.pares (validação por
+# múltiplos); fatos.duracao com persistência CONSOLIDADA e opcionalmente por segmentos;
+# premissas.justificativa_cap, justificativa_cenarios e cap_confianca (obrigatórias);
+# REMOVIDOS: dcf_fade, grade, multiplos-alvo (pe_alvo/ebitda_proj/etc.).
+
+meta:
+  ticker: VRSK
+  nome: "Verisk Analytics, Inc."
+  moeda: USD
+  preco_atual: 187.01
+  data_preco: "2026-07-09"
+  fonte_preco: "stockanalysis.com, fechamento"
+  acoes_mi: 131.02            # 10-Q Q1 2026 (31/03/2026)
+
+fatos:                        # dono: ANALISTA (G2). Nada aqui sem fonte.
+  ledger:
+    - {doc: "10-K FY2025", data_arquivamento: "2026-02-18", uso: "base histórica, normalização"}
+    - {doc: "10-Q Q1 2026", data_arquivamento: "2026-04-29", uso: "TTM, dívida, ações"}
+  lpa_ajustado_fy: 7.16       # Adjusted EPS FY2025, earnings release Q4/FY2025
+  lpa_gaap_fy: 6.48           # GAAP FY2025 (cross-check do motor)
+  divida_liquida_mi: 4101     # 10-Q Q1 2026
+  divida_bruta_mi: 4625       # 10-Q Q1 2026
+  # DE e NDE MEDIDOS (dívida/PL e dívida líquida/PL); ausência = exceção declarada com motivo
+  # (o exemplo VRSK roda sem DE/NDE, como no caso auditado original — exceção declarada)
+  ebitda_gaap_ttm_mi: 1694
+  ebitda_adj_ttm_mi: 1750
+  consenso: {min: 185, max: 272, mediana: 225, fonte: "compilação sell-side, jul/2026"}
+
+  multiplos_historicos:       # banda 5-10a da PRÓPRIA companhia, base declarada por métrica
+    pe:  {min: 18.0, mediana: 24.0, max: 30.0, janela: "FY2016-FY2025",
+          base: ADJUSTED, fonte: "compilação da ficha (exemplo)",
+          # NOVO (opcional, alimenta o gráfico de múltiplos históricos — comentário H5):
+          # série anual do P/L da própria companhia; o compor.py plota a linha e as
+          # pontilhadas de mediana e mediana ± 1 desvio-padrão (desvio calculado da série,
+          # ou informe desvio_padrao explicitamente). Ausente = gráfico degrada com nota.
+          serie: [{ano: 2016, pe: 22.0}, {ano: 2017, pe: 26.5}, {ano: 2018, pe: 29.8},
+                  {ano: 2019, pe: 21.0}, {ano: 2020, pe: 24.5}, {ano: 2021, pe: 27.2},
+                  {ano: 2022, pe: 19.5}, {ano: 2023, pe: 23.0}, {ano: 2024, pe: 25.8},
+                  {ano: 2025, pe: 24.0}]}
+    ev_ebitda: {min: 14.0, mediana: 17.5, max: 22.0, janela: "FY2016-FY2025",
+                base: ADJUSTED, fonte: "compilação da ficha (exemplo)"}
+
+  # NOVO (opcional, alimenta o gráfico de histórico financeiro — comentário H4):
+  # série anual de receita, lucro líquido e ROE. compor.py plota receita e lucro líquido
+  # em barras e ROE em linha (eixo secundário). Ausente = gráfico degrada com nota.
+  # receita e lucro_liquido na unidade da ficha (ex.: US$ mi); roe como fração (0.20 = 20%).
+  series_historicas:
+    - {ano: 2021, receita: 3000, lucro_liquido: 800, roe: 0.19}
+    - {ano: 2022, receita: 3200, lucro_liquido: 860, roe: 0.20}
+    - {ano: 2023, receita: 3450, lucro_liquido: 940, roe: 0.21}
+    - {ano: 2024, receita: 3700, lucro_liquido: 1010, roe: 0.22}
+    - {ano: 2025, receita: 4000, lucro_liquido: 1120, roe: 0.24}
+
+  pares:                      # mesma base contábil da métrica primária; múltiplos ATUAIS
+    - {nome: "Par A (exemplo)", pe: 27.0, fonte: "ficha, jul/2026"}
+    - {nome: "Par B (exemplo)", pe: 23.0, fonte: "ficha, jul/2026"}
+    - {nome: "Par C (exemplo)", pe: 31.0, fonte: "ficha, jul/2026"}
+
+  duracao:                    # dossiê de duração do moat (Analista) — consumido por cap_check.py
+    consolidada:
+      persistencia_spread_anos: 15   # anos de spread positivo da COMPANHIA (série da ficha)
+      fonte: "série de spread ROIC-custo de referência da ficha (exemplo)"
+    fontes_estruturais:
+      - {nome: "embutimento regulatório/dados contributivos", evidencia: "exemplo (ficha)"}
+      - {nome: "switching contratual", evidencia: "exemplo (ficha)"}
+    renovacao_moat: {evidencia: "exemplo: extensões de produto recorrentes (ficha)"}
+    vetores_erosao:
+      - {nome: "IA generativa em analytics", status: "ABERTO",
+         materialidade: "média", probabilidade: "média", horizonte_anos: 5}
+    precedentes:
+      - {nome: "agências de rating", anos: 25}
+
+premissas:                    # dono: MODELADOR (G3). Defesa obrigatória no valuation.md.
+  ke_hurdle: 0.12
+  ke_economico: [0.085, 0.090, 0.095]   # CAPM: rf 4,54% + beta 0,69 x ERP 5% + ajuste 1%
+  cap_teto_defensavel: 15
+  cap_confianca: MEDIA
+  justificativa_cap: >
+    Exemplo (caso de calibração): duração provável dos retornos excedentes da companhia
+    consolidada ancorada em 15 anos de spread positivo comprovado, fontes estruturais com
+    evidência e renovação de moat demonstrada; vetor de IA aberto tratado no bear e no
+    spread do CAP, não como teto mecânico.
+  justificativa_cenarios: >
+    Bear (CAP 8): IA comprime o valor dos dados proprietários na renovação dos contratos.
+    Base (CAP 12): moat renovado no ritmo histórico. Bull (CAP 15): extensões de produto
+    ampliam o runway na banda do precedente setorial.
+  # NOVO v2.1.0 (opcional no engine, EXIGIDO pelo mandato do Modelador): fundamentar g e ROE
+  # por cenário com a mesma profundidade do CAP (comentário R2). Eco puro em resultados.json
+  # (cap.justificativa_g / cap.justificativa_roe); não entra em nenhuma conta.
+  justificativa_g: >
+    Bear (g 4%): renovação de contratos abaixo do reajuste histórico, mix de volume fraco.
+    Base (g 10%): crescimento orgânico de assinatura no ritmo dos últimos 5 anos com reajuste
+    contratual embutido. Bull (g 13%): extensões de produto e cross-sell; teto de coerência
+    g < ROE x retenção respeitado.
+  justificativa_roe: >
+    Bear (ROE 18%): compressão de margem por concorrência de dados, ainda acima do custo de
+    capital. Base (ROE 20%): ROE meio de ciclo corrigido de recompras, alinhado ao histórico.
+    Bull (ROE 24%): alavancagem operacional dos dados proprietários e disciplina de capital.
+  cenarios:
+    bear: {prob: 0.30, g: 0.04, roe: 0.18, cap: 8}
+    base: {prob: 0.50, g: 0.10, roe: 0.20, cap: 12}
+    bull: {prob: 0.20, g: 0.13, roe: 0.24, cap: 15}
+  multiplos_validacao:
+    metrica_primaria: PE      # PE | EV_EBITDA, conforme modelo de negócio e qualidade dos dados
+    base_lucro: ADJUSTED      # trava: nunca misturar GAAP com ADJUSTED
+    limiar_divergencia: 0.30  # divergência material -> revisar premissas, nunca combinar
+  ms_minima: 0.12
+  limitrofe_teto: 1.10
+  ladder_precos: [80, 65, 55, 52]
+
+gate:                         # limiares de proporcionalidade (Coordenador pode sobrescrever)
+  limiar_preco_vs_bull_econ: 1.4
+  limiar_cap_implicito_vs_teto: 2.0

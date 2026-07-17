@@ -1,0 +1,61 @@
+/* template.css — identidade institucional fixa do relatório de research (weasyprint) */
+@page {
+  size: A4;
+  margin: 2.1cm 1.9cm 2.2cm 1.9cm;
+  @bottom-left { content: "__RODAPE__"; font-size: 7.5pt; color: #667; }
+  @bottom-right { content: "página " counter(page) " de " counter(pages); font-size: 7.5pt; color: #667; }
+}
+@page capa { @bottom-left { content: none; } @bottom-right { content: none; } }
+
+body { font-family: "DejaVu Sans", "Helvetica Neue", Arial, sans-serif;
+       font-size: 9.3pt; line-height: 1.42; color: #1a1d24; }
+
+/* Capa */
+.capa { page: capa; page-break-after: always; padding-top: 5.5cm; }
+.capa-marca { font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #8a8f9c;
+              border-top: 2.5pt solid #14324f; padding-top: 6pt; width: 60%; }
+.capa-titulo { font-size: 26pt; color: #14324f; margin: 18pt 0 6pt 0; line-height: 1.15; }
+.capa-sub { font-size: 12.5pt; color: #3d5a76; margin-bottom: 22pt; }
+.capa-meta { font-size: 9.5pt; color: #444; margin-bottom: 4pt; }
+.capa-data { font-size: 9.5pt; color: #888; }
+
+/* Sumário */
+.sumario { page-break-after: always; }
+.sumario h1 { border: none; }
+.toc1 { font-weight: 600; margin: 5pt 0 1pt 0; }
+.toc2 { margin: 1pt 0 1pt 14pt; color: #3d5a76; }
+.toc1 a, .toc2 a { text-decoration: none; color: inherit; }
+.quebra { page-break-after: avoid; }
+
+/* Títulos */
+h1 { font-size: 14.5pt; color: #14324f; border-bottom: 1.6pt solid #14324f;
+     padding-bottom: 3pt; margin: 20pt 0 8pt 0; page-break-after: avoid; }
+h2 { font-size: 11.5pt; color: #1f4468; margin: 14pt 0 5pt 0; page-break-after: avoid; }
+h3 { font-size: 10pt; color: #2b567e; margin: 10pt 0 4pt 0; page-break-after: avoid; }
+h4, h5, h6 { font-size: 9.3pt; color: #2b567e; margin: 8pt 0 3pt 0; }
+
+p { margin: 4pt 0 7pt 0; text-align: justify; }
+ul, ol { margin: 3pt 0 8pt 0; padding-left: 16pt; }
+li { margin-bottom: 2.5pt; }
+strong { color: #10233a; }
+
+/* Caixa de recomendação (blockquote) */
+blockquote { border: 1.2pt solid #14324f; border-left: 6pt solid #14324f;
+             background: #f2f6fa; padding: 8pt 12pt; margin: 8pt 0 12pt 0;
+             page-break-inside: avoid; }
+blockquote p { margin: 2.5pt 0; text-align: left; }
+
+/* Tabelas */
+table { border-collapse: collapse; width: 100%; margin: 7pt 0 11pt 0;
+        font-size: 8.4pt; page-break-inside: avoid; }
+th { background: #14324f; color: #fff; padding: 4pt 6pt; text-align: left;
+     font-weight: 600; }
+td { padding: 3.5pt 6pt; border-bottom: 0.6pt solid #cfd6e0; vertical-align: top; }
+tr:nth-child(even) td { background: #f6f8fb; }
+
+img { max-width: 100%; margin: 6pt 0; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 8.2pt;
+       background: #eef1f5; padding: 0.5pt 3pt; border-radius: 2pt; }
+pre { background: #eef1f5; padding: 7pt; font-size: 8pt; overflow: hidden; }
+hr { border: none; border-top: 0.8pt solid #cfd6e0; margin: 12pt 0; }
+a { color: #1f4468; }
