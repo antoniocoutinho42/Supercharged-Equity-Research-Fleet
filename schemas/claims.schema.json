@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "claims.schema.json",
+  "title": "claims.yaml (rastro de fatos/estimativas/hipóteses citáveis)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["claims"],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/claim"}
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tipo", "texto"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[FEH]-\\d{2,3}$"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["FATO", "ESTIMATIVA", "HIPOTESE"]
+        },
+        "texto": {"type": "string", "minLength": 1},
+        "fonte": {"type": "string"},
+        "data": {"type": "string"},
+        "pilar": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      },
+      "if": {
+        "properties": {"tipo": {"const": "FATO"}},
+        "required": ["tipo"]
+      },
+      "then": {
+        "required": ["fonte", "data"]
+      }
+    }
+  }
+}

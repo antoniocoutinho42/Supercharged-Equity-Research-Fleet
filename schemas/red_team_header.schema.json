@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "red_team_header.schema.json",
+  "title": "Cabeçalho YAML (front-matter) de red_team.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agregado", "dimensoes", "issues", "confianca"],
+  "properties": {
+    "agregado": {
+      "type": "string",
+      "enum": ["DEMONSTRADA", "DEMONSTRADA_COM_RESSALVAS", "NAO_DEMONSTRADA", "REPROVADA"]
+    },
+    "dimensoes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integridade", "correcao", "especificacao", "robustez"],
+      "properties": {
+        "integridade": {
+          "type": "string",
+          "enum": ["verificada", "incompleta", "falhou"]
+        },
+        "correcao": {
+          "type": "string",
+          "enum": ["verificada", "erro_material"]
+        },
+        "especificacao": {
+          "type": "string",
+          "enum": ["forte", "aceitavel", "fragil"]
+        },
+        "robustez": {
+          "type": "string",
+          "enum": ["confirmada", "inconclusiva", "divergente"]
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severidade", "estado", "titulo", "enderecada_a"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^AC-\\d{2,3}$"
+          },
+          "severidade": {
+            "type": "string",
+            "enum": ["CRITICA", "RELEVANTE", "MENOR"]
+          },
+          "estado": {
+            "type": "string",
+            "enum": ["aberta", "fechada"]
+          },
+          "titulo": {"type": "string", "minLength": 1},
+          "enderecada_a": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "confianca": {
+      "type": "string",
+      "enum": ["alta", "media", "baixa"]
+    },
+    "cap_auditoria": {
+      "type": "string"
+    }
+  }
+}

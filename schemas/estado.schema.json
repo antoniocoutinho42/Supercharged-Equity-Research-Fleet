@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "estado.schema.json",
+  "title": "estado.yaml (estado enxuto do processo)",
+  "description": "Racional denso vive em eventos.jsonl, não aqui — os gates carregam apenas o veredicto (enum de uma palavra).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticker", "data", "profundidade", "modo", "snapshot", "engine", "gates"],
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "pattern": "^[A-Z0-9._-]{1,12}$"
+    },
+    "data": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "profundidade": {
+      "$ref": "#/$defs/profundidade"
+    },
+    "profundidade_provisoria": {
+      "$ref": "#/$defs/profundidade"
+    },
+    "modo": {
+      "type": "string",
+      "enum": ["CALIBRADO", "PARCIAL", "PROVISORIO"]
+    },
+    "snapshot": {
+      "type": "boolean"
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["versao", "hash"],
+      "properties": {
+        "versao": {"type": "string"},
+        "hash": {"type": "string", "pattern": "^[0-9a-f]{16}$"}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["G1", "G1_5", "G2", "G3_0", "G3", "G4", "G5", "G6", "G7", "G8"],
+      "properties": {
+        "G1": {"$ref": "#/$defs/veredicto"},
+        "G1_5": {"$ref": "#/$defs/veredicto"},
+        "G2": {"$ref": "#/$defs/veredicto"},
+        "G3_0": {"$ref": "#/$defs/veredicto"},
+        "G3": {"$ref": "#/$defs/veredicto"},
+        "G4": {"$ref": "#/$defs/veredicto"},
+        "G5": {"$ref": "#/$defs/veredicto"},
+        "G6": {"$ref": "#/$defs/veredicto"},
+        "G7": {"$ref": "#/$defs/veredicto"},
+        "G8": {"$ref": "#/$defs/veredicto"}
+      }
+    },
+    "auditoria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acionada"],
+      "properties": {
+        "acionada": {"type": "boolean"},
+        "agregado": {
+          "anyOf": [
+            {"type": "string", "enum": ["DEMONSTRADA", "DEMONSTRADA_COM_RESSALVAS", "NAO_DEMONSTRADA", "REPROVADA"]},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "decisao": {
+      "$ref": "decisao.schema.json"
+    },
+    "pendencias": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "texto", "dono"],
+        "properties": {
+          "id": {"type": "string"},
+          "texto": {"type": "string"},
+          "dono": {
+            "type": "string",
+            "enum": ["Analista", "Modelador", "Auditor", "PM", "Redator", "Coordenador", "Usuario"]
+          }
+        }
+      }
+    },
+    "status_final": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "profundidade": {
+      "type": "string",
+      "enum": ["SUMARIA", "PADRAO", "REFORCADA"]
+    },
+    "veredicto": {
+      "type": "string",
+      "enum": ["PENDENTE", "EM_ANDAMENTO", "APROVADO", "APROVADO_COM_RESSALVA", "REPROVADO", "VETO", "PULADO", "ENTREGUE"]
+    }
+  }
+}

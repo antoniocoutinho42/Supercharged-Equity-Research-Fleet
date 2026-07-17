@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decisao.schema.json",
+  "title": "Bloco decisao (estado.yaml, consumido por compor.py)",
+  "description": "Recomendação final da análise. ressalvas/gatilhos/plano_acao DEVEM ser listas: string escalar quebra a composição (um item por caractere) — esse é o bug real que este schema existe para reprovar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recomendacao", "confianca", "racional"],
+  "properties": {
+    "recomendacao": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confianca": {
+      "type": "string",
+      "enum": ["ALTA", "MEDIA", "BAIXA"]
+    },
+    "racional": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tese": {
+      "type": "string"
+    },
+    "ressalvas": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "gatilhos": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "plano_acao": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "revisao": {
+      "type": "string"
+    }
+  }
+}
