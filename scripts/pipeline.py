@@ -112,10 +112,28 @@ def _dep_g4(estado):
 
 
 def _dep_g5(estado):
-    # G4 = ENTREGUE é o caso normal; G4 = PULADO também libera G5 (auditoria
-    # inteira pulada quando não acionada — mesmo padrão de G1_5 -> G2).
+    # Checagem de ALCANÇABILIDADE (usada por 'status' para o PROXIMO, onde não
+    # há veredicto alvo): G5 só é abordável se G4 já fechou. A regra estrita,
+    # que depende do veredicto alvo, é imposta em _dep_g5_veredicto (chamada de
+    # _cmd_gate): G5=PULADO exige G4=PULADO; qualquer veredicto REAL de G5
+    # exige G4=ENTREGUE.
     if estado["gates"]["G4"] not in ("ENTREGUE", "PULADO"):
         return "G5 exige G4 = ENTREGUE"
+    return None
+
+
+def _dep_g5_veredicto(estado, veredicto):
+    """Regra estrita de G5, ciente do veredicto alvo. Retorna mensagem de erro
+    PT-BR ou None."""
+    if veredicto == "PULADO":
+        if estado["gates"]["G4"] != "PULADO":
+            return "G5 = PULADO só é permitido quando G4 = PULADO (auditoria pulada por inteiro)"
+        return None
+    if estado["gates"]["G4"] != "ENTREGUE":
+        return (
+            f"G5 = {veredicto} exige G4 = ENTREGUE "
+            "(veredicto real de auditoria exige a auditoria efetivamente entregue)"
+        )
     return None
 
 
@@ -326,6 +344,12 @@ def _cmd_gate(ns, args, validar_mod):
                 "antes, ou via --profundidade nesta chamada",
                 file=sys.stderr,
             )
+            return 1
+
+    if gate == "G5":
+        erro_g5 = _dep_g5_veredicto(estado, veredicto)
+        if erro_g5:
+            print(f"erro: {erro_g5}", file=sys.stderr)
             return 1
 
     if gate == "G6" and estado.get("snapshot") is False and veredicto != "PULADO":

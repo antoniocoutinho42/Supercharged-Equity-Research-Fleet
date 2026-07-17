@@ -270,3 +270,55 @@ def test_g6_snapshot_false_so_aceita_pulado(tmp_path):
                    "--racional", "Tentativa de aprovar G6 com snapshot desativado.")
     assert r.returncode == 1
     assert r.stderr.strip() != ""
+
+
+def _levar_ate_g3_aprovado(ns):
+    """Fluxo comum até G3 = APROVADO (sem tocar G4+), reusado pelos testes de G5."""
+    for p in (
+        ["init", "--ticker", "FNV"],
+        ["gate", "G1", "--veredicto", "APROVADO", "--racional", "G1 ok."],
+        ["gate", "G1_5", "--veredicto", "APROVADO", "--racional", "G1_5 ok."],
+        ["gate", "G2", "--veredicto", "APROVADO", "--racional", "G2 ok."],
+        ["set", "profundidade", "PADRAO"],
+        ["gate", "G3_0", "--veredicto", "APROVADO", "--racional", "G3_0 ok.", "--ref", "dossie.md"],
+        ["set", "engine", "--versao", "2.2.0", "--hash", "1234567890abcdef"],
+        ["gate", "G3", "--veredicto", "APROVADO", "--racional", "G3 ok."],
+    ):
+        r = _pipeline(ns, *p)
+        assert r.returncode == 0, r.stderr
+
+
+def test_g5_pulado_exige_g4_pulado_nao_aprovado(tmp_path):
+    """(a) G4 = PULADO + G5 com veredicto REAL (APROVADO) → exit 1:
+    veredicto real de auditoria exige G4 = ENTREGUE, não G4 = PULADO."""
+    ns = str(tmp_path / "FNV")
+    _levar_ate_g3_aprovado(ns)
+    r_g4 = _pipeline(ns, "gate", "G4", "--veredicto", "PULADO",
+                      "--racional", "Auditoria nao acionada.")
+    assert r_g4.returncode == 0, r_g4.stderr
+
+    r = _pipeline(ns, "gate", "G5", "--veredicto", "APROVADO",
+                   "--racional", "Tentativa de aprovar G5 com G4 apenas PULADO.")
+    assert r.returncode == 1
+    assert r.stderr.strip() != ""
+
+    estado = _ler_estado(ns)
+    assert estado["gates"]["G5"] == "PENDENTE"
+
+
+def test_g5_aprovado_exige_g4_entregue(tmp_path):
+    """(b) G4 = ENTREGUE (auditoria acionada) + G5 APROVADO → exit 0."""
+    ns = str(tmp_path / "FNV")
+    _levar_ate_g3_aprovado(ns)
+    r_set = _pipeline(ns, "set", "auditoria", "--acionada", "true")
+    assert r_set.returncode == 0, r_set.stderr
+    r_g4 = _pipeline(ns, "gate", "G4", "--veredicto", "ENTREGUE",
+                      "--racional", "Auditoria acionada e entregue.")
+    assert r_g4.returncode == 0, r_g4.stderr
+
+    r = _pipeline(ns, "gate", "G5", "--veredicto", "APROVADO",
+                   "--racional", "G5 aprovado sobre auditoria entregue.")
+    assert r.returncode == 0, r.stderr
+
+    estado = _ler_estado(ns)
+    assert estado["gates"]["G5"] == "APROVADO"
