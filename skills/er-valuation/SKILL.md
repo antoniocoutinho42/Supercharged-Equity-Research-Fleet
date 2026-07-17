@@ -54,8 +54,12 @@ recomendar auditoria ao Coordenador. `--selftest` valida a régua.
 3. Rodar `python engine.py inputs_<TICKER>.yaml --out saida_<TICKER> --chart` (`--xlsx` opcional).
    O engine RECUSA inputs incoerentes (LPA <= 0 → modo custom com autorização do
    Coordenador; probabilidades erradas; g >= ROE; CAPs fora de ordem; justificativas ausentes).
-4. Reportar o `gate.modo_recomendado` ao Coordenador ANTES de escrever prosa (é o G3.0).
-5. Escrever `valuation.md` interpretando `resultados.json`. Citar números pela chave
+4. Rodar `python scripts/snapshot.py <ns>` (caminho relativo à raiz do plugin): congela
+   `inputs.yaml` + `resultados.json` em `runs/<hash8>/` imutável; o hash impresso é o
+   identificador canônico da rodada, reportado ao Coordenador junto com o gate.
+5. Reportar o `gate.modo_recomendado` (e o hash do passo 4) ao Coordenador ANTES de
+   escrever prosa (é o G3.0).
+6. Escrever `valuation.md` interpretando `resultados.json`. Citar números pela chave
    (ex.: `hurdle.cenarios.ponderado`). Limite: 1 página (SUMÁRIA), 2 (PADRÃO/REFORÇADA).
 
 **Proibições:** narrar aritmética em prosa; construir método manual paralelo (DCF de
@@ -64,7 +68,11 @@ exista no JSON; tratar múltiplos como preço-alvo; alterar fórmula sem subir a
 
 ## 4. Fluxo de uso (Auditor)
 
-1. Re-executar o engine com os mesmos inputs; conferir `engine.hash_inputs` e o JSON.
+1. Re-executar o engine a partir de `<ns>/runs/<hash>/inputs.yaml` (o hash canônico vem
+   de `estado.yaml` campo `engine.hash`), comparando com `runs/<hash>/resultados.json`.
+   REGRA DURA: o Auditor NUNCA lê nem usa o `<ns>/inputs.yaml` mutável; se `runs/<hash>/`
+   não existir, a auditoria DEVOLVE ao Coordenador com "snapshot ausente; Modelador deve
+   rodar snapshot.py" — nunca prossegue sobre o arquivo mutável.
 2. Recomputar à mão 5-8 números sinal-críticos com a implementação de referência
    (apêndice do mandato do Auditor: DDM explícito com Bracket DE/NDE) — independência real.
 3. Re-rodar `cap_check.py` e auditar o JULGAMENTO de CAP: justificativas respondem aos
@@ -101,3 +109,4 @@ exista no JSON; tratar múltiplos como preço-alvo; alterar fórmula sem subir a
 - `cap_check.py` — parecer de julgamento do CAP (com --selftest); NÃO é gate
 - `inputs_exemplo_vrsk.yaml` — schema canônico comentado (contrato Analista/Modelador)
 - `tests/test_golden_vrsk.py` — suíte golden (rodar antes de qualquer promoção)
+- `scripts/snapshot.py` (fora desta pasta, na raiz do plugin) — congela o run em `runs/<hash8>/`
