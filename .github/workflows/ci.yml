@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install pyyaml jsonschema pytest
+
+      - name: Golden valuation-engine
+        run: python skills/er-valuation/tests/test_golden_vrsk.py
+
+      - name: cap_check selftest
+        run: python skills/er-valuation/cap_check.py --selftest
+
+      - name: pytest
+        run: if [ -d tests ]; then python -m pytest tests -q; else echo "tests/ ainda não existe"; fi
+
+      - name: Estrutura do plugin
+        run: |
+          python -c "
+          import json
+          with open('.claude-plugin/plugin.json', encoding='utf-8') as fh:
+              data = json.load(fh)
+          for campo in ('name', 'version', 'description'):
+              assert campo in data and data[campo], f'campo obrigatório ausente: {campo}'
+          print('plugin.json OK:', data['name'], data['version'])
+          "

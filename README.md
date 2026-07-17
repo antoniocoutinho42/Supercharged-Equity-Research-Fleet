@@ -44,10 +44,22 @@ O teste resolve o `engine.py` e o `inputs_exemplo_vrsk.yaml` por caminho relativ
 próprio arquivo de teste (via `__file__`), portanto funciona a partir da raiz do repo
 sem depender do diretório de trabalho.
 
-Via pytest (usa `pyproject.toml`, `testpaths = ["tests", "skills/er-valuation/tests"]`):
+**Não use `pytest` para rodar o golden test.** `test_golden_vrsk.py` é um script
+standalone (chama `sys.exit(...)` no nível de módulo), não um módulo de testes no
+estilo pytest — coletar esse arquivo via pytest quebra a coleta com
+`INTERNALERROR` (o `SystemExit` escapa do import). A execução correta é sempre
+direta:
 
 ```bash
-pytest
+python skills/er-valuation/tests/test_golden_vrsk.py
+```
+
+Via pytest (usa `pyproject.toml`, `testpaths = ["tests"]`) — hoje o diretório
+`tests/` ainda não existe neste repositório; assim que ele existir (suíte pytest
+real, fora de `skills/`), `pytest tests/ -q` passará a valer:
+
+```bash
+pytest tests/ -q
 ```
 
 No Windows, se `python` não estiver disponível via PATH, tente `py -3`.

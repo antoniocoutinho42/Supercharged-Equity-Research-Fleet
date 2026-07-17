@@ -1,2 +1,2 @@
 [tool.pytest.ini_options]
-testpaths = ["tests", "skills/er-valuation/tests"]
+testpaths = ["tests"]
