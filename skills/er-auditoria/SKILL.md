@@ -69,8 +69,9 @@ achado original.
 Quatro dimensões (INTEGRIDADE: verificada | incompleta | falhou; CORREÇÃO:
 verificada | erro material; ESPECIFICAÇÃO: forte | aceitável | frágil;
 ROBUSTEZ: confirmada | inconclusiva | divergente) e AGREGADO, NUNCA mais
-forte que a dimensão mais fraca: DEMONSTRADA | DEMONSTRADA COM RESSALVAS |
-NÃO DEMONSTRADA | REPROVADA (suficiência de demonstração, nunca
+forte que a dimensão mais fraca: DEMONSTRADA | DEMONSTRADA_COM_RESSALVAS |
+NAO_DEMONSTRADA | REPROVADA (grafia exata no YAML, ou validar.py
+reprova; suficiência de demonstração, nunca
 recomendação). `red_team.md` ABRE com o cabeçalho YAML de
 `schemas/red_team_header.schema.json` (`agregado`, `dimensoes`, `issues`,
 `confianca`, `cap_auditoria` opcional); valide com `python scripts/
