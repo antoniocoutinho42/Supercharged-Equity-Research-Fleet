@@ -14,7 +14,11 @@ Uso:
      inputs.yaml; se ausente/ilegível, usa o primeiro diretório saida_* do ns).
      Valida que resultados["engine"]["hash_inputs"] == hash8.
   3. Cria <ns>/runs/<hash8>/ com cópias imutáveis de inputs.yaml,
-     resultados.json e um meta.yaml novo.
+     resultados.json e um meta.yaml novo. Também congela <ns>/claims.yaml e
+     <ns>/estado.yaml QUANDO existirem (best-effort — arquivos opcionais,
+     ausência não falha o snapshot; usados por scripts/delta.py para comparar
+     claims e a decisão entre runs). meta.yaml ganha a chave "congelados" com
+     a lista de arquivos efetivamente copiados para o run.
   4. Remove a permissão de escrita dos arquivos copiados e do diretório
      (best effort — não falha se o SO não suportar).
   5. É idempotente: se runs/<hash8>/ já existe, não regrava.
@@ -171,6 +175,19 @@ def main(argv=None):
 
     shutil.copy2(caminho_inputs, os.path.join(tmp_dir, "inputs.yaml"))
     shutil.copy2(caminho_resultados, os.path.join(tmp_dir, "resultados.json"))
+    congelados = ["inputs.yaml", "resultados.json"]
+
+    # claims.yaml e estado.yaml (Task 3.1): opcionais, best-effort — congelados
+    # QUANDO existirem no ns, sem quebrar o snapshot se ausentes ou se a cópia
+    # falhar por algum motivo do SO.
+    for nome_opcional in ("claims.yaml", "estado.yaml"):
+        origem_opcional = os.path.join(ns, nome_opcional)
+        if os.path.isfile(origem_opcional):
+            try:
+                shutil.copy2(origem_opcional, os.path.join(tmp_dir, nome_opcional))
+                congelados.append(nome_opcional)
+            except OSError:
+                pass
 
     engine_versao = engine_info.get("versao") if isinstance(engine_info, dict) else None
     meta = {
@@ -181,6 +198,7 @@ def main(argv=None):
             "inputs": caminho_inputs,
             "resultados": caminho_resultados,
         },
+        "congelados": sorted(congelados),
     }
     meta_path = os.path.join(tmp_dir, "meta.yaml")
     with open(meta_path, "w", encoding="utf-8") as fh:
@@ -188,7 +206,7 @@ def main(argv=None):
 
     os.replace(tmp_dir, run_dir)
 
-    for nome in ("inputs.yaml", "resultados.json", "meta.yaml"):
+    for nome in congelados + ["meta.yaml"]:
         _somente_leitura(os.path.join(run_dir, nome))
     _somente_leitura(run_dir)
 

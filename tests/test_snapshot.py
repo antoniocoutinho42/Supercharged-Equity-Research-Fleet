@@ -224,3 +224,45 @@ def test_ajuda_curta():
     with pytest.raises(SystemExit) as excinfo:
         snapshot.main(["--help"])
     assert excinfo.value.code == 0
+
+
+def test_congela_claims_e_estado_quando_presentes(tmp_path, capsys):
+    """Task 3.1: claims.yaml e estado.yaml são congelados no run QUANDO existem
+    no ns, e meta.yaml ganha a chave 'congelados' listando o que foi copiado."""
+    ns, hash8 = _montar_ns(tmp_path)
+    claims_texto = "claims:\n  - id: F-01\n    tipo: FATO\n    texto: \"x\"\n    fonte: \"y\"\n    data: \"2026-01-01\"\n"
+    (ns / "claims.yaml").write_text(claims_texto, encoding="utf-8")
+    estado_texto = "ticker: TST\ndecisao:\n  recomendacao: WATCHLIST\n  confianca: MEDIA\n  racional: \"x\"\n"
+    (ns / "estado.yaml").write_text(estado_texto, encoding="utf-8")
+
+    codigo = snapshot.main([str(ns)])
+    capsys.readouterr()
+    assert codigo == 0
+
+    run_dir = ns / "runs" / hash8
+    assert (run_dir / "claims.yaml").is_file()
+    assert (run_dir / "estado.yaml").is_file()
+    assert (run_dir / "claims.yaml").read_text(encoding="utf-8") == claims_texto
+    assert (run_dir / "estado.yaml").read_text(encoding="utf-8") == estado_texto
+
+    meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
+    assert sorted(meta["congelados"]) == sorted(
+        ["inputs.yaml", "resultados.json", "claims.yaml", "estado.yaml"]
+    )
+
+
+def test_nao_congela_claims_e_estado_quando_ausentes(tmp_path, capsys):
+    """Ausência de claims.yaml/estado.yaml no ns não falha o snapshot
+    (best-effort, item 3 do contrato atualizado)."""
+    ns, hash8 = _montar_ns(tmp_path)
+
+    codigo = snapshot.main([str(ns)])
+    capsys.readouterr()
+    assert codigo == 0
+
+    run_dir = ns / "runs" / hash8
+    assert not (run_dir / "claims.yaml").exists()
+    assert not (run_dir / "estado.yaml").exists()
+
+    meta = yaml.safe_load((run_dir / "meta.yaml").read_text(encoding="utf-8"))
+    assert sorted(meta["congelados"]) == sorted(["inputs.yaml", "resultados.json"])
