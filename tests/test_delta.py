@@ -326,6 +326,53 @@ def test_claims_adicionado_modificado_removido(tmp_path, capsys):
     assert dados["resumo"]["n_claims"] == 3
 
 
+def test_claims_congelado_malformado_exit_1_sem_traceback(tmp_path, capsys):
+    """Fix 1 (review): claims.yaml congelado com YAML inválido -> exit 1 com
+    mensagem 'erro: ...', nunca traceback não-tratado."""
+    ns = tmp_path / "ns"
+    ns.mkdir()
+    run_base = _montar_run(ns, "aaaaaaaaaaaaaaaa")
+    _montar_run(ns, "bbbbbbbbbbbbbbbb")
+    # YAML sintaticamente inválido (flow sequence não fechada)
+    (run_base / "claims.yaml").write_text("claims: [\n  - id: F-01\n", encoding="utf-8")
+
+    codigo = delta.main([str(ns), "--desde", "aaaaaaaaaaaaaaaa", "--ate", "bbbbbbbbbbbbbbbb"])
+    saida = capsys.readouterr()
+
+    assert codigo == 1
+    mensagem = saida.out + saida.err
+    assert "erro" in mensagem
+    assert "Traceback" not in mensagem
+
+
+def test_claims_base_nunca_cai_no_fallback_do_ns(tmp_path, capsys):
+    """Fix 1 (review): o lado BASE nunca usa <ns>/claims.yaml — run base sem
+    claims congelado é tratado como ausente mesmo com claims.yaml presente no
+    ns. Prova: alvo congela os MESMOS claims do ns; se a base caísse no
+    fallback, o diff seria vazio; correto é todos os claims do alvo virarem
+    'adicionados'."""
+    ns = tmp_path / "ns"
+    ns.mkdir()
+    claims = [
+        {"id": "F-01", "tipo": "FATO", "texto": "x", "fonte": "y", "data": "2026-01-01"},
+        {"id": "F-02", "tipo": "FATO", "texto": "z", "fonte": "w", "data": "2026-01-02"},
+    ]
+    _montar_run(ns, "aaaaaaaaaaaaaaaa")  # base SEM claims.yaml congelado
+    _montar_run(ns, "bbbbbbbbbbbbbbbb", claims=claims)
+    _escrever_yaml(ns / "claims.yaml", {"claims": claims})  # idêntico ao alvo
+
+    codigo = delta.main([str(ns), "--desde", "aaaaaaaaaaaaaaaa", "--ate", "bbbbbbbbbbbbbbbb"])
+    capsys.readouterr()
+    assert codigo == 0
+
+    dados = json.loads((ns / "delta.json").read_text(encoding="utf-8"))
+    bloco = dados["fatos"]["claims"]
+    # base = ausente (não o arquivo do ns) -> tudo do alvo é "adicionado"
+    assert bloco["adicionados"] == ["F-01", "F-02"]
+    assert bloco["modificados"] == []
+    assert bloco["removidos"] == []
+
+
 def test_claims_fallback_para_claims_yaml_atual_do_ns(tmp_path, capsys):
     """Quando o run alvo não tem claims.yaml congelado, cai para <ns>/claims.yaml atual."""
     ns = tmp_path / "ns"

@@ -462,7 +462,7 @@ def main(argv=None):
 
     try:
         delta = calcular_delta(ns, args.desde, alvo_hash, base_dir, alvo_dir)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, KeyError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"erro: falha ao calcular delta: {exc}", file=sys.stderr)
         return 1
 
