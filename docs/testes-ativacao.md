@@ -58,8 +58,10 @@ er-valuation).
 1. "Analisa a Vale para mim" (er-processo)
 2. "Vale a pena comprar FNV a esse preço?" (er-processo)
 3. "O preço atual da Franco-Nevada faz sentido?" (er-processo → er-valuation)
-4. "Roda o valuation da VRSK com essas premissas" (er-valuation)
-5. "Quanto vale a ação X pelo método de vocês?" (er-valuation)
+4. "Roda o valuation da VRSK com essas premissas" (er-processo classifica
+   PONTUAL → er-valuation; aceitável também er-valuation direto)
+5. "Quanto vale a ação X pelo método de vocês?" (er-processo classifica
+   PONTUAL → er-valuation; aceitável também er-valuation direto)
 6. "Atualiza a tese da FNV com o resultado do 2T" (er-processo P2 → er-memoria)
 7. "O que a gente concluiu sobre FNV da última vez?" (er-memoria)
 8. "Audita esse valuation" / "roda o red team só no cálculo" (er-auditoria,

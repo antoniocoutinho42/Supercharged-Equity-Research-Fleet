@@ -23,8 +23,9 @@ respondem no ambiente real. Registrar cada item em `docs/plataforma.md`
 Rodar, numa sessão Cowork **nova**, 3 cenários de `docs/testes-ativacao.md`:
 
 - 1 GREEN de pipeline completo (ex.: "Analisa a Vale para mim" → er-processo).
-- 1 GREEN de skill isolada (ex.: "Roda o valuation da VRSK com essas
-  premissas" → er-valuation).
+- 1 GREEN de pergunta pontual (ex.: "Roda o valuation da VRSK com essas
+  premissas" → er-processo classifica PONTUAL e invoca er-valuation, sem
+  abrir P1; er-valuation direto também é aprovado).
 - 1 RED (ex.: "O que é P/L?" → nenhuma skill do fleet).
 
 Registrar resultado (disparou/não disparou a skill certa) da mesma forma que
