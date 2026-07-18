@@ -39,4 +39,4 @@ Regra primeiro, julgamento registrado depois. Ver `references/regras-decisao.md`
 
 ## 6. Ambiente
 
-Detecte o ambiente antes de agir. Em Cowork (fleet multiagente), despache um subagente por gate. Em chat (sem subagentes nem hooks), opere single-agent invocando as skills de domínio em sequência e declare a limitação ao usuário. Ver `references/chat-mode.md`.
+Detecte o ambiente antes de agir. Em Cowork (fleet multiagente), despache um subagente por gate (`agents/analista.md`, `modelador.md`, `auditor.md`, `portfolio-manager.md`, `redator.md`), com o brief de `references/despacho.md`. Em chat (sem subagentes nem hooks), opere single-agent invocando as skills de domínio em sequência e declare a limitação ao usuário. Ver `references/chat-mode.md`.
