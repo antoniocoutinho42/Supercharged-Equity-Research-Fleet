@@ -68,14 +68,19 @@ claims:
     data: "2026-07-15"
     pilar: 8
 
+  # Nota: a hipótese do prêmio-sobre-pares (crítica AC-04) NÃO tem claim aqui
+  # porque não está no texto do dossiê original — nasceu na auditoria (red_team.md)
+  # e está documentada como pendência AC-04 no estado (lacuna real da sessão).
   - id: H-01
     tipo: HIPOTESE
     texto: >
-      O prêmio histórico de negociação da FNV sobre pares royalty/streaming
-      (Wheaton, Royal Gold, Osisko, Triple Flag) é estrutural e merecido
-      (escala, diversificação, balanço mais forte) — hipótese não testada
-      com evidência qualitativa própria nesta rodada; permanece como
-      questão qualitativa em aberto (crítica AC-04 do Auditor).
+      O moat da FNV é real e estruturalmente defensável (permanência
+      contratual + escala + acesso a deal flow), mas o evento Cobre Panamá
+      comprova que não é imune a risco político concentrado em jurisdições
+      específicas; a resposta da companhia (diversificar para 121 ativos,
+      reduzir o peso de qualquer ativo único) é a correta mitigação
+      estrutural — ainda em curso, portanto hipótese de resiliência não
+      totalmente comprovada.
     pilar: 6
 
   - id: H-02
