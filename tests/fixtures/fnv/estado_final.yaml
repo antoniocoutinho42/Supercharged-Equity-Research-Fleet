@@ -1,0 +1,46 @@
+ticker: FNV
+data: "2026-07-15"
+profundidade: PADRAO
+modo: PARCIAL
+snapshot: false
+auditoria: {acionada: true, agregado: "DEMONSTRADA_COM_RESSALVAS"}
+engine: {versao: "2.2.0", hash: "34e6680992b5b76e"}
+gates:
+  G1: APROVADO_COM_RESSALVA
+  G1_5: PULADO
+  G2: APROVADO
+  G3_0: APROVADO
+  G3: APROVADO
+  G4: ENTREGUE
+  G5: APROVADO_COM_RESSALVA
+  G6: PULADO
+  G7: APROVADO
+  G8: ENTREGUE
+decisao:
+  recomendacao: "WATCHLIST (PRÓXIMA) — NÃO COMPRAR AGORA"
+  confianca: MEDIA
+  racional: "P2 corrigiu a mecanica de valor terminal do P/L Justo (engine v2.2.0, m_terminal calibrado no P/B implicito historico REALIZADO da propria FNV: bear 2,50/base 4,00/bull 5,20), auditada e revalidada de forma independente pelo Auditor (recomputo genuino confirmado, golden suite 100% verde, zero regressao). Efeito material: Preco Maximo para o Hurdle subiu para US$116,46 (ainda NAO_ACIONAVEL, premio +72,3%, mas muito menor que os +288% originais); Valor Intrinseco Economico central subiu para US$188,49 na faixa US$175,05-203,18 (sinal mudou de SOBREAVALIADO para DENTRO_DA_FAIXA, premio de so +6,4%). PORÉM o Auditor demonstrou, na propria revalidacao, que esse sinal central NAO e robusto: ancorando o multiplicador do valor terminal no M implicito de PARES (2,25x, em vez do historico proprio da FNV) o preco-teto cai para US$124,51 e o sinal reverte para SOBREAVALIADO; mesmo usando o M bear do proprio Modelador (2,50) de forma uniforme, o preco-teto fica em US$134,07, tambem SOBREAVALIADO. A questao decisiva -- se o premio historico da FNV sobre Wheaton/Royal Gold/Osisko/Triple Flag e estrutural e merecido, ou apenas um padrao de mercado nunca testado -- ficou explicitamente NAO resolvida por nenhum dos dois agentes tecnicos (fora do mandato de valuation e de auditoria de calculo; e pergunta de julgamento qualitativo sobre moat/posicionamento competitivo). Por regra dura da Secao 5 (Robustez DIVERGENTE nao resolvida nao fundamenta compra), a leitura central DENTRO_DA_FAIXA nao pode, por si so, sustentar uma entrada. Alem disso, o Preco Maximo para o Hurdle -- ancora independente desta discussao de terminal -- permanece NAO_ACIONAVEL sob toda especificacao testada (US$116,46 a US$134,07, sempre abaixo do preco atual de US$200,61). Resultado: WATCHLIST se mantem, mas recaracterizada de DISTANTE para PROXIMA, dado que o gap real (nao o gap artificialmente inflado pela mecanica de book contabil) fechou substancialmente. Confianca permanece MEDIA (nao sobe para ALTA): CAP com persistencia medida em janela curta (5 anos), robustez divergente nao resolvida, e questao qualitativa de premio-sobre-pares ainda aberta."
+  tese: "Franco-Nevada e um dos negocios de maior qualidade estrutural do universo de metais preciosos: modelo asset-light de royalty/streaming, sem exposicao a capex ou custo operacional de mina, margens EBITDA ajustadas de 86-91%, zero divida em todos os anos observados. A auditoria desta rodada confirmou que o metodo padrao original subestimava artificialmente o valor economico ao reverter o terminal a book contabil a custo historico (ex. Goldstrike, 1986); corrigido para refletir o book economico real via o multiplo P/B historico proprio da FNV, o gap entre preco e valor fecha substancialmente. Mas a correcao tambem revelou que boa parte do valor da FNV, mesmo corrigido, depende de aceitar que a empresa merece negociar estruturalmente acima de seus pares diretos do setor royalty/streaming -- uma pergunta de moat/qualidade relativa ainda nao testada com evidencia propria, e nao apenas com o fato de que o mercado sempre pagou esse premio. Ate essa pergunta ser respondida com evidencia qualitativa (nao apenas historico de precificacao), o caso segue como WATCHLIST, mais proximo do que estava, mas ainda sem retorno suficiente comprovado para o hurdle ao preco atual."
+  ressalvas:
+    - "CRITICA AC-04 do Auditor (aberta, nao resolvida nesta rodada): o sinal economico DENTRO_DA_FAIXA depende de ancorar o valor terminal no P/B historico realizado da propria FNV (media 4,28x); ancorando no M implicito de pares (2,25x) o sinal reverte para SOBREAVALIADO (preco-teto US$124,51, ou US$134,07 mesmo com o M bear do Modelador). Por regra de decisao, isso por si so impede que o sinal fundamente uma compra."
+    - "O Preco Maximo para o Hurdle (US$116,46) permanece a ancora de entrada mais conservadora e mais robusta desta analise: preco atual ainda 72,3% acima dele sob toda especificacao testada."
+    - "Validacao por multiplos DIVERGE_MATERIAL mudou de lado apos a correcao: convergiu com a mediana historica propria da FNV (-6,5%) mas passou a divergir da mediana de pares royalty/streaming (+54,7%) -- premio historico real e preexistente, nao criado por esta revisao, mas cujo merito nao foi testado qualitativamente nesta analise."
+    - "Risco politico-regulatorio concentrado (Cobre Panama, impairment realizado de US$1.169,2mi, ~20% da receita 2023) monitorado mas nao eliminado; concentracao geografica de ~88-89% da receita nas Americas; arbitragem com audiencia prevista para 2026."
+    - "Auditoria acionada nesta rodada (P2) com agregado DEMONSTRADA_COM_RESSALVAS; sem snapshot de carteira, portanto sem avaliacao de encaixe/PM."
+  gatilhos:
+    - "Resolucao qualitativa da CRITICA AC-04 (fundamentacao ou revisao do premio estrutural da FNV sobre pares royalty/streaming, ex. via aprofundamento do Analista): mudaria a confianca do sinal economico e poderia justificar reavaliacao para ACIONAVEL"
+    - "Preco abaixo de ~US$116-124 (Preco Maximo para o Hurdle, ou o teto adversarial ancorado em pares): reavaliar para diligencia de entrada mesmo sem resolver AC-04"
+    - "Aprovacao formal pelo governo do Panama da retomada plena de mineracao em Cobre Panama ate 2027, com cronograma definido: eleva a duracao defensavel do moat e reduz a ressalva geopolitica"
+    - "Ruptura da politica de divida zero (divida liquida/EBITDA > 0,5x por 2 trimestres consecutivos) ou quebra da sequencia de 19 anos de aumento de dividendos: kill criteria, remover da tese"
+  plano_acao:
+    - "Monitorar trimestralmente o preco de mercado contra as duas ancoras atualizadas (hurdle US$116,46; faixa economica US$175,05-203,18)"
+    - "Se aprofundamento futuro for autorizado, encomendar ao Analista uma investigacao qualitativa dedicada da CRITICA AC-04 (por que a FNV negocia estruturalmente acima de Wheaton/Royal Gold/Osisko/Triple Flag: qualidade de portfolio, historico de alocacao de capital, ou premio nao testado)"
+    - "Acompanhar a arbitragem Panama-First Quantum (audiencia prevista 2026) e o ritmo de retomada de Cobre Panama"
+    - "Sem acao de compra enquanto a CRITICA AC-04 nao for resolvida e/ou o preco nao recuar para perto do Preco Maximo para o Hurdle"
+  revisao: "Apos a audiencia da arbitragem Panama-First Quantum prevista para 2026, ou antes se o preco recuar para a faixa de US$116-135, ou se a CRITICA AC-04 for resolvida qualitativamente"
+pendencias:
+  - {id: P1, texto: "Reconstruir ROIC pre-2021 e peso de segmento por lucro (nao apenas receita), se aprofundamento futuro for solicitado", dono: Analista}
+  - {id: AC-04, texto: "Investigar qualitativamente se o premio historico da FNV sobre pares royalty/streaming (WPM/RGLD/OR/TFPM) e estrutural/merecido (qualidade de portfolio, historico de alocacao de capital) ou apenas um padrao de mercado nunca testado. Critica aberta do Auditor que bloqueia, por regra de robustez divergente, qualquer sinal de compra ate ser resolvida.", dono: Analista}
+  - {id: P3, texto: "Reconciliar efeito fiscal exato do impairment de Cobre Panama sobre base tributaria futura", dono: Analista}
+  - {id: P4_sync, texto: "Sincronizar fatos.duracao.segmentos (dono Analista) com a evidencia de reserva usada na extensao de CAP desta rodada (Detour Lake, Magino, East Gouldie), por higiene, sem efeito material na banda sugerida", dono: Analista}
+status_final: "ENTREGUE (P2) — WATCHLIST (PRÓXIMA), confianca MEDIA, com CRITICA AC-04 aberta registrada como pendencia"

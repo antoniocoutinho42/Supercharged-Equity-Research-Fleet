@@ -1,0 +1,88 @@
+claims:
+  - id: F-01
+    tipo: FATO
+    texto: >
+      Impairment de US$ 1.169,2 milhões reconhecido sobre o stream de Cobre
+      Panamá, referente a um ativo que respondia por quase 20% da receita de
+      2023, após o fechamento da mina por ordem do governo do Panamá
+      (novembro de 2023).
+    fonte: "Demonstrações financeiras FY2023 (nota de impairment Cobre Panamá)"
+    data: "2024-03-05"
+    pilar: 6
+
+  - id: F-02
+    tipo: FATO
+    texto: >
+      Dívida bruta igual a zero (debt-free) em todos os cinco anos
+      observados (2021-2025) e no TTM; D/E = 0,00 em todos os anos.
+    fonte: "stockanalysis.com income statement / balance sheet"
+    data: "2026-07-15"
+    pilar: 3
+
+  - id: F-03
+    tipo: FATO
+    texto: >
+      19 anos consecutivos de aumento de dividendos desde o IPO em 2007.
+    fonte: "Reports Record 2025 Results"
+    data: "2026-03-10"
+    pilar: 1
+
+  - id: F-04
+    tipo: FATO
+    texto: >
+      Receita FY2025 de US$ 1.822,8 milhões (+64% a/a) e fluxo de caixa
+      operacional de US$ 1.493,7 milhões (+80% a/a); companhia terminou
+      2025 sem dívida e com US$ 3,1 bilhões em capital disponível.
+    fonte: "Reports Record 2025 Results"
+    data: "2026-03-10"
+    pilar: 1
+
+  - id: F-05
+    tipo: FATO
+    texto: >
+      121 ativos produtores de fluxo de caixa divulgados no Asset Handbook
+      2026 (06/05/2026).
+    fonte: "Asset Handbook 2026 / prnewswire.com"
+    data: "2026-05-12"
+    pilar: 6
+
+  - id: E-01
+    tipo: ESTIMATIVA
+    texto: >
+      ROIC reconstruído (NOPAT/capital investido, metodologia própria) entre
+      10,9% e 16,7% no período 2021-2025+TTM, com spread positivo sobre o
+      custo de capital de referência de 8% em todos os seis pontos
+      observados (2021, 2022, 2023 normalizado, 2024, 2025, TTM).
+    fonte: "Reconstrução própria a partir de stockanalysis.com/balance-sheet cruzado com filings da FNV"
+    data: "2026-07-15"
+    pilar: 4
+
+  - id: E-02
+    tipo: ESTIMATIVA
+    texto: >
+      ROIIC estimado na janela 2021-2025 de aproximadamente 18,0%
+      (método ΔNOPAT/ΔCapital investido); cifra inflada por alavancagem
+      operacional do preço do ouro, não isola o retorno puro sobre capital
+      novo alocado.
+    fonte: "Estimativa própria do Analista"
+    data: "2026-07-15"
+    pilar: 8
+
+  - id: H-01
+    tipo: HIPOTESE
+    texto: >
+      O prêmio histórico de negociação da FNV sobre pares royalty/streaming
+      (Wheaton, Royal Gold, Osisko, Triple Flag) é estrutural e merecido
+      (escala, diversificação, balanço mais forte) — hipótese não testada
+      com evidência qualitativa própria nesta rodada; permanece como
+      questão qualitativa em aberto (crítica AC-04 do Auditor).
+    pilar: 6
+
+  - id: H-02
+    tipo: HIPOTESE
+    texto: >
+      A cultura de disciplina de alocação de capital sobrevive à sucessão de
+      liderança pós-Harquail (Paul Brink como CEO desde 2020) — sinalizada
+      pelo discurso da nova geração, mas ainda sem track record de décadas
+      sob a nova liderança para confirmar.
+    pilar: 1

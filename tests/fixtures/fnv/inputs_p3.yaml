@@ -1,0 +1,279 @@
+meta:
+  ticker: "FNV"
+  nome: "Franco-Nevada Corporation"
+  moeda: "USD"
+  preco_atual: 200.61
+  data_preco: "2026-07-15"
+  fonte_preco: "stockanalysis.com/stocks/fnv/ (NYSE, fechamento intradiário 15/07/2026)"
+  acoes_mi: 193.0
+
+fatos:
+  ledger:
+    - doc: "Reports Record 2025 Results (press release + demonstrações financeiras FY2025)"
+      data_arquivamento: "2026-03-10"
+      uso: "Receita, EBITDA ajustado, lucro liquido, EPS, dividendo, guidance 2026, GEOs por segmento"
+    - doc: "Form 6-K (referencia 2025 Annual Report / Form 40-F na SEC)"
+      data_arquivamento: "2026-03-10"
+      uso: "Confirmacao de arquivamento do relatorio anual FY2025 junto a SEC"
+    - doc: "Reports Record Q1 2026 Results"
+      data_arquivamento: "2026-05-12"
+      uso: "Receita, GEOs, OCF, EPS ajustado Q1 2026, atualizacao Cobre Panama, nova linha de credito"
+    - doc: "Demonstracoes financeiras FY2023 (nota de impairment Cobre Panama)"
+      data_arquivamento: "2024-03-05"
+      uso: "Detalhe do impairment de US$1.169,2mi, base contabil IFRS"
+    - doc: "MD&A Q3 2025"
+      data_arquivamento: "2025-10-29"
+      uso: "Atualizacao Cobre Panama (auditoria SGS, arbitragem descontinuada), reversao parcial de impairment"
+    - doc: "Reports Q4 and Year-end 2024 Results"
+      data_arquivamento: "2025-03-11"
+      uso: "Receita FY2024, guidance 2025"
+    - doc: "stockanalysis.com income statement / balance sheet"
+      data_arquivamento: "2026-07-15"
+      uso: "Serie FY2021-FY2025 + TTM: receita, EBIT, EBITDA, lucro liquido, EPS, FCF, ativos, passivos, patrimonio, caixa"
+    - doc: "macrotrends.net revenue / pe-ratio / roi"
+      data_arquivamento: "2026-07-15"
+      uso: "Serie longa de receita 2011-2024, serie de preco/EPS/PE trimestral 2011-2026, multiplos de pares"
+
+  lpa_ajustado_fy: 5.58   # FY2025, non-GAAP divulgado pela empresa (US$1.075,2mi / 192,7mi acoes)
+  lpa_gaap_fy: 5.76        # FY2025, GAAP diluido
+
+  divida_liquida_mi: -670.9   # FY2025: dívida bruta 0 menos caixa 670,9mi = caixa liquido (valor negativo = caixa liquido)
+  divida_bruta_mi: 0.0
+
+  de: 0.00     # dívida bruta / patrimonio liquido, FY2025 (dívida bruta = 0 em todos os anos observados 2021-2025)
+  nde: -0.088  # dívida liquida / patrimonio liquido, FY2025 (negativo = caixa liquido; -670.9/7635.0)
+
+  ebitda_gaap_ttm_mi: 1995.0
+  ebitda_adj_ttm_mi: 1995.0   # ESTIMATIVA: ausencia de distorcoes materiais no TTM encerrado mar/2026 (GAAP e adjusted convergem, diferente de 2023)
+
+  consenso:
+    min: null
+    max: null
+    mediana: 245.25
+    fonte: "stockanalysis.com/stocks/fnv/statistics/ (preco-alvo medio, rating consenso Buy; amostra e data exatas dos analistas nao especificadas pela fonte)"
+
+  multiplos_historicos:
+    pe:
+      min: 34.54
+      mediana: 36.11
+      max: 40.47
+      janela: "2021-2025 (ex-2023, EPS negativo/n.m.)"
+      base: "GAAP"
+      fonte: "macrotrends.net/stocks/charts/FNV/franco-nevada/pe-ratio, consultado 2026-07-15"
+      serie:
+        - {ano: 2016, pe: 78.71}
+        - {ano: 2017, pe: 69.40}
+        - {ano: 2018, pe: 87.30}
+        - {ano: 2019, pe: 53.11}
+        - {ano: 2020, pe: 69.52}
+        - {ano: 2021, pe: 34.54}
+        - {ano: 2022, pe: 36.11}
+        - {ano: 2024, pe: 40.47}
+        - {ano: 2025, pe: 35.85}
+    ev_ebitda:
+      min: 19.1
+      mediana: 21.8
+      max: 23.6
+      janela: "2021-2025 + TTM (ex-2023, EBITDA GAAP negativo/n.m.)"
+      base: "GAAP"
+      fonte: "ESTIMATIVA propria: EV = preco fim-de-ano x acoes diluidas - caixa; EBITDA GAAP dos filings/stockanalysis.com; preco de macrotrends.net"
+      serie:
+        - {ano: 2021, ev_ebitda: 21.4}
+        - {ano: 2022, ev_ebitda: 21.8}
+        - {ano: 2024, ev_ebitda: 21.9}
+        - {ano: 2025, ev_ebitda: 23.6}
+
+  series_historicas:
+    - {ano: 2021, receita: 1300.0, lucro_liquido: 733.7,  roe: 0.1218}
+    - {ano: 2022, receita: 1316.0, lucro_liquido: 700.6,  roe: 0.1092}
+    - {ano: 2023, receita: 1219.4, lucro_liquido: -466.4, roe: -0.0808}
+    - {ano: 2024, receita: 1113.6, lucro_liquido: 552.1,  roe: 0.0921}
+    - {ano: 2025, receita: 1822.8, lucro_liquido: 1112.1, roe: 0.1457}
+
+  pares:
+    - nome: "Wheaton Precious Metals (WPM)"
+      pe: 21.37
+      ev_ebitda: 16.98
+      fonte: "gurufocus.com/term/forward-pe-ratio/WPM (2026-06-25); tikr.com (NTM EV/EBITDA)"
+    - nome: "Royal Gold (RGLD)"
+      pe: 20.45
+      ev_ebitda: 13.19
+      fonte: "tikr.com/blog/royal-gold-has-dropped-14-from-its-52-week-high (NTM)"
+    - nome: "Osisko Gold Royalties (OR)"
+      pe: 27.5
+      ev_ebitda: 17.98
+      fonte: "koalagains.com/stocks/NYSE/WPM/competition (forward PE aprox., faixa 25-30x); tikr.com (NTM EV/EBITDA)"
+    - nome: "Triple Flag Precious Metals (TFPM)"
+      pe: 22.30
+      ev_ebitda: 16.76
+      fonte: "macrotrends.net/stocks/charts/TFPM/triple-flag-precious-metals/pe-ratio (2026-07-13, trailing); tikr.com (NTM EV/EBITDA)"
+
+  duracao:
+    consolidada:
+      persistencia_spread_anos: 5
+      fonte: "Reconstrucao propria 2021-2025 a partir de stockanalysis.com/balance-sheet cruzado com filings da FNV; metodologia: NOPAT/(Ativo Total - Passivo Circulante - Caixa), custo de capital de referencia 8%; ano de 2023 normalizado ex-impairment de Cobre Panama. Persistencia pre-2021 nao calculada por ausencia de balanco patrimonial detalhado disponivel nesta pesquisa (limitacao declarada)."
+    segmentos:
+      - nome: "Precious Metals (ouro, prata, PGM)"
+        peso_lucro: 0.85
+        persistencia_anos: 15
+        notas: "Peso baseado em receita FY2025 (US$1.548,7mi / US$1.822,8mi = 85,0%), usado como proxy de peso no lucro por ausencia de disclosure segmentado de lucro liquido. Persistencia estrutural longa: royalties/streams em minas Tier 1 com vidas de mina tipicamente 15-25+ anos (ex. Candelaria estendida de 14 para 25+ anos)."
+      - nome: "Diversified (minerio de ferro, oleo e gas)"
+        peso_lucro: 0.143
+        persistencia_anos: 10
+        notas: "Peso baseado em receita FY2025 (US$259,9mi / US$1.822,8mi = 14,3%). Segmento mais heterogeneo: energia (oleo/gas) tem duracao mais curta e maior sensibilidade a preco de ciclo curto; minerio de ferro (Vale, LIORC) tem contratos de longuissimo prazo mas menor crescimento estrutural."
+    fontes_estruturais:
+      - nome: "Permanencia contratual de royalty (servidao real sobre a propriedade mineral)"
+        evidencia: "Royalty sobre Goldstrike adquirida em 1986, ainda ativa e pagando quase 40 anos depois (franco-nevada.com/about-us/our-history)"
+      - nome: "Escala e diversificacao de portfolio"
+        evidencia: "121 ativos produtores de fluxo de caixa divulgados no Asset Handbook 2026 de 06/05/2026 (fonte: prnewswire.com/news-releases/4-3-billion-for-antaminas-silver..., 12/05/2026)"
+      - nome: "Acesso preferencial a deal flow (marca/reputacao como financiador nao-dilutivo)"
+        evidencia: "Quatro aquisicoes anunciadas em rapida sucessao pos-2025 (i-80 Gold US$250mi, Casa Berardi US$100mi, Bullabulling A$170mi, Victoria Gold C$55mi), conforme press release Reports Record 2025 Results, 2026-03-10"
+    renovacao_moat:
+      evidencia: "Deployment de capital em novos compromissos de royalty/stream/working interest cresceu de US$406,0mi em 2024 para US$2.190,0mi em 2025 (recorde), conforme thedeepdive.ca/franco-nevada-reports-2025-record-revenue-cash-flow-on-precious-metals-run, 2026-03; ROIIC estimado na janela 2021-2025 de aproximadamente 18,0% (ESTIMATIVA propria, metodo delta-NOPAT/delta-Capital-Investido)."
+    vetores_erosao:
+      - nome: "Risco politico/regulatorio Panama (Cobre Panama)"
+        status: "ABERTO"
+        materialidade: "alta"
+        probabilidade: "media"
+        horizonte_anos: 2
+      - nome: "Ciclicidade do preco do ouro/prata/commodities"
+        status: "ABERTO"
+        materialidade: "alta"
+        probabilidade: "media"
+        horizonte_anos: 5
+      - nome: "Concentracao residual em operadores/ativos-ancora"
+        status: "ABERTO"
+        materialidade: "media"
+        probabilidade: "baixa"
+        horizonte_anos: 5
+      - nome: "Novas regras de transfer pricing no Canada (2026+)"
+        status: "AGRAVANDO"
+        materialidade: "media"
+        probabilidade: "media"
+        horizonte_anos: 2
+      - nome: "Lente IA - substituicao do produto"
+        status: "ABERTO"
+        materialidade: "baixa"
+        probabilidade: "baixa"
+        horizonte_anos: 8
+      - nome: "Lente IA - compressao de margem por entrantes habilitados por IA"
+        status: "ABERTO"
+        materialidade: "baixa"
+        probabilidade: "baixa"
+        horizonte_anos: 8
+    precedentes:
+      - {nome: "Franco-Nevada (desde IPO 2007)", anos: 19}
+      - {nome: "Royal Gold (fundada 1981, negociada publicamente ha mais de 30 anos)", anos: 30}
+      - {nome: "Wheaton Precious Metals (fundada 2004 como Silver Wheaton)", anos: 20}
+
+premissas:                    # dono: MODELADOR (G3). Defesa registrada no valuation.md.
+  ke_hurdle: 0.12              # padrao (small/mid cap gold royalty listada em NYSE/TSX, sem qualidade premium comprovada suficiente para 9%; risco politico/ciclico ativo compensa balanco debt-free)
+  ke_economico: [0.081, 0.086, 0.091]   # CAPM: rf 4,60% (UST10y, 15/07/2026) + beta [0,70/0,80/0,90] (consenso 0,83 Investing.com, 0,90 Yahoo/Google 0,90, 0,36-0,90 dispersao ampla entre fontes; usamos banda 0,70-0,90 centrada em 0,80) x ERP 5,0%. Sanity check: rf+2,5pp=7,10% a rf+6pp=10,60% -> banda 8,1-9,1% esta dentro.
+  cap_teto_defensavel: 23      # teto defensavel = CAP do cenario bull (revisado nesta rodada; ver justificativa_cap)
+  cap_confianca: MEDIA
+  justificativa_cap: >
+    REVISADO NESTA RODADA (P2, delta): duracao economica provavel dos retornos excedentes da FNV
+    CONSOLIDADA elevada de 15 para 17 anos no cenario base (banda "moat claro", 12-18, proximo do
+    teto). Motivo da revisao: releitura mais completa do DOSSIE DE DURACAO DO MOAT (dossie.md)
+    identificou evidencia de renovacao organica de reserva/vida-de-mina em MULTIPLOS ativos
+    nomeados, nao apenas Candelaria: Detour Lake (plano de expansao subterranea), Magino
+    (expansao de moinho para 20.000 tpd e aumento de 30% em reservas minerais) e East Gouldie
+    (FNV cobre ~24% da reserva, com perfuracao continuando a estender o deposito, opcionalidade
+    de exploracao sem capital adicional da FNV). Essa e uma forma de renovacao do moat MAIS FORTE
+    que a evidencia usada na rodada anterior (deployment de capital em M&A), porque ocorre a
+    custo marginal zero para a FNV e e estrutural ao proprio modelo de royalty (vida util de
+    mina tipicamente 10-25+ anos, renovavel via exploracao do operador). Fontes estruturais
+    previas mantidas: royalty e servidao real sobre a propriedade mineral (Goldstrike 1986, ~40
+    anos ainda pagando), escala e diversificacao (121 ativos produtores), acesso preferencial a
+    deal flow (4 aquisicoes pos-2025, deployment recorde US$2.190mi em 2025). Precedentes
+    setoriais N=3 convergem em 19-30 anos (FNV desde IPO 2007 = 19a; Royal Gold >30a; Wheaton
+    ~20a). MESMO COM A REVISAO, NAO elevamos para banda geracional (25+) e MANTEMOS confianca
+    MEDIA (nao ALTA), pelas MESMAS tres razoes da rodada anterior, ainda validas e nao afetadas
+    pela nova evidencia de reserva: (1) persistencia de spread ROIC positivo CALCULADA cobre
+    apenas 5 anos (2021-2025), limitacao de dados declarada pelo Analista; (2) dois vetores de
+    erosao ABERTOS com materialidade ALTA seguem SEM resolucao (risco politico Cobre Panama,
+    ciclicidade estrutural do preco do ouro) -- a evidencia de reserva/mina nao muda nada sobre
+    esses dois vetores, que sao politicos/macro, nao geologicos; (3) o segmento Diversified
+    (14,3% do peso, persistencia 10 anos) segue reduzindo a persistencia ponderada consolidada.
+    IMPORTANTE (transparencia ao Coordenador/Auditor): esta revisao de CAP e resultado de
+    releitura mais cuidadosa de evidencia JA DISPONIVEL no dossie.md original (nao e dado novo
+    coletado nesta rodada) e e justificada nos MERITOS PROPRIOS do julgamento de CAP -- nao foi
+    motivada pela divergencia de multiplos. A quantificacao abaixo (elasticidades/reverse)
+    mostra que mesmo esta CAP revisada NAO resolve a divergencia de multiplos (efeito marginal
+    de poucos dolares por acao); a extensao de CAP nao e, sozinha, a solucao ao ponto em aberto.
+  justificativa_cenarios: >
+    Bear (CAP 10, banda default, inalterado): Cobre Panama nao retoma operacao plena e ciclo do
+    ouro vira para baixo simultaneamente, truncando a janela de reinvestimento e acelerando a
+    maturidade natural do portfolio sem reposicao equivalente de deal flow ou de reserva.
+    Base (CAP 17, "moat claro" upper bound, revisado de 15): renovacao do moat prossegue tanto
+    via deal flow (ritmo 2025) quanto via extensao organica de reserva/vida-de-mina em ativos
+    Tier-1 ja detidos (Candelaria, Detour Lake, Magino, East Gouldie), Cobre Panama normaliza
+    parcialmente, ciclo do ouro nem excepcional nem adverso.
+    Bull (CAP 23, "excepcional", revisado de 20): resolucao favoravel de Cobre Panama (restart
+    pleno) combinada a manutencao do ritmo de aquisicoes Tier-1 E continuidade do padrao de
+    extensao de reserva observado em multiplos ativos-ancora, aproximando a persistencia dos
+    precedentes setoriais de 19-30 anos.
+  justificativa_g: >
+    Bear (g 4%): reprecificacao do ouro em baixa reduz volume de GEOs vendidos e desacelera
+    deployment de novo capital (menos alvos de aquisicao economicamente atrativos), retencao
+    de ~73% aplicada a ROE de 9% mantem g bem abaixo do teto de coerencia (g/ROE=0,44).
+    Base (g 7%): crescimento organico ancorado no ritmo de deployment 2024-2025 (US$406mi para
+    US$2.190mi) normalizado para um ritmo sustentavel de meio de ciclo, mais reajuste
+    contratual de royalties/streams existentes; g/ROE=0,58, abaixo da retencao historica de
+    ~73% (payout 2025 ~27,2% do lucro ajustado).
+    Bull (g 9%): ritmo de aquisicoes Tier-1 mantido no patamar recorde de 2025 e ciclo de
+    precos de metais preciosos favorece expansao de GEOs vendidos acima da media historica;
+    g/ROE=0,60, ainda dentro da retencao observada.
+  justificativa_roe: >
+    Bear (ROE 9%): compressao de margem por preco de ouro mais fraco, proximo ao ponto mais
+    baixo observado na serie 2021-2025+TTM (ROE GAAP minimo ex-2023 distorcido = 9,21% em
+    2024); tambem absorve impacto parcial do vetor AGRAVANDO de transfer pricing canadense.
+    Base (ROE 12%): meio de ciclo entre os pontos observados 2021-2025 (10,9%-14,6%,
+    excluindo 2023 GAAP distorcido por impairment nao-caixa), consistente com ROIC
+    reconstruido pelo Analista (10,9%-16,7% no mesmo periodo, spread positivo em todos os 6
+    pontos observados).
+    Bull (ROE 15%): sustentacao do patamar de 2025/TTM (ROE GAAP 14,57%, ROIC TTM 16,73%),
+    refletindo alavancagem operacional do modelo de royalty/streaming (custo quase fixo) sob
+    precos de metais preciosos estruturalmente altos.
+  justificativa_m_terminal: >
+    REVISAO DE ESPECIFICACAO DO VALOR TERMINAL (P3, delta pos G5, engine v2.2.0), motivada
+    pela critica AC-01 (CRITICA) do Auditor: o motor padrao reverte o valor terminal a book
+    GAAP a custo historico no fim do CAP, o que subestima estruturalmente royalties de
+    longuissima duracao carregadas a custo de aquisicao (ex. Goldstrike 1986) sem remarcacao
+    pela alta do metal nem pela extensao de vida de mina. Evidencia usada, NAO-CIRCULAR (nao
+    e reverse-engineered do preco atual): o P/B IMPLICITO REALIZADO da propria FNV, calculado
+    como P/E historico (fatos.multiplos_historicos.pe.serie, base GAAP) x ROE historico
+    (fatos.series_historicas.roe, GAAP), excluindo 2023 por distorcao do impairment nao-caixa
+    de Cobre Panama: 2021=4,21x, 2022=3,94x, 2024=3,73x, 2025=5,22x (media 4,28x, mediana
+    4,08x, faixa 3,73x-5,22x). Verificado de forma independente nesta rodada (recalculo
+    proprio, resultado identico ao do Auditor). Cross-check de piso: o M implicito que
+    reconciliaria o preco atual com a mediana de PARES (21,84x) seria ~2,25x -- usado como
+    REFERENCIA DE PISO/sanity check, nao como ancora principal (o M dos pares reflete a
+    precificacao de mercado de OUTRAS empresas, nao a evidencia propria e realizada da FNV).
+    Escolha por cenario (ancora principal = P/B realizado proprio, nao media cosmetica com
+    o piso de pares): Bear M=2,50 (proximo do piso setorial dos pares, cenario em que o
+    premio estrutural de book economico da FNV comprime por mudanca de regime -- ex.
+    remarcacao contabil forcada, perda de escassez de royalty companies investiveis, ou
+    reversao do ciclo do ouro); Base M=4,00 (ancorado na mediana realizada propria de 4,08x,
+    arredondado para baixo por conservadorismo, abaixo da media de 4,28x); Bull M=5,20
+    (replica o pico realizado em 2025, ano recorde, refletindo continuidade do regime
+    favoravel de escassez/ciclo do ouro). IMPORTANTE (transparencia ao Coordenador/Auditor):
+    esta e uma correcao de ESPECIFICACAO do valor terminal (book economico vs. book GAAP),
+    nao um ajuste cosmetico para convergir com o preco de mercado -- o objetivo declarado e
+    o valor economicamente correto; o efeito sobre os sinais e reportado no valuation.md sem
+    filtro, incluindo se a divergencia de multiplos permanecer.
+  cenarios:
+    bear: {prob: 0.25, g: 0.04, roe: 0.09, cap: 10, m_terminal: 2.50}
+    base: {prob: 0.50, g: 0.07, roe: 0.12, cap: 17, m_terminal: 4.00}
+    bull: {prob: 0.25, g: 0.09, roe: 0.15, cap: 23, m_terminal: 5.20}
+  multiplos_validacao:
+    metrica_primaria: PE       # base GAAP declarada pelo Analista (unica base disponivel com serie historica consistente); EV/EBITDA como validacao secundaria
+    base_lucro: GAAP
+    limiar_divergencia: 0.30
+  ms_minima: 0.12
+  limitrofe_teto: 1.10
+  ladder_precos: [175, 155, 135, 115]
+
+gate:
+  limiar_preco_vs_bull_econ: 1.4
+  limiar_cap_implicito_vs_teto: 2.0
