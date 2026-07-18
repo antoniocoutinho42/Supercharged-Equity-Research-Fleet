@@ -9,9 +9,13 @@ carregar a metodologia inteira. Este teste trava:
 - tamanho maximo por arquivo (4096 bytes, orcamento real ~2800);
 - cada corpo menciona a skill obrigatoria correta e as proibicoes de papel
   portadas do mandato correspondente em docs/fontes/;
-- cada corpo contem o contrato de retorno (handoff, 10 linhas).
+- cada corpo contem o contrato de retorno (handoff, 10 linhas);
+- o template de brief em despacho.md e um handoff VALIDO contra
+  schemas/handoff.schema.json (via scripts/validar.py).
 """
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -130,3 +134,25 @@ def test_despacho_md_existe_com_gate_validar_e_tabela():
     # tabela gate -> agente: verifica que os 5 nomes de agente aparecem
     for nome in AGENTES_ESPERADOS:
         assert nome in texto, f"despacho.md nao menciona o agente '{nome}' na tabela"
+
+
+def test_template_do_brief_e_handoff_valido(tmp_path):
+    """O bloco YAML do template em despacho.md deve validar contra o schema
+    handoff via scripts/validar.py (trava o Critical 1 contra regressao)."""
+    caminho = RAIZ / "skills" / "er-processo" / "references" / "despacho.md"
+    texto = caminho.read_text(encoding="utf-8")
+    m = re.search(r"```yaml\r?\n(.*?)```", texto, re.S)
+    assert m, "despacho.md nao contem bloco ```yaml com o template do brief"
+
+    brief = tmp_path / "G2-brief.yaml"
+    brief.write_text(m.group(1), encoding="utf-8")
+
+    resultado = subprocess.run(
+        [sys.executable, str(RAIZ / "scripts" / "validar.py"), str(brief), "--schema", "handoff"],
+        capture_output=True,
+        text=True,
+    )
+    assert resultado.returncode == 0, (
+        "template do brief nao valida contra o schema handoff:\n" + resultado.stderr
+    )
+    assert "VALIDO" in resultado.stdout

@@ -32,8 +32,11 @@ nunca narrativa longa dentro do `estado.yaml`.
   carimbar uma profundidade PROVISÓRIA, ANTES de encomendar o dossiê
   completo. Evita orçar um dossiê de 8 páginas para um caso obviamente
   SUMÁRIA, ou o inverso.
-- Quem executa: Modelador, skill `er-valuation` (rodada leve do engine); o
-  Coordenador registra o veredicto e a profundidade provisória.
+- Quem executa: Analista, skill `er-guardrails` (a coleta dirigida dos fatos
+  mínimos é o gargalo e é domínio do Analista; a rodada coarse do engine é
+  mecânica e segue o fluxo da própria `er-guardrails`; o rascunho é
+  descartado, nunca snapshotado). O Coordenador registra o veredicto e a
+  profundidade provisória.
 - Pré-condição: `G1` em `{APROVADO, APROVADO_COM_RESSALVA}`.
 - Sem fatos mínimos disponíveis rapidamente (ex.: sem cobertura de consenso):
   o gate é `PULADO` e o processo segue para o G2 com profundidade `PADRAO`

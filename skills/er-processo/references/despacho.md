@@ -4,30 +4,46 @@ Cada despacho a um subagente descartável (agents/*.md) é um brief curto que o
 Coordenador preenche, com contexto fresco (o subagente não herda a thread) e
 sem colar conteúdo de arquivo. Um despacho por gate.
 
-## Template do brief
+## Template do brief (handoff válido)
 
-```
-gate: <G1|G1_5|G2|G3_0|G3|G4|G5|G6|G7|G8>
-agente: <analista|modelador|auditor|portfolio-manager|redator>
-ns: <caminho do namespace, ex.: /tmp/analise/<TICKER>/>
-foco: |
-  <2 a 4 linhas: o que decide neste gate, prioridades, o que NÃO repetir>
-insumos: [<paths dos arquivos que o agente deve ler>]
-entregaveis esperados: [<paths dos arquivos canônicos que o agente deve escrever>]
+O brief usa EXATAMENTE o schema `handoff` (`schemas/handoff.schema.json`,
+`additionalProperties: false`): chaves `gate`, `de`, `para`, `insumos`,
+`entregaveis`, `foco`, `restricoes` (opcional), `status`. O agente-alvo vai
+em `para`; o namespace fica implícito no path do arquivo do brief e nos paths
+de `insumos`/`entregaveis`. Exemplo preenchido (G2, Analista):
+
+```yaml
+gate: G2
+de: Coordenador
+para: analista
+foco: >-
+  Dossiê completo de FNV com prioridade nas questões decisivas do intake
+  (alocação de capital, duração do moat de royalties); não repetir a
+  evidência já coletada nos guardrails do G1.
+insumos:
+  - /tmp/analise/FNV/estado.yaml
+  - /tmp/analise/FNV/handoffs/G1.yaml
+entregaveis:
+  - /tmp/analise/FNV/dossie.md
+  - /tmp/analise/FNV/inputs_valuation.md
+  - /tmp/analise/FNV/inputs.yaml
 restricoes:
-  - profundidade: <SUMARIA|PADRAO|REFORCADA, quando já carimbada>
-  - orcamento_paginas: <ex.: dossiê até 6 páginas>
-  - escopo_auditoria: <somente para G4/G5: o que a ordem explícita do usuário cobre>
+  - "profundidade: PADRAO"
+  - "orcamento_paginas: dossie ate 6 paginas"
+status: ABERTO
 ```
+
+Em `restricoes` entram profundidade, orçamento de páginas e, no G4/G5, o
+escopo de auditoria coberto pela ordem explícita do usuário.
 
 ## Regras
 
 - Nunca cole conteúdo de arquivo no brief nem na resposta: aponte paths, o
   agente lê ele mesmo.
-- O brief vai como arquivo `<ns>/handoffs/<gate>-brief.yaml` (mesmo schema
-  `handoff` de `schemas/handoff.schema.json`, campo `status: ABERTO`), OU
-  inline no despacho quando a plataforma não permitir escrever arquivo antes
-  do dispatch (declare qual modo foi usado).
+- O brief vai como arquivo `<ns>/handoffs/<gate>-brief.yaml` (schema
+  `handoff`, `status: ABERTO`), OU inline no despacho quando a plataforma
+  não permitir escrever arquivo antes do dispatch (declare qual modo foi
+  usado).
 - Um despacho por gate: não acumule dois gates num único brief, mesmo que o
   mesmo agente execute os dois em sequência (ex.: Analista em G1_5 e G2).
 - Contexto fresco: o subagente é despachado sem herdar a thread do
@@ -42,9 +58,9 @@ restricoes:
 | Gate      | Agente             | Skill obrigatória          |
 |-----------|---------------------|-----------------------------|
 | G1        | analista            | er-guardrails                |
-| G1.5      | analista            | er-guardrails                |
+| G1_5      | analista            | er-guardrails                |
 | G2        | analista            | er-dossie                    |
-| G3.0      | modelador           | er-valuation                 |
+| G3_0      | modelador           | er-valuation                 |
 | G3        | modelador           | er-valuation                 |
 | G4        | auditor             | er-auditoria                 |
 | G5        | auditor             | er-auditoria                 |
