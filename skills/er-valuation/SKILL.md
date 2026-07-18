@@ -1,6 +1,7 @@
 ---
 name: er-valuation
-description: Motor determinístico de valuation do processo de Antonio (etapa G3 do fleet de research). USE SEMPRE que a tarefa envolver valuation de uma ação, P/L Justo, Preço Máximo para o Hurdle, Valor Intrínseco Econômico, entry ladder, expectativas implícitas no preço (g/CAP/Ke implícitos), validação por múltiplos de comparáveis ou por histórico próprio, julgamento de CAP (cap_check), ou o gate de proporcionalidade G3.0 — mesmo que o pedido diga apenas "calcule o valor justo", "roda o valuation de X" ou "o preço atual faz sentido?". REGRA CENTRAL: nunca calcular valuation à mão em prosa; preencher inputs.yaml, rodar cap_check.py e engine.py e interpretar resultados.json citando por chave. Também usar quando o Auditor pedir re-execução, testes de limite ou verificação do motor.
+description: >-
+  Motor determinístico de valuation do processo de Antonio (etapa G3 do fleet de research). USE SEMPRE que a tarefa envolver valuation de uma ação, P/L Justo, Preço Máximo para o Hurdle, Valor Intrínseco Econômico, entry ladder, expectativas implícitas no preço (g/CAP/Ke implícitos), validação por múltiplos de comparáveis ou por histórico próprio, julgamento de CAP (cap_check), ou o gate de proporcionalidade G3.0 — mesmo que o pedido diga apenas "calcule o valor justo", "roda o valuation de X" ou "o preço atual faz sentido?". REGRA CENTRAL: nunca calcular valuation à mão em prosa; preencher inputs.yaml, rodar cap_check.py e engine.py e interpretar resultados.json citando por chave. Também usar quando o Auditor pedir re-execução, testes de limite ou verificação do motor.
 ---
 
 # valuation-engine v2 — cálculo em código, prosa só interpreta
