@@ -54,12 +54,20 @@ direta:
 python skills/er-valuation/tests/test_golden_vrsk.py
 ```
 
-Via pytest (usa `pyproject.toml`, `testpaths = ["tests"]`) — hoje o diretório
-`tests/` ainda não existe neste repositório; assim que ele existir (suíte pytest
-real, fora de `skills/`), `pytest tests/ -q` passará a valer:
+Via pytest (usa `pyproject.toml`, `testpaths = ["tests"]`): `tests/` contém a
+suíte pytest real (196 testes, fora de `skills/`) cobrindo pipeline, schemas,
+delta, memória, skills de domínio e a regressão de fixture FNV.
 
 ```bash
-pytest tests/ -q
+python -m pytest tests/ -q
+```
+
+O golden do valuation-engine e o selftest do `cap_check` continuam fora do
+pytest (scripts standalone, ver seção acima):
+
+```bash
+python skills/er-valuation/tests/test_golden_vrsk.py
+python skills/er-valuation/cap_check.py --selftest
 ```
 
 No Windows, se `python` não estiver disponível via PATH, tente `py -3`.

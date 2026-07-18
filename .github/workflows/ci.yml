@@ -24,7 +24,7 @@ jobs:
         run: python skills/er-valuation/cap_check.py --selftest
 
       - name: pytest
-        run: if [ -d tests ]; then python -m pytest tests -q; else echo "tests/ ainda não existe"; fi
+        run: python -m pytest tests/ -q
 
       - name: Estrutura do plugin
         run: |

@@ -8,9 +8,10 @@ sem colar conteúdo de arquivo. Um despacho por gate.
 
 O brief usa EXATAMENTE o schema `handoff` (`schemas/handoff.schema.json`,
 `additionalProperties: false`): chaves `gate`, `de`, `para`, `insumos`,
-`entregaveis`, `foco`, `restricoes` (opcional), `status`. O agente-alvo vai
-em `para`; o namespace fica implícito no path do arquivo do brief e nos paths
-de `insumos`/`entregaveis`. Exemplo preenchido (G2, Analista):
+`entregaveis`, `foco`, `restricoes` (opcional), `status`, `resposta`
+(opcional; preenchida pelo agente na entrega, ≤600 caracteres). O agente-alvo
+vai em `para`; o namespace fica implícito no path do arquivo do brief e nos
+paths de `insumos`/`entregaveis`. Exemplo preenchido (G2, Analista):
 
 ```yaml
 gate: G2

@@ -27,11 +27,11 @@ nunca narrativa longa dentro do `estado.yaml`.
 ## G1_5 — Pré-profundidade (NOVO)
 
 - O que faz: com fatos mínimos já disponíveis após o G1 (preço atual, LPA
-  aproximado, consenso de mercado, quando existirem), o Modelador roda o
-  engine em modo coarse (rascunho, sem inputs completos do Analista) só para
-  carimbar uma profundidade PROVISÓRIA, ANTES de encomendar o dossiê
-  completo. Evita orçar um dossiê de 8 páginas para um caso obviamente
-  SUMÁRIA, ou o inverso.
+  aproximado, consenso de mercado, quando existirem), o Analista (via
+  `er-guardrails`) roda o engine em modo coarse (rascunho, sem inputs
+  completos do Analista) só para carimbar uma profundidade PROVISÓRIA, ANTES
+  de encomendar o dossiê completo. Evita orçar um dossiê de 8 páginas para um
+  caso obviamente SUMÁRIA, ou o inverso.
 - Quem executa: Analista, skill `er-guardrails` (a coleta dirigida dos fatos
   mínimos é o gargalo e é domínio do Analista; a rodada coarse do engine é
   mecânica e segue o fluxo da própria `er-guardrails`; o rascunho é

@@ -34,8 +34,11 @@ jobs:
         run: |
           python -c "import json; d=json.load(open('.claude-plugin/plugin.json', encoding='utf-8')); assert all(k in d and d[k] for k in ('name','version','description')), 'campos obrigatorios faltando'; print('plugin.json OK:', d['name'], d['version'])"
 
+      - name: Validar tag == version do plugin.json
+        run: python -c "import json,os; v=json.load(open('.claude-plugin/plugin.json'))['version']; t=os.environ['GITHUB_REF_NAME']; assert t=='v'+v, f'tag {t} != v{v}'"
+
       - name: Empacotar ZIP
-        run: zip -r "equity-research-fleet-${GITHUB_REF_NAME}.zip" . -x '.git/*' -x '.github/*' -x '.superpowers/*' -x '**/__pycache__/*'
+        run: zip -r "equity-research-fleet-${GITHUB_REF_NAME}.zip" . -x '.git/*' -x '.github/*' -x '.superpowers/*' -x '**/__pycache__/*' -x 'docs/fontes/*' -x 'tests/*'
 
       - name: Publicar release
         uses: softprops/action-gh-release@v2
