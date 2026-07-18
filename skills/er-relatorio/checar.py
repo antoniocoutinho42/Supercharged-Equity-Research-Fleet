@@ -12,15 +12,27 @@ Etapas:
   --etapa decisao    estado.yaml com bloco decisao completo (pré-requisito do compor.py).
   --etapa relatorio  relatorio.md + log_consistencia.md presentes; nenhum marcador de
                      pendência de composição ({{...}}) sobrou no texto.
-  --etapa tudo       todas as anteriores, tolerando ausências opcionais (red_team, portfolio_fit).
+  --etapa claims     dossie.md + claims.yaml presentes; claims.yaml válido contra
+                     schemas/claims.schema.json; todo ID [F-xx]/[E-xx]/[H-xx] citado no
+                     dossie.md tem entrada em claims.yaml e vice-versa (nenhum claim órfão).
+  --etapa tudo       todas as anteriores, tolerando ausências opcionais (red_team,
+                     portfolio_fit); claims só roda se claims.yaml existir (namespaces
+                     anteriores ao sistema de claims recebem AVISO, não reprovação).
 
 Uso: python checar.py <namespace> --etapa <etapa> [--json]
 Exit code 0 = aprovado; 1 = reprovado (lista objetiva de faltas).
 """
+import importlib.util
 import json
 import os
 import re
 import sys
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_VALIDAR_PATH = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "..", "scripts", "validar.py"))
+_SCHEMAS_DIR = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "..", "schemas"))
+
+_ID_CLAIM_RE = re.compile(r"\[([FEH]-\d{2,3})\]")
 
 OBRIG_JSON = [
     "engine.versao", "engine.hash_inputs", "meta.preco_atual", "gate.modo_recomendado",
@@ -155,6 +167,96 @@ def checar_relatorio(ns, faltas, avisos):
             faltas.append(f"relatorio.md com marcadores não resolvidos: {sobras[:5]}")
 
 
+def _carregar_validar_por_path():
+    """Importa scripts/validar.py por caminho (não por pacote), mesmo padrão de
+    scripts/pipeline.py — funciona de qualquer cwd. Levanta exceção se o arquivo
+    não existir ou o import falhar."""
+    spec = importlib.util.spec_from_file_location("checar_validar_interno", _VALIDAR_PATH)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def _validar_claims_schema(caminho):
+    """Valida <caminho> (claims.yaml) contra schemas/claims.schema.json.
+    Reutiliza scripts/validar.py (mesmo Registry de $ref, mesmas mensagens PT-BR);
+    se o import por path falhar por qualquer motivo, cai para uma validação
+    inline com jsonschema (mesma lib, sem as mensagens PT-BR customizadas).
+    Retorna lista de mensagens de erro (vazia se válido)."""
+    try:
+        validar_mod = _carregar_validar_por_path()
+        if validar_mod.jsonschema is None:
+            raise ImportError("jsonschema ausente no módulo validar.py")
+        schema, erro = validar_mod._carregar_schema("claims")
+        if erro:
+            return [erro]
+        dados, erro = validar_mod._carregar_documento(caminho)
+        if erro:
+            return [erro]
+        registry = validar_mod._construir_registry()
+        validador = validar_mod.jsonschema.Draft202012Validator(schema, registry=registry)
+        erros = sorted(
+            validador.iter_errors(dados),
+            key=lambda e: [str(p) for p in e.absolute_path],
+        )
+        return [validar_mod._mensagem_pt(e) for e in erros]
+    except Exception:
+        # Fallback: validação inline (reuso do path preferencial falhou; TENTAMOS
+        # primeiro acima, conforme o contrato do brief).
+        try:
+            import jsonschema
+        except ImportError:
+            return ["jsonschema ausente: instale (pip install jsonschema) para validar claims.yaml"]
+        schema_path = os.path.join(_SCHEMAS_DIR, "claims.schema.json")
+        if not os.path.isfile(schema_path):
+            return [f"schema ausente: {schema_path}"]
+        with open(schema_path, encoding="utf-8") as fh:
+            schema = json.load(fh)
+        try:
+            dados = _carrega_yaml(caminho)
+        except Exception as exc:
+            return [f"claims.yaml ilegível: {exc}"]
+        validador = jsonschema.Draft202012Validator(schema)
+        return [str(e) for e in validador.iter_errors(dados)]
+
+
+def checar_claims(ns, faltas, avisos):
+    faltantes = _existe(ns, "dossie.md", "claims.yaml")
+    if faltantes:
+        faltas += [f"arquivo ausente: {a}" for a in faltantes]
+        return
+
+    dossie_path = os.path.join(ns, "dossie.md")
+    claims_path = os.path.join(ns, "claims.yaml")
+
+    erros_schema = _validar_claims_schema(claims_path)
+    if erros_schema:
+        faltas += [f"claims.yaml: {e}" for e in erros_schema]
+        return  # schema inválido: cross-check de IDs não é confiável
+
+    try:
+        claims_doc = _carrega_yaml(claims_path)
+    except Exception as exc:
+        faltas.append(f"claims.yaml ilegível: {exc}")
+        return
+    lista = (claims_doc or {}).get("claims") or []
+    ids_yaml = {c["id"] for c in lista if isinstance(c, dict) and c.get("id")}
+
+    texto = open(dossie_path, encoding="utf-8").read()
+    ids_citados = set(_ID_CLAIM_RE.findall(texto))
+
+    orfaos = sorted(ids_yaml - ids_citados)
+    sem_entrada = sorted(ids_citados - ids_yaml)
+    if orfaos:
+        faltas.append(
+            f"claims.yaml: {len(orfaos)} claim(s) sem citação em dossie.md: {orfaos}"
+        )
+    if sem_entrada:
+        faltas.append(
+            f"dossie.md: {len(sem_entrada)} ID(s) citado(s) sem entrada em claims.yaml: {sem_entrada}"
+        )
+
+
 def main():
     ns = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "."
     etapa = "tudo"
@@ -162,10 +264,22 @@ def main():
         etapa = sys.argv[sys.argv.index("--etapa") + 1]
     faltas, avisos = [], []
     passos = {"dossie": checar_dossie, "valuation": checar_valuation,
-              "decisao": checar_decisao, "relatorio": checar_relatorio}
+              "decisao": checar_decisao, "relatorio": checar_relatorio,
+              "claims": checar_claims}
     if etapa == "tudo":
-        for fn in passos.values():
+        for nome, fn in passos.items():
+            if nome == "claims":
+                continue
             fn(ns, faltas, avisos)
+        # claims.yaml é opcional em "tudo" (compat com namespaces anteriores ao
+        # sistema de claims): sem o arquivo, AVISO em vez de reprovação.
+        if os.path.exists(os.path.join(ns, "claims.yaml")):
+            checar_claims(ns, faltas, avisos)
+        else:
+            avisos.append(
+                "claims.yaml ausente: etapa claims não rodou "
+                "(namespace anterior ao sistema de claims; rode --etapa claims após criá-lo)"
+            )
     elif etapa in passos:
         passos[etapa](ns, faltas, avisos)
     else:
