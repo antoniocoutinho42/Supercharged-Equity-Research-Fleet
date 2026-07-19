@@ -47,15 +47,17 @@ smoke real ser rodado (não simulado por este agente).
 
 | Data | Versão do plugin | Resultado (itens 1-6) | Issue aberta |
 |---|---|---|---|
-| | | | |
+| 2026-07-19 | 1.0.0 (main 04332c5) | 1 OK (upload ZIP e marketplace via repo, após adicionar marketplace.json — sem manifest o Cowork recusa com erro claro); 2 OK (3 cenários, ver testes-ativacao); 3 OK (pipeline.py --help e cap_check --selftest exit 0 no sandbox); 4 OK (mini-P1 VRSK: init→G3 tudo exit 0, snapshot a32ff7550a41fb40 read-only, estado.yaml 19 linhas); 5 OK (modelador despachado, resposta ≤10 linhas, handoffs/G3.yaml VALIDO); 6 pendente (chat) | nenhuma |
+
+Notas do smoke 2026-07-19: plugin montado em `/root/.claude/plugins/synced/equity-research-fleet`; namespace `/tmp/analise/<TICKER>` funciona como documentado; imutabilidade do run é por permissão (root pode sobrescrever — aceito, é proteção contra edição acidental, não contra adversário); aviso esperado do exemplo VRSK (DE/NDE ausentes → 0/0 declarado). O erro `--profundidade só é aplicável ao gate G3_0` veio de instrução de teste incorreta, não de defeito.
 
 ## Decisão de distribuição
 
-A preencher **depois do primeiro smoke real**, não antes — decisão
-prematura sem dado observado é o mesmo erro que este documento existe para
-evitar. Hipótese de trabalho até lá (não confirmada): marketplace-first
-(repo GitHub `owner/repo`, com botão Update) com fallback ZIP para quem não
-consegue vincular o repositório como marketplace (ex.: repositório privado
-sem a auth resolvida, ver item acima). Esta seção substitui a hipótese pela
-decisão real assim que o item "repositório privado" da seção anterior for
-verificado.
+**DECIDIDO (smoke 2026-07-19): marketplace-first.** O canal principal é o
+repositório GitHub como marketplace (`antoniocoutinho42/Supercharged-Equity-Research-Fleet`),
+que exige o manifest `.claude-plugin/marketplace.json` no repo (adicionado no
+commit 04332c5; sem ele o Cowork recusa com "nenhum manifest encontrado"). O
+Cowork acessou o repositório com a autenticação da conta sem passo extra
+observado. Fallback confirmado: upload manual do ZIP (`dist/` ou asset da
+release) também instala e funciona. Atualizações: botão Update do
+marketplace.

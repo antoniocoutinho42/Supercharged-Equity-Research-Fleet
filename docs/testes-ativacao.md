@@ -91,7 +91,8 @@ funcionou).
 
 | Cenário | Data | Ambiente | Resultado | Racionalização observada | Ação |
 |---|---|---|---|---|---|
-| | | | | | |
+| GREEN 1 "Analisa a Vale para mim" (auto-observação do agente no smoke) | 2026-07-19 | cowork | OK: declarou que invocaria er-processo PRIMEIRO, antes de qualquer resposta | nenhuma | nenhuma |
+| Controle: prompt de smoke test de encanamento | 2026-07-19 | cowork | OK (RED implícito): nenhuma skill ativou para pedido de teste técnico, enquadramento correto | "pedido enquadrado como teste de encanamento, não análise de empresa" | nenhuma |
 
 Legenda de ambiente: `cowork` (plugin instalado via marketplace/ZIP),
 `chat` (claude.ai sem fleet, skills isoladas), `subagente-cc` (Claude Code,
