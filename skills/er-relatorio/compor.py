@@ -165,10 +165,19 @@ def aparar_dossie(md):
         texto = re.sub(r"</?cite[^>]*>", "", texto)
         removidos.append(f"{n_cites} tag(s) <cite> de sessão de pesquisa")
     # nomenclatura institucional (R6): "Dossiê de duração..." -> "Análise de duração..."
-    if re.search(r"[Dd]ossi[êe] de dura", texto):
+    if re.search(r"dossi[êe] de dura", texto, re.I):
+        texto = re.sub(r"\bDOSSI[ÊE] DE DURA", "ANÁLISE DE DURA", texto)
         texto = re.sub(r"\bDossi[êe] de dura", "Análise de dura", texto)
         texto = re.sub(r"\bdossi[êe] de dura", "análise de dura", texto)
         removidos.append("nomenclatura: 'Dossiê de duração' -> 'Análise de duração'")
+    # autorreferências do artefato interno viram referência ao documento
+    n_ref = len(re.findall(r"\b[nd]este dossi[êe]\b", texto, re.I))
+    if n_ref:
+        texto = re.sub(r"\bneste dossi[êe]\b", "nesta análise", texto)
+        texto = re.sub(r"\bNeste dossi[êe]\b", "Nesta análise", texto)
+        texto = re.sub(r"\bdeste dossi[êe]\b", "desta análise", texto)
+        texto = re.sub(r"\bDeste dossi[êe]\b", "Desta análise", texto)
+        removidos.append(f"{n_ref} autorreferência(s) 'neste/deste dossiê' -> 'nesta/desta análise'")
     return texto, removidos
 
 
