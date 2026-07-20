@@ -220,6 +220,24 @@ def checar_decisao(ns, faltas, avisos):
                       "escreva a tese como cadeia causal (geração de valor, vantagens que "
                       "sustentam o retorno, o que o preço embute, assimetria e riscos que a "
                       "invalidam); o racional operacional do gate fica no anexo técnico")
+    # R6: os campos da decisão que vão para o CORPO do relatório (tudo menos o
+    # racional, que vive no anexo) devem nascer em linguagem institucional — o
+    # G7 é a fonte; corrigir aqui evita reprovar só na composição.
+    campos_corpo = [("recomendacao", dec.get("recomendacao")), ("tese", dec.get("tese")),
+                    ("revisao", dec.get("revisao"))]
+    for k in ("ressalvas", "gatilhos", "plano_acao"):
+        for i, item in enumerate(dec.get(k) or [] if isinstance(dec.get(k), list) else []):
+            campos_corpo.append((f"{k}[{i}]", item))
+    for campo, valor in campos_corpo:
+        if not valor:
+            continue
+        for rotulo, padrao in _LINTER_CORPO:
+            achados = padrao.findall(str(valor))
+            if achados:
+                exemplos = sorted(set(str(a) for a in achados))[:3]
+                faltas.append(f"estado.yaml: decisao.{campo} com linguagem operacional "
+                              f"({rotulo}): {exemplos} — o corpo do relatório é institucional; "
+                              f"detalhe operacional vai em decisao.racional (anexo técnico)")
     # campos de lista: string escalar aqui gera item-por-caractere no relatório
     # (bug real de composição); reprovar ANTES do compor.py
     for k in DECISAO_LISTAS:
@@ -243,7 +261,7 @@ def checar_decisao(ns, faltas, avisos):
 _MARCADOR_ANEXO = re.compile(r"^#\s*Anexo t[ée]cnico", re.M | re.I)
 _LINTER_CORPO = [
     ("chave de dados inline", re.compile(r"`[a-z_]+(?:\.[a-zA-Z0-9_\"\.\[\]\*]+)+`")),
-    ("hash hexadecimal", re.compile(r"\b[0-9a-f]{12,64}\b")),
+    ("hash hexadecimal", re.compile(r"\b(?=[0-9a-f]{12,64}\b)[0-9a-f]*[a-f][0-9a-f]*\b")),
     ("código de gate", re.compile(r"\bG\d(?:_\d|\.\d)?\b")),
     ("código de issue de auditoria", re.compile(r"\bAC-\d+\b")),
     ("ID de claim inline", re.compile(r"\[[FEH]-\d{2,3}\]")),
@@ -279,6 +297,9 @@ def checar_relatorio(ns, faltas, avisos):
         fm = re.match(r"^---\n.*?\n---\n", corpo, re.S)
         if fm:
             corpo = corpo[fm.end():]
+        # URLs de fontes são conteúdo institucional legítimo (lista de referências);
+        # sem a máscara, slugs hexadecimais de URL virariam falso positivo de hash
+        corpo = re.sub(r"https?://\S+", "<url>", corpo)
         for rotulo, padrao in _LINTER_CORPO:
             achados = padrao.findall(corpo)
             if achados:
