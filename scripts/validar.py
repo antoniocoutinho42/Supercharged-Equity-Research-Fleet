@@ -6,7 +6,7 @@ JSON Schema (draft 2020-12) de schemas/<nome>.schema.json.
 Uso:
     python validar.py <arquivo> --schema <nome>
 
-<nome> ∈ {estado, handoff, claims, decisao, red_team_header}
+<nome> ∈ {estado, handoff, claims, decisao, red_team_header, metodo}
 
 Substitui handoffs/estado/claims/decisão em prosa por validação de código:
 o formato é fixado nos JSON Schemas de schemas/ (derivados dos arquivos
@@ -53,7 +53,7 @@ except ImportError:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMAS_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "schemas"))
 
-NOMES_VALIDOS = ("estado", "handoff", "claims", "decisao", "red_team_header")
+NOMES_VALIDOS = ("estado", "handoff", "claims", "decisao", "red_team_header", "metodo")
 
 _RE_FRONT_MATTER = re.compile(r"^-{3,}[ \t]*\r?\n(.*?\r?\n)-{3,}[ \t]*(\r?\n|$)", re.S)
 

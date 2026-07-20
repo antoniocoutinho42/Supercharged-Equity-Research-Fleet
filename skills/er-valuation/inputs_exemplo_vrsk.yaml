@@ -23,8 +23,12 @@ fatos:                        # dono: ANALISTA (G2). Nada aqui sem fonte.
   lpa_gaap_fy: 6.48           # GAAP FY2025 (cross-check do motor)
   divida_liquida_mi: 4101     # 10-Q Q1 2026
   divida_bruta_mi: 4625       # 10-Q Q1 2026
-  # DE e NDE MEDIDOS (dívida/PL e dívida líquida/PL); ausência = exceção declarada com motivo
-  # (o exemplo VRSK roda sem DE/NDE, como no caso auditado original — exceção declarada)
+  # DE e NDE MEDIDOS (fatos.de = dívida bruta/PL; fatos.nde = dívida líquida/PL; a
+  # diferença DE - NDE = caixa LIVRE/PL no sentido econômico do bracket). REGRA R2
+  # (engine v3): a AUSÊNCIA de medição NUNCA vira 0/0 silencioso — o engine recusa,
+  # salvo premissas.excecao_de_nde declarada (motivo econômico + faixa_alternativa,
+  # com a sensibilidade CALCULADA pelo engine). O exemplo VRSK roda sob essa exceção
+  # declarada (ver bloco premissas), como no caso auditado original.
   ebitda_gaap_ttm_mi: 1694
   ebitda_adj_ttm_mi: 1750
   consenso: {min: 185, max: 272, mediana: 225, fonte: "compilação sell-side, jul/2026"}
@@ -74,8 +78,25 @@ fatos:                        # dono: ANALISTA (G2). Nada aqui sem fonte.
       - {nome: "agências de rating", anos: 25}
 
 premissas:                    # dono: MODELADOR (G3). Defesa obrigatória no valuation.md.
+  # ke_hurdle: EXCLUSIVAMENTE o retorno mínimo exigido informado PELO USUÁRIO no
+  # intake (R3). NÃO existe valor padrão: sem resposta explícita do usuário, OMITA o
+  # campo — o engine degrada para a âncora econômica (sinais.entrada = SEM_HURDLE) e o
+  # relatório declara a ausência em uma linha. NUNCA copie o 0.12 abaixo como default;
+  # ele é o valor que o usuário informou na sessão VRSK que calibrou este exemplo.
   ke_hurdle: 0.12
   ke_economico: [0.085, 0.090, 0.095]   # CAPM: rf 4,54% + beta 0,69 x ERP 5% + ajuste 1%
+  # R2 — exceção declarada: DE/NDE não medidos nesta ficha (PL não coletado na sessão
+  # original). Substitutos 0/0 com faixa alternativa plausível; o engine calcula a
+  # sensibilidade do impacto no valor (de_nde.excecao.sensibilidade em resultados.json).
+  excecao_de_nde:
+    motivo: >
+      Exceção do caso de calibração: a ficha original não coletou o patrimônio líquido,
+      então DE (dívida bruta/PL) e NDE (dívida líquida/PL) não puderam ser medidos;
+      substitutos 0/0 equivalem a bracket neutro (payout = 1 - g/ROE), premissa
+      conservadora para uma companhia com dívida líquida positiva.
+    de_substituto: 0.0
+    nde_substituto: 0.0
+    faixa_alternativa: {de: 0.50, nde: 0.44}   # ordem de grandeza com PL ~ US$ 9,3 bi
   cap_teto_defensavel: 15
   cap_confianca: MEDIA
   justificativa_cap: >

@@ -196,6 +196,134 @@ espera_recusa("m_terminal != 1.0 sem justificativa_m_terminal recusado",
               "justificativa_m_terminal")
 
 print("=" * 100)
+print("CAMADA D — R2: inputs estruturais nunca zerados por lacuna (engine v3)")
+print("=" * 100)
+
+
+def _sem_excecao(i):
+    i["premissas"].pop("excecao_de_nde", None)
+
+
+def _excecao_sem_motivo(i):
+    i["premissas"]["excecao_de_nde"] = {"motivo": "curto",
+                                        "faixa_alternativa": {"de": 0.5, "nde": 0.44}}
+
+
+def _excecao_sem_faixa(i):
+    i["premissas"]["excecao_de_nde"] = {
+        "motivo": "justificativa econômica longa o suficiente para passar na régua"}
+
+
+espera_recusa("DE/NDE ausentes SEM exceção declarada -> recusa",
+              _sem_excecao, "input estrutural")
+espera_recusa("exceção sem motivo suficiente -> recusa", _excecao_sem_motivo, "motivo")
+espera_recusa("exceção sem faixa_alternativa -> recusa (sem sensibilidade não há exceção)",
+              _excecao_sem_faixa, "faixa_alternativa")
+
+# D4: com a exceção declarada do exemplo, o engine CALCULA a sensibilidade
+exc = res["de_nde"]["excecao"]
+chk_bool("D4 de_nde.excecao presente com sensibilidade calculada",
+         exc is not None and "sensibilidade" in exc
+         and exc["sensibilidade"]["econ_central_substituto"] > 0
+         and exc["sensibilidade"]["econ_central_alternativa"] > 0
+         and exc["sensibilidade"]["delta_econ_central_pct"] is not None)
+# D5: DE/NDE medidos nos fatos -> excecao = None e mesmo resultado numérico
+inp_med = copy.deepcopy(inp)
+inp_med["fatos"]["de"] = 0.0
+inp_med["fatos"]["nde"] = 0.0
+inp_med["premissas"].pop("excecao_de_nde", None)
+res_med = rodar(inp_med)
+chk("D5 medido 0/0 == substituto 0/0 (central econ idêntico)",
+    res_med["economico"]["central_ponderado"], res["economico"]["central_ponderado"], 1e-9)
+chk_bool("D5b medido -> de_nde.excecao = None e medido = true",
+         res_med["de_nde"]["excecao"] is None and res_med["de_nde"]["medido"] is True)
+
+print("=" * 100)
+print("CAMADA E — R3: hurdle exclusivamente do usuário (degrade limpo sem default)")
+print("=" * 100)
+inp_sh = copy.deepcopy(inp)
+inp_sh["premissas"].pop("ke_hurdle")
+res_sh = rodar(inp_sh)
+chk_bool("E1 sem ke_hurdle: hurdle = null (nenhum default assumido)", res_sh["hurdle"] is None)
+chk_bool("E2 sinais.entrada = SEM_HURDLE com nota declarando a ausência",
+         res_sh["sinais"]["entrada"] == "SEM_HURDLE"
+         and "não informado" in res_sh["sinais"]["nota_hurdle"])
+chk_bool("E3 derivados do hurdle nulos (reverse, elasticidades, múltiplos, matrizes)",
+         res_sh["reverse"]["g_implicito_hurdle_base"] is None
+         and res_sh["elasticidades"]["hurdle"] is None
+         and res_sh["validacao_multiplos"]["pl_justo_ponderado_hurdle"] is None
+         and res_sh["matrizes"]["hurdle"] is None)
+chk("E4 âncora econômica intacta sem hurdle",
+    res_sh["economico"]["central_ponderado"], res["economico"]["central_ponderado"], 1e-9)
+chk_bool("E5 sinal econômico preservado e gate ainda emitido",
+         res_sh["sinais"]["economico"] == res["sinais"]["economico"]
+         and res_sh["gate"]["modo_recomendado"] in ("SUMARIA", "PADRAO", "REFORCADA"))
+
+print("=" * 100)
+print("CAMADA F — R4: experimento declarado + alerta de sinal contraintuitivo")
+print("=" * 100)
+el = res["elasticidades"]
+chk_bool("F1 experimento declarado para as 4 elasticidades",
+         all(k in el["experimento"] for k in
+             ("mais_1a_cap", "mais_1pp_g", "mais_1pp_roe", "menos_05pp_ke"))
+         and "lucro" in el["experimento"]["mais_1pp_roe"].lower())
+chk_bool("F2 caso VRSK: sem alerta de sinal (todos os sinais na direção esperada)",
+         el["alertas_sinal"] == [])
+# F3: m_terminal alto torna a elasticidade de ROE negativa (termo terminal ∝ m/ROE
+# domina) -> alerta SEM resposta -> respondido False
+inp_neg = copy.deepcopy(inp)
+for n in ("bear", "base", "bull"):
+    inp_neg["premissas"]["cenarios"][n]["m_terminal"] = 4.0
+inp_neg["premissas"]["justificativa_m_terminal"] = (
+    "cenário sintético de teste: book econômico ~4x o book contábil")
+res_neg = rodar(inp_neg)
+alertas_roe = [a for a in res_neg["elasticidades"]["alertas_sinal"]
+               if a["parametro"] == "mais_1pp_roe"]
+chk_bool("F3 elasticidade de ROE negativa gera alerta não respondido",
+         len(alertas_roe) >= 1 and all(a["respondido"] is False for a in alertas_roe)
+         and alertas_roe[0]["sinal_observado"] == "NEGATIVO")
+# F4: com resposta registrada em premissas.respostas_sinais o alerta fica respondido
+inp_neg2 = copy.deepcopy(inp_neg)
+inp_neg2["premissas"]["respostas_sinais"] = {
+    "mais_1pp_roe": "Mecanismo: com lucro e g fixos, +ROE encolhe o book (lucro/ROE) e o "
+                    "terminal (∝ m/ROE); plausibilidade: variação redesenhada no caso real."}
+res_neg2 = rodar(inp_neg2)
+chk_bool("F4 alerta respondido quando premissas.respostas_sinais existe",
+         all(a["respondido"] for a in res_neg2["elasticidades"]["alertas_sinal"]
+             if a["parametro"] == "mais_1pp_roe"))
+
+print("=" * 100)
+print("CAMADA G — R6: matrizes de sensibilidade 3x3 (preço por célula, fixos declarados)")
+print("=" * 100)
+mz = res["matrizes"]
+chk_bool("G1 duas âncoras x três matrizes presentes",
+         all(k in mz["economico"] for k in ("cap_x_roe", "cap_x_g", "roe_x_g"))
+         and all(k in mz["hurdle"] for k in ("cap_x_roe", "cap_x_g", "roe_x_g")))
+# G2: célula base/base da CAP×ROE econômica == preço base do cenário central
+from engine import preco_justo  # noqa: E402
+cen_b = inp["premissas"]["cenarios"]["base"]
+esp = round(inp["fatos"]["lpa_ajustado_fy"]
+            * pl_justo(cen_b["g"], cen_b["roe"], cen_b["cap"], mz["economico"]["ke"]), 2)
+chk("G2 célula base/base (econ, CAP×ROE) == pl_justo direto",
+    mz["economico"]["cap_x_roe"]["precos"]["base"]["base"], esp, 0.01)
+# G3: célula bull/bear da CAP×ROE usa cap bull e roe bear com g base fixo
+cen = inp["premissas"]["cenarios"]
+esp_bb = round(inp["fatos"]["lpa_ajustado_fy"]
+               * pl_justo(cen_b["g"], cen["bear"]["roe"], cen["bull"]["cap"],
+                          mz["economico"]["ke"]), 2)
+chk("G3 célula bull(linha=cap)/bear(coluna=roe) correta",
+    mz["economico"]["cap_x_roe"]["precos"]["bull"]["bear"], esp_bb, 0.01)
+chk_bool("G4 fixos declarados (g base, ke, lpa, de/nde, m_terminal) — herda o R4",
+         mz["economico"]["cap_x_roe"]["fixos"]["g"] == cen_b["g"]
+         and mz["economico"]["cap_x_roe"]["fixos"]["lpa"] == inp["fatos"]["lpa_ajustado_fy"])
+# G5: célula com g >= ROE vira null (incoerente), nunca número falso
+inp_gx = copy.deepcopy(inp)
+inp_gx["premissas"]["cenarios"]["bear"]["roe"] = 0.11  # g base 0.10 < 0.11, cenário coerente
+res_gx = rodar(inp_gx)
+chk_bool("G5 ROE×g: célula (roe bear=11%, g bull=13%) é null por retenção > 100%",
+         res_gx["matrizes"]["economico"]["roe_x_g"]["precos"]["bear"]["bull"] is None)
+
+print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")
     sys.exit(1)

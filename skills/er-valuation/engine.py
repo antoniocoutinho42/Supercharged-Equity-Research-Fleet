@@ -11,7 +11,8 @@ Métodos (fluxo padrão — nada além disso):
   1. MOTOR PRINCIPAL — P/L Justo (franchise-fade, fórmula imutável do mandato):
        P/L = Bracket * SUM_{t=1..CAP} (1+g)^(t-1)/(1+Ke)^t + (1+g)^CAP/[(1+Ke)^CAP * ROE]
        Bracket = (1 - g/ROE) + (DE - NDE) * (g/ROE)
-     Duas âncoras (hurdle e econômico), 3 cenários + ponderado, cross-check GAAP.
+     Duas âncoras (hurdle SOMENTE quando o usuário informa o retorno exigido — sem
+     default — e econômico), 3 cenários + ponderado, cross-check GAAP.
      Propriedades validadas: ROE=Ke -> P/L = 1/Ke; limite de Gordon; monotonia em Ke.
   2. VALIDAÇÃO POR MÚLTIPLOS (contextualização, NUNCA preço-alvo, NUNCA média):
      (a) comparáveis: P/L justo e múltiplo atual vs. mediana dos pares (mesma base);
@@ -19,7 +20,9 @@ Métodos (fluxo padrão — nada além disso):
          (P/L ou EV/EBITDA, métrica primária declarada pelo Modelador).
      Divergência material (> limiar) vira FLAG: revisar premissas e explicar,
      nunca combinar mecanicamente.
-  3. Expectativas implícitas no preço (reverse enxuto) + entry ladder + elasticidades.
+  3. Expectativas implícitas no preço (reverse enxuto) + entry ladder + elasticidades
+     (com experimento declarado e alerta de sinal contraintuitivo — R4) + matrizes de
+     sensibilidade 3x3 por âncora (R6).
   4. Gate G3.0 — proporcionalidade -> profundidade (SUMARIA | PADRAO | REFORCADA).
 
 REMOVIDOS na v2.0.0 (decisão de processo, ver CHANGELOG): DCF-fade, grade de
@@ -47,6 +50,36 @@ import sys
 from datetime import datetime, timezone
 
 # CHANGELOG
+# v3.0.0 (2026-07-20): correções sistêmicas pós-feedback do caso HG (R2/R3/R4/R5/R6).
+#   BREAKING (contrato de inputs):
+#   (1) R2 — INPUTS ESTRUTURAIS NUNCA ZERADOS POR LACUNA: fatos.de/fatos.nde
+#       ausentes deixam de virar 0/0 com aviso; o engine RECUSA, salvo exceção
+#       declarada em premissas.excecao_de_nde {motivo, de_substituto, nde_substituto,
+#       faixa_alternativa {de, nde}}. Com a exceção, o engine CALCULA a sensibilidade
+#       da premissa substituta (novo bloco de_nde.excecao.sensibilidade) — a
+#       declaração sozinha não basta. Semântica confirmada na fonte: DE = dívida
+#       bruta/PL, NDE = dívida líquida/PL, medidos; (DE − NDE) = caixa/PL; o "caixa"
+#       do bracket é caixa livre no sentido econômico da fórmula (em negócios com
+#       float, decidir o que é caixa livre é decisão econômica do Modelador).
+#   (2) R3 — HURDLE EXCLUSIVAMENTE DO USUÁRIO: premissas.ke_hurdle passa a ser
+#       OPCIONAL. Ausente: hurdle = null, sinais.entrada = SEM_HURDLE, reverse e
+#       elasticidades da âncora hurdle nulos, gate degrada para a âncora econômica,
+#       e sinais.nota_hurdle declara a ausência em uma linha. Nenhum default.
+#   NOVOS BLOCOS (aditivos):
+#   (3) R4 — elasticidades.experimento declara o ceteris paribus de cada
+#       elasticidade; elasticidades.alertas_sinal compara sinal observado vs.
+#       esperado economicamente e exige resposta do Modelador
+#       (premissas.respostas_sinais.<parametro>) — publicação bloqueada pelo
+#       checar.py enquanto houver alerta sem resposta.
+#   (4) R5 — premissas.resolucao_divergencia {via: REVISAO_PREMISSAS |
+#       EXPLICACAO_FUNDAMENTADA | ADAPTACAO_METODOLOGICA, texto} ecoada em
+#       validacao_multiplos.resolucao; DIVERGE_MATERIAL sem resolução bloqueia a
+#       publicação (checar.py), nunca segue como "ressalva declarada".
+#   (5) R6 — bloco matrizes: 3 matrizes 3×3 por âncora (CAP×ROE com g base fixo;
+#       CAP×g com ROE base fixo; ROE×g com CAP base fixo), preço por ação em cada
+#       célula, eixos nas premissas bear/base/bull, fixos declarados (herda o R4);
+#       célula com g >= ROE vira null (retenção > 100%, economicamente incoerente).
+#   Núcleo matemático pl_justo() INALTERADO (golden camadas A/B intactas).
 # v2.2.0 (2026-07-15): m_terminal (multiplicador do termo terminal, default 1.0,
 #   retrocompatível): permite valor terminal por book econômico em vez de book
 #   contábil; exige justificativa_m_terminal quando != 1.0.
@@ -79,7 +112,7 @@ from datetime import datetime, timezone
 # v1.1.0 (2026-07-12): Bracket com DE/NDE; sinal de entrada em 3 estados;
 #       gate renomeado para PROFUNDIDADE (SUMARIA | PADRAO | REFORCADA).
 # v1.0.0: versão inicial calibrada no caso VRSK.
-ENGINE_VERSION = "2.2.0"
+ENGINE_VERSION = "3.0.0"
 
 # ----------------------------------------------------------------------------
 # Núcleo matemático (inalterado desde v1.1.0 — coberto por golden tests)
@@ -147,12 +180,28 @@ def ke_implicito(preco, lpa, g, roe, cap, de=0.0, nde=0.0, m_terminal=1.0, lo=1e
     return _bisseccao(lambda k: pl_justo(g, roe, cap, k, de, nde, m_terminal) - alvo, lo, hi)
 
 
+def _excecao_de_nde(inp):
+    """Exceção declarada (R2) quando DE/NDE não puderam ser medidos.
+    Formato: premissas.excecao_de_nde {motivo, de_substituto, nde_substituto,
+    faixa_alternativa {de, nde}}. A validação dura vive em bloco_validacao."""
+    exc = (inp.get("premissas") or {}).get("excecao_de_nde")
+    return exc if isinstance(exc, dict) else None
+
+
 def _de_nde(inp):
+    """DE = dívida bruta/PL e NDE = dívida líquida/PL, MEDIDOS (fatos.de/fatos.nde).
+    (DE − NDE) = caixa/PL — caixa LIVRE no sentido econômico da fórmula, decisão
+    do Modelador registrada na ficha. R2: ausência de medição NUNCA vira 0/0
+    silencioso; exige exceção declarada (premissas.excecao_de_nde), cujos
+    substitutos alimentam o cálculo e cuja sensibilidade o engine calcula."""
     f = inp["fatos"]
-    de = float(f.get("de", 0.0) or 0.0)
-    nde = float(f.get("nde", 0.0) or 0.0)
-    medido = ("de" in f) and ("nde" in f)
-    return de, nde, medido
+    medido = (f.get("de") is not None) and (f.get("nde") is not None)
+    if medido:
+        return float(f["de"]), float(f["nde"]), True
+    exc = _excecao_de_nde(inp) or {}
+    de = float(exc.get("de_substituto", 0.0) or 0.0)
+    nde = float(exc.get("nde_substituto", 0.0) or 0.0)
+    return de, nde, False
 
 
 # ----------------------------------------------------------------------------
@@ -212,10 +261,53 @@ def bloco_validacao(inp):
     if str(p.get("cap_confianca", "")).upper() not in ("ALTA", "MEDIA", "MÉDIA", "BAIXA"):
         erros.append("premissas.cap_confianca deve ser ALTA, MEDIA ou BAIXA")
 
+    # R2 — input estrutural nunca zerado por lacuna de coleta (regra dura).
     _, _, medido = _de_nde(inp)
     if not medido:
-        avisos.append("DE/NDE ausentes dos fatos: assumidos 0/0 — só aceitável como "
-                      "exceção declarada com motivo na tabela de premissas")
+        exc = _excecao_de_nde(inp)
+        if not exc:
+            erros.append(
+                "fatos.de/fatos.nde ausentes (DE = dívida bruta/PL; NDE = dívida líquida/PL, "
+                "MEDIDOS): um input estrutural da fórmula não pode ser zerado por lacuna de "
+                "coleta. Ou o Analista mede DE/NDE (o plano de coleta deve prever o dado que "
+                "a definição do bracket exige, incluindo a discriminação de caixa livre), ou o "
+                "Modelador declara premissas.excecao_de_nde {motivo, de_substituto, "
+                "nde_substituto, faixa_alternativa {de, nde}} — justificativa econômica E "
+                "sensibilidade, nunca só uma declaração.")
+        else:
+            if len(str(exc.get("motivo", "")).strip()) < 20:
+                erros.append("premissas.excecao_de_nde.motivo ausente ou insuficiente: a exceção "
+                             "exige justificativa econômica registrada (por que a medição é "
+                             "genuinamente impossível e o que o substituto representa)")
+            faixa = exc.get("faixa_alternativa") or {}
+            if not (isinstance(faixa, dict) and faixa.get("de") is not None
+                    and faixa.get("nde") is not None):
+                erros.append("premissas.excecao_de_nde.faixa_alternativa {de, nde} ausente: sem a "
+                             "faixa plausível alternativa o engine não consegue calcular a "
+                             "sensibilidade do impacto da premissa substituta no valor")
+
+    # R3 — hurdle exclusivamente do usuário: opcional; quando presente, sanidade.
+    ke_h = p.get("ke_hurdle")
+    if ke_h is not None and (not isinstance(ke_h, (int, float)) or float(ke_h) <= 0):
+        erros.append("premissas.ke_hurdle inválido: quando informado pelo usuário deve ser > 0; "
+                     "sem resposta do usuário, OMITA o campo (nenhum default é permitido)")
+
+    # R4 — respostas a sinais contraintuitivos: mapa parametro -> texto.
+    rs = p.get("respostas_sinais")
+    if rs is not None and not isinstance(rs, dict):
+        erros.append("premissas.respostas_sinais deve ser um mapa parametro -> resposta "
+                     "(mecanismo econômico E plausibilidade do experimento)")
+
+    # R5 — resolução da divergência de múltiplos: estrutura validada quando presente.
+    rd = p.get("resolucao_divergencia")
+    if rd is not None:
+        vias = ("REVISAO_PREMISSAS", "EXPLICACAO_FUNDAMENTADA", "ADAPTACAO_METODOLOGICA")
+        if not isinstance(rd, dict) or str(rd.get("via", "")).upper() not in vias:
+            erros.append("premissas.resolucao_divergencia.via deve ser REVISAO_PREMISSAS, "
+                         "EXPLICACAO_FUNDAMENTADA ou ADAPTACAO_METODOLOGICA")
+        elif len(str(rd.get("texto", "")).strip()) < 40:
+            erros.append("premissas.resolucao_divergencia.texto insuficiente: a resolução exige "
+                         "fundamentação econômica premissa a premissa, não uma declaração")
 
     mv = p.get("multiplos_validacao", {})
     if str(mv.get("metrica_primaria", "PE")).upper() not in ("PE", "EV_EBITDA"):
@@ -251,7 +343,7 @@ def bloco_pl_justo(inp):
     lpa = inp["fatos"]["lpa_ajustado_fy"]
     lpa_gaap = inp["fatos"].get("lpa_gaap_fy")
     cen = p["cenarios"]
-    ke_h = p["ke_hurdle"]
+    ke_h = p.get("ke_hurdle")  # R3: opcional; SOMENTE o usuário informa, sem default
     de, nde, medido = _de_nde(inp)
 
     def rodar(lpa_base, ke):
@@ -263,10 +355,13 @@ def bloco_pl_justo(inp):
         out["ponderado"] = round(_pond(cen, {n: out[n]["preco"] for n in ("bear", "base", "bull")}), 2)
         return out
 
-    hurdle = {"ke": ke_h, "lpa_base": lpa, "cenarios": rodar(lpa, ke_h),
-              "de_nde": {"de": de, "nde": nde, "medido": medido}}
-    if lpa_gaap:
-        hurdle["cross_check_gaap"] = rodar(lpa_gaap, ke_h)
+    if ke_h is None:
+        hurdle = None
+    else:
+        hurdle = {"ke": ke_h, "lpa_base": lpa, "cenarios": rodar(lpa, ke_h),
+                  "de_nde": {"de": de, "nde": nde, "medido": medido}}
+        if lpa_gaap:
+            hurdle["cross_check_gaap"] = rodar(lpa_gaap, ke_h)
 
     econ = {"por_ke": {}, "lpa_base": lpa}
     for ke in p["ke_economico"]:
@@ -280,6 +375,51 @@ def bloco_pl_justo(inp):
              for k in econ["por_ke"] for n in ("bear", "base", "bull")]
     econ["faixa_completa"] = [min(todos), max(todos)]
     return hurdle, econ
+
+
+def bloco_de_nde(inp, hurdle, econ):
+    """R2: rastreabilidade do bracket. Medido: eco simples. Exceção declarada:
+    o engine CALCULA a sensibilidade da premissa substituta (ponderado com os
+    substitutos vs. com a faixa alternativa plausível) — a exceção nunca é só
+    uma declaração."""
+    de, nde, medido = _de_nde(inp)
+    out = {"de": de, "nde": nde, "medido": medido,
+           "definicao": "DE = dívida bruta/PL; NDE = dívida líquida/PL; (DE − NDE) = "
+                        "caixa livre/PL no sentido econômico do bracket (decisão registrada "
+                        "do Modelador sobre o que conta como caixa livre)"}
+    if medido:
+        out["excecao"] = None
+        return out
+    exc = _excecao_de_nde(inp)
+    faixa = exc["faixa_alternativa"]
+    de_alt, nde_alt = float(faixa["de"]), float(faixa["nde"])
+    p, f = inp["premissas"], inp["fatos"]
+    lpa = f["lpa_ajustado_fy"]
+    cen = p["cenarios"]
+
+    def pond(ke, d, n_):
+        precos = {n: lpa * pl_justo(cen[n]["g"], cen[n]["roe"], cen[n]["cap"], ke, d, n_,
+                                    _m_terminal(cen[n]))
+                  for n in ("bear", "base", "bull")}
+        return round(_pond(cen, precos), 2)
+
+    ke_c = econ["ke_central"]
+    sens = {
+        "econ_central_substituto": pond(ke_c, de, nde),
+        "econ_central_alternativa": pond(ke_c, de_alt, nde_alt),
+    }
+    sens["delta_econ_central_pct"] = round(
+        100.0 * (sens["econ_central_alternativa"] / sens["econ_central_substituto"] - 1.0), 1)
+    if hurdle is not None:
+        sens["hurdle_ponderado_substituto"] = pond(hurdle["ke"], de, nde)
+        sens["hurdle_ponderado_alternativa"] = pond(hurdle["ke"], de_alt, nde_alt)
+        sens["delta_hurdle_ponderado_pct"] = round(
+            100.0 * (sens["hurdle_ponderado_alternativa"] / sens["hurdle_ponderado_substituto"] - 1.0), 1)
+    out["excecao"] = {"motivo": exc.get("motivo"),
+                      "de_substituto": de, "nde_substituto": nde,
+                      "faixa_alternativa": {"de": de_alt, "nde": nde_alt},
+                      "sensibilidade": sens}
+    return out
 
 
 def bloco_cap(inp):
@@ -315,11 +455,13 @@ def bloco_reverse(inp, econ):
     p, f = inp["premissas"], inp["fatos"]
     preco, lpa = inp["meta"]["preco_atual"], f["lpa_ajustado_fy"]
     base = p["cenarios"]["base"]
-    ke_h, ke_mid = p["ke_hurdle"], econ["ke_central"]
+    ke_h, ke_mid = p.get("ke_hurdle"), econ["ke_central"]
     de, nde, _ = _de_nde(inp)
     m_base = _m_terminal(base)  # reverse usa o m_terminal do cenário BASE (âncora central)
     r = {
-        "g_implicito_hurdle_base": g_implicito(preco, lpa, base["roe"], base["cap"], ke_h, de, nde, m_base),
+        # R3: sem hurdle informado pelo usuário, a leitura ancorada nele não existe
+        "g_implicito_hurdle_base": (g_implicito(preco, lpa, base["roe"], base["cap"], ke_h, de, nde, m_base)
+                                    if ke_h is not None else None),
         "cap_implicito_econ_base": cap_implicito(preco, lpa, base["g"], base["roe"], ke_mid, de, nde, m_base),
         "ke_implicito_cap_teto": ke_implicito(preco, lpa, base["g"], base["roe"],
                                               p["cap_teto_defensavel"], de, nde, m_base),
@@ -349,12 +491,32 @@ def bloco_ladder(inp, econ):
     return out
 
 
+EXPERIMENTO_ELASTICIDADES = {
+    # R4: toda sensibilidade declara seu experimento — o que fica FIXO e o que a
+    # variação implica. Texto gerado por código, injetado no relatório pela composição.
+    "mais_1a_cap": "Varia só a duração da vantagem (CAP +1 ano); mantém fixos lucro (LPA), "
+                   "g, ROE, Ke, DE/NDE e m_terminal do cenário base.",
+    "mais_1pp_g": "Varia só o crescimento (g +1 p.p.); mantém fixos lucro, ROE, CAP, Ke, "
+                  "DE/NDE e m_terminal. Com ROE fixo, mais g exige mais retenção "
+                  "(payout cai): o experimento move crescimento E retenção juntos.",
+    "mais_1pp_roe": "Varia só a rentabilidade (ROE +1 p.p.); mantém fixos LUCRO, g, CAP, Ke, "
+                    "DE/NDE e m_terminal. Com lucro fixo, mais ROE implica patrimônio "
+                    "implícito MENOR (book = lucro/ROE) e book terminal menor — o experimento "
+                    "move duas coisas ao mesmo tempo. Onde o patrimônio é observado e "
+                    "regulatório (seguradoras, bancos), esta variação pode não corresponder a "
+                    "nenhuma variação real da companhia: redesenhe ou reenquadre.",
+    "menos_05pp_ke": "Varia só a taxa de desconto (Ke −0,5 p.p.); mantém todo o resto fixo.",
+}
+
+
 def bloco_elasticidades(inp, econ):
     f, p = inp["fatos"], inp["premissas"]
     lpa = f["lpa_ajustado_fy"]
     base = p["cenarios"]["base"]
+    ke_h = p.get("ke_hurdle")
     de, nde, _ = _de_nde(inp)
     m_base = _m_terminal(base)
+    respostas = p.get("respostas_sinais") or {}
 
     def elast(ke):
         p0 = preco_justo(lpa, base["g"], base["roe"], base["cap"], ke, de, nde, m_base)
@@ -365,7 +527,54 @@ def bloco_elasticidades(inp, econ):
             "mais_1pp_roe": round(preco_justo(lpa, base["g"], base["roe"] + 0.01, base["cap"], ke, de, nde, m_base) - p0, 2),
             "menos_05pp_ke": round(preco_justo(lpa, base["g"], base["roe"], base["cap"], ke - 0.005, de, nde, m_base) - p0, 2),
         }
-    return {"hurdle": elast(p["ke_hurdle"]), "economico": elast(econ["ke_central"])}
+
+    def sinais_esperados(ke):
+        """Sinal ECONOMICAMENTE esperado por parâmetro. CAP e g criam valor sse há
+        spread (ROE > Ke) — invariante ROE=Ke ⇒ P/L = 1/Ke. ROE: expectativa
+        econômica ingênua é POSITIVO ('mais rentabilidade, mais valor'); quando o
+        experimento (lucro fixo ⇒ book encolhe) inverte o sinal, isso é alerta,
+        não erro — e exige explicação de mecanismo E plausibilidade (R4b)."""
+        spread_pos = base["roe"] > ke
+        return {
+            "mais_1a_cap": "POSITIVO" if spread_pos else "NEGATIVO",
+            "mais_1pp_g": "POSITIVO" if spread_pos else "NEGATIVO",
+            "mais_1pp_roe": "POSITIVO",
+            "menos_05pp_ke": "POSITIVO",
+        }
+
+    def alertas(nome_ancora, ke, valores):
+        out = []
+        esperados = sinais_esperados(ke)
+        for parametro, esperado in esperados.items():
+            v = valores[parametro]
+            if abs(v) < 0.005:
+                continue
+            observado = "POSITIVO" if v > 0 else "NEGATIVO"
+            if observado != esperado:
+                resposta = str(respostas.get(parametro, "")).strip()
+                out.append({
+                    "ancora": nome_ancora, "parametro": parametro,
+                    "valor": v, "sinal_esperado": esperado, "sinal_observado": observado,
+                    "exigencia": "Sinal contrário à relação econômica esperada: verificar "
+                                 "cálculo e interações entre premissas; se válido, explicar o "
+                                 "MECANISMO econômico e a PLAUSIBILIDADE do experimento (a "
+                                 "explicação algébrica sozinha não basta); se não, corrigir a "
+                                 "especificação. Publicação bloqueada sem resposta.",
+                    "respondido": bool(resposta),
+                    "resposta": resposta or None,
+                })
+        return out
+
+    econ_vals = elast(econ["ke_central"])
+    todos_alertas = alertas("economico", econ["ke_central"], econ_vals)
+    if ke_h is not None:
+        hurdle_vals = elast(ke_h)
+        todos_alertas += alertas("hurdle", ke_h, hurdle_vals)
+    else:
+        hurdle_vals = None  # R3: sem hurdle informado, a âncora não existe
+    return {"hurdle": hurdle_vals, "economico": econ_vals,
+            "experimento": EXPERIMENTO_ELASTICIDADES,
+            "alertas_sinal": todos_alertas}
 
 
 def _cmp_pct(a, b):
@@ -388,7 +597,8 @@ def bloco_validacao_multiplos(inp, hurdle, econ):
 
     pe_atual = round(preco / lpa, 2)
     pl_justo_econ = round(econ["central_ponderado"] / lpa, 2)
-    pl_justo_hurdle = round(hurdle["cenarios"]["ponderado"] / lpa, 2)
+    pl_justo_hurdle = (round(hurdle["cenarios"]["ponderado"] / lpa, 2)
+                       if hurdle is not None else None)
 
     ev_ebitda_atual = None
     chave_ttm = None
@@ -463,16 +673,25 @@ def bloco_validacao_multiplos(inp, hurdle, econ):
         veredicto = "DIVERGE_MATERIAL" if flags else "CONVERGE"
     out["veredicto"] = veredicto
     out["flags"] = flags
-    out["instrucao"] = ("Divergência material NÃO se resolve por média ou combinação: "
-                        "revise as premissas do motor principal ou explique a diferença; "
-                        "sem resolução, rebaixe a confiança declarada.")
+    # R5: a resolução registrada pelo Modelador é ecoada aqui; sem ela,
+    # DIVERGE_MATERIAL BLOQUEIA a publicação (checar.py --etapa valuation).
+    rd = p.get("resolucao_divergencia")
+    if isinstance(rd, dict) and rd.get("via"):
+        out["resolucao"] = {"via": str(rd["via"]).upper(), "texto": str(rd.get("texto", "")).strip()}
+    else:
+        out["resolucao"] = None
+    out["instrucao"] = ("Divergência material NÃO se resolve por média, combinação nem "
+                        "ressalva declarada: (a) revise premissas até reconciliar, (b) explique "
+                        "premissa a premissa por que o mercado estaria errando (evidência + "
+                        "observável que arbitra e quando), ou (c) adapte a metodologia via "
+                        "julgamento metodológico (R1). Registre em premissas.resolucao_divergencia; "
+                        "sem resolução o caso NÃO avança para publicação.")
     return out
 
 
 def bloco_sinais_e_gate(inp, hurdle, econ, reverse):
     m, p, g = inp["meta"], inp["premissas"], inp.get("gate", {})
     preco = m["preco_atual"]
-    hurdle_pond = hurdle["cenarios"]["ponderado"]
     faixa = econ["faixa_ponderada"]
     if preco > faixa[1]:
         sinal_econ = "SOBREAVALIADO"
@@ -482,19 +701,36 @@ def bloco_sinais_e_gate(inp, hurdle, econ, reverse):
         sinal_econ = "DENTRO_DA_FAIXA"
     ms_min = p.get("ms_minima", 0.12)
     lim_teto = p.get("limitrofe_teto", 1.10)
-    if preco <= (1.0 - ms_min) * hurdle_pond:
-        sinal_entrada = "ACIONAVEL"
-    elif preco <= lim_teto * hurdle_pond:
-        sinal_entrada = "LIMITROFE"
+    if hurdle is None:
+        # R3: sem retorno exigido informado pelo usuário não existe sinal de
+        # entrada, disciplina de compra nem nada derivado do hurdle. Degrade
+        # limpo para a âncora econômica, com a ausência declarada em uma linha.
+        sinal_entrada = "SEM_HURDLE"
+        sinais = {
+            "economico": sinal_econ,
+            "entrada": sinal_entrada,
+            "preco_sobre_hurdle_pond": None,
+            "premio_sobre_hurdle_pct": None,
+            "premio_sobre_econ_central_pct": round(100.0 * (preco / econ["central_ponderado"] - 1.0), 1),
+            "nota_hurdle": "Retorno mínimo exigido não informado pelo usuário: sinal de "
+                           "entrada, preço máximo para o hurdle e degraus ancorados nele não "
+                           "foram calculados; a leitura usa a âncora econômica.",
+        }
     else:
-        sinal_entrada = "NAO_ACIONAVEL"
-    sinais = {
-        "economico": sinal_econ,
-        "entrada": sinal_entrada,
-        "preco_sobre_hurdle_pond": round(preco / hurdle_pond, 2),
-        "premio_sobre_hurdle_pct": round(100.0 * (preco / hurdle_pond - 1.0), 1),
-        "premio_sobre_econ_central_pct": round(100.0 * (preco / econ["central_ponderado"] - 1.0), 1),
-    }
+        hurdle_pond = hurdle["cenarios"]["ponderado"]
+        if preco <= (1.0 - ms_min) * hurdle_pond:
+            sinal_entrada = "ACIONAVEL"
+        elif preco <= lim_teto * hurdle_pond:
+            sinal_entrada = "LIMITROFE"
+        else:
+            sinal_entrada = "NAO_ACIONAVEL"
+        sinais = {
+            "economico": sinal_econ,
+            "entrada": sinal_entrada,
+            "preco_sobre_hurdle_pond": round(preco / hurdle_pond, 2),
+            "premio_sobre_hurdle_pct": round(100.0 * (preco / hurdle_pond - 1.0), 1),
+            "premio_sobre_econ_central_pct": round(100.0 * (preco / econ["central_ponderado"] - 1.0), 1),
+        }
     teto_bull_econ = econ["faixa_completa"][1]
     razao_preco = preco / teto_bull_econ
     cap_impl = reverse["cap_implicito_econ_base"]
@@ -511,6 +747,10 @@ def bloco_sinais_e_gate(inp, hurdle, econ, reverse):
     elif sinal_entrada in ("ACIONAVEL", "LIMITROFE"):
         modo = "REFORCADA"
         razoes.append(f"entrada {sinal_entrada} (preco ate {lim_teto:.2f}x o hurdle ponderado): proximidade de compra")
+    elif sinal_entrada == "SEM_HURDLE" and sinal_econ == "SUBAVALIADO":
+        modo = "REFORCADA"
+        razoes.append("sem hurdle informado: proximidade de decisão avaliada pela âncora "
+                      "econômica (preço abaixo da faixa ponderada)")
     else:
         modo = "PADRAO"
         razoes.append("zona de debate (nem inequivocamente caro, nem em zona de compra)")
@@ -522,6 +762,57 @@ def bloco_sinais_e_gate(inp, hurdle, econ, reverse):
                          "ms_minima": ms_min, "limitrofe_teto": lim_teto},
             "razoes": razoes}
     return sinais, gate
+
+
+def bloco_matrizes(inp, econ):
+    """R6: três matrizes 3×3 por âncora com PREÇO POR AÇÃO em cada célula:
+    CAP×ROE (g base fixo), CAP×g (ROE base fixo), ROE×g (CAP base fixo).
+    Eixos usam as premissas bear/base/bull da tabela de cenários. Herda o R4:
+    cada matriz declara em `fixos` o que permanece constante (lucro, o terceiro
+    driver no valor base, Ke da âncora, DE/NDE, m_terminal base). Célula com
+    g >= ROE seria retenção > 100% — emitida como null (incoerente), nunca um
+    número falso. Cálculo 100% determinístico (pl_justo), nada em prosa."""
+    p, f = inp["premissas"], inp["fatos"]
+    lpa = f["lpa_ajustado_fy"]
+    cen = p["cenarios"]
+    base = cen["base"]
+    de, nde, _ = _de_nde(inp)
+    m_base = _m_terminal(base)
+    eixos = {d: {n: cen[n][d] for n in ("bear", "base", "bull")} for d in ("cap", "roe", "g")}
+    pares = (("cap", "roe", "g"), ("cap", "g", "roe"), ("roe", "g", "cap"))
+
+    def matriz(linha, coluna, fixo, ke):
+        precos = {}
+        for ln in ("bear", "base", "bull"):
+            precos[ln] = {}
+            for cn in ("bear", "base", "bull"):
+                drivers = {fixo: base[fixo], linha: eixos[linha][ln], coluna: eixos[coluna][cn]}
+                if drivers["g"] >= drivers["roe"]:
+                    precos[ln][cn] = None  # retenção > 100%: célula economicamente incoerente
+                else:
+                    precos[ln][cn] = round(lpa * pl_justo(drivers["g"], drivers["roe"],
+                                                          drivers["cap"], ke, de, nde, m_base), 2)
+        return {
+            "linha": linha, "coluna": coluna,
+            "valores_linha": eixos[linha], "valores_coluna": eixos[coluna],
+            "fixos": {fixo: base[fixo], "ke": ke, "lpa": lpa, "de": de, "nde": nde,
+                      "m_terminal": m_base},
+            "precos": precos,
+        }
+
+    def por_ancora(ke):
+        return {f"{a}_x_{b}": matriz(a, b, c, ke) for a, b, c in pares}
+
+    ke_h = p.get("ke_hurdle")
+    return {
+        "economico": {"ke": econ["ke_central"], **por_ancora(econ["ke_central"])},
+        "hurdle": ({"ke": ke_h, **por_ancora(ke_h)} if ke_h is not None else None),
+        "nota_experimento": "Cada matriz varia DOIS drivers pelos valores bear/base/bull da "
+                            "tabela de cenários e mantém fixos o terceiro driver (no valor "
+                            "base), o lucro (LPA), Ke da âncora, DE/NDE e m_terminal base. "
+                            "Células não são ponderadas por probabilidade (a leitura "
+                            "probabilística é a tabela de Cenários).",
+    }
 
 
 # ----------------------------------------------------------------------------
@@ -546,10 +837,12 @@ def carregar_inputs(caminho):
 def rodar(inp):
     validacao = bloco_validacao(inp)
     hurdle, econ = bloco_pl_justo(inp)
+    de_nde = bloco_de_nde(inp, hurdle, econ)
     cap = bloco_cap(inp)
     reverse = bloco_reverse(inp, econ)
     ladder = bloco_ladder(inp, econ)
     elast = bloco_elasticidades(inp, econ)
+    matrizes = bloco_matrizes(inp, econ)
     val_mult = bloco_validacao_multiplos(inp, hurdle, econ)
     sinais, gate = bloco_sinais_e_gate(inp, hurdle, econ, reverse)
     return {
@@ -561,11 +854,13 @@ def rodar(inp):
         "gate": gate,
         "sinais": sinais,
         "hurdle": hurdle,
+        "de_nde": de_nde,
         "economico": econ,
         "cap": cap,
         "reverse": reverse,
         "ladder": ladder,
         "elasticidades": elast,
+        "matrizes": matrizes,
         "validacao_multiplos": val_mult,
     }
 
@@ -575,12 +870,13 @@ def gerar_grafico(res, caminho):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     preco = res["meta"]["preco_atual"]
-    h = res["hurdle"]["cenarios"]
     e = res["economico"]
     linhas = [
-        ("Preço máx. hurdle", h["bear"]["preco"], h["bull"]["preco"], h["ponderado"]),
         ("Valor econômico (P/L Justo)", e["faixa_completa"][0], e["faixa_completa"][1], e["central_ponderado"]),
     ]
+    if res.get("hurdle"):  # R3: sem hurdle informado, o gráfico degrada para a âncora econômica
+        h = res["hurdle"]["cenarios"]
+        linhas.insert(0, ("Preço máx. hurdle", h["bear"]["preco"], h["bull"]["preco"], h["ponderado"]))
     fig, ax = plt.subplots(figsize=(9, 3.2))
     for i, (rot, lo, hi, centro) in enumerate(reversed(linhas)):
         ax.hlines(i, lo, hi, lw=8, alpha=0.45)
@@ -641,9 +937,16 @@ def main(argv=None):
     print(f"[engine v{ENGINE_VERSION}] resultados -> {dest}")
     print(f"  gate: {res['gate']['modo_recomendado']} | sinais: entrada="
           f"{res['sinais']['entrada']}, economico={res['sinais']['economico']}")
-    print(f"  hurdle ponderado: {res['hurdle']['cenarios']['ponderado']} | "
+    hurdle_txt = (res["hurdle"]["cenarios"]["ponderado"] if res.get("hurdle")
+                  else "n/a (hurdle nao informado pelo usuario)")
+    print(f"  hurdle ponderado: {hurdle_txt} | "
           f"econ faixa ponderada: {res['economico']['faixa_ponderada']}")
     print(f"  validacao_multiplos: {res['validacao_multiplos']['veredicto']}")
+    for al in res["elasticidades"]["alertas_sinal"]:
+        if not al["respondido"]:
+            print(f"  ALERTA DE SINAL (bloqueante): {al['ancora']}.{al['parametro']} "
+                  f"{al['sinal_observado']} vs esperado {al['sinal_esperado']} — responda em "
+                  f"premissas.respostas_sinais.{al['parametro']}")
     for a in res["validacao"]["avisos"]:
         print("  AVISO:", a)
     if args.chart:

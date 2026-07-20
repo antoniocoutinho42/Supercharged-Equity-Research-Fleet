@@ -60,7 +60,10 @@ def resultado_gerado(tmp_path_factory):
 
 
 def test_engine_versao_e_hash(resultado_gerado):
-    assert resultado_gerado["engine"]["versao"] == "2.2.0"
+    # v3.0.0: correções sistêmicas pós-HG (R2/R3/R4/R5/R6) — núcleo matemático e
+    # números do caso FNV/m_terminal INALTERADOS (só validação de inputs e blocos
+    # novos); ver CHANGELOG no topo de engine.py.
+    assert resultado_gerado["engine"]["versao"] == "3.0.0"
     assert resultado_gerado["engine"]["hash_inputs"] == "34e6680992b5b76e"
 
 

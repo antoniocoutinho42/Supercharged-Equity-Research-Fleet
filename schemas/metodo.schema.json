@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "metodo.schema.json",
+  "title": "metodo.yaml (julgamento metodologico previo — R1)",
+  "description": "Avaliacao registrada de aderencia do P/L Justo ao modelo de negocio, produzida ANTES da coleta completa e revisitada antes do valuation. Proporcional ao caso: um caso padrao obvio cabe em poucas linhas; um caso com float/cauda exige premissas_em_risco e dados_adicionais preenchidos. Precedentes de memoria (ex.: FNV/m_terminal) sao jurisprudencia de raciocinio, nunca atalho automatico.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticker", "decisao", "justificativa", "premissas_em_risco", "dados_adicionais"],
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "pattern": "^[A-Z0-9._-]{1,12}$"
+    },
+    "decisao": {
+      "type": "string",
+      "enum": ["PADRAO", "PADRAO_COM_ADAPTACAO", "INAPLICAVEL_CUSTOM"],
+      "description": "PADRAO: fluxo padrao representa a economia do ativo. PADRAO_COM_ADAPTACAO: adaptacao especifica ex-ante (bloco adaptacoes obrigatorio). INAPLICAVEL_CUSTOM: modo custom, exige autorizacao do Coordenador."
+    },
+    "justificativa": {
+      "type": "string",
+      "minLength": 40,
+      "description": "Como a companhia forma resultado e por que o P/L Justo (ou a adaptacao) representa essa economia. Economica, nao operacional."
+    },
+    "premissas_em_risco": {
+      "type": "array",
+      "description": "Premissas da derivacao em risco neste caso (lista vazia e legitima num caso padrao obvio).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["premissa", "risco"],
+        "properties": {
+          "premissa": {
+            "type": "string",
+            "enum": ["representatividade_lucro", "ciclicalidade", "roe_patrimonio", "retencao_crescimento", "divida_caixa_livre_bracket", "premissa_terminal", "risco_cauda", "outra"]
+          },
+          "risco": {"type": "string", "minLength": 10},
+          "tratamento": {"type": "string"}
+        }
+      }
+    },
+    "dados_adicionais": {
+      "type": "array",
+      "description": "Dados que a definicao da formula exige neste caso e que entram no plano de coleta do Analista (ex.: discriminacao caixa livre vs restrito/colateral quando ha float). Lista vazia e legitima num caso padrao.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dado", "motivo"],
+        "properties": {
+          "dado": {"type": "string", "minLength": 5},
+          "motivo": {"type": "string", "minLength": 10},
+          "coletado": {"type": "boolean"}
+        }
+      }
+    },
+    "adaptacoes": {
+      "type": "array",
+      "description": "Obrigatorio quando decisao = PADRAO_COM_ADAPTACAO: cada desvio do fluxo padrao, definido ex-ante, justificado economicamente, dimensionado com sensibilidade e sem vies direcional.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["parametro", "justificativa", "sensibilidade"],
+        "properties": {
+          "parametro": {"type": "string", "minLength": 2},
+          "justificativa": {"type": "string", "minLength": 20},
+          "sensibilidade": {"type": "string", "minLength": 10, "description": "Como o impacto da adaptacao no valor sera dimensionado (chaves do engine, nunca aritmetica em prosa)."},
+          "precedente": {"type": "string", "description": "Precedente consultado como jurisprudencia (opcional; nunca aplicado automaticamente)."}
+        }
+      }
+    },
+    "precedentes_consultados": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "revisao_valuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmada"],
+      "description": "Preenchido pelo Modelador quando os fatos completos chegam, ANTES do valuation (checar.py --etapa valuation exige confirmada: true).",
+      "properties": {
+        "confirmada": {"type": "boolean"},
+        "nota": {"type": "string"}
+      }
+    },
+    "autor": {
+      "type": "string",
+      "enum": ["Analista", "Modelador", "Coordenador"]
+    },
+    "data": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decisao": {"const": "PADRAO_COM_ADAPTACAO"}}},
+      "then": {"required": ["adaptacoes"], "properties": {"adaptacoes": {"minItems": 1}}}
+    }
+  ]
+}
