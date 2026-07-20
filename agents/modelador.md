@@ -17,7 +17,7 @@ Você NÃO julga a qualidade do negócio, NÃO recomenda compra ou venda, NÃO d
 
 ## 3. Skill obrigatória
 
-Ao receber um despacho, invoque PRIMEIRO a skill er-valuation e siga o fluxo dela: preencha premissas no inputs.yaml, rode cap_check.py ANTES de fixar o CAP, rode engine.py, reporte o gate G3.0 de profundidade ao Coordenador antes de escrever qualquer prosa, e só então escreva o valuation.md.
+Ao receber um despacho, invoque PRIMEIRO a skill er-valuation e siga o fluxo dela: revisite e confirme o metodo.yaml (julgamento metodológico) com os fatos completos ANTES de qualquer premissa, preencha premissas no inputs.yaml (ke_hurdle SOMENTE se o usuário informou o retorno exigido, nunca default; DE/NDE medidos ou exceção declarada com faixa), rode cap_check.py ANTES de fixar o CAP, rode engine.py, resolva os bloqueios de coerência (alertas de sinal contraintuitivo respondidos; divergência material de múltiplos resolvida) e reporte o gate G3.0 de profundidade ao Coordenador antes de escrever qualquer prosa, e só então escreva o valuation.md.
 
 ## 4. Insumos e entregáveis
 

@@ -3,6 +3,27 @@
 Plugin Claude que empacota o fleet de equity research buy-side de Antonio: dossiê,
 valuation determinístico, auditoria e relatório institucional.
 
+## v2.0.0 — correções sistêmicas pós-feedback do caso HG (BREAKING)
+
+Engine v3.0.0 e processo revisados; o contrato de inputs MUDA:
+
+- **R1** Julgamento metodológico prévio (`metodo.yaml`, `schemas/metodo.schema.json`):
+  aderência do P/L Justo ao modelo de negócio decidida ANTES da coleta completa e
+  revisitada antes do valuation (`checar.py` bloqueia sem ele).
+- **R2** `fatos.de`/`fatos.nde` (dívida bruta/PL e dívida líquida/PL) nunca mais são
+  zerados por lacuna: engine recusa sem `premissas.excecao_de_nde` (motivo econômico +
+  faixa alternativa) e calcula a sensibilidade da premissa substituta.
+- **R3** `premissas.ke_hurdle` é OPCIONAL e exclusivamente informado pelo usuário
+  (nenhum default de 12%); ausente, tudo degrada para a âncora econômica
+  (`sinais.entrada = SEM_HURDLE`).
+- **R4** Elasticidades com experimento declarado (`elasticidades.experimento`) e
+  alertas de sinal contraintuitivo bloqueantes (`premissas.respostas_sinais`).
+- **R5** `DIVERGE_MATERIAL` bloqueia a publicação sem `premissas.resolucao_divergencia`.
+- **R6** Relatório em duas audiências: corpo institucional (linter em
+  `checar.py --etapa relatorio`) + anexo técnico; matrizes de sensibilidade 3×3
+  (`matrizes` no engine); gráficos com rótulos de dados.
+- **R7** Auditoria proporcional: recomputo independente restrito a gatilhos.
+
 ## Estrutura
 
 ```

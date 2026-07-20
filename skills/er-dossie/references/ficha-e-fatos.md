@@ -69,9 +69,17 @@ todo campo com a MESMA fonte já registrada.
 - `ledger` (resumido: doc, data_arquivamento, uso).
 - `lpa_ajustado_fy`, `lpa_gaap_fy`.
 - `divida_liquida_mi`, `divida_bruta_mi`.
-- `de`, `nde` (dívida/PL e dívida líquida/PL MEDIDOS; se o PL estiver
-  distorcido a ponto de o quociente não fazer sentido, registre 0.0 e a
-  exceção com o motivo).
+- `de`, `nde` (dívida BRUTA/PL e dívida LÍQUIDA/PL MEDIDOS; (DE − NDE) =
+  caixa/PL, e o "caixa" que a fórmula consome é o caixa LIVRE no sentido
+  econômico do bracket — em negócios com float/ativos que lastreiam passivos
+  (seguradoras), colete a discriminação caixa livre vs. restrito/colateral que
+  o metodo.yaml (R1) tiver pedido, para o Modelador decidir o tratamento.
+  REGRA R2: NUNCA registre 0.0 por lacuna de coleta — se a medição for
+  genuinamente impossível (ex.: PL distorcido a ponto de o quociente não fazer
+  sentido), NÃO preencha os campos e registre a impossibilidade na ficha; a
+  exceção formal é do Modelador (premissas.excecao_de_nde, com motivo
+  econômico e faixa alternativa — o engine calcula a sensibilidade e recusa
+  exceção sem os dois).
 - `ebitda_gaap_ttm_mi`, `ebitda_adj_ttm_mi`.
 - `consenso {min, max, mediana, fonte}`.
 - `multiplos_historicos {pe {min, mediana, max, janela, base, fonte, serie

@@ -23,15 +23,19 @@ Responder em PT-BR, tom profissional e direto.
 | Validação 2 | Múltiplo atual vs. banda histórica da própria companhia (P/L ou EV/EBITDA, métrica primária declarada) | `validacao_multiplos.historico_proprio` |
 | Expectativas implícitas | g implícito (hurdle), CAP implícito (econ.), Ke que reconcilia o preço com o teto do CAP | `reverse` |
 | Entry ladder | Ke e CAP implícitos por degrau + delta até o valor central | `ladder` |
-| Elasticidades | Valor por +1 ano de CAP, +1pp g, +1pp ROE, −0,5pp Ke (duas âncoras) | `elasticidades` |
-| Sinais e gate | Entrada (ACIONAVEL/LIMITROFE/NAO_ACIONAVEL), econômico (SUB/DENTRO/SOBRE), profundidade G3.0 | `sinais`, `gate` |
-| Rastreabilidade | Eco do julgamento de CAP (cenários, teto, confiança, justificativas) e das checagens de coerência | `cap`, `validacao` |
+| Elasticidades | Valor por +1 ano de CAP, +1pp g, +1pp ROE, −0,5pp Ke (duas âncoras), com EXPERIMENTO declarado e alertas de sinal contraintuitivo | `elasticidades` (+ `experimento`, `alertas_sinal`) |
+| Matrizes 3×3 | CAP×ROE (g base fixo), CAP×g (ROE base fixo), ROE×g (CAP base fixo) por âncora, preço por célula, fixos declarados | `matrizes` |
+| Sinais e gate | Entrada (ACIONAVEL/LIMITROFE/NAO_ACIONAVEL/SEM_HURDLE), econômico (SUB/DENTRO/SOBRE), profundidade G3.0 | `sinais`, `gate` |
+| Rastreabilidade | Eco do julgamento de CAP, do bracket DE/NDE (com sensibilidade da exceção) e das checagens de coerência | `cap`, `de_nde`, `validacao` |
 
 **Removidos na v2 (não recriar à mão):** DCF-fade, grade de sensibilidade Ke×g×CAP,
-múltiplos-alvo com preços por cenário. Múltiplos NÃO são preços-alvo nem entram em
-média com o P/L Justo: são teste de razoabilidade. Divergência material (> limiar,
-default 30%) vira flag em `validacao_multiplos.flags` e obriga revisão das premissas
-ou explicação premissa a premissa — nunca combinação mecânica.
+múltiplos-alvo com preços por cenário. (As matrizes 3×3 da v3 NÃO são a volta da
+grade: usam só as premissas bear/base/bull já decididas nos cenários, com fixos
+declarados, e vivem no bloco `matrizes` do engine — nunca à mão.) Múltiplos NÃO são
+preços-alvo nem entram em média com o P/L Justo: são teste de razoabilidade.
+Divergência material (> limiar, default 30%) vira flag em `validacao_multiplos.flags`
+e BLOQUEIA a publicação até resolução registrada (Seção 3, R5) — nunca combinação
+mecânica, nunca "ressalva declarada".
 
 ## 2. Julgamento de CAP (cap_check.py — parecer, não gate)
 
@@ -49,12 +53,37 @@ recomendar auditoria ao Coordenador. `--selftest` valida a régua.
 
 ## 3. Fluxo de uso (Modelador)
 
+0. REVISITAR `<ns>/metodo.yaml` (R1) com os fatos completos, ANTES de qualquer
+   premissa: a decisão metodológica (padrão | adaptação | custom) ainda se sustenta?
+   Confirme em `revisao_valuation.confirmada: true` (o `checar.py --etapa valuation`
+   bloqueia sem isso). Adaptação nova: registre ex-ante no metodo.yaml (justificativa
+   econômica + sensibilidade), nunca durante o ajuste fino de resultado.
 1. Conferir `meta` e `fatos` do Analista no `inputs_<TICKER>.yaml` (schema canônico:
    `inputs_exemplo_vrsk.yaml`); preencher `premissas` (decisão sua, defendida no valuation.md).
+   REGRAS DURAS DE INPUT: (a) `ke_hurdle` é EXCLUSIVAMENTE o retorno exigido informado
+   pelo usuário — sem resposta, OMITA o campo (nenhum default; o engine degrada para a
+   âncora econômica com `SEM_HURDLE` declarado); (b) DE/NDE MEDIDOS pelo Analista —
+   sem medição, o engine recusa salvo `premissas.excecao_de_nde` {motivo econômico +
+   faixa_alternativa}, e ele mesmo calcula a sensibilidade da premissa substituta; o
+   que conta como "caixa livre" no bracket em negócios com float é decisão econômica
+   SUA, registrada, nunca regra automática de setor.
 2. Rodar `python cap_check.py inputs_<TICKER>.yaml` ANTES de fixar o CAP; responder os alertas.
 3. Rodar `python engine.py inputs_<TICKER>.yaml --out saida_<TICKER> --chart` (`--xlsx` opcional).
    O engine RECUSA inputs incoerentes (LPA <= 0 → modo custom com autorização do
-   Coordenador; probabilidades erradas; g >= ROE; CAPs fora de ordem; justificativas ausentes).
+   Coordenador; probabilidades erradas; g >= ROE; CAPs fora de ordem; justificativas ausentes;
+   DE/NDE ausentes sem exceção declarada).
+   PÓS-RODADA, DOIS BLOQUEIOS DE COERÊNCIA (nunca "ressalva e segue"):
+   (R4) `elasticidades.alertas_sinal` não vazio → verifique cálculo e interações; se o
+   efeito é válido, responda em `premissas.respostas_sinais.<parametro>` com o MECANISMO
+   econômico E a plausibilidade do experimento (algébrico sozinho não basta; experimento
+   implausível para o caso — ex.: encolher book observado/regulatório — se redesenha ou
+   reenquadra); se não, corrija a especificação. PROIBIDO ajustar output para produzir
+   o sinal esperado.
+   (R5) `validacao_multiplos.veredicto = DIVERGE_MATERIAL` → resolva antes de publicar:
+   revisão de premissas que reconcilie, explicação premissa a premissa que efetivamente
+   resolva (por que o mercado erraria, evidência, observável que arbitra e quando), ou
+   adaptação metodológica via metodo.yaml; registre em `premissas.resolucao_divergencia`
+   {via, texto} e re-rode. O checar.py reprova o G3 sem esses registros.
 4. Rodar `python scripts/snapshot.py <ns>` (caminho relativo à raiz do plugin): congela
    `inputs.yaml` + `resultados.json` em `runs/<hash8>/` imutável; o hash impresso é o
    identificador canônico da rodada, reportado ao Coordenador junto com o gate.

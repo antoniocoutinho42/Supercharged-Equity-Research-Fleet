@@ -17,11 +17,27 @@ positivamente para a carteira.
    re-expressa.
 3. Com auditoria: o agregado e o que sobreviveu ao contraditório (G5). Sem
    auditoria: as pendências do Modelador.
-4. Veredicto da validação por múltiplos: `DIVERGE_MATERIAL` não resolvido
-   rebaixa confiança.
+4. Veredicto da validação por múltiplos: `DIVERGE_MATERIAL` sem resolução
+   registrada (revisão de premissas que reconcilie, explicação premissa a
+   premissa que efetivamente resolva, ou adaptação metodológica via julgamento
+   do metodo.yaml) BLOQUEIA o G7 — o `checar.py --etapa valuation` já reprova
+   antes; nunca decida "com ressalva" por cima de divergência aberta. A
+   conclusão da resolução vai ao corpo do relatório; o histórico, ao anexo.
 5. Encaixe na carteira, quando avaliado (G6).
 6. Atualidade das evidências: se houve evento posterior aos dados usados,
    rode o P2 (atualização por delta) antes de decidir.
+
+## Regra sem hurdle informado (R3)
+
+O sinal de entrada, o Preço Máximo para o Hurdle e os degraus ancorados nele SÓ
+existem quando o usuário informou o retorno mínimo exigido no intake. Sem
+resposta (`sinais.entrada = SEM_HURDLE`): nenhum valor é assumido; as linhas da
+matriz que dependem de `ACIONAVEL`/`LIMITROFE`/`NAO_ACIONAVEL` ficam
+inalcançáveis (em particular `COMPRAR`); decida entre `WATCHLIST` e `PASSAR`
+pela âncora econômica (sinal econômico + reverse + ladder por Ke implícito), e
+declare em uma linha, na decisão, que a disciplina de entrada aguarda o retorno
+exigido do usuário. Nunca descreva a ausência como neutralidade: é uma decisão
+não tomada pelo usuário, não um sinal.
 
 ## Regra sem auditoria (default)
 

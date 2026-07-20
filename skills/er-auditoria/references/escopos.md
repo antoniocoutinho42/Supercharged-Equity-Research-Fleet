@@ -12,20 +12,38 @@ achado. `completa` roda os cinco escopos abaixo, na ordem em que aparecem.
 
 ## calculo
 
-RE-EXECUÇÃO DETERMINÍSTICA: rode o engine com o MESMO `inputs.yaml` de
-`<ns>/runs/<hash>/` (hash de `estado.yaml` campo `engine.hash`; NUNCA o
-`inputs.yaml` mutável do namespace); confira `engine.versao`,
-`engine.hash_inputs` e `resultados.json` byte-idênticos salvo timestamp.
-Rode também `python cap_check.py inputs_<TICKER>.yaml` e compare o parecer
-com as respostas do Modelador na tabela de premissas. Determinismo
-substitui replicação: PROIBIDO refazer o modelo em planilha ou num segundo
-script.
+PRINCÍPIO (R7 — auditoria proporcional ao risco): quando o valuation foi
+produzido pelo engine determinístico, versionado, coberto por golden tests
+e testes de cenários válidos, e a execução é rastreável (snapshot/hash), a
+auditoria de cálculo VERIFICA A RASTREABILIDADE e concentra o tempo em
+integridade dos inputs, premissas e adequação econômica da especificação
+(escopos `evidencia`/`especificacao`/`robustez`). Testes validam a
+execução do código; não validam a qualidade dos inputs nem a adequação
+econômica da especificação — é aí que a auditoria agrega.
 
-RECOMPUTO INDEPENDENTE (ver `references/recomputo-referencia.md`):
-recalcule 5 a 8 números sinal-críticos com a implementação de referência,
-caminho de cálculo diferente do engine (soma DDM explícita ano a ano com
-Bracket DE/NDE vs. a forma fechada). Divergência acima de 1e-6 no múltiplo
-é issue CRÍTICA imediata.
+RE-EXECUÇÃO DETERMINÍSTICA (sempre, é barata): rode o engine com o MESMO
+`inputs.yaml` de `<ns>/runs/<hash>/` (hash de `estado.yaml` campo
+`engine.hash`; NUNCA o `inputs.yaml` mutável do namespace); confira
+`engine.versao`, `engine.hash_inputs` e `resultados.json` byte-idênticos
+salvo timestamp. Rode também `python cap_check.py inputs_<TICKER>.yaml` e
+compare o parecer com as respostas do Modelador na tabela de premissas.
+Determinismo substitui replicação: PROIBIDO refazer o modelo em planilha
+ou num segundo script.
+
+RECOMPUTO INDEPENDENTE (ver `references/recomputo-referencia.md`) — NÃO é
+rotina de toda rodada; fica RESTRITO aos gatilhos: (a) resultado gerado
+FORA do fluxo determinístico (modo custom, script novo, número sem chave);
+(b) fórmula ou adaptação ainda não coberta por golden test (ex.: um
+`m_terminal` novo, um bloco novo do engine); (c) falha nos controles
+existentes (golden vermelho, hash divergente, snapshot ausente); (d)
+anomalia que levante dúvida razoável sobre o cálculo (ex.: sinal
+contraintuitivo sem resposta registrada que se sustente). Acionado um
+gatilho: recalcule 5 a 8 números sinal-críticos com a implementação de
+referência, caminho de cálculo diferente do engine (soma DDM explícita ano
+a ano com Bracket DE/NDE vs. a forma fechada); divergência acima de 1e-6
+no múltiplo é issue CRÍTICA imediata. Sem gatilho: declare no corpo
+"recomputo não acionado (fluxo determinístico rastreável; gatilhos do R7
+não presentes)" e siga para os escopos onde a auditoria agrega.
 
 CODE REVIEW DO ENGINE (só quando `engine.versao` mudou desde a última
 análise assinada; caso contrário este passo não existe): leia o diff, rode

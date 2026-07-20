@@ -41,6 +41,22 @@ nunca narrativa longa dentro do `estado.yaml`.
 - Sem fatos mínimos disponíveis rapidamente (ex.: sem cobertura de consenso):
   o gate é `PULADO` e o processo segue para o G2 com profundidade `PADRAO`
   como default.
+- JULGAMENTO METODOLÓGICO (R1): junto do G1_5 (ou no início do G2, quando o
+  G1_5 é PULADO), o Analista produz `<ns>/metodo.yaml` (schema
+  `schemas/metodo.schema.json`): compreensão do modelo de negócio e da formação
+  dos resultados ANTES da coleta completa; decisão explícita
+  PADRAO | PADRAO_COM_ADAPTACAO | INAPLICAVEL_CUSTOM com justificativa
+  econômica; premissas da fórmula em risco no caso; e os dados adicionais que a
+  definição da fórmula exige (ex.: discriminação de caixa livre vs.
+  restrito/colateral quando há float), que entram no plano de coleta do dossiê.
+  Proporcional ao caso: caso padrão óbvio cabe em poucas linhas; resseguradora
+  cat-exposta exige mais que uma linha. Precedentes de memória (ex.:
+  FNV/m_terminal) são jurisprudência de raciocínio a consultar, nunca atalho
+  automático. O `checar.py --etapa dossie` reprova sem o arquivo; o Modelador
+  revisita e confirma antes do valuation (`revisao_valuation.confirmada`,
+  cobrada pelo `checar.py --etapa valuation`).
+- HURDLE DO USUÁRIO (R3): a rodada coarse NUNCA assume hurdle; `ke_hurdle` só
+  entra no inputs se o usuário o informou no intake.
 - REGRA DE ADITIVIDADE: a profundidade do G1_5 é provisória e existe só para
   dimensionar o dossiê com economia; o G3_0 sempre confirma ou eleva depois
   dos fatos completos. Elevar depois do G1_5 é aditivo (mais diligência
@@ -96,8 +112,14 @@ nunca narrativa longa dentro do `estado.yaml`.
 - Pedido de calibração do Modelador (precisa de dado novo do Analista):
   roteie ao Analista como delta, uma rodada por padrão. Modo custom: só com
   o motivo registrado no racional do gate.
+- BLOQUEIOS DE COERÊNCIA (engine v3, verificados pelo checar): o G3 NÃO fecha
+  com (a) `metodo.yaml` sem a revisão confirmada do Modelador (R1); (b) alerta
+  de sinal contraintuitivo de elasticidade sem resposta registrada de mecanismo
+  E plausibilidade (R4); (c) validação por múltiplos em divergência material
+  sem resolução registrada — revisão de premissas, explicação fundamentada ou
+  adaptação metodológica via R1 (R5). Nunca "ressalva declarada e segue".
 - Verificação por código: `python skills/er-relatorio/checar.py <ns> --etapa
-  valuation` (chaves obrigatórias e citadas), depois `python
+  valuation` (chaves obrigatórias e citadas + bloqueios acima), depois `python
   scripts/pipeline.py <ns> gate G3 --veredicto APROVADO --racional "..."`.
 
 ## G4 — Auditoria (SOMENTE sob ordem explícita do usuário)

@@ -1,16 +1,21 @@
 ---
 name: er-relatorio
 description: >-
-  Composição determinística e renderização do relatório final de equity research do processo de Antonio (etapa G8 do fleet). USE SEMPRE que a tarefa envolver montar, compor, revisar ou gerar o relatório final (relatorio.md / relatorio_final.pdf) de uma análise, validar o namespace da análise (checar.py), gerar log de consistência, ou converter um Markdown em PDF com o template institucional (capa, sumário, tabelas, rodapé, paginação) — mesmo que o pedido diga apenas "gera o PDF", "monta o relatório" ou "valida os arquivos da análise". REGRA CENTRAL: o relatório NÃO é escrito por agente; compor.py injeta dossie.md e valuation.md verbatim e gera tearsheet/tabelas de chaves do resultados.json; agentes apenas editam transições pontuais no relatorio.md composto. render_pdf.py é genérico e serve para qualquer Markdown do processo.
+  Composição determinística e renderização do relatório final de equity research do processo de Antonio (etapa G8 do fleet). USE SEMPRE que a tarefa envolver montar, compor, revisar ou gerar o relatório final (relatorio.md / relatorio_final.pdf) de uma análise, validar o namespace da análise (checar.py), gerar log de consistência, ou converter um Markdown em PDF com o template institucional (capa, sumário, tabelas, rodapé, paginação) — mesmo que o pedido diga apenas "gera o PDF", "monta o relatório" ou "valida os arquivos da análise". REGRA CENTRAL: o relatório NÃO é escrito por agente; compor.py monta um CORPO institucional (dossiê saneado + seções de valuation geradas por chave do resultados.json, zero linguagem operacional) e um ANEXO TÉCNICO com a trilha auditável (memorando do Modelador, parecer da auditoria, hashes, resoluções); agentes apenas editam transições pontuais no relatorio.md composto. render_pdf.py é genérico e serve para qualquer Markdown do processo.
 ---
 
 # research-report — o relatório é composto por código, não reescrito por agente
 
-Este skill codifica a etapa G8 do processo. Princípios:
-**conteúdo analítico entra verbatim (dossiê do Analista, valuation do Modelador);
-todo número novo sai de uma chave (resultados.json/inputs.yaml/estado.yaml);
-capa, sumário, tabelas, estilos, rodapé e paginação são template fixo; zero prosa de agente
-para montar ou conferir.**
+Este skill codifica a etapa G8 do processo. Princípios (R6, separação de audiências):
+**o CORPO é um documento institucional de investimento, legível sem conhecimento do
+workflow — dossiê do Analista injetado com saneamento determinístico, seção de
+Valuation gerada por chave (conclusões primeiro, matrizes 3×3 com fixos declarados,
+resolução de divergência), verificação independente em linguagem executiva; a trilha
+técnica (chaves, hashes, memorando do Modelador, parecer integral da auditoria,
+racional do gate) vive no ANEXO TÉCNICO; todo número novo sai de uma chave
+(resultados.json/inputs.yaml/estado.yaml); capa, sumário, tabelas, estilos, rodapé e
+paginação são template fixo; zero prosa de agente para montar ou conferir; o
+`checar.py --etapa relatorio` REPROVA linguagem operacional no corpo.**
 
 Responder em PT-BR.
 
@@ -42,8 +47,8 @@ engine: {versao: "2.0.0", hash: "..."}
 decisao:                     # bloco escrito no G7; pré-requisito do compor.py
   recomendacao: "WATCHLIST (DISTANTE) — NÃO COMPRAR AGORA"
   confianca: MEDIA
-  racional: "1-3 frases do G7"
-  tese: "opcional: parágrafo de tese para a capa do tearsheet"
+  racional: "1-3 frases operacionais do G7 (vai ao ANEXO técnico, nunca ao corpo)"
+  tese: "OBRIGATÓRIA (>= 120 caracteres): cadeia causal — como a companhia gera valor, o que sustenta o retorno acima do custo de capital, o que o preço embute, onde está a assimetria e que riscos invalidam a tese; é o corpo do bloco de recomendação"
   ressalvas: ["opcional; as padronizadas (sem auditoria/sem snapshot) são automáticas"]
   gatilhos: ["US$80: diligência final", "US$70: entrada inicial"]
   plano_acao: ["opcional; default gerado da recomendação + gatilhos"]
@@ -56,6 +61,10 @@ são **LISTAS YAML** (`campo: ["item 1", "item 2"]` ou itens com `-`), nunca str
 nem bloco `>`/`|`. String escalar quebra a composição (um item por caractere no relatório).
 O `checar.py --etapa decisao` reprova o tipo errado; o `compor.py` ainda aplica coerção
 defensiva (string vira um item por linha), mas a coerção é rede de segurança, não licença.
+**LINGUAGEM (R6):** todos os campos da decisão que vão ao corpo (recomendacao, tese,
+ressalvas, gatilhos, plano_acao, revisao) nascem em linguagem institucional — sem códigos
+de gate/issue, enums, chaves ou hashes (o `checar.py --etapa decisao` reprova); o detalhe
+operacional vai em `racional`, que a composição envia ao anexo técnico.
 
 ## 3. Fluxo canônico (G8)
 
@@ -79,12 +88,17 @@ defensiva (string vira um item por linha), mas a coerção é rede de segurança
 
 ## 5. Saídas visuais e tabelas geradas pelo compor.py
 
-- **Tabela de premissas por limite** (substitui o gráfico de faixas): para cada âncora
-  (Preço Máximo para o Hurdle e Valor Intrínseco Econômico), mostra CAP, ROE, g, Ke e o
-  preço por ação do limite inferior e do superior, mais a linha ponderada/central. O
-  gráfico de faixas (PNG) só é gerado com `--com-grafico` (opt-in).
+- **Matrizes de sensibilidade 3×3** (substituem as tabelas de limites): para cada âncora
+  (Preço Máximo para o Hurdle QUANDO o usuário informou o retorno exigido; Valor
+  Intrínseco Econômico), CAP×ROE (g base fixo), CAP×g (ROE base fixo) e ROE×g (CAP base
+  fixo), preço por ação em cada célula, eixos nas premissas bear/base/bull, célula
+  Base/Base destacada, fixos declarados (herda o R4); células com g >= ROE viram "n.s."
+  com nota. Números do bloco `matrizes` do engine. A tabela "Cenários" permanece como
+  visão conjunta e probabilística. Gráfico de faixas (PNG) só com `--com-grafico`.
 - **Gráfico de histórico financeiro** (se `fatos.series_historicas` existir): receita e
-  lucro líquido em barras, ROE em linha; cores fixas Receita #002060, Lucro Líquido
+  lucro líquido em barras COM valores rotulados acima das barras (moeda reportada, em
+  milhões), ROE em linha com o percentual centralizado sobre cada marcador (fundo
+  branco, contorno na cor da linha); cores fixas Receita #002060, Lucro Líquido
   #FFC000, ROE #7F7F7F. Injetado após o dossiê.
 - **Gráfico de P/L histórico** (se `fatos.multiplos_historicos.pe.serie` existir): linha do
   P/L da companhia com pontilhadas na mediana e em mediana ± 1 desvio-padrão. Injetado após

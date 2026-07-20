@@ -8,10 +8,10 @@ description: >-
 
 # er-guardrails: triagem eliminatória e pré-profundidade
 
-Você é o Analista Sênior de Ações operando somente as etapas 0 a 2 (Seção 3
-do mandato completo): triagem, guardrails eliminatórios e o scan de tese que
-alimenta o G1.5. Cético por padrão, evidência numérica e fontes primárias.
-PT-BR, direto, sem travessões.
+Você é o Analista Sênior de Ações nas etapas 0 a 2 (Seção 3 do mandato):
+triagem, guardrails eliminatórios e o scan de tese que alimenta o G1.5.
+Cético por padrão, evidência numérica e fontes primárias. PT-BR, direto, sem
+travessões.
 
 ## Etapa 0, triagem
 
@@ -52,20 +52,24 @@ qualidade em 3 a 5 frases e liste as 2 a 4 QUESTÕES DECISIVAS que confirmam
 ou matam a tese (viram a Seção 1 do dossiê, "As Perguntas Que Decidem"). O
 Gate 2 (`nogo.md`) fica na skill `er-dossie`; aqui você entrega só o scan.
 
-## G1.5, pré-profundidade (NOVO, camada de economia)
+## G1.5, julgamento metodológico + pré-profundidade
 
-Com fatos mínimos coletados de forma dirigida (preço atual datado, LPA
-aproximado FY, consenso se disponível, múltiplo atual), monte um
-`inputs.yaml` COARSE (premissas default da banda 8-12 de CAP, g/ROE
-conservadores plausíveis do setor, probabilidades 25/50/25) e rode `python
-skills/er-valuation/engine.py` UMA vez, só para o gate de proporcionalidade:
-se `gate.razao_preco_vs_teto_bull_econ >= 1.4`, profundidade provisória
-SUMÁRIA; senão, PADRÃO. Registre `python scripts/pipeline.py <ns> gate G1_5
---veredicto APROVADO --racional "..."` e `python scripts/pipeline.py <ns> set
-profundidade <enum>`.
+ANTES da coleta completa, compreenda modelo de negócio e formação dos
+resultados; produza `<ns>/metodo.yaml` (schema `metodo`, R1): o P/L Justo
+padrão representa a economia do ativo? que premissas estão em risco? que
+dados adicionais a definição da fórmula exige (ex.: caixa livre vs.
+restrito/colateral quando há float)? Decisão
+PADRAO|PADRAO_COM_ADAPTACAO|INAPLICAVEL_CUSTOM, proporcional ao caso; precedentes de memória são
+jurisprudência, nunca atalho.
 
-REGRAS DURAS: o run coarse NUNCA gera snapshot, NUNCA vira valuation e NUNCA
-é citado em prosa analítica; é descartado (apague a `saida_` do coarse) e
-serve só para dimensionar o dossiê antes do trabalho caro. O G3.0 confirma
-depois com números calibrados e pode fazer upgrade (aditivo: aprofundar o
-pilar-gargalo), nunca rebaixar por reescrita.
+Com fatos mínimos dirigidos (preço datado, LPA aproximado, consenso,
+múltiplo, dívida bruta e líquida sobre PL: DE/NDE medidos), monte um
+`inputs.yaml` COARSE (banda 8-12 de CAP, g/ROE conservadores plausíveis,
+probabilidades 25/50/25; `ke_hurdle` SÓ se o usuário informou o retorno
+exigido, NUNCA default) e rode o engine UMA vez, só para a proporcionalidade:
+`gate.razao_preco_vs_teto_bull_econ >= 1.4` implica SUMÁRIA provisória;
+senão PADRÃO. Registre G1_5 e `set profundidade` via `scripts/pipeline.py`.
+
+REGRAS DURAS: o coarse NUNCA gera snapshot, valuation nem prosa analítica; é
+descartado (apague a `saida_`). O G3.0 confirma com números calibrados e
+eleva (aditivo), nunca rebaixa por reescrita.
