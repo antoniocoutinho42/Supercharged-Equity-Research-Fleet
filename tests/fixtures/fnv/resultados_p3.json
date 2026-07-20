@@ -1,8 +1,8 @@
 {
   "engine": {
-    "versao": "2.2.0",
-    "hash_inputs": "34e6680992b5b76e",
-    "gerado_em": "2026-07-15T17:42:30+00:00"
+    "versao": "3.0.0",
+    "hash_inputs": "089ea8e6f4fc398b",
+    "gerado_em": "2026-07-20T18:05:03+00:00"
   },
   "meta": {
     "ticker": "FNV",
@@ -77,6 +77,13 @@
       },
       "ponderado": 120.22
     }
+  },
+  "de_nde": {
+    "de": 0.0,
+    "nde": -0.088,
+    "medido": true,
+    "definicao": "DE = dívida bruta/PL; NDE = dívida líquida/PL; (DE − NDE) = caixa livre/PL no sentido econômico do bracket (decisão registrada do Modelador sobre o que conta como caixa livre)",
+    "excecao": null
   },
   "economico": {
     "por_ke": {
@@ -235,7 +242,298 @@
       "mais_1pp_g": 21.13,
       "mais_1pp_roe": -7.93,
       "menos_05pp_ke": 13.29
-    }
+    },
+    "experimento": {
+      "mais_1a_cap": "Varia só a duração da vantagem (CAP +1 ano); mantém fixos lucro (LPA), g, ROE, Ke, DE/NDE e m_terminal do cenário base.",
+      "mais_1pp_g": "Varia só o crescimento (g +1 p.p.); mantém fixos lucro, ROE, CAP, Ke, DE/NDE e m_terminal. Com ROE fixo, mais g exige mais retenção (payout cai): o experimento move crescimento E retenção juntos.",
+      "mais_1pp_roe": "Varia só a rentabilidade (ROE +1 p.p.); mantém fixos LUCRO, g, CAP, Ke, DE/NDE e m_terminal. Com lucro fixo, mais ROE implica patrimônio implícito MENOR (book = lucro/ROE) e book terminal menor — o experimento move duas coisas ao mesmo tempo. Onde o patrimônio é observado e regulatório (seguradoras, bancos), esta variação pode não corresponder a nenhuma variação real da companhia: redesenhe ou reenquadre.",
+      "menos_05pp_ke": "Varia só a taxa de desconto (Ke −0,5 p.p.); mantém todo o resto fixo."
+    },
+    "alertas_sinal": [
+      {
+        "ancora": "economico",
+        "parametro": "mais_1a_cap",
+        "valor": -0.26,
+        "sinal_esperado": "POSITIVO",
+        "sinal_observado": "NEGATIVO",
+        "exigencia": "Sinal contrário à relação econômica esperada: verificar cálculo e interações entre premissas; se válido, explicar o MECANISMO econômico e a PLAUSIBILIDADE do experimento (a explicação algébrica sozinha não basta); se não, corrigir a especificação. Publicação bloqueada sem resposta.",
+        "respondido": true,
+        "resposta": "Mecanismo: com m_terminal 4,0 o termo terminal (M x x^CAP/ROE) domina o valor; +1 ano de CAP adia esse terminal (mais um ano de desconto a Ke > g) por mais tempo do que a anuidade de franquia adiciona, dai o sinal negativo. Verificado por recomputo (nao e erro de calculo). Plausibilidade: nesta especificacao o valor ja esta majoritariamente no book economico acumulado; a leitura correta e \"o terminal alto antecipado vale mais que a franquia marginal\", e nao \"moat mais longo destroi valor\"."
+      },
+      {
+        "ancora": "economico",
+        "parametro": "mais_1pp_roe",
+        "valor": -7.93,
+        "sinal_esperado": "POSITIVO",
+        "sinal_observado": "NEGATIVO",
+        "exigencia": "Sinal contrário à relação econômica esperada: verificar cálculo e interações entre premissas; se válido, explicar o MECANISMO econômico e a PLAUSIBILIDADE do experimento (a explicação algébrica sozinha não basta); se não, corrigir a especificação. Publicação bloqueada sem resposta.",
+        "respondido": true,
+        "resposta": "Mecanismo: o experimento mantem lucro e g fixos; +1pp de ROE encolhe o patrimonio implicito por unidade de lucro (book = lucro/ROE) e o terminal (proporcional a M/ROE) cai mais do que o payout da franquia sobe. Calculos verificados; interacao de premissas correta. Plausibilidade: o book contabil de royalty e reconhecidamente ma proxy do capital economico (a propria razao do m_terminal); a leitura correta e \"a mesma capacidade de lucro sustentada por menos capital economico reduz o valor terminal por unidade de lucro\", nunca \"mais rentabilidade destroi valor\"."
+      },
+      {
+        "ancora": "hurdle",
+        "parametro": "mais_1pp_g",
+        "valor": 11.68,
+        "sinal_esperado": "NEGATIVO",
+        "sinal_observado": "POSITIVO",
+        "exigencia": "Sinal contrário à relação econômica esperada: verificar cálculo e interações entre premissas; se válido, explicar o MECANISMO econômico e a PLAUSIBILIDADE do experimento (a explicação algébrica sozinha não basta); se não, corrigir a especificação. Publicação bloqueada sem resposta.",
+        "respondido": true,
+        "resposta": "Mecanismo: na ancora do retorno exigido (12%, igual ao ROE base, spread zero) o modelo padrao seria insensivel a g; com m_terminal 4,0 o crescimento amplia o book economico que sobrevive ao fade e o efeito liquido vira positivo. Plausibilidade: coerente com royalty/streaming, onde o crescimento vem de entregas ja contratadas sem capex incremental do acionista."
+      },
+      {
+        "ancora": "hurdle",
+        "parametro": "mais_1pp_roe",
+        "valor": -4.12,
+        "sinal_esperado": "POSITIVO",
+        "sinal_observado": "NEGATIVO",
+        "exigencia": "Sinal contrário à relação econômica esperada: verificar cálculo e interações entre premissas; se válido, explicar o MECANISMO econômico e a PLAUSIBILIDADE do experimento (a explicação algébrica sozinha não basta); se não, corrigir a especificação. Publicação bloqueada sem resposta.",
+        "respondido": true,
+        "resposta": "Mecanismo: o experimento mantem lucro e g fixos; +1pp de ROE encolhe o patrimonio implicito por unidade de lucro (book = lucro/ROE) e o terminal (proporcional a M/ROE) cai mais do que o payout da franquia sobe. Calculos verificados; interacao de premissas correta. Plausibilidade: o book contabil de royalty e reconhecidamente ma proxy do capital economico (a propria razao do m_terminal); a leitura correta e \"a mesma capacidade de lucro sustentada por menos capital economico reduz o valor terminal por unidade de lucro\", nunca \"mais rentabilidade destroi valor\"."
+      }
+    ]
+  },
+  "matrizes": {
+    "economico": {
+      "ke": 0.086,
+      "cap_x_roe": {
+        "linha": "cap",
+        "coluna": "roe",
+        "valores_linha": {
+          "bear": 10,
+          "base": 17,
+          "bull": 23
+        },
+        "valores_coluna": {
+          "bear": 0.09,
+          "base": 0.12,
+          "bull": 0.15
+        },
+        "fixos": {
+          "g": 0.07,
+          "ke": 0.086,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 227.77,
+            "base": 182.86,
+            "bull": 155.91
+          },
+          "base": {
+            "bear": 215.3,
+            "base": 180.92,
+            "bull": 160.29
+          },
+          "bull": {
+            "bear": 205.59,
+            "base": 179.41,
+            "bull": 163.7
+          }
+        }
+      },
+      "cap_x_g": {
+        "linha": "cap",
+        "coluna": "g",
+        "valores_linha": {
+          "bear": 10,
+          "base": 17,
+          "bull": 23
+        },
+        "valores_coluna": {
+          "bear": 0.04,
+          "base": 0.07,
+          "bull": 0.09
+        },
+        "fixos": {
+          "roe": 0.12,
+          "ke": 0.086,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 150.32,
+            "base": 182.86,
+            "bull": 209.47
+          },
+          "base": {
+            "bear": 133.09,
+            "base": 180.92,
+            "bull": 226.43
+          },
+          "bull": {
+            "bear": 121.96,
+            "base": 179.41,
+            "bull": 241.31
+          }
+        }
+      },
+      "roe_x_g": {
+        "linha": "roe",
+        "coluna": "g",
+        "valores_linha": {
+          "bear": 0.09,
+          "base": 0.12,
+          "bull": 0.15
+        },
+        "valores_coluna": {
+          "bear": 0.04,
+          "base": 0.07,
+          "bull": 0.09
+        },
+        "fixos": {
+          "cap": 17,
+          "ke": 0.086,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 156.4,
+            "base": 215.3,
+            "bull": null
+          },
+          "base": {
+            "bear": 133.09,
+            "base": 180.92,
+            "bull": 226.43
+          },
+          "bull": {
+            "bear": 119.11,
+            "base": 160.29,
+            "bull": 199.14
+          }
+        }
+      }
+    },
+    "hurdle": {
+      "ke": 0.12,
+      "cap_x_roe": {
+        "linha": "cap",
+        "coluna": "roe",
+        "valores_linha": {
+          "bear": 10,
+          "base": 17,
+          "bull": 23
+        },
+        "valores_coluna": {
+          "bear": 0.09,
+          "base": 0.12,
+          "bull": 0.15
+        },
+        "fixos": {
+          "g": 0.07,
+          "ke": 0.12,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 168.97,
+            "base": 136.96,
+            "bull": 117.75
+          },
+          "base": {
+            "bear": 131.61,
+            "base": 113.77,
+            "bull": 103.07
+          },
+          "bull": {
+            "bear": 107.84,
+            "base": 99.02,
+            "bull": 93.73
+          }
+        }
+      },
+      "cap_x_g": {
+        "linha": "cap",
+        "coluna": "g",
+        "valores_linha": {
+          "bear": 10,
+          "base": 17,
+          "bull": 23
+        },
+        "valores_coluna": {
+          "bear": 0.04,
+          "base": 0.07,
+          "bull": 0.09
+        },
+        "fixos": {
+          "roe": 0.12,
+          "ke": 0.12,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 114.06,
+            "base": 136.96,
+            "bull": 155.75
+          },
+          "base": {
+            "bear": 87.54,
+            "base": 113.77,
+            "bull": 138.96
+          },
+          "bull": {
+            "bear": 73.54,
+            "base": 99.02,
+            "bull": 126.91
+          }
+        }
+      },
+      "roe_x_g": {
+        "linha": "roe",
+        "coluna": "g",
+        "valores_linha": {
+          "bear": 0.09,
+          "base": 0.12,
+          "bull": 0.15
+        },
+        "valores_coluna": {
+          "bear": 0.04,
+          "base": 0.07,
+          "bull": 0.09
+        },
+        "fixos": {
+          "cap": 17,
+          "ke": 0.12,
+          "lpa": 5.58,
+          "de": 0.0,
+          "nde": -0.088,
+          "m_terminal": 4.0
+        },
+        "precos": {
+          "bear": {
+            "bear": 100.07,
+            "base": 131.61,
+            "bull": null
+          },
+          "base": {
+            "bear": 87.54,
+            "base": 113.77,
+            "bull": 138.96
+          },
+          "bull": {
+            "bear": 80.03,
+            "base": 103.07,
+            "bull": 124.92
+          }
+        }
+      }
+    },
+    "nota_experimento": "Cada matriz varia DOIS drivers pelos valores bear/base/bull da tabela de cenários e mantém fixos o terceiro driver (no valor base), o lucro (LPA), Ke da âncora, DE/NDE e m_terminal base. Células não são ponderadas por probabilidade (a leitura probabilística é a tabela de Cenários)."
   },
   "validacao_multiplos": {
     "metrica_primaria": "PE",
@@ -285,6 +583,10 @@
     "flags": [
       "DIVERGENCIA_MATERIAL_COMPARAVEIS: P/L justo econômico (33.78x) diverge 54.7% da mediana dos pares (21.84x) — revisar premissas ou explicar premissa a premissa"
     ],
-    "instrucao": "Divergência material NÃO se resolve por média ou combinação: revise as premissas do motor principal ou explique a diferença; sem resolução, rebaixe a confiança declarada."
+    "resolucao": {
+      "via": "EXPLICACAO_FUNDAMENTADA",
+      "texto": "A divergencia remanescente e exclusivamente contra a mediana de pares de royalty/streaming (+54,7%); contra a banda historica da propria companhia o modelo converge (-6,5%). O premio da Franco-Nevada sobre Wheaton/Royal Gold/Osisko/Triple Flag e um fato de mercado preexistente (P/E atual 35,95x vs pares 21,84x; o minimo historico proprio de 34,54x ja ficava 58% acima da mediana atual de pares), nao um artefato desta revisao. A evidencia que sustenta a leitura interna e o P/B implicito realizado da propria companhia em quatro anos independentes de precos passados (nao o preco de hoje). O observavel que arbitra: a investigacao qualitativa dedicada do merito do premio sobre pares (pendencia registrada com dono), e, ate ela ser concluida, a regra de decisao mantem o caso fora de compra -- a explicacao resolve a publicacao, nao autoriza o sinal de entrada."
+    },
+    "instrucao": "Divergência material NÃO se resolve por média, combinação nem ressalva declarada: (a) revise premissas até reconciliar, (b) explique premissa a premissa por que o mercado estaria errando (evidência + observável que arbitra e quando), ou (c) adapte a metodologia via julgamento metodológico (R1). Registre em premissas.resolucao_divergencia; sem resolução o caso NÃO avança para publicação."
   }
 }

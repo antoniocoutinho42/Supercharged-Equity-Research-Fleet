@@ -45,7 +45,12 @@ MEMORIA_PATH = os.path.join(REPO_ROOT, "scripts", "memoria.py")
 
 PYTHON = sys.executable
 
-HASH_P3_ESPERADO = "34e6680992b5b76e"
+# ATUALIZAÇÃO INTENCIONAL (engine v3.0.0, correções pós-HG): inputs_p3.yaml ganhou
+# premissas.respostas_sinais (R4) e premissas.resolucao_divergencia (R5) — os novos
+# comportamentos bloqueantes exigem esses registros; os números-âncora do caso
+# (hurdle 116,46 / central 188,49 / sinais) permanecem IDÊNTICOS à sessão real.
+# Hash anterior (fixture byte-a-byte da sessão de 15/07/2026): 34e6680992b5b76e.
+HASH_P3_ESPERADO = "089ea8e6f4fc398b"
 
 # frase única do dossiê (governança/ownership — nunca citada pela nota de
 # memória, que só ecoa cabeçalho/decisão/pendências/âncoras) usada como
@@ -104,6 +109,8 @@ def pipeline(tmp_path_factory):
     shutil.copyfile(os.path.join(FIXT_DIR, "claims.yaml"), ns / "claims.yaml")
     shutil.copyfile(os.path.join(FIXT_DIR, "estado_final.yaml"), ns / "estado.yaml")
     shutil.copyfile(os.path.join(FIXT_DIR, "inputs_valuation.md"), ns / "inputs_valuation.md")
+    # R1: julgamento metodológico prévio (obrigatório no checar --etapa dossie/valuation)
+    shutil.copyfile(os.path.join(FIXT_DIR, "metodo.yaml"), ns / "metodo.yaml")
 
     inputs_path = ns / "inputs.yaml"
     saida_dir = ns / "saida_FNV"
@@ -174,8 +181,9 @@ def pipeline(tmp_path_factory):
 # ----------------------------------------------------------------------------
 
 def test_inputs_p3_hash_fiel_ao_original():
-    """O hash8 do inputs_p3.yaml commitado DEVE continuar 34e6680992b5b76e —
-    é o teste de que a cópia (binária) da sessão real não foi transcodificada."""
+    """O hash8 do inputs_p3.yaml commitado DEVE bater com HASH_P3_ESPERADO — é o
+    teste de que a fixture não muda silenciosamente (toda mudança intencional
+    atualiza a constante COM justificativa no comentário dela)."""
     import hashlib
     caminho = os.path.join(FIXT_DIR, "inputs_p3.yaml")
     with open(caminho, "r", encoding="utf-8") as fh:
@@ -326,8 +334,8 @@ def test_memoria_gera_nota_sem_erro(pipeline):
 def test_memoria_conteudo_esperado(pipeline):
     nota = pipeline["nota"]
     assert "WATCHLIST (PRÓXIMA)" in nota
-    assert "AC-04" in nota
-    assert "34e66809" in nota
+    assert "AC-04" in nota          # trilha interna: pendências mantêm IDs de issue
+    assert "089ea8e6" in nota       # hash8 do run canônico (engine v3, ver HASH_P3_ESPERADO)
 
 
 def test_memoria_nao_duplica_dossie(pipeline):

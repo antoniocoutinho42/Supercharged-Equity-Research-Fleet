@@ -274,6 +274,52 @@ premissas:                    # dono: MODELADOR (G3). Defesa registrada no valua
   limitrofe_teto: 1.10
   ladder_precos: [175, 155, 135, 115]
 
+  # R4 (engine v3): respostas registradas aos alertas de sinal contraintuitivo das
+  # elasticidades -- mecanismo economico E plausibilidade do experimento (a
+  # explicacao algebrica sozinha nao basta). Item bloqueante do checar.py.
+  respostas_sinais:
+    mais_1a_cap: >
+      Mecanismo: com m_terminal 4,0 o termo terminal (M x x^CAP/ROE) domina o valor;
+      +1 ano de CAP adia esse terminal (mais um ano de desconto a Ke > g) por mais
+      tempo do que a anuidade de franquia adiciona, dai o sinal negativo. Verificado
+      por recomputo (nao e erro de calculo). Plausibilidade: nesta especificacao o
+      valor ja esta majoritariamente no book economico acumulado; a leitura correta e
+      "o terminal alto antecipado vale mais que a franquia marginal", e nao "moat mais
+      longo destroi valor".
+    mais_1pp_g: >
+      Mecanismo: na ancora do retorno exigido (12%, igual ao ROE base, spread zero) o
+      modelo padrao seria insensivel a g; com m_terminal 4,0 o crescimento amplia o
+      book economico que sobrevive ao fade e o efeito liquido vira positivo.
+      Plausibilidade: coerente com royalty/streaming, onde o crescimento vem de
+      entregas ja contratadas sem capex incremental do acionista.
+    mais_1pp_roe: >
+      Mecanismo: o experimento mantem lucro e g fixos; +1pp de ROE encolhe o
+      patrimonio implicito por unidade de lucro (book = lucro/ROE) e o terminal
+      (proporcional a M/ROE) cai mais do que o payout da franquia sobe. Calculos
+      verificados; interacao de premissas correta. Plausibilidade: o book contabil de
+      royalty e reconhecidamente ma proxy do capital economico (a propria razao do
+      m_terminal); a leitura correta e "a mesma capacidade de lucro sustentada por
+      menos capital economico reduz o valor terminal por unidade de lucro", nunca
+      "mais rentabilidade destroi valor".
+
+  # R5 (engine v3): resolucao registrada da divergencia material de multiplos --
+  # explicacao premissa a premissa com evidencia e observavel que arbitra.
+  resolucao_divergencia:
+    via: EXPLICACAO_FUNDAMENTADA
+    texto: >
+      A divergencia remanescente e exclusivamente contra a mediana de pares de
+      royalty/streaming (+54,7%); contra a banda historica da propria companhia o
+      modelo converge (-6,5%). O premio da Franco-Nevada sobre Wheaton/Royal
+      Gold/Osisko/Triple Flag e um fato de mercado preexistente (P/E atual 35,95x vs
+      pares 21,84x; o minimo historico proprio de 34,54x ja ficava 58% acima da
+      mediana atual de pares), nao um artefato desta revisao. A evidencia que
+      sustenta a leitura interna e o P/B implicito realizado da propria companhia em
+      quatro anos independentes de precos passados (nao o preco de hoje). O
+      observavel que arbitra: a investigacao qualitativa dedicada do merito do premio
+      sobre pares (pendencia registrada com dono), e, ate ela ser concluida, a regra
+      de decisao mantem o caso fora de compra -- a explicacao resolve a publicacao,
+      nao autoriza o sinal de entrada.
+
 gate:
   limiar_preco_vs_bull_econ: 1.4
   limiar_cap_implicito_vs_teto: 2.0

@@ -1,0 +1,43 @@
+# Julgamento metodologico previo (R1) — caso FNV, reconstruido da sessao real de
+# 15/07/2026 que originou o m_terminal (a adaptacao foi autorizada ex-post naquela
+# sessao, via critica da auditoria; este arquivo registra o mesmo julgamento no
+# formato que o processo passou a exigir EX-ANTE).
+ticker: FNV
+decisao: PADRAO_COM_ADAPTACAO
+justificativa: >
+  Royalty/streaming de metais preciosos: lucro contabil positivo e representativo
+  (margens 86-91%, sem capex de mina), mas ativos de duracao muito longa cujo book
+  contabil a custo historico (ex.: Goldstrike, 1986) subestima o patrimonio
+  economico; a premissa terminal padrao (reversao a book contabil no fim do CAP)
+  nao representa a economia do ativo.
+premissas_em_risco:
+  - premissa: premissa_terminal
+    risco: "reversao a book contabil a custo historico subestima o terminal em ativos de duracao muito longa"
+    tratamento: "m_terminal calibrado em evidencia realizada (P/B implicito historico proprio), por cenario"
+  - premissa: roe_patrimonio
+    risco: "ROE contabil distorcido pelo book a custo historico e pelo impairment de 2023"
+    tratamento: "ROE por cenario ancorado nos pontos observados 2021-2025 ex-distorcao"
+  - premissa: retencao_crescimento
+    risco: "parte do crescimento vem de portfolio ja contratado (entregas futuras), nao de retencao corrente"
+    tratamento: "g por cenario limitado ao teto de coerencia e amarrado a evidencia de reservas"
+dados_adicionais:
+  - dado: "serie de P/B implicito realizado (P/E x ROE) da propria companhia, ex-2023"
+    motivo: "calibrar o multiplicador de book economico do terminal em evidencia nao-circular (precos passados realizados, nao o preco de hoje)"
+    coletado: true
+adaptacoes:
+  - parametro: m_terminal
+    justificativa: >
+      Valor terminal por book economico em vez de book contabil, calibrado no P/B
+      implicito realizado da propria FNV (media 4,28x, mediana 4,08x, 4 anos
+      independentes ex-2023), com bear ancorado na regressao ao padrao de pares.
+    sensibilidade: >
+      Cenarios bear/base/bull com M 2,50/4,00/5,20; teste adversarial da auditoria
+      com M implicito de pares (2,25x) e com M bear uniforme, ambos registrados no
+      parecer e na decisao.
+    precedente: "primeiro caso da adaptacao; registrado em memoria como jurisprudencia de raciocinio, nunca atalho automatico por setor"
+precedentes_consultados: []
+revisao_valuation:
+  confirmada: true
+  nota: "revisitado com os fatos completos no P2; adaptacao autorizada pelo Coordenador apos critica material da auditoria"
+autor: Modelador
+data: "2026-07-15"
