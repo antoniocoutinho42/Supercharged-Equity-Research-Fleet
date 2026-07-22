@@ -1205,10 +1205,66 @@ def bloco_ebit_justo(inp, econ):
     }
     elast["alertas_sinal"] = alertas
 
+    # História→números (condição 6 da aprovação): tabela gerada POR CHAVE, um item por
+    # cenário — a resposta estrutural ao "fundamentações meio arbitrárias" (Seção 5 do
+    # prompt master). SEMPRE presente quando ebit_justo roda; drivers ausentes viram "—"
+    # com aviso nomeado, nunca omissão silenciosa.
+    avisos = []
+    drivers = op.get("drivers_narrativos") or {}
+    historia = {}
+    sem_drivers = []
+    for n in nomes:
+        hist = str(drivers.get(n, "")).strip()
+        if not hist:
+            sem_drivers.append(n)
+        historia[n] = {
+            "historia": hist or "—",
+            "premissa": f"margem_nopat {cen_op[n]['margem_nopat']} × giro_noa "
+                        f"{cen_op[n]['giro_noa']} (g {cen_eq[n]['g']}, cap {cen_eq[n]['cap']})",
+            "implicito": {"roic": out_cen[n]["roic"],
+                          "rir_terminal": out_cen[n]["rir_implicito_terminal"],
+                          "g": float(cen_eq[n]["g"])},
+            "evidencia": f"wacc: {op['fonte_wacc']}; aliquotas: {op['fonte_aliquotas']}",
+        }
+    if sem_drivers:
+        avisos.append(f"DRIVERS_NARRATIVOS_AUSENTES ({', '.join(sem_drivers)}): a coluna "
+                      "'história' da tabela história→premissa→implícito→evidência ficou vazia — "
+                      "o Modelador deve declarar premissas.operacional.drivers_narrativos por "
+                      "cenário e defender cada implícito contra o dossiê (G2)")
+
+    # Camadas de imposto (H5): operacional entra na cadeia; marginal/terminal são eco
+    # rastreável de premissas.impostos. Terminal não declarada => aviso nomeado (evidência
+    # TF no B0: 27%→34% no terminal move o EV em −12,6% — a escolha é material).
+    imp = p.get("impostos") or {}
+    aliquotas = {"operacional": t}
+    for chave in ("marginal", "terminal"):
+        if imp.get(chave) is not None:
+            aliquotas[chave] = float(imp[chave])
+    if imp.get("fontes"):
+        aliquotas["fontes"] = str(imp["fontes"])
+    if aliquotas.get("terminal") is None:
+        avisos.append("ALIQUOTA_TERMINAL_NAO_DECLARADA: a cadeia usa a alíquota operacional; "
+                      "declare premissas.impostos.terminal (statutory de longo prazo, salvo "
+                      "evidência documentada) — no caso TF a diferença 27%→34% move o EV em "
+                      "−12,6% (B0)")
+
+    # Dupla penalização no bear (H6/Seção 5): margem E giro simultaneamente abaixo do base
+    # exigem justificativa própria (a mesma força movendo os dois é história, não default).
+    if (float(cen_op["bear"]["margem_nopat"]) < float(cen_op["base"]["margem_nopat"])
+            and float(cen_op["bear"]["giro_noa"]) < float(cen_op["base"]["giro_noa"])
+            and not str(op.get("justificativa_dupla_penalizacao", "")).strip()):
+        avisos.append("DUPLA_PENALIZACAO_BEAR: margem E giro simultaneamente abaixo do base "
+                      "sem justificativa própria (premissas.operacional."
+                      "justificativa_dupla_penalizacao) — evidência TF: a mesma força move "
+                      "margem para baixo e giro para CIMA (mix franquia); dupla penalização "
+                      "exige história específica")
+
     return {
         "wacc": w,
         "fonte_wacc": str(op["fonte_wacc"]),
-        "aliquotas": {"operacional": t},
+        "aliquotas": aliquotas,
+        "historia_numeros": historia,
+        "avisos": avisos,
         "cenarios": out_cen,
         "ponderado_preco": ponderado,
         "bridge": {"claims": claims, "total_mi": total_claims,

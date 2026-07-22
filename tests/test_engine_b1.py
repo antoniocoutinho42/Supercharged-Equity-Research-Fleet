@@ -341,3 +341,47 @@ def test_elasticidades_operacionais():
     assert el["mais_1pp_margem"] > 0                           # spread positivo (roic 0,24 > wacc 0,14)
     assert set(el["experimento"]) == {"mais_1pp_margem", "mais_01x_giro", "mais_1a_cap", "menos_05pp_wacc"}
     assert el["alertas_sinal"] == []                           # nenhum sinal contraintuitivo neste caso
+
+
+# ---------------------------------------------------------------------------
+# Task 7 — história→números (condição 6) + camadas de imposto ecoadas (H5)
+# ---------------------------------------------------------------------------
+
+def test_historia_numeros_sempre_presente():
+    def mut(inp):
+        com_operacional(inp)
+        inp["premissas"]["operacional"]["drivers_narrativos"] = {
+            "base": "mix franquia sobe; ~40 aberturas/ano; SSS positivo"}
+    res = rodar_fixture(FIX_TFCO4, mut)
+    hn = res["ebit_justo"]["historia_numeros"]
+    assert "mix franquia" in hn["base"]["historia"]
+    assert hn["bear"]["historia"] == "—"                       # ausente vira travessão + aviso
+    assert "0.13" in hn["bear"]["premissa"] and "1.5" in hn["bear"]["premissa"]
+    assert hn["base"]["implicito"]["rir_terminal"] == pytest.approx(0.12 / 0.24, abs=1e-6)
+    assert any("DRIVERS_NARRATIVOS_AUSENTES" in a for a in res["ebit_justo"]["avisos"])
+
+
+def test_impostos_eco_e_warning_terminal():
+    res = rodar_fixture(FIX_TFCO4, com_operacional)
+    assert any("ALIQUOTA_TERMINAL_NAO_DECLARADA" in a for a in res["ebit_justo"]["avisos"])
+
+    def mut(inp):
+        com_operacional(inp)
+        inp["premissas"]["impostos"] = {"marginal": 0.34, "terminal": 0.34,
+                                        "fontes": "statutory BR 34% (IRPJ+CSLL); teste"}
+    res2 = rodar_fixture(FIX_TFCO4, mut)
+    alq = res2["ebit_justo"]["aliquotas"]
+    assert alq["operacional"] == T_OPER and alq["marginal"] == 0.34 and alq["terminal"] == 0.34
+    assert not any("ALIQUOTA_TERMINAL_NAO_DECLARADA" in a for a in res2["ebit_justo"]["avisos"])
+
+
+def test_dupla_penalizacao_bear():
+    res = rodar_fixture(FIX_TFCO4, com_operacional)             # bear: margem E giro abaixo do base
+    assert any("DUPLA_PENALIZACAO_BEAR" in a for a in res["ebit_justo"]["avisos"])
+
+    def mut(inp):
+        com_operacional(inp)
+        inp["premissas"]["operacional"]["justificativa_dupla_penalizacao"] = (
+            "No bear a mesma força (perda de escala) comprime margem E giro: história específica.")
+    res2 = rodar_fixture(FIX_TFCO4, mut)
+    assert not any("DUPLA_PENALIZACAO_BEAR" in a for a in res2["ebit_justo"]["avisos"])
