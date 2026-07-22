@@ -266,3 +266,78 @@ def test_ebit_justo_recusa_g_maior_que_roic():
 def test_ebit_justo_ausente_nao_emite_bloco():
     res = rodar_fixture(FIX_TFCO4)
     assert "ebit_justo" not in res
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — paridade (WARNING, condição 3), reverse e elasticidades operacionais
+# Wedge de add-backs 1,1789 = 1,12/0,95 medido no B0 (h9h10 [5])
+# ---------------------------------------------------------------------------
+
+def com_op_paridade(inp, lpa_op=0.95):
+    """Âncora operacional CONSISTENTE com a equity: margem×giro = ROE por cenário,
+    wacc = Ke econ central (0,14), DE=NDE (bracket sem caixa), claims vazio,
+    nopat_fy = lpa_op × ações → com lpa_op = LPA do motor, paridade EXATA."""
+    inp["fatos"]["de"] = inp["fatos"]["nde"] = 0.196          # (DE−NDE)=0: bracket = payout puro
+    acoes = inp["meta"]["acoes_mi"]
+    com_operacional(inp,
+                    margens={"bear": 0.18, "base": 0.22, "bull": 0.25},
+                    giros={"bear": 1.0, "base": 1.0, "bull": 1.0},
+                    nopat_fy=lpa_op * acoes, claims=[], wacc=0.14, com_ebitda=False)
+
+
+def test_paridade_exata_nd_zero():
+    res = rodar_fixture(FIX_TFCO4, com_op_paridade)
+    par = res["ebit_justo"]["paridade"]
+    assert par["preco_equity_central"] == res["economico"]["central_ponderado"]
+    assert par["preco_op_ponderado"] == res["ebit_justo"]["ponderado_preco"]
+    assert par["delta_pct"] == pytest.approx(0.0, abs=0.2)     # arredondamento a 2 casas nos preços
+    assert par["status"] == "CONVERGE"
+    assert par["warning"] is None
+
+
+def test_paridade_wedge_add_backs():
+    res = rodar_fixture(FIX_TFCO4, lambda inp: com_op_paridade(inp, lpa_op=1.12))
+    par = res["ebit_justo"]["paridade"]
+    razao = par["preco_op_ponderado"] / par["preco_equity_central"]
+    assert razao == pytest.approx(1.12 / 0.95, abs=2e-3)       # 1,1789: isola exatamente o wedge
+    assert par["status"] == "DIVERGE"
+    assert par["warning"] == "PARIDADE_DIVERGENTE"
+    assert par["nota_resolucao"] is None                       # condição 3: warning, nunca erro
+
+
+def test_paridade_nota_resolucao_ecoada():
+    def mut(inp):
+        com_op_paridade(inp, lpa_op=1.12)
+        inp["premissas"]["operacional"]["nota_paridade"] = (
+            "Wedge de add-backs de R$29mi: a âncora operacional usa NOPAT reportado sem os "
+            "ajustes do LPA; divergência esperada e documentada no dossiê.")
+    res = rodar_fixture(FIX_TFCO4, mut)
+    par = res["ebit_justo"]["paridade"]
+    assert par["status"] == "DIVERGE" and par["warning"] == "PARIDADE_DIVERGENTE"
+    assert "add-backs" in par["nota_resolucao"]
+
+
+def test_reverse_operacional_round_trip():
+    res = rodar_fixture(FIX_TFCO4, com_op_paridade)
+    ej = res["ebit_justo"]
+    rev = ej["reverse"]
+    inp = carregar(FIX_TFCO4)
+    base = inp["premissas"]["cenarios"]["base"]
+    alvo = (14.99 * res["meta"]["acoes_mi"] - ej["bridge"]["total_mi"]) / (0.95 * res["meta"]["acoes_mi"])
+    assert rev["alvo_ev_nopat_implicito"] == pytest.approx(alvo, abs=1e-3)
+    # round-trip pelo CAP (sempre solúvel neste caso; ROIC isolado pode não alcançar o alvo
+    # com o preço 79,7% acima do justo — degrade declarado, nunca número falso)
+    got = engine.pl_justo(base["g"], 0.22 * 1.0, rev["cap_implicito_op"], 0.14, 0.0, 0.0, 1.0)
+    assert got == pytest.approx(alvo, abs=2e-2)
+    assert rev["wacc_implicito"] is not None
+    assert "roic_implicito_no_preco" in rev                    # presente; None permitido com nota
+
+
+def test_elasticidades_operacionais():
+    res = rodar_fixture(FIX_TFCO4, com_operacional)
+    el = res["ebit_justo"]["elasticidades"]
+    for k in ("preco_base", "mais_1pp_margem", "mais_01x_giro", "mais_1a_cap", "menos_05pp_wacc"):
+        assert k in el
+    assert el["mais_1pp_margem"] > 0                           # spread positivo (roic 0,24 > wacc 0,14)
+    assert set(el["experimento"]) == {"mais_1pp_margem", "mais_01x_giro", "mais_1a_cap", "menos_05pp_wacc"}
+    assert el["alertas_sinal"] == []                           # nenhum sinal contraintuitivo neste caso

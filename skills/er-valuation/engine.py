@@ -1012,6 +1012,9 @@ def bloco_fatos_reformulado(inp):
             "gates_aplicabilidade": _gates_h7(serie)}
 
 
+EBIT_PARIDADE_LIMIAR_PCT = 10.0  # |delta| acima disso => PARIDADE_DIVERGENTE (warning, condição 3)
+
+
 def bloco_ebit_justo(inp, econ):
     """H9/H4 (v3.1.0): âncora operacional no MOTOR ÚNICO — a MESMA pl_justo com
     inputs operacionais (g, ROIC = margem×giro, CAP, WACC), convenção TRAILING,
@@ -1112,8 +1115,98 @@ def bloco_ebit_justo(inp, econ):
         if dsobre is not None:
             out_cen[n]["ev_ebitda_justo"] = round(evn * (1.0 - t) * (1.0 - float(dsobre)), 4)
     ponderado = round(_pond(cen_eq, {n: out_cen[n]["preco"] for n in nomes}), 2)
+
+    # Paridade das âncoras — condição 3 da aprovação (2026-07-21): WARNING com nota de
+    # resolução obrigatória no relatório; NUNCA bloqueio de publicação. Reavaliar a
+    # decisão após 3 análises reais.
+    preco_eq_central = econ["central_ponderado"]
+    delta_pct = round(100.0 * (ponderado / preco_eq_central - 1.0), 1)
+    diverge = abs(delta_pct) > EBIT_PARIDADE_LIMIAR_PCT
+    nota_par = str(op.get("nota_paridade", "")).strip() or None
+    paridade = {
+        "preco_equity_central": preco_eq_central,
+        "preco_op_ponderado": ponderado,
+        "delta_pct": delta_pct,
+        "limiar_pct": EBIT_PARIDADE_LIMIAR_PCT,
+        "status": "DIVERGE" if diverge else "CONVERGE",
+        "warning": "PARIDADE_DIVERGENTE" if diverge else None,
+        "nota_resolucao": nota_par,
+        "instrucao": ("Paridade é ROTA DE RECONCILIAÇÃO, nunca segundo preço-alvo: com ND≈0 e "
+                      "premissas consistentes as âncoras convergem por identidade; divergência "
+                      "isola wedges REAIS (ex.: add-backs na base de lucro — o teste "
+                      "independente dos ajustes). Divergente => WARNING com nota de resolução "
+                      "obrigatória no relatório; NÃO bloqueia publicação (decisão registrada; "
+                      "reavaliar após 3 análises reais)."),
+    }
+
+    # Reverse operacional: o que o preço exige nos drivers operacionais (base do cenário base).
+    base_eq = cen_eq["base"]
+    m_base = _m_terminal(base_eq)
+    g_b, cap_b = float(base_eq["g"]), float(base_eq["cap"])
+    roic_b = roics["base"]
+    preco_atual = meta["preco_atual"]
+    alvo = (preco_atual * float(acoes) - total_claims) / float(nopat_fy)
+    w = float(wacc)
+    roic_impl = _bisseccao(lambda r: pl_justo(g_b, r, cap_b, w, 0.0, 0.0, m_base) - alvo,
+                           g_b + 1e-6, 2.0)
+    cap_impl = _bisseccao(lambda c: pl_justo(g_b, roic_b, c, w, 0.0, 0.0, m_base) - alvo,
+                          0.5, 400.0)
+    wacc_impl = _bisseccao(lambda x: pl_justo(g_b, roic_b, cap_b, x, 0.0, 0.0, m_base) - alvo,
+                           1e-6, 0.60)
+    reverse = {
+        "alvo_ev_nopat_implicito": round(alvo, 4),
+        "roic_implicito_no_preco": round(roic_impl, 4) if roic_impl is not None else None,
+        "cap_implicito_op": round(cap_impl, 1) if cap_impl is not None else None,
+        "wacc_implicito": round(wacc_impl, 4) if wacc_impl is not None else None,
+        "nota": ("None = o driver isolado não alcança o EV/NOPAT implícito no preço dentro de "
+                 "faixas plausíveis (degrade declarado, nunca número falso)"),
+    }
+
+    # Elasticidades operacionais (padrão R4: experimento declarado + alerta de sinal).
+    mg_b, gr_b = float(cen_op["base"]["margem_nopat"]), float(cen_op["base"]["giro_noa"])
+
+    def preco_op(margem, giro, cap_, w_):
+        evn = pl_justo(g_b, margem * giro, cap_, w_, 0.0, 0.0, m_base)
+        return (evn * float(nopat_fy) + total_claims) / float(acoes)
+
+    p0 = preco_op(mg_b, gr_b, cap_b, w)
+    elast = {
+        "preco_base": round(p0, 2),
+        "mais_1pp_margem": round(preco_op(mg_b + 0.01, gr_b, cap_b, w) - p0, 2),
+        "mais_01x_giro": round(preco_op(mg_b, gr_b + 0.1, cap_b, w) - p0, 2),
+        "mais_1a_cap": round(preco_op(mg_b, gr_b, cap_b + 1, w) - p0, 2),
+        "menos_05pp_wacc": round(preco_op(mg_b, gr_b, cap_b, w - 0.005) - p0, 2),
+    }
+    spread_pos = roic_b > w
+    esperados = {"mais_1pp_margem": "POSITIVO", "mais_01x_giro": "POSITIVO",
+                 "mais_1a_cap": "POSITIVO" if spread_pos else "NEGATIVO",
+                 "menos_05pp_wacc": "POSITIVO"}
+    respostas = p.get("respostas_sinais") or {}
+    alertas = []
+    for parametro, esperado in esperados.items():
+        v = elast[parametro]
+        if abs(v) < 0.005:
+            continue
+        observado = "POSITIVO" if v > 0 else "NEGATIVO"
+        if observado != esperado:
+            resposta = str(respostas.get(parametro, "")).strip()
+            alertas.append({"ancora": "operacional", "parametro": parametro, "valor": v,
+                            "sinal_esperado": esperado, "sinal_observado": observado,
+                            "exigencia": "Sinal contrário à relação econômica esperada: mesmo "
+                                         "protocolo do R4 (mecanismo + plausibilidade em "
+                                         "premissas.respostas_sinais).",
+                            "respondido": bool(resposta), "resposta": resposta or None})
+    elast["experimento"] = {
+        "mais_1pp_margem": "Varia só a margem NOPAT (+1 p.p.; ROIC = margem×giro sobe junto); "
+                           "mantém fixos NOPAT_fy da base, giro, g, CAP, WACC, m_terminal e claims.",
+        "mais_01x_giro": "Varia só o giro de NOA (+0,1x; ROIC sobe junto); demais fixos como acima.",
+        "mais_1a_cap": "Varia só a duração da vantagem (CAP +1 ano); demais fixos.",
+        "menos_05pp_wacc": "Varia só o WACC (−0,5 p.p.); todo o resto fixo.",
+    }
+    elast["alertas_sinal"] = alertas
+
     return {
-        "wacc": float(wacc),
+        "wacc": w,
         "fonte_wacc": str(op["fonte_wacc"]),
         "aliquotas": {"operacional": t},
         "cenarios": out_cen,
@@ -1121,6 +1214,9 @@ def bloco_ebit_justo(inp, econ):
         "bridge": {"claims": claims, "total_mi": total_claims,
                    "convencao_sinal": "valor_mi = contribuição ao EQUITY (dívida negativa; "
                                       "caixa livre/NOL positivos)"},
+        "paridade": paridade,
+        "reverse": reverse,
+        "elasticidades": elast,
         "convencao": "trailing (mesma convenção do motor equity); comparação com múltiplos "
                      "forward exige ×(1+g) e SÓ vale com m_terminal=1 (fator medido no B0)",
     }
