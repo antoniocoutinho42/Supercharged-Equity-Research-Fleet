@@ -63,7 +63,11 @@ def test_engine_versao_e_hash(resultado_gerado):
     # v3.0.0: correções sistêmicas pós-HG (R2/R3/R4/R5/R6) — núcleo matemático e
     # números do caso FNV/m_terminal INALTERADOS (só validação de inputs e blocos
     # novos); ver CHANGELOG no topo de engine.py.
-    assert resultado_gerado["engine"]["versao"] == "3.0.0"
+    # B1 (v3.1.0): pino de versão relaxado para MAJOR — o critério de regressão
+    # aprovado na FASE B é "chaves idênticas exceto engine.{versao,gerado_em}";
+    # minors aditivos não podem quebrar este teste (única edição autorizada).
+    major = str(resultado_gerado["engine"]["versao"]).split(".")[0]
+    assert major == "3"
     assert resultado_gerado["engine"]["hash_inputs"] == "34e6680992b5b76e"
 
 

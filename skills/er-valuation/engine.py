@@ -50,6 +50,45 @@ import sys
 from datetime import datetime, timezone
 
 # CHANGELOG
+# v3.1.0 (2026-07-21): upgrade metodológico FASE B/B1 (arquitetura A aprovada; evidência
+#   FASE A + B0 em C:\Claude\upgrade_fleet_v2_fase_a e referencia\verificacao_referencia.py).
+#   MINOR ADITIVO — núcleo pl_justo() INALTERADO; inputs antigos produzem todas as chaves
+#   antigas idênticas (critério de regressão: chaves idênticas exceto engine.{versao,
+#   gerado_em}; núcleo 1e-12). Blocos novos com GATING POR PRESENÇA (nunca retroativo):
+#   (1) H11 — sensibilidade_phi: grade φ∈{0;0,25;0,5;1} na âncora econômica central,
+#       m(φ)=1+φ·(ROE−Ke)/Ke por cenário (identidade validada no B0 com erro 0,00),
+#       CAP equivalente por bisseção; SEMPRE emitida. EXCLUSÃO MÚTUA com m_terminal
+#       manual (mesma alavanca): premissas.phi é recusado como input; com m_terminal≠1
+#       o bloco degrada para aplicavel=false. Default do motor segue φ=0 (conservador).
+#   (2) H1/H6 — fatos.reformulado (opcional): série validada NA CARGA como ERRO de input
+#       (CE≡NOA tol. 0,5%; ni≡nopat+nie; roic/roe declarados vs derivados); derivados
+#       margem/giro/roic/roic_ex_goodwill/nbc/flev/ponte/direto por ano (base MÉDIA para
+#       diagnóstico; EoP proibido — FASE A); NBC=None com nota quando |ND|<2% do NOA;
+#       diagnóstico ROIIC/RiR/g em JANELA ACUMULADA (razão anual é instável — TF).
+#   (3) H7 — gates_aplicabilidade da âncora equity: eliminatórios A1 (E>0 na janela),
+#       A2 (mediana E/NOA >= 0,30), A3 (lucro recorrente último e mediana > 0) decidem a
+#       âncora; FLEV cruza sinal / NBC instável / ND imaterial são FLAGS de diagnóstico
+#       (TF: cruzamento benigno não expulsa a âncora). Limiares PROVISORIO_N3 (TF/Lopes/
+#       PVV) com nota de RECALIBRAÇÃO obrigatória a cada caso novo (condição 7).
+#   (4) H9/H4 — ebit_justo: âncora operacional no MOTOR ÚNICO (mesma pl_justo com
+#       g/ROIC=margem×giro/CAP/WACC, TRAILING, de=nde=0; g/cap/prob/m_terminal herdados
+#       da tabela única de cenários); cadeia EV/EBIT=(1−t)× e EV/EBITDA=×(1−d); bridge
+#       de claims assinados (equity = EV + Σ claims); WACC RECEBIDO como premissa
+#       documentada (H8), nunca derivado; reverse operacional com degrade declarado;
+#       elasticidades margem/giro/CAP/WACC no padrão R4. Fator forward=(1+g)×trailing
+#       SÓ com m_terminal=1 (B0) — o bloco nunca converte para forward.
+#   (5) Condição 3 (aprovação 2026-07-21) — PARIDADE DAS ÂNCORAS: delta operacional vs
+#       patrimonial central, limiar 10%; divergência = WARNING PARIDADE_DIVERGENTE com
+#       nota de resolução obrigatória no relatório; NÃO bloqueia publicação (checar emite
+#       AVISO). DECISÃO A REAVALIAR APÓS 3 ANÁLISES REAIS.
+#   (6) Condição 6 — historia_numeros: tabela história→premissa→implícito→evidência por
+#       cenário, SEMPRE presente no ebit_justo (drivers ausentes = "—" + aviso nomeado);
+#       aviso DUPLA_PENALIZACAO_BEAR sem justificativa própria (H6/Seção 5).
+#   (7) H5 — camadas de imposto: aliquota_operacional na cadeia; marginal/terminal eco
+#       de premissas.impostos; terminal não declarada = aviso (TF: 27→34% move EV −12,6%).
+#   Contrato (passada única, checar/compor): sensibilidade_phi obrigatória em v3.1+;
+#   blocos presentes exigem subchaves; seções novas no corpo institucional; humano()
+#   cobre os enums novos; linter intacto.
 # v3.0.0 (2026-07-20): correções sistêmicas pós-feedback do caso HG (R2/R3/R4/R5/R6).
 #   BREAKING (contrato de inputs):
 #   (1) R2 — INPUTS ESTRUTURAIS NUNCA ZERADOS POR LACUNA: fatos.de/fatos.nde
@@ -112,7 +151,7 @@ from datetime import datetime, timezone
 # v1.1.0 (2026-07-12): Bracket com DE/NDE; sinal de entrada em 3 estados;
 #       gate renomeado para PROFUNDIDADE (SUMARIA | PADRAO | REFORCADA).
 # v1.0.0: versão inicial calibrada no caso VRSK.
-ENGINE_VERSION = "3.0.0"
+ENGINE_VERSION = "3.1.0"
 
 # ----------------------------------------------------------------------------
 # Núcleo matemático (inalterado desde v1.1.0 — coberto por golden tests)
