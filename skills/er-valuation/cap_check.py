@@ -47,7 +47,13 @@ Uso:
 import json
 import sys
 
-VERSAO = "2.0"
+# v2.1 (2026-07-21, B2/R5): (a) confianca_da_banda derivada da EVIDÊNCIA (âncora,
+#   fontes, precedente, renovação — 1 ponto cada; >=3 ALTA, 2 MEDIA, <=1 BAIXA),
+#   SEPARADA da confiança declarada pelo Modelador; (b) ÔNUS DE SOBRESCREVER PARA
+#   BAIXO: CAP base abaixo da banda sugerida também gera alerta (evidência FASE A:
+#   FNV real tinha banda 18-25, base 17 e zero alertas — encurtar sem defesa era
+#   grátis); histórico listado curto é limitação de CONFIANÇA, não trava da banda.
+VERSAO = "2.1"
 BANDAS = [
     (0, "default", (8, 12)),
     (1, "moat claro", (12, 18)),
@@ -129,6 +135,21 @@ def avaliar(inp):
     notas.append(f"banda de referência sugerida: {nome_banda} — referência de julgamento; "
                  f"o CAP final é decisão do Modelador, defendida na tabela de premissas")
 
+    # v2.1 (R5): confiança DA EVIDÊNCIA que sustenta a banda — separada da confiança
+    # que o Modelador declara. Histórico curto rebaixa ESTA confiança (alarga faixa e
+    # convicção), nunca trava a banda.
+    pontos = (int(ancora is not None) + int(len(fontes) >= 2)
+              + int(prec >= 20) + int(renovacao))
+    confianca_banda = {
+        "nivel": "ALTA" if pontos >= 3 else ("MEDIA" if pontos == 2 else "BAIXA"),
+        "pontos": pontos,
+        "criterio": ("1 ponto cada: âncora de persistência presente; >=2 fontes estruturais "
+                     "com evidência; precedente >=20 anos; renovação do moat evidenciada "
+                     "(>=3 ALTA, 2 MEDIA, <=1 BAIXA). Mede a evidência que sustenta a BANDA, "
+                     "separada da confiança declarada pelo Modelador; BAIXA pede faixa "
+                     "bear-bull mais larga e convicção menor, nunca CAP curto mecânico."),
+    }
+
     # Vetores de erosão: exigem análise, não rebaixamento automático
     for v in vetores:
         status = str(v.get("status", "")).upper()
@@ -152,6 +173,15 @@ def avaliar(inp):
     conf = str(p.get("cap_confianca", "")).upper().replace("É", "E")
     teto = p.get("cap_teto_defensavel")
     if caps:
+        # v2.1 (R5): ônus de sobrescrever para BAIXO — simétrico ao alerta de CAP alto.
+        lo_sugerida = sugerida[2][0]
+        if ancora is not None and caps.get("base") and caps["base"] < lo_sugerida:
+            alertas.append(f"CAP base ({caps['base']:.0f}) ABAIXO da banda sugerida pela "
+                           f"evidência ({nome_banda}): encurtar TAMBÉM exige justificativa — "
+                           f"histórico listado curto é limitação de confiança (alargue a faixa "
+                           f"bear-bull e rebaixe a convicção), não trava da banda; defenda o "
+                           f"encurtamento na tabela de premissas ou realinhe o CAP (ônus "
+                           f"invertido, R5)")
         if ancora is not None and caps.get("base", 0) > 2.0 * ancora:
             alertas.append(f"CAP base ({caps['base']:.0f}) supera 2x a evidência-âncora "
                            f"({ancora:.1f} anos, {origem}): não é proibido, mas exige "
@@ -187,6 +217,7 @@ def avaliar(inp):
             "renovacao_moat_evidenciada": renovacao,
             "precedente_max_anos": prec,
             "banda_referencia": nome_banda,
+            "confianca_da_banda": confianca_banda,
             "confianca_declarada": conf or None,
             "alertas": alertas,
             "notas": notas,
@@ -225,7 +256,12 @@ def _selftest():
     r2 = avaliar(forte)
     casos.append(("consolidada 22a + renovação -> banda geracional sugerida",
                   "geracional" in r2["banda_referencia"]))
-    casos.append(("sem alertas espúrios no caso forte", r2["alertas"] == []))
+    # v2.1: base 18 ABAIXO da banda geracional sugerida (25-35) agora gera o alerta de
+    # ônus invertido — e NENHUM outro alerta espúrio.
+    casos.append(("caso forte: único alerta é o ônus para baixo (v2.1)",
+                  len(r2["alertas"]) == 1 and "ABAIXO da banda" in r2["alertas"][0]))
+    casos.append(("caso forte: confiança da banda ALTA (4 pontos), separada da declarada",
+                  r2["confianca_da_banda"]["nivel"] == "ALTA"))
     # 3. Ponderação por segmentos
     seg = {"fatos": {"duracao": {"segmentos": [{"nome": "A", "peso_lucro": 0.6, "persistencia_anos": 20},
                                                {"nome": "B", "peso_lucro": 0.4, "persistencia_anos": 5}],
