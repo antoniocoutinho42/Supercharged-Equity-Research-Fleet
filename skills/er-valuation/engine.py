@@ -339,6 +339,19 @@ def bloco_validacao(inp):
                          "conservador φ=0; para terminal por book econômico use m_terminal "
                          "por cenário com justificativa_m_terminal (exclusão mútua)")
 
+    # R2/B2 (v3.2.0) — central_neutro: quando presente, os três parâmetros e a
+    # justificativa própria são obrigatórios (premissas nunca escolhidas pelo resultado).
+    cn = p.get("central_neutro")
+    if cn is not None:
+        if not isinstance(cn, dict) or any(
+                not isinstance(cn.get(k), (int, float)) or float(cn.get(k) or 0) <= 0
+                for k in ("lpa", "cap_base", "ke")):
+            erros.append("premissas.central_neutro exige lpa, cap_base e ke numéricos > 0")
+        if len(str((cn or {}).get("justificativa", "")).strip()) < 40:
+            erros.append("premissas.central_neutro.justificativa insuficiente: o caso neutro "
+                         "exige fundamentação própria (por que estas três alavancas são o "
+                         "centro neutro), nunca escolha pelo resultado")
+
     # R3 — hurdle exclusivamente do usuário: opcional; quando presente, sanidade.
     ke_h = p.get("ke_hurdle")
     if ke_h is not None and (not isinstance(ke_h, (int, float)) or float(ke_h) <= 0):
@@ -1051,6 +1064,109 @@ def bloco_fatos_reformulado(inp):
             "gates_aplicabilidade": _gates_h7(serie)}
 
 
+def bloco_central_neutro(inp, hurdle, econ):
+    """R2 (v3.2.0): caso central NEUTRO de primeira classe + robustez CONJUNTA.
+    O relatório publica, ao lado do caso base, o efeito de desfazer o empilhamento
+    conservador nas TRÊS alavancas AO MESMO TEMPO (base de lucro, CAP base, Ke),
+    com a decomposição one-at-a-time e a interação — evidência B0: no TFCO4 o
+    conjunto corta o prêmio pela metade e degrada o gate de SUMARIA para PADRAO.
+    Gating por presença (premissas.central_neutro); premissas do neutro exigem
+    justificativa própria (nunca escolhidas pelo resultado — regra 6)."""
+    p, f, meta = inp["premissas"], inp["fatos"], inp["meta"]
+    cn = p.get("central_neutro")
+    if not cn:
+        return None
+    nomes = ("bear", "base", "bull")
+    cen = p["cenarios"]
+    de, nde, _ = _de_nde(inp)
+    preco_atual = float(meta["preco_atual"])
+    lpa0 = float(f["lpa_ajustado_fy"])
+    ke0 = econ["ke_central"]
+    lpa_n, cap_n, ke_n = float(cn["lpa"]), float(cn["cap_base"]), float(cn["ke"])
+
+    def rodada(lpa_x, cap_base_x, ke_x):
+        precos = {}
+        for n in nomes:
+            c = cen[n]
+            cap_x = cap_base_x if n == "base" else float(c["cap"])
+            precos[n] = round(lpa_x * pl_justo(float(c["g"]), float(c["roe"]), cap_x, ke_x,
+                                               de, nde, _m_terminal(c)), 2)
+        pond = round(_pond(cen, precos), 2)
+        return precos, pond
+
+    def premio(pond):
+        return round(100.0 * (preco_atual / pond - 1.0), 1)
+
+    cap_base0 = float(cen["base"]["cap"])
+    _, pond_base = rodada(lpa0, cap_base0, ke0)
+    precos_n, pond_n = rodada(lpa_n, cap_n, ke_n)
+    _, pond_lpa = rodada(lpa_n, cap_base0, ke0)
+    _, pond_cap = rodada(lpa0, cap_n, ke0)
+    _, pond_ke = rodada(lpa0, cap_base0, ke_n)
+
+    premio_base = premio(pond_base)
+    premio_n = premio(pond_n)
+    so_lpa = round(premio(pond_lpa) - premio_base, 1)
+    so_cap = round(premio(pond_cap) - premio_base, 1)
+    so_ke = round(premio(pond_ke) - premio_base, 1)
+    soma = round(so_lpa + so_cap + so_ke, 1)
+    interacao = round((premio_n - premio_base) - soma, 1)
+
+    out = {"parametros": {"lpa": lpa_n, "cap_base": cap_n, "ke": ke_n,
+                          "justificativa": str(cn["justificativa"]).strip()},
+           "precos": dict(precos_n, ponderado=pond_n),
+           "premio_econ_pct": premio_n}
+
+    premio_hurdle_base = None
+    if hurdle is not None:
+        ke_h = float(hurdle["ke"])
+        _, pond_h_n = rodada(lpa_n, cap_n, ke_h)
+        out["hurdle_ponderado"] = pond_h_n
+        out["premio_hurdle_pct"] = premio(pond_h_n)
+        premio_hurdle_base = premio(float(hurdle["cenarios"]["ponderado"]))
+
+    # Gate recomputado sob o caso neutro (mesmas regras/limiares do gate G3.0).
+    g_cfg = inp.get("gate", {})
+    lim_preco = g_cfg.get("limiar_preco_vs_bull_econ", 1.4)
+    lim_cap = g_cfg.get("limiar_cap_implicito_vs_teto", 2.0)
+    base = cen["base"]
+    m_base = _m_terminal(base)
+    cap_impl_n = cap_implicito(preco_atual, lpa_n, float(base["g"]), float(base["roe"]),
+                               ke_n, de, nde, m_base)
+    teto_bull_n = max(precos_n.values())
+    razao_preco = preco_atual / teto_bull_n
+    razao_cap = (cap_impl_n / float(p["cap_teto_defensavel"])) if cap_impl_n else None
+    if razao_preco >= lim_preco or (razao_cap is not None and razao_cap >= lim_cap):
+        modo_n = "SUMARIA"
+    else:
+        acionavel = False
+        if hurdle is not None:
+            ms_min = p.get("ms_minima", 0.12)
+            lim_teto = p.get("limitrofe_teto", 1.10)
+            acionavel = preco_atual <= lim_teto * out["hurdle_ponderado"]
+            if preco_atual <= (1.0 - ms_min) * out["hurdle_ponderado"] or acionavel:
+                modo_n = "REFORCADA"
+            else:
+                modo_n = "PADRAO"
+        else:
+            modo_n = "PADRAO"
+    out["gate_recomputado"] = {"modo": modo_n,
+                               "razao_preco_vs_teto_bull": round(razao_preco, 2),
+                               "razao_cap_implicito_vs_teto": (round(razao_cap, 2)
+                                                               if razao_cap else None),
+                               "cap_implicito_neutro": (round(cap_impl_n, 1)
+                                                        if cap_impl_n else None)}
+    out["robustez_conjunta"] = {
+        "baseline": {"premio_econ_pct": premio_base, "premio_hurdle_pct": premio_hurdle_base},
+        "decomposicao": {"so_lpa_pp": so_lpa, "so_cap_pp": so_cap, "so_ke_pp": so_ke,
+                         "soma_isolados_pp": soma, "interacao_pp": interacao},
+        "nota": ("Decomposição one-at-a-time do prêmio sobre o central econômico: cada linha "
+                 "move UMA alavanca do caso base para o valor neutro; a interação é a diferença "
+                 "entre o efeito conjunto e a soma dos isolados (sub-aditiva quando positiva)."),
+    }
+    return out
+
+
 EBIT_PARIDADE_LIMIAR_PCT = 10.0  # |delta| acima disso => PARIDADE_DIVERGENTE (warning, condição 3)
 
 
@@ -1423,6 +1539,9 @@ def rodar(inp):
     ebit = bloco_ebit_justo(inp, econ)
     if ebit is not None:
         res["ebit_justo"] = ebit
+    cneutro = bloco_central_neutro(inp, hurdle, econ)
+    if cneutro is not None:
+        res["central_neutro"] = cneutro
     return res
 
 
