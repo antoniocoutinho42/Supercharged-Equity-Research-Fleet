@@ -4,7 +4,7 @@ description: >-
   Motor determinístico de valuation do processo de Antonio (etapa G3 do fleet de research). USE SEMPRE que a tarefa envolver valuation de uma ação, P/L Justo, Preço Máximo para o Hurdle, Valor Intrínseco Econômico, entry ladder, expectativas implícitas no preço (g/CAP/Ke implícitos), validação por múltiplos de comparáveis ou por histórico próprio, julgamento de CAP (cap_check), ou o gate de proporcionalidade G3.0 — mesmo que o pedido diga apenas "calcule o valor justo", "roda o valuation de X" ou "o preço atual faz sentido?". REGRA CENTRAL: nunca calcular valuation à mão em prosa; preencher inputs.yaml, rodar cap_check.py e engine.py e interpretar resultados.json citando por chave. Também usar quando o Auditor pedir re-execução, testes de limite ou verificação do motor.
 ---
 
-# valuation-engine v2 — cálculo em código, prosa só interpreta
+# valuation-engine v3 — cálculo em código, prosa só interpreta
 
 Este skill codifica a etapa G3 do processo de research de Antonio. O princípio:
 **toda aritmética vive em `engine.py` (versionado e coberto por golden tests);
@@ -18,7 +18,14 @@ Responder em PT-BR, tom profissional e direto.
 
 | Papel | Método | Chave em `resultados.json` |
 |---|---|---|
-| Motor principal (único gerador de preço) | P/L Justo (franchise-fade, Bracket DE/NDE) nas duas âncoras: Preço Máximo p/ Hurdle e Valor Intrínseco Econômico (grade de Ke CAPM), 3 cenários + ponderado, cross-check GAAP | `hurdle`, `economico` |
+| Motor principal (único gerador de preço) | P/L Justo (spread constante até o CAP com terminal modulável por `m_terminal`; Bracket DE/NDE) nas duas âncoras: Preço Máximo p/ Hurdle e Valor Intrínseco Econômico (grade de Ke CAPM), 3 cenários + ponderado, cross-check GAAP | `hurdle`, `economico` |
+| Âncora operacional (v3.1; rota de RECONCILIAÇÃO, não terceiro sinal) | EV/NOPAT justo pela MESMA fórmula com inputs operacionais (margem×giro→ROIC, WACC recebido como premissa, trailing); cadeia EV/EBIT=(1−t)× e EV/EBITDA=×(1−d); bridge de claims; reversa e elasticidades operacionais; tabela história→premissa→implícito | `ebit_justo` |
+| Série reformulada + aplicabilidade (v3.1) | Série 5-6a validada NA CARGA (CE≡NOA; ponte≡direto; base MÉDIA p/ diagnóstico, EoP proibido); ROIIC/RiR em janela acumulada; gates da âncora patrimonial | `fatos_reformulado` (+ `gates_aplicabilidade`) |
+| Caso central neutro (v3.2, R2) | As três alavancas (base de lucro, CAP base, Ke) movidas juntas para valores neutros com justificativa própria; decomposição one-at-a-time + interação; gate recomputado | `central_neutro` |
+| Dossiê de Ke (v3.2, R4) | DUAS rotas obrigatórias (paridade-US e build local) + prêmio de tamanho com critério (mesmo zero) + grade de Ke em torno do central | `ke_dossier` |
+| Implícitos dos múltiplos (v3.2, R3) | CAP/g/Ke que justificariam a mediana histórica e a dos pares — decomposição do prêmio por driver em tabela | `validacao_multiplos.implicitos` |
+| Spread terminal (v3.1, H11) | Grade φ∈{0; 0,25; 0,5; 1} na âncora econômica central + CAP equivalente; default do motor é φ=0 | `sensibilidade_phi` |
+| Norma contábil (v3.1, eco) | Regime + pacote de leasing travado, detectados NA COLETA (o engine é agnóstico); trava de pacote não-nativo | `norma_contabil` |
 | Validação 1 | Múltiplos de comparáveis: P/L justo e múltiplo atual vs. mediana dos pares (mesma base contábil) | `validacao_multiplos.comparaveis` |
 | Validação 2 | Múltiplo atual vs. banda histórica da própria companhia (P/L ou EV/EBITDA, métrica primária declarada) | `validacao_multiplos.historico_proprio` |
 | Expectativas implícitas | g implícito (hurdle), CAP implícito (econ.), Ke que reconcilia o preço com o teto do CAP | `reverse` |
@@ -50,6 +57,26 @@ premissas e PODE sobrescrever com justificativa registrada; o engine exige
 `justificativa_cap`, `justificativa_cenarios` e `cap_confianca` (ALTA | MEDIA | BAIXA —
 BAIXA amplia o spread bear-bull, nunca encurta o CAP mecanicamente). CAP base >= 25:
 recomendar auditoria ao Coordenador. `--selftest` valida a régua.
+
+## 2b. Terminal, gates e paridade (regras duras v3.1/v3.2)
+
+- **`m_terminal` × φ — EXCLUSÃO MÚTUA (aceite duro da aprovação da FASE B).** O termo
+  terminal é modulável por `m_terminal` POR CENÁRIO (default 1,0 = spread zera no CAP;
+  ≠1 exige `justificativa_m_terminal`). A grade `sensibilidade_phi` é SAÍDA de primeira
+  classe (`premissas.phi` como input é RECUSADO); com `m_terminal` manual ela degrada para
+  não-aplicável — a mesma alavanca nunca entra duas vezes. Equivalência: m(φ)=1+φ·(ROE−Ke)/Ke.
+- **Gates de aplicabilidade da âncora patrimonial (H7)** — eliminatórios: patrimônio positivo
+  na janela; mediana E/NOA ≥ 0,30; lucro recorrente positivo. FLEV/NBC/ND são FLAGS de
+  diagnóstico (não trocam a âncora). Limiares **PROVISÓRIOS** (calibrados em n=3: TF, Lopes,
+  PVV) — **recalibrar a cada caso novo aplicado**, registrando no CHANGELOG (condição 7).
+- **Paridade das âncoras** — com ND≈0 e premissas consistentes as âncoras convergem por
+  identidade; divergência (>10%) vira WARNING `PARIDADE_DIVERGENTE` com `nota_paridade`
+  obrigatória no relatório e **não bloqueia a publicação** (condição 3 da aprovação;
+  decisão a reavaliar após 3 análises reais). A divergência isola wedges REAIS (ex.:
+  add-backs na base de lucro — o teste independente dos ajustes).
+- **Impostos em camadas (H5)**: `aliquota_operacional` entra na cadeia do `ebit_justo`;
+  marginal/terminal são eco documentado (`premissas.impostos`); terminal não declarada gera
+  aviso (a diferença 27%→34% moveu o EV do caso de referência em −12,6%).
 
 ## 3. Fluxo de uso (Modelador)
 

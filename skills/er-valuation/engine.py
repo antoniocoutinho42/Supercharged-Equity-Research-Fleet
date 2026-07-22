@@ -8,7 +8,8 @@ O Modelador preenche inputs (.yaml/.json), roda o engine e escreve prosa
 interpretativa citando as chaves de resultados.json. Nenhuma aritmética em prosa.
 
 Métodos (fluxo padrão — nada além disso):
-  1. MOTOR PRINCIPAL — P/L Justo (franchise-fade, fórmula imutável do mandato):
+  1. MOTOR PRINCIPAL — P/L Justo (spread constante até o CAP, terminal modulável
+     por m_terminal; fórmula imutável do mandato):
        P/L = Bracket * SUM_{t=1..CAP} (1+g)^(t-1)/(1+Ke)^t + (1+g)^CAP/[(1+Ke)^CAP * ROE]
        Bracket = (1 - g/ROE) + (DE - NDE) * (g/ROE)
      Duas âncoras (hurdle SOMENTE quando o usuário informa o retorno exigido — sem
@@ -176,7 +177,9 @@ ENGINE_VERSION = "3.2.0"
 
 def pl_justo(g: float, roe: float, cap: float, ke: float,
              de: float = 0.0, nde: float = 0.0, m_terminal: float = 1.0) -> float:
-    """Múltiplo P/L Justo (franchise-fade com reversão a book no fim do CAP).
+    """Múltiplo P/L Justo: spread CONSTANTE durante t=1..CAP e reversão a book no fim
+    do CAP (não há fade; o termo terminal é modulável por m_terminal — nomenclatura
+    corrigida no B5: o rótulo antigo sugeria um decaimento que nunca existiu).
     Bracket = (1 - g/ROE) + (DE - NDE) x (g/ROE), conforme fórmula imutável do mandato;
     DE = dívida/PL e NDE = dívida líquida/PL, MEDIDOS; DE=NDE=0 é exceção declarada.
     m_terminal (v2.2.0): multiplicador do TERMO TERMINAL, default 1.0 (retrocompatível

@@ -21,7 +21,7 @@ Ao receber um despacho, invoque PRIMEIRO a skill er-dossie e siga o fluxo dela. 
 
 ## 4. Insumos e entregáveis
 
-Espera receber no brief: o gate (G1, G1.5 ou G2), o namespace <ns>, ticker/empresa e bolsa, foco e prioridades de pesquisa, e a profundidade quando já carimbada. Entrega no <ns>: em G1/G1.5, veto.md ou o veredicto dos guardrails (sem arquivo, se aprovado) e o metodo.yaml (julgamento metodológico prévio: compreensão do modelo de negócio e aderência do método ANTES da coleta completa, com os dados adicionais que a fórmula exige no plano de coleta); em G2, dossie.md, inputs_valuation.md e inputs.yaml (blocos meta e fatos, incluindo DE/NDE medidos), ou nogo.md se a tese não sobreviver ao scan.
+Espera receber no brief: o gate (G1, G1.5 ou G2), o namespace <ns>, ticker/empresa e bolsa, foco e prioridades de pesquisa, e a profundidade quando já carimbada. Entrega no <ns>: em G1/G1.5, veto.md ou o veredicto dos guardrails (sem arquivo, se aprovado) e o metodo.yaml (julgamento metodológico prévio: compreensão do modelo de negócio e aderência do método ANTES da coleta completa, com os dados adicionais que a fórmula exige no plano de coleta); em G2, dossie.md, inputs_valuation.md e inputs.yaml (blocos meta e fatos, incluindo DE/NDE medidos), ou nogo.md se a tese não sobreviver ao scan. Quando a análise for reformulada (v3.1): colete fatos.reformulado (série 5-6 anos, base MÉDIA; o engine valida CE≡NOA e ponte≡direto como ERRO de input), o ledger classificacao.yaml (toda linha do balanço classificada por NATUREZA com justificativa+fonte, critérios em er-dossie/references/classificacao.md; linha em dúvida = ambigua: true) e fatos.norma_contabil (regime detectado pelo filing + pacote de leasing travado).
 
 ## 5. Retorno
 

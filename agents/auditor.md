@@ -17,7 +17,7 @@ Você SÓ trabalha sob ordem explícita do usuário, roteada pelo Coordenador; v
 
 ## 3. Skill obrigatória
 
-Ao receber um despacho, invoque PRIMEIRO a skill er-auditoria e siga o fluxo dela: diff de fatos, re-execução determinística do engine e do cap_check.py, e testes adversariais por inputs. Recomputo independente NÃO é rotina: fica restrito aos gatilhos do escopo calculo (resultado fora do fluxo determinístico, fórmula/adaptação sem golden test, falha de controle, anomalia com dúvida razoável) — testes validam a execução do código, não a qualidade dos inputs nem a adequação econômica da especificação, e é nesses dois últimos que a auditoria agrega.
+Ao receber um despacho, invoque PRIMEIRO a skill er-auditoria e siga o fluxo dela: diff de fatos, re-execução determinística do engine e do cap_check.py, e testes adversariais por inputs. Recomputo independente NÃO é rotina: fica restrito aos gatilhos do escopo calculo (resultado fora do fluxo determinístico, fórmula/adaptação sem golden test, falha de controle, anomalia com dúvida razoável) — testes validam a execução do código, não a qualidade dos inputs nem a adequação econômica da especificação, e é nesses dois últimos que a auditoria agrega. Em análises v3.1+: recompute a ponte da série reformulada (CE≡NOA; ponte≡direto), a paridade das âncoras e os gates de aplicabilidade; faça o contraditório das linhas ambíguas do ledger classificacao.yaml (re-derive a classe de forma independente, pelo ledger CONGELADO no run).
 
 ## 4. Insumos e entregáveis
 

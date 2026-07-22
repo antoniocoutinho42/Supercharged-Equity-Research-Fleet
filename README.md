@@ -3,6 +3,22 @@
 Plugin Claude que empacota o fleet de equity research buy-side de Antonio: dossiê,
 valuation determinístico, auditoria e relatório institucional.
 
+## v2.1.0 — upgrade metodológico (FASE B; engine v3.2.0, ADITIVO)
+
+Metodologia adjudicada contra quatro modelos de referência (FASE A + verificação B0) e
+exercitada no caso TFCO4 (`docs/impacto_TFCO4.md`). Tudo com GATING POR PRESENÇA — inputs
+antigos produzem as chaves antigas idênticas (exceto `engine.{versao,gerado_em}`):
+
+- **Âncora operacional** `ebit_justo` no motor único (margem×giro→ROIC, WACC como premissa,
+  trailing; bridge de claims; paridade das âncoras como warning com nota) + série reformulada
+  `fatos.reformulado` com invariantes na carga e gates de aplicabilidade (provisórios n=3).
+- **R2–R5**: `central_neutro` + robustez conjunta; `validacao_multiplos.implicitos`;
+  `ke_dossier` (duas rotas + prêmio de tamanho com critério + grade); cap_check v2.1
+  (confiança da banda separada; ônus de sobrescrever para baixo).
+- **Spread terminal**: `sensibilidade_phi` de primeira classe, exclusão mútua com `m_terminal`.
+- **Classificação por natureza**: `classificacao.yaml` (schema + invariantes + congelamento no
+  snapshot) e `fatos.norma_contabil` com trava de pacote de leasing — sem dicionário de rubricas.
+
 ## v2.0.0 — correções sistêmicas pós-feedback do caso HG (BREAKING)
 
 Engine v3.0.0 e processo revisados; o contrato de inputs MUDA:

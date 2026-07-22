@@ -1,4 +1,6 @@
-# inputs do valuation-engine v2 — exemplo canônico (VRSK, análise de 09-10/07/2026)
+# inputs do valuation-engine v3 — exemplo canônico (VRSK, análise de 09-10/07/2026)
+# Blocos v3.1/v3.2 (fatos.reformulado, premissas.operacional, central_neutro, dossie_ke,
+# norma_contabil, impostos) são OPCIONAIS (gating por presença) — ver SKILL.md §2b.
 # Este arquivo é o CONTRATO entre Analista (blocos meta e fatos) e Modelador (bloco premissas).
 # Regra: todo fato com fonte; toda premissa defendida no valuation.md.
 # NOVIDADES do schema v2 (vs. v1.x): fatos.multiplos_historicos e fatos.pares (validação por
