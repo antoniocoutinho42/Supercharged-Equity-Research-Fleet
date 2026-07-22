@@ -84,3 +84,54 @@ def test_implicitos_round_trip_e_monotonia():
         assert pares["ke_implicito"] > 0.14
     assert "decomposicao" in imp["nota"].lower() or "driver" in imp["nota"].lower()
     assert pl_justo_econ == pytest.approx(8.78, abs=0.01)      # PDF/B0: justo 8,78x
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — ke_dossier (R4): duas rotas + prêmio de tamanho com critério + grade
+# Aceitação: grade de Ke medida no B0 (h8_quant): 11%→10,60 | 14%→8,34 | 15%→7,73
+# ---------------------------------------------------------------------------
+
+def com_dossie_ke(inp):
+    inp["premissas"]["dossie_ke"] = {
+        "rota_paridade_us": {"componentes": {"rf_us": 0.042, "beta": 1.0, "erp": 0.055,
+                                             "premio_pais": 0.035, "dif_inflacao": 0.0146},
+                             "total": 0.1466},
+        "rota_local": {"componentes": {"rf_local": 0.135, "beta": 1.0, "erp_local": 0.055},
+                       "total": 0.19},
+        "premio_tamanho": {"valor_pp": 0.0, "criterio": "liquidez adequada; sem prêmio (critério: ADTV > R$10mi)"},
+        "escolhido": 0.14,
+        "reconciliacao_hurdle": "hurdle 13% do usuário fica 1pp abaixo do Ke econômico central.",
+    }
+
+
+def test_ke_dossier_grade():
+    res = rodar_fixture(FIX_TFCO4, com_dossie_ke)
+    kd = res["ke_dossier"]
+    grade = {g["ke"]: g for g in kd["grade_ke"]}
+    assert grade[0.11]["central_ponderado"] == pytest.approx(10.60, abs=0.01)
+    assert grade[0.14]["central_ponderado"] == pytest.approx(8.34, abs=0.01)
+    assert grade[0.15]["central_ponderado"] == pytest.approx(7.73, abs=0.01)
+    assert grade[0.11]["premio_pct"] == pytest.approx(41.4, abs=0.2)
+    assert grade[0.15]["premio_pct"] == pytest.approx(93.9, abs=0.2)
+    assert kd["rota_paridade_us"]["total"] == 0.1466
+    assert kd["rota_local"]["total"] == 0.19
+    assert kd["premio_tamanho"]["criterio"]
+
+
+def test_ke_dossier_exige_duas_rotas_e_criterio():
+    def mut(inp):
+        com_dossie_ke(inp)
+        del inp["premissas"]["dossie_ke"]["rota_local"]
+    with pytest.raises(ValueError, match="dossie_ke"):
+        rodar_fixture(FIX_TFCO4, mut)
+
+    def mut2(inp):
+        com_dossie_ke(inp)
+        inp["premissas"]["dossie_ke"]["premio_tamanho"] = {"valor_pp": 0.09}  # sem critério
+    with pytest.raises(ValueError, match="criterio|critério"):
+        rodar_fixture(FIX_TFCO4, mut2)
+
+
+def test_ke_dossier_ausente_nao_emite():
+    res = rodar_fixture(FIX_TFCO4)
+    assert "ke_dossier" not in res

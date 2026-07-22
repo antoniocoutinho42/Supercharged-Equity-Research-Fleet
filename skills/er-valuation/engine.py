@@ -352,6 +352,29 @@ def bloco_validacao(inp):
                          "exige fundamentação própria (por que estas três alavancas são o "
                          "centro neutro), nunca escolha pelo resultado")
 
+    # R4/B2 (v3.2.0) — dossie_ke: quando presente, as duas rotas e o prêmio de
+    # tamanho com critério são obrigatórios (mesmo prêmio zero exige critério).
+    dk = p.get("dossie_ke")
+    if dk is not None:
+        if not isinstance(dk, dict):
+            erros.append("premissas.dossie_ke deve ser um mapa")
+        else:
+            for rota in ("rota_paridade_us", "rota_local"):
+                r_ = dk.get(rota)
+                if not (isinstance(r_, dict) and isinstance(r_.get("total"), (int, float))
+                        and float(r_["total"]) > 0):
+                    erros.append(f"premissas.dossie_ke.{rota} ausente ou sem total > 0 — as "
+                                 "DUAS rotas (paridade-US e build local) são obrigatórias no "
+                                 "dossiê de Ke (R4)")
+            pt = dk.get("premio_tamanho")
+            if not (isinstance(pt, dict) and pt.get("valor_pp") is not None
+                    and str(pt.get("criterio", "")).strip()):
+                erros.append("premissas.dossie_ke.premio_tamanho exige valor_pp E criterio "
+                             "explícito (mesmo quando o prêmio é zero) — evidência PVV: 9pp "
+                             "movem o EV ~17x")
+            if not isinstance(dk.get("escolhido"), (int, float)) or float(dk.get("escolhido") or 0) <= 0:
+                erros.append("premissas.dossie_ke.escolhido ausente ou <= 0")
+
     # R3 — hurdle exclusivamente do usuário: opcional; quando presente, sanidade.
     ke_h = p.get("ke_hurdle")
     if ke_h is not None and (not isinstance(ke_h, (int, float)) or float(ke_h) <= 0):
@@ -1103,6 +1126,55 @@ def bloco_fatos_reformulado(inp):
             "gates_aplicabilidade": _gates_h7(serie)}
 
 
+KE_GRADE_OFFSETS_PP = (-3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0)  # em torno do central
+
+
+def bloco_ke_dossier(inp, econ):
+    """R4 (v3.2.0): dossiê de Ke como bloco de primeira classe. Exige as DUAS rotas
+    (paridade-US e build local — a prática revelada nos modelos do usuário é calcular
+    a local e rejeitá-la, mas ela tem de estar NA MESA), prêmio de tamanho/iliquidez
+    EXPLÍCITO com critério (mesmo quando zero — caso PVV: 9pp movem o EV ~17x), e
+    reconciliação com o hurdle quando informado. A grade de Ke em torno do central
+    (−3,0..+1,0pp) vira saída de primeira classe: Ke é a maior alavanca isolada do
+    caso TFCO4 (B0). Gating por presença (premissas.dossie_ke)."""
+    p, f, meta = inp["premissas"], inp["fatos"], inp["meta"]
+    dk = p.get("dossie_ke")
+    if not dk:
+        return None
+    nomes = ("bear", "base", "bull")
+    cen = p["cenarios"]
+    lpa = float(f["lpa_ajustado_fy"])
+    de, nde, _ = _de_nde(inp)
+    preco_atual = float(meta["preco_atual"])
+    ke_c = econ["ke_central"]
+    grade = []
+    for off in KE_GRADE_OFFSETS_PP:
+        ke = round(ke_c + off / 100.0, 4)
+        if ke <= 0:
+            continue
+        precos = {n: lpa * pl_justo(cen[n]["g"], cen[n]["roe"], cen[n]["cap"], ke,
+                                    de, nde, _m_terminal(cen[n])) for n in nomes}
+        pond = round(_pond(cen, precos), 2)
+        grade.append({"ke": ke, "central_ponderado": pond,
+                      "premio_pct": round(100.0 * (preco_atual / pond - 1.0), 1)})
+    out = {
+        "rota_paridade_us": dk["rota_paridade_us"],
+        "rota_local": dk["rota_local"],
+        "premio_tamanho": dk["premio_tamanho"],
+        "escolhido": float(dk["escolhido"]),
+        "reconciliacao_hurdle": str(dk.get("reconciliacao_hurdle", "")).strip() or None,
+        "grade_ke": grade,
+        "nota": ("Duas rotas obrigatórias na mesa (paridade-US e build local); prêmio de "
+                 "tamanho/iliquidez sempre explícito com critério; a grade mostra a "
+                 "elasticidade do caso ao Ke — a maior alavanca isolada (R4)."),
+    }
+    if abs(float(dk["escolhido"]) - ke_c) > 0.005:
+        out["aviso"] = (f"KE_ESCOLHIDO_DIVERGE_DO_CENTRAL: escolhido {dk['escolhido']} vs "
+                        f"central da grade econômica {ke_c} — alinhe premissas.ke_economico "
+                        "ao dossiê ou justifique a diferença")
+    return out
+
+
 def bloco_central_neutro(inp, hurdle, econ):
     """R2 (v3.2.0): caso central NEUTRO de primeira classe + robustez CONJUNTA.
     O relatório publica, ao lado do caso base, o efeito de desfazer o empilhamento
@@ -1581,6 +1653,9 @@ def rodar(inp):
     cneutro = bloco_central_neutro(inp, hurdle, econ)
     if cneutro is not None:
         res["central_neutro"] = cneutro
+    kdossier = bloco_ke_dossier(inp, econ)
+    if kdossier is not None:
+        res["ke_dossier"] = kdossier
     return res
 
 
