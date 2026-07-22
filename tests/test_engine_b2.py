@@ -55,3 +55,32 @@ def test_central_neutro_justificativa_obrigatoria():
 def test_central_neutro_ausente_nao_emite():
     res = rodar_fixture(FIX_TFCO4)
     assert "central_neutro" not in res
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — validacao_multiplos.implicitos (R3): que premissas justificam cada
+# múltiplo de referência — reverse aplicado à mediana histórica e à dos pares
+# ---------------------------------------------------------------------------
+
+def test_implicitos_round_trip_e_monotonia():
+    res = rodar_fixture(FIX_TFCO4)
+    imp = res["validacao_multiplos"]["implicitos"]
+    inp = carregar(FIX_TFCO4)
+    base = inp["premissas"]["cenarios"]["base"]
+    de, nde = inp["fatos"]["de"], inp["fatos"]["nde"]
+    hist = imp["historico_proprio"]
+    assert hist["multiplo"] == 20.0
+    got = engine.pl_justo(base["g"], base["roe"], hist["cap_implicito"], 0.14, de, nde, 1.0)
+    assert got == pytest.approx(20.0, abs=0.05)                # round-trip da bisseção (cap 1 casa)
+    pares = imp["comparaveis"]
+    assert pares["multiplo"] == pytest.approx(5.24, abs=0.01)
+    # monotonia: justificar 20x exige MAIS duração que o justo (8,16x); 5,24x exige menos
+    pl_justo_econ = res["validacao_multiplos"]["pl_justo_ponderado_econ"]
+    assert hist["cap_implicito"] > base["cap"]
+    if pares["cap_implicito"] is not None:
+        assert pares["cap_implicito"] < base["cap"]
+    # ke implícito da mediana dos pares > Ke central (múltiplo menor = desconto maior)
+    if pares["ke_implicito"] is not None:
+        assert pares["ke_implicito"] > 0.14
+    assert "decomposicao" in imp["nota"].lower() or "driver" in imp["nota"].lower()
+    assert pl_justo_econ == pytest.approx(8.78, abs=0.01)      # PDF/B0: justo 8,78x

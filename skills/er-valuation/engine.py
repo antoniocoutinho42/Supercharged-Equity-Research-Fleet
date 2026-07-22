@@ -734,6 +734,45 @@ def bloco_validacao_multiplos(inp, hurdle, econ):
     else:
         out["comparaveis"] = None
 
+    # R3/B2 (v3.2.0) — implícitos dos múltiplos de referência: em vez de só medir a
+    # distância ("diverge X%"), o bloco responde QUE premissas justificariam cada
+    # múltiplo — reverse (CAP, g, Ke implícitos, um driver por vez, demais no caso
+    # base) aplicado à mediana histórica própria e à mediana dos pares. É a
+    # decomposição do prêmio por driver em forma de tabela, nunca prosa.
+    if metrica == "PE":
+        base_cen = p["cenarios"]["base"]
+        de_, nde_, _m = _de_nde(inp)
+        m_b = _m_terminal(base_cen)
+        ke_c = sorted(p["ke_economico"])[len(p["ke_economico"]) // 2]
+
+        def implicitos_de(multiplo):
+            preco_ref = float(multiplo) * lpa
+            cap_i = cap_implicito(preco_ref, lpa, base_cen["g"], base_cen["roe"], ke_c,
+                                  de_, nde_, m_b)
+            g_i = g_implicito(preco_ref, lpa, base_cen["roe"], base_cen["cap"], ke_c,
+                              de_, nde_, m_b)
+            ke_i = ke_implicito(preco_ref, lpa, base_cen["g"], base_cen["roe"],
+                                base_cen["cap"], de_, nde_, m_b)
+            return {"multiplo": float(multiplo),
+                    "cap_implicito": round(cap_i, 1) if cap_i is not None else None,
+                    "g_implicito": round(g_i, 4) if g_i is not None else None,
+                    "ke_implicito": round(ke_i, 4) if ke_i is not None else None}
+
+        implicitos = {"historico_proprio": None, "comparaveis": None,
+                      "nota": ("Decomposição do prêmio por driver: para cada múltiplo de "
+                               "referência, o CAP, o g e o Ke que o justificariam com os demais "
+                               "drivers no caso base (None = fora de faixas plausíveis). "
+                               "Compare com o caso base para ler QUAL driver o mercado precifica "
+                               "diferente — tabela, não prosa (R3).")}
+        if out.get("historico_proprio") and out["historico_proprio"].get("mediana"):
+            implicitos["historico_proprio"] = implicitos_de(out["historico_proprio"]["mediana"])
+        if out.get("comparaveis") and out["comparaveis"].get("mediana_pares"):
+            implicitos["comparaveis"] = implicitos_de(out["comparaveis"]["mediana_pares"])
+        out["implicitos"] = implicitos
+    else:
+        out["implicitos"] = {"historico_proprio": None, "comparaveis": None,
+                             "nota": "Implícitos exigem métrica primária PE (o motor é P/L)."}
+
     veredicto = "SEM_DADOS"
     if out["historico_proprio"] or out["comparaveis"]:
         veredicto = "DIVERGE_MATERIAL" if flags else "CONVERGE"
