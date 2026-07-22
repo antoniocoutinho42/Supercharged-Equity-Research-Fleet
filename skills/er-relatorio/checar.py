@@ -187,6 +187,32 @@ def checar_valuation(ns, faltas, avisos):
                     "NÃO avança como ressalva declarada; registre "
                     "premissas.resolucao_divergencia (REVISAO_PREMISSAS | "
                     "EXPLICACAO_FUNDAMENTADA | ADAPTACAO_METODOLOGICA) e re-rode o engine (R5)")
+
+        # v3.1 (B1, 2026-07-21): gating por PRESENÇA — nunca retroativo.
+        partes_v = versao_engine.split(".")
+        engine_v31 = engine_v3 and len(partes_v) > 1 and partes_v[1].isdigit() and int(partes_v[1]) >= 1
+        if engine_v31 and _get(res, "sensibilidade_phi") is None:
+            faltas.append("resultados.json: chave obrigatória ausente (engine v3.1+): "
+                          "sensibilidade_phi (saída de primeira classe, default φ=0)")
+        if res.get("fatos_reformulado") is not None:
+            for sub in ("serie", "diagnostico", "gates_aplicabilidade"):
+                if _get(res, f"fatos_reformulado.{sub}") is None:
+                    faltas.append(f"resultados.json: fatos_reformulado presente sem {sub}")
+        if res.get("ebit_justo") is not None:
+            for sub in ("cenarios", "paridade", "reverse", "historia_numeros", "bridge"):
+                if _get(res, f"ebit_justo.{sub}") is None:
+                    faltas.append(f"resultados.json: ebit_justo presente sem {sub} "
+                                  "(contrato do bloco operacional — condição 6 inclui "
+                                  "historia_numeros)")
+            # Condição 3 da aprovação da FASE B: paridade divergente é WARNING com nota de
+            # resolução obrigatória no relatório — AVISO aqui, NUNCA falta/bloqueio.
+            # Decisão registrada; reavaliar após 3 análises reais.
+            if (_get(res, "ebit_justo.paridade.status") == "DIVERGE"
+                    and not _get(res, "ebit_justo.paridade.nota_resolucao")):
+                avisos.append("ebit_justo.paridade: DIVERGE sem nota_resolucao — declare "
+                              "premissas.operacional.nota_paridade (a nota é obrigatória no "
+                              "relatório; a divergência em si NÃO bloqueia a publicação — "
+                              "condição 3 da aprovação, reavaliar após 3 análises reais)")
     # chaves citadas no valuation.md existem no JSON
     val = open(os.path.join(ns, "valuation.md"), encoding="utf-8").read()
     citadas = set(re.findall(r"`([a-z_]+(?:\.[a-zA-Z0-9_\"\.\[\]\*]+)+)`", val))

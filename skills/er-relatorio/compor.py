@@ -49,7 +49,16 @@ def humano(sinal):
             "NAO_DEMONSTRADA": "não demonstrada", "REPROVADA": "reprovada",
             "REVISAO_PREMISSAS": "revisão de premissas",
             "EXPLICACAO_FUNDAMENTADA": "explicação econômica fundamentada",
-            "ADAPTACAO_METODOLOGICA": "adaptação metodológica específica"}
+            "ADAPTACAO_METODOLOGICA": "adaptação metodológica específica",
+            # v3.1 (B1): âncora operacional, gates de aplicabilidade e paridade
+            "EQUITY_OK": "âncora patrimonial aplicável",
+            "GATE_DISPARA": "âncora patrimonial não aplicável (gate acionado)",
+            "EQUITY": "patrimonial", "OPERACIONAL": "operacional",
+            "PARIDADE_DIVERGENTE": "paridade divergente entre as âncoras",
+            "DIVERGE": "divergem", "PROVISORIO_N3": "provisórios (calibrados em três casos)",
+            "FLEV_CRUZA_SINAL": "alavancagem cruza de sinal na janela",
+            "NBC_INSTAVEL": "custo de dívida não interpretável na janela",
+            "ND_IMATERIAL": "dívida líquida imaterial"}
     return mapa.get(str(sinal), str(sinal))
 
 
@@ -554,6 +563,132 @@ def secao_matrizes(dados):
     return "\n\n".join(blocos) + "\n\n" + nota
 
 
+def secao_reformulado(dados):
+    """v3.1: série reformulada (diagnóstico) + aplicabilidade das âncoras (H7)."""
+    fr = dados["res"].get("fatos_reformulado")
+    if not fr:
+        return None
+    t = ["| Ano | Margem | Giro | Retorno s/ capital operacional | Custo líq. de dívida | Alavancagem | Retorno s/ patrimônio |",
+         "|---|---|---|---|---|---|---|"]
+    for i, s in enumerate(fr["serie"]):
+        nbc_txt = ("n.s." if s.get("nbc") is None
+                   else n(100 * s["nbc"], f"fatos_reformulado.serie[{i}].nbc", 1, suf="%"))
+        t.append(f"| {s['ano']} | {br(100 * s['margem_nopat'], 1)}% | {br(s['giro_noa'], 2)}x | "
+                 f"{n(100 * s['roic'], f'fatos_reformulado.serie[{i}].roic', 1, suf='%')} | {nbc_txt} | "
+                 f"{br(s['flev'], 3)} | {n(100 * s['roe_direto'], f'fatos_reformulado.serie[{i}].roe_direto', 1, suf='%')} |")
+    out = "\n".join(t)
+    out += ("\n\nn.s. = sem significado econômico (dívida líquida minúscula no período; o custo "
+            "aparente vira artefato de base).")
+    d = fr["diagnostico"]
+    if d.get("roiic_acumulado") is not None:
+        out += (f"\n\nNa janela {d['janela']}, o retorno sobre o capital INCREMENTAL foi de "
+                f"{n(100 * d['roiic_acumulado'], 'fatos_reformulado.diagnostico.roiic_acumulado', 1, suf='%')} "
+                f"com reinvestimento acumulado de "
+                f"{n(100 * d['rir_acumulado'], 'fatos_reformulado.diagnostico.rir_acumulado', 1, suf='%')} "
+                "do resultado operacional — leitura por janela acumulada (a razão ano a ano é "
+                "instável em transição).")
+    g7 = fr["gates_aplicabilidade"]
+    elim = g7["eliminatorios"]
+    out += (f"\n\n**Aplicabilidade das âncoras.** {humano(g7['ancora_equity']).capitalize()}; "
+            f"âncora primária recomendada: {humano(g7['ancora_primaria_recomendada'])}. "
+            f"Critérios eliminatórios: patrimônio positivo em toda a janela "
+            f"({'sim' if elim['a1_e_positivo']['passa'] else 'não'}); mediana do patrimônio sobre "
+            f"o capital operacional {br(elim['a2_mediana_e_noa']['valor'], 2)} vs. mínimo "
+            f"{br(elim['a2_mediana_e_noa']['limiar'], 2)} "
+            f"({'sim' if elim['a2_mediana_e_noa']['passa'] else 'não'}); lucro recorrente positivo "
+            f"({'sim' if elim['a3_lucro_recorrente']['passa'] else 'não'}).")
+    if g7["flags"]:
+        avisos_txt = "; ".join(humano(f["codigo"]) for f in g7["flags"])
+        out += (f" Ressalvas de diagnóstico (não mudam a âncora): {avisos_txt}.")
+    out += (f" Limiares {humano(g7['calibracao'])}, com recalibração prevista a cada novo caso.")
+    return out
+
+
+def secao_ebit_justo(dados):
+    """v3.1: âncora operacional (motor único com margem×giro), bridge, paridade,
+    reversa operacional e a tabela história→premissa→implícito→evidência."""
+    ej = dados["res"].get("ebit_justo")
+    if not ej:
+        return None
+    t = ["| Cenário | Margem × Giro | Retorno operacional | Múltiplo justo s/ resultado operacional líq. | Valor por ação |",
+         "|---|---|---|---|---|"]
+    for nome in ("bear", "base", "bull"):
+        c = ej["cenarios"][nome]
+        t.append(f"| {nome.capitalize()} | {br(100 * c['margem_nopat'], 1)}% × {br(c['giro_noa'], 2)}x | "
+                 f"{br(100 * c['roic'], 1)}% | "
+                 f"{n(c['ev_nopat_justo'], f'ebit_justo.cenarios.{nome}.ev_nopat_justo', 2, suf='x')} | "
+                 f"{n(c['preco'], f'ebit_justo.cenarios.{nome}.preco')} |")
+    out = "\n".join(t)
+    out += (f"\n\nValor ponderado pela âncora operacional: "
+            f"{n(ej['ponderado_preco'], 'ebit_justo.ponderado_preco')} por ação, com taxa de "
+            f"desconto operacional de {br(100 * ej['wacc'], 1)}% recebida como premissa "
+            f"documentada e ajuste de {n(ej['bridge']['total_mi'], 'ebit_justo.bridge.total_mi')} "
+            "milhões entre o valor da operação e o valor do acionista (dívidas negativas; caixa "
+            "livre e créditos positivos).")
+    par = ej["paridade"]
+    if par["status"] == "CONVERGE":
+        out += (f"\n\n**Paridade das âncoras.** As duas âncoras convergem: diferença de "
+                f"{n(par['delta_pct'], 'ebit_justo.paridade.delta_pct', 1, suf='%')} entre o valor "
+                "operacional ponderado e o valor patrimonial central, dentro do limiar de "
+                f"{br(par['limiar_pct'], 0)}%.")
+    else:
+        out += (f"\n\n**Paridade das âncoras.** As âncoras {humano(par['status'])}: "
+                f"{n(par['delta_pct'], 'ebit_justo.paridade.delta_pct', 1, suf='%')} de diferença "
+                f"(limiar {br(par['limiar_pct'], 0)}%) — {humano(par['warning'])}. ")
+        if par.get("nota_resolucao"):
+            out += f"Resolução registrada: {par['nota_resolucao']}"
+        else:
+            out += ("Nota de resolução pendente: a divergência isola uma diferença REAL entre as "
+                    "bases (por exemplo, ajustes no lucro) e deve ser explicada aqui antes da "
+                    "publicação.")
+    rev = ej["reverse"]
+    out += (f"\n\n**O que o preço exige na leitura operacional.** O preço atual embute um múltiplo "
+            f"de {n(rev['alvo_ev_nopat_implicito'], 'ebit_justo.reverse.alvo_ev_nopat_implicito', 2, suf='x')} "
+            "sobre o resultado operacional líquido; ")
+    out += (f"duração implícita de {n(rev['cap_implicito_op'], 'ebit_justo.reverse.cap_implicito_op', 1)} anos "
+            if rev.get("cap_implicito_op") is not None else "duração implícita fora de faixas plausíveis ")
+    out += (f"e taxa implícita de {n(100 * rev['wacc_implicito'], 'ebit_justo.reverse.wacc_implicito', 1, suf='%')}. "
+            if rev.get("wacc_implicito") is not None else "e taxa implícita fora de faixas plausíveis. ")
+    if rev.get("roic_implicito_no_preco") is None:
+        out += ("A rentabilidade operacional sozinha, mesmo em níveis extremos, não alcança o "
+                "múltiplo implícito no preço — o preço exige duração ou crescimento acima do caso base.")
+    hn = ej["historia_numeros"]
+    t2 = ["| Cenário | História | Premissa | Implícitos |", "|---|---|---|---|"]
+    for nome in ("bear", "base", "bull"):
+        h = hn[nome]
+        imp = h["implicito"]
+        t2.append(f"| {nome.capitalize()} | {h['historia']} | {h['premissa'].replace('margem_nopat', 'margem').replace('giro_noa', 'giro')} | "
+                  f"retorno {br(100 * imp['roic'], 1)}%; reinvestimento terminal "
+                  f"{br(100 * imp['rir_terminal'], 0)}%; crescimento {br(100 * imp['g'], 1)}% |")
+    out += ("\n\n**História → premissa → implícito.** Cada cenário declara a história que as "
+            "premissas têm de sustentar; os implícitos são defendidos contra o dossiê.\n\n"
+            + "\n".join(t2))
+    return out
+
+
+def secao_phi(dados):
+    """v3.1: sensibilidade a spread terminal (saída de primeira classe; default conservador)."""
+    sp = dados["res"].get("sensibilidade_phi")
+    if not sp:
+        return None
+    if not sp.get("aplicavel"):
+        return ("Não se aplica a esta análise: o valor terminal já foi definido por cenário no "
+                "julgamento do caso (multiplicador terminal manual) — a grade de spread terminal "
+                "fracionário usa a mesma alavanca e não pode coexistir com ela.")
+    t = ["| Fração do spread mantida no terminal | Multiplicador terminal (base) | Valor central ponderado | Prêmio do preço atual | Duração equivalente |",
+         "|---|---|---|---|---|"]
+    for i, g in enumerate(sp["grid"]):
+        t.append(f"| {br(100 * g['phi'], 0)}% | {br(g['m_por_cenario']['base'], 2)} | "
+                 f"{n(g['central_ponderado'], f'sensibilidade_phi.grid[{i}].central_ponderado')} | "
+                 f"{n(g['premio_vs_preco_pct'], f'sensibilidade_phi.grid[{i}].premio_vs_preco_pct', 1, suf='%')} | "
+                 f"{br(g['cap_equivalente_base'], 1)} anos |")
+    out = "\n".join(t)
+    out += ("\n\nO caso central mantém a disciplina conservadora (nenhum spread no terminal). A "
+            "grade mostra quanto do prêmio do preço atual depende dessa escolha e qual duração "
+            "adicional da vantagem produziria o mesmo efeito.")
+    return out
+
+
 def secao_cenarios(dados):
     res = dados["res"]
     cen = _premissas_cenarios(dados)
@@ -982,6 +1117,10 @@ def compor(ns, out_nome="relatorio.md"):
     # Seção de Valuation orientada à decisão: conclusões primeiro (bloco de valor,
     # acima), depois fundamentos e sensibilidades — tudo gerado por chave.
     partes.append("# Valuation\n\n## Cenários\n\n" + secao_cenarios(dados))
+    if dados["res"].get("fatos_reformulado"):
+        partes.append("## Série reformulada e aplicabilidade das âncoras\n\n" + secao_reformulado(dados))
+    if dados["res"].get("ebit_justo"):
+        partes.append("## Âncora operacional e paridade\n\n" + secao_ebit_justo(dados))
     partes.append("## Matrizes de sensibilidade (preço por ação)\n\n" + secao_matrizes(dados))
     partes.append("## O que o preço atual embute\n\n" + secao_reverse(dados))
     partes.append("## Validação por múltiplos\n\n" + secao_multiplos(dados))
@@ -990,6 +1129,8 @@ def compor(ns, out_nome="relatorio.md"):
                       f"![P/L histórico da companhia com mediana e ± 1 desvio-padrão]({graf_pe})")
     partes.append("## Retorno e crença por faixa de entrada\n\n" + secao_ladder(dados))
     partes.append("## Elasticidades (o que move o valor por ação)\n\n" + secao_elasticidades(dados))
+    if dados["res"].get("sensibilidade_phi"):
+        partes.append("## Sensibilidade a spread terminal\n\n" + secao_phi(dados))
     partes.append("# Verificação independente\n\n" + secao_auditoria(dados))
     partes.append("# Encaixe na carteira\n\n" + secao_encaixe(dados))
     partes.append("# Plano de ação\n\n" + secao_plano(dados))
