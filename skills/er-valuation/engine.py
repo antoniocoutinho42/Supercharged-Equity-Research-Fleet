@@ -286,6 +286,20 @@ def bloco_validacao(inp):
                              "faixa plausível alternativa o engine não consegue calcular a "
                              "sensibilidade do impacto da premissa substituta no valor")
 
+    # H11 (v3.1.0) — φ é SAÍDA (sensibilidade_phi), nunca input do motor: exclusão
+    # mútua com m_terminal (mesma alavanca — spread terminal). Declarar premissas.phi
+    # é recusado sempre; a mensagem distingue o caso com m_terminal manual.
+    if p.get("phi") is not None:
+        if any(abs(_m_terminal(cen[n]) - 1.0) > 1e-12 for n in nomes if isinstance(cen.get(n), dict)):
+            erros.append("premissas.phi e m_terminal != 1 são mutuamente exclusivos (a mesma "
+                         "alavanca de spread terminal): declare UM só — m_terminal por cenário "
+                         "com justificativa, OU nenhum (φ é saída de sensibilidade, não input)")
+        else:
+            erros.append("premissas.phi é reservado: a sensibilidade a spread terminal "
+                         "(sensibilidade_phi) é SAÍDA de primeira classe com default "
+                         "conservador φ=0; para terminal por book econômico use m_terminal "
+                         "por cenário com justificativa_m_terminal (exclusão mútua)")
+
     # R3 — hurdle exclusivamente do usuário: opcional; quando presente, sanidade.
     ke_h = p.get("ke_hurdle")
     if ke_h is not None and (not isinstance(ke_h, (int, float)) or float(ke_h) <= 0):
@@ -815,6 +829,56 @@ def bloco_matrizes(inp, econ):
     }
 
 
+PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
+
+
+def bloco_sensibilidade_phi(inp, econ):
+    """H11 (v3.1.0): sensibilidade a spread terminal fracionário como SAÍDA de
+    primeira classe, default conservador φ=0 (motor). ROE_term = Ke + φ·(ROE−Ke)
+    ⇔ m_terminal(φ) = 1 + φ·(ROE−Ke)/Ke por cenário (identidade validada no B0
+    com erro 0,00 vs engine). EXCLUSÃO MÚTUA com m_terminal manual: quando o
+    input declara m_terminal != 1 (a mesma alavanca), o bloco degrada para
+    aplicavel=false — nunca dois mecanismos de spread terminal no mesmo run.
+    Âncora: econômica central. cap_equivalente_base = CAP que, com φ=0,
+    reproduz o P/L do cenário base com m(φ) (régua prática do fade)."""
+    p, f = inp["premissas"], inp["fatos"]
+    cen = p["cenarios"]
+    nomes = ("bear", "base", "bull")
+    nota = ("Default do motor é φ=0 (spread zera no CAP; disciplina conservadora). A grade "
+            "reporta o preço central ponderado permitindo spread terminal fracionário e o CAP "
+            "equivalente que o reproduziria com φ=0 — φ e m_terminal são a MESMA alavanca "
+            "(exclusão mútua).")
+    if any(abs(_m_terminal(cen[n]) - 1.0) > 1e-12 for n in nomes):
+        return {"aplicavel": False,
+                "motivo_na": "m_terminal manual declarado nos cenários (mesma alavanca de "
+                             "spread terminal que φ): a escolha de terminal já foi feita no "
+                             "input; a grade φ não se aplica (exclusão mútua)",
+                "ancora": "economico_central", "grid": None, "nota": nota}
+    lpa = f["lpa_ajustado_fy"]
+    ke = econ["ke_central"]
+    de, nde, _ = _de_nde(inp)
+    base = cen["base"]
+    grid = []
+    for phi in PHI_GRID:
+        ms = {n: 1.0 + phi * (cen[n]["roe"] - ke) / ke for n in nomes}
+        precos = {n: lpa * pl_justo(cen[n]["g"], cen[n]["roe"], cen[n]["cap"], ke, de, nde, ms[n])
+                  for n in nomes}
+        pond = round(_pond(cen, precos), 2)
+        alvo = pl_justo(base["g"], base["roe"], base["cap"], ke, de, nde, ms["base"])
+        cap_eq = _bisseccao(lambda c: pl_justo(base["g"], base["roe"], c, ke, de, nde, 1.0) - alvo,
+                            0.5, 400.0)
+        preco_atual = inp["meta"]["preco_atual"]
+        grid.append({
+            "phi": phi,
+            "m_por_cenario": {n: round(ms[n], 4) for n in nomes},
+            "central_ponderado": pond,
+            "premio_vs_preco_pct": round(100.0 * (preco_atual / pond - 1.0), 1),
+            "cap_equivalente_base": round(cap_eq, 2) if cap_eq is not None else None,
+        })
+    return {"aplicavel": True, "motivo_na": None, "ancora": "economico_central",
+            "grid": grid, "nota": nota}
+
+
 # ----------------------------------------------------------------------------
 # Orquestração, IO e saídas
 # ----------------------------------------------------------------------------
@@ -843,6 +907,7 @@ def rodar(inp):
     ladder = bloco_ladder(inp, econ)
     elast = bloco_elasticidades(inp, econ)
     matrizes = bloco_matrizes(inp, econ)
+    sens_phi = bloco_sensibilidade_phi(inp, econ)
     val_mult = bloco_validacao_multiplos(inp, hurdle, econ)
     sinais, gate = bloco_sinais_e_gate(inp, hurdle, econ, reverse)
     return {
@@ -861,6 +926,7 @@ def rodar(inp):
         "ladder": ladder,
         "elasticidades": elast,
         "matrizes": matrizes,
+        "sensibilidade_phi": sens_phi,
         "validacao_multiplos": val_mult,
     }
 
