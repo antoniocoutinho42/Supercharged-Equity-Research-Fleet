@@ -85,3 +85,73 @@ def test_phi_exclusao_mutua_recusa():
     inp["premissas"]["phi"] = 0.5
     with pytest.raises(ValueError, match="exclus"):
         engine.rodar(inp)
+
+
+# ---------------------------------------------------------------------------
+# Task 3 — fatos.reformulado: invariantes na carga (ERRO), derivados, diagnóstico
+# Série TF REAL (recomputo B0/h6_h7: EoP NOA/ND/TE + NOPAT + NI; médios = média de EoP consecutivos)
+# ---------------------------------------------------------------------------
+
+SERIE_TF = [
+    # ano, receita, nopat, noa_medio, nd_medio, e_medio, e_fim, nie_pos, ni
+    dict(ano=2020, receita=267320.0, nopat=31364.9, noa_medio=147095.05, nd_medio=41589.9,
+         e_medio=105505.15, e_fim=200190.8, nie_pos_imposto=-3730.9, ni_recorrente=27634.0),
+    dict(ano=2021, receita=434592.0, nopat=81389.3, noa_medio=225370.55, nd_medio=-6140.85,
+         e_medio=231511.4, e_fim=262832.0, nie_pos_imposto=-1423.3, ni_recorrente=79966.0),
+    dict(ano=2022, receita=567426.0, nopat=100302.2, noa_medio=327597.0, nd_medio=37491.0,
+         e_medio=290106.0, e_fim=317380.0, nie_pos_imposto=-3842.0, ni_recorrente=96460.2),
+    dict(ano=2023, receita=683690.1, nopat=124256.1, noa_medio=419478.35, nd_medio=64314.85,
+         e_medio=355163.5, e_fim=392947.0, nie_pos_imposto=-9846.1, ni_recorrente=114410.0),
+    dict(ano=2024, receita=787411.5, nopat=120214.4, noa_medio=469069.6, nd_medio=43087.6,
+         e_medio=425982.0, e_fim=459017.0, nie_pos_imposto=-11659.7, ni_recorrente=108554.7),
+]
+
+
+def com_reformulado(inp, serie=None):
+    inp["fatos"]["reformulado"] = {
+        "unidade": "R$ mil", "fonte": "T&F_CG_3Q24.xlsm Reformulated Accounts (recomputo B0)",
+        "serie": copy.deepcopy(serie if serie is not None else SERIE_TF)}
+
+
+def test_reformulado_derivados_tf():
+    res = rodar_fixture(FIX_TFCO4, com_reformulado)
+    fr = res["fatos_reformulado"]
+    s24 = fr["serie"][-1]
+    assert s24["roic"] == pytest.approx(0.2563, abs=1e-3)
+    assert s24["margem_nopat"] * s24["giro_noa"] == pytest.approx(s24["roic"], abs=1e-6)
+    assert s24["nbc"] == pytest.approx(0.2706, abs=1e-3)          # spread financeiro NEGATIVO 2024
+    assert s24["roe_ponte"] == pytest.approx(s24["roe_direto"], abs=1e-6)
+    assert s24["roe_direto"] == pytest.approx(0.254834, abs=1e-4)
+    d = fr["diagnostico"]
+    esperado_roiic = (120214.4 - 31364.9) / (469069.6 - 147095.05)
+    assert d["roiic_acumulado"] == pytest.approx(esperado_roiic, abs=1e-6)
+    assert d["janela"] == "2020-2024"
+
+
+def test_reformulado_ce_noa_erro():
+    def quebra(inp):
+        com_reformulado(inp)
+        inp["fatos"]["reformulado"]["serie"][2]["nd_medio"] *= 1.10  # CE != NOA além de 0,5%
+    with pytest.raises(ValueError, match="CE"):
+        rodar_fixture(FIX_TFCO4, quebra)
+
+
+def test_reformulado_ni_inconsistente_erro():
+    def quebra(inp):
+        com_reformulado(inp)
+        inp["fatos"]["reformulado"]["serie"][3]["ni_recorrente"] *= 1.05
+    with pytest.raises(ValueError, match="ni_recorrente"):
+        rodar_fixture(FIX_TFCO4, quebra)
+
+
+def test_reformulado_roic_declarado_divergente_erro():
+    def quebra(inp):
+        com_reformulado(inp)
+        inp["fatos"]["reformulado"]["serie"][-1]["roic"] = 0.30    # declarado != derivado 0,2563
+    with pytest.raises(ValueError, match="roic"):
+        rodar_fixture(FIX_TFCO4, quebra)
+
+
+def test_reformulado_ausente_nao_emite_bloco():
+    res = rodar_fixture(FIX_TFCO4)
+    assert "fatos_reformulado" not in res

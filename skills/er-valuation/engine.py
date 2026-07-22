@@ -829,6 +829,113 @@ def bloco_matrizes(inp, econ):
     }
 
 
+REF_TOL_REL = 0.005      # inputs coletados à mão: invariantes com 0,5% relativo (B0: resíduos reais < 0,01%)
+REF_ND_MINUSCULO = 0.02  # |ND médio| < 2% do NOA => NBC sem significado (TF 2024: base pequena, evidência FASE A)
+
+
+def bloco_fatos_reformulado(inp):
+    """H1/H6 (v3.1.0): série reformulada OPCIONAL (gating por presença) validada na
+    CARGA — invariantes viram ERRO de input, nunca warning (mission §B1):
+      CE ≡ NOA  (nd_medio + e_medio ≡ noa_medio, tolerância relativa 0,5%);
+      ni_recorrente ≡ nopat + nie_pos_imposto;
+      roic/roe DECLARADOS (opcionais) devem bater com os derivados.
+    Deriva por ano: margem_nopat, giro_noa, roic (= margem×giro, base MÉDIA),
+    roic_ex_goodwill (se noa_medio_ex_goodwill vier), nbc (None quando |ND| é
+    minúsculo — base sem significado), flev, roe_ponte, roe_direto.
+    Diagnóstico H6 em JANELA ACUMULADA (nunca anual — evidência TF: razão
+    RiR/(g/ROIC) anual oscila 0,32–5,03): roiic_acumulado, rir_acumulado,
+    g_nopat_acumulado. Convenção de base: MÉDIA para diagnóstico (par
+    média/inicial da FASE A; EoP proibido)."""
+    ref = inp["fatos"].get("reformulado")
+    if not ref:
+        return None
+    serie_in = ref.get("serie") or []
+    erros = []
+    if len(serie_in) < 2:
+        erros.append("fatos.reformulado.serie exige >= 2 anos (recomendado 5-6 + TTM)")
+    obrig = ("ano", "receita", "nopat", "noa_medio", "nd_medio", "e_medio", "e_fim",
+             "nie_pos_imposto")
+    serie = []
+    for i, row in enumerate(serie_in):
+        faltando = [c for c in obrig if row.get(c) is None]
+        if faltando:
+            erros.append(f"serie[{i}] (ano {row.get('ano')}): campos ausentes: {', '.join(faltando)}")
+            continue
+        ano = row["ano"]
+        receita, nopat = float(row["receita"]), float(row["nopat"])
+        noa, nd, e_med = float(row["noa_medio"]), float(row["nd_medio"]), float(row["e_medio"])
+        nie = float(row["nie_pos_imposto"])
+        ce_delta = (nd + e_med) - noa
+        if abs(ce_delta) > REF_TOL_REL * max(1.0, abs(noa)):
+            erros.append(f"serie[{i}] (ano {ano}): CE != NOA (nd_medio + e_medio - noa_medio = "
+                         f"{ce_delta:.1f}, acima de {REF_TOL_REL:.1%} do NOA) — a reformulação "
+                         "não fecha; corrija a coleta, não o engine")
+        ni = row.get("ni_recorrente")
+        ni_derivado = nopat + nie
+        if ni is None:
+            ni = ni_derivado
+        elif abs(float(ni) - ni_derivado) > REF_TOL_REL * max(1.0, abs(ni_derivado)):
+            erros.append(f"serie[{i}] (ano {ano}): ni_recorrente ({float(ni):.1f}) != nopat + "
+                         f"nie_pos_imposto ({ni_derivado:.1f}) — identidade da ponte violada na coleta")
+        margem = nopat / receita
+        giro = receita / noa
+        roic = margem * giro
+        if row.get("roic") is not None and abs(float(row["roic"]) - roic) > 1e-3:
+            erros.append(f"serie[{i}] (ano {ano}): roic declarado ({float(row['roic']):.4f}) != "
+                         f"derivado margem×giro ({roic:.4f})")
+        nd_minusculo = abs(nd) < REF_ND_MINUSCULO * abs(noa)
+        nbc = None if nd_minusculo else -(nie / nd)
+        flev = nd / e_med
+        roe_ponte = None if nbc is None else roic + flev * (roic - nbc)
+        roe_direto = float(ni) / e_med
+        if row.get("roe") is not None and abs(float(row["roe"]) - roe_direto) > 1e-3:
+            erros.append(f"serie[{i}] (ano {ano}): roe declarado ({float(row['roe']):.4f}) != "
+                         f"derivado ni/e_medio ({roe_direto:.4f})")
+        saida = dict(row)
+        saida["ni_recorrente"] = round(float(ni), 2)
+        saida.update({
+            "margem_nopat": round(margem, 6),
+            "giro_noa": round(giro, 6),
+            "roic": round(roic, 6),
+            "nbc": None if nbc is None else round(nbc, 6),
+            "nbc_nota": ("ND médio < 2% do NOA: NBC sem significado econômico (base "
+                         "minúscula) — não interpretar como custo de dívida" if nd_minusculo else None),
+            "flev": round(flev, 6),
+            "roe_ponte": None if roe_ponte is None else round(roe_ponte, 6),
+            "roe_direto": round(roe_direto, 6),
+        })
+        if row.get("noa_medio_ex_goodwill") is not None:
+            saida["roic_ex_goodwill"] = round(nopat / float(row["noa_medio_ex_goodwill"]), 6)
+        serie.append(saida)
+    if erros:
+        raise ValueError("fatos.reformulado recusado pelo engine:\n- " + "\n- ".join(erros))
+
+    prim, ult = serie[0], serie[-1]
+    n = len(serie)
+    d_noa = float(ult["noa_medio"]) - float(prim["noa_medio"])
+    diagnostico = {
+        "janela": f"{prim['ano']}-{ult['ano']}",
+        "base_capital": "MEDIA (diagnóstico); modelo de valor usa INICIAL — EoP proibido (FASE A)",
+        "roiic_acumulado": (round((float(ult["nopat"]) - float(prim["nopat"])) / d_noa, 6)
+                            if abs(d_noa) > 1e-9 else None),
+        "rir_acumulado": (round(d_noa / sum(float(s["nopat"]) for s in serie[1:]), 6)
+                          if sum(float(s["nopat"]) for s in serie[1:]) else None),
+        "g_nopat_acumulado": (round((float(ult["nopat"]) / float(prim["nopat"])) ** (1.0 / (n - 1)) - 1.0, 6)
+                              if float(prim["nopat"]) > 0 and n > 1 else None),
+        "nota": ("ROIIC/RiR em janela acumulada — a razão anual RiR/(g/ROIC) é instável em "
+                 "transição (evidência TF: 0,32–5,03); g/ROIC só vale como RiR terminal"),
+    }
+    validacoes = [
+        f"CE≡NOA verificado nos {n} anos (tolerância {REF_TOL_REL:.1%})",
+        "ni_recorrente ≡ nopat + nie_pos_imposto verificado (identidade da ponte)",
+        "margem×giro ≡ roic por construção (base média)",
+    ]
+    if n < 4:
+        validacoes.append(f"NOTA: série curta ({n} anos; recomendado 5-6 + TTM)")
+    return {"unidade": ref.get("unidade"), "fonte": ref.get("fonte"),
+            "serie": serie, "diagnostico": diagnostico, "validacoes": validacoes}
+
+
 PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
 
 
@@ -900,6 +1007,7 @@ def carregar_inputs(caminho):
 
 def rodar(inp):
     validacao = bloco_validacao(inp)
+    fatos_ref = bloco_fatos_reformulado(inp)   # v3.1.0: valida na carga; None se ausente
     hurdle, econ = bloco_pl_justo(inp)
     de_nde = bloco_de_nde(inp, hurdle, econ)
     cap = bloco_cap(inp)
@@ -910,7 +1018,7 @@ def rodar(inp):
     sens_phi = bloco_sensibilidade_phi(inp, econ)
     val_mult = bloco_validacao_multiplos(inp, hurdle, econ)
     sinais, gate = bloco_sinais_e_gate(inp, hurdle, econ, reverse)
-    return {
+    res = {
         "engine": {"versao": ENGINE_VERSION,
                    "hash_inputs": inp["_hash_inputs"],
                    "gerado_em": datetime.now(timezone.utc).isoformat(timespec="seconds")},
@@ -929,6 +1037,9 @@ def rodar(inp):
         "sensibilidade_phi": sens_phi,
         "validacao_multiplos": val_mult,
     }
+    if fatos_ref is not None:                  # gating por presença (nunca retroativo)
+        res["fatos_reformulado"] = fatos_ref
+    return res
 
 
 def gerar_grafico(res, caminho):
