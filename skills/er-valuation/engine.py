@@ -50,6 +50,23 @@ import sys
 from datetime import datetime, timezone
 
 # CHANGELOG
+# v3.2.0 (2026-07-21): FASE B/B2 — respostas R2–R5 por chave (aditivo; núcleo intocado):
+#   (R2) central_neutro (gating por presença): caso conjunto moderado {lpa, cap_base, ke}
+#        com justificativa própria; robustez_conjunta com decomposição one-at-a-time e
+#        interação; gate G3.0 recomputado sob o neutro (TFCO4: prêmio 79,7→41,7% e
+#        SUMARIA→PADRAO — o empilhamento define o tratamento do caso, agora auditável).
+#   (R3) validacao_multiplos.implicitos (sempre emitido, métrica PE): CAP/g/Ke que
+#        justificariam a mediana histórica própria e a dos pares — decomposição do
+#        prêmio por driver em tabela, nunca prosa.
+#   (R4) ke_dossier (gating por presença): DUAS rotas obrigatórias (paridade-US e build
+#        local), prêmio de tamanho/iliquidez explícito COM critério (mesmo zero — PVV:
+#        9pp movem o EV ~17x), reconciliação com hurdle, grade de Ke −3,0..+1,0pp em
+#        torno do central como saída de primeira classe (a maior alavanca isolada).
+#   (R5) cap_check v2.1 (arquivo próprio): confianca_da_banda derivada da evidência e
+#        SEPARADA da declarada; ônus de sobrescrever para BAIXO (CAP base abaixo da
+#        banda sugerida também alerta).
+#   Contrato: checar exige validacao_multiplos.implicitos em v3.2+; central_neutro/
+#   ke_dossier presentes exigem subchaves; seções novas no corpo institucional.
 # v3.1.0 (2026-07-21): upgrade metodológico FASE B/B1 (arquitetura A aprovada; evidência
 #   FASE A + B0 em C:\Claude\upgrade_fleet_v2_fase_a e referencia\verificacao_referencia.py).
 #   MINOR ADITIVO — núcleo pl_justo() INALTERADO; inputs antigos produzem todas as chaves
@@ -151,7 +168,7 @@ from datetime import datetime, timezone
 # v1.1.0 (2026-07-12): Bracket com DE/NDE; sinal de entrada em 3 estados;
 #       gate renomeado para PROFUNDIDADE (SUMARIA | PADRAO | REFORCADA).
 # v1.0.0: versão inicial calibrada no caso VRSK.
-ENGINE_VERSION = "3.1.0"
+ENGINE_VERSION = "3.2.0"
 
 # ----------------------------------------------------------------------------
 # Núcleo matemático (inalterado desde v1.1.0 — coberto por golden tests)

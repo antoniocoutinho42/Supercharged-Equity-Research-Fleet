@@ -689,6 +689,88 @@ def secao_phi(dados):
     return out
 
 
+def secao_central_neutro(dados):
+    """v3.2 (R2): caso central neutro + robustez conjunta com decomposição."""
+    cn = dados["res"].get("central_neutro")
+    if not cn:
+        return None
+    par = cn["parametros"]
+    out = (f"Além do caso base, o processo publica um caso central NEUTRO — as três alavancas "
+           f"principais movidas juntas para valores moderados (lucro por ação {br(par['lpa'])}, "
+           f"duração base {br(par['cap_base'], 0)} anos, taxa {br(100 * par['ke'], 1)}%): valor "
+           f"central de {n(cn['precos']['ponderado'], 'central_neutro.precos.ponderado')} por "
+           f"ação e prêmio do preço atual de "
+           f"{n(cn['premio_econ_pct'], 'central_neutro.premio_econ_pct', 1, suf='%')}")
+    rc = cn["robustez_conjunta"]
+    out += (f" (vs. {n(rc['baseline']['premio_econ_pct'], 'central_neutro.robustez_conjunta.baseline.premio_econ_pct', 1, suf='%')} "
+            "no caso base). Justificativa do neutro: " + par["justificativa"])
+    d = rc["decomposicao"]
+    t = ["| Alavanca movida sozinha | Efeito no prêmio |", "|---|---|",
+         f"| Base de lucro | {n(d['so_lpa_pp'], 'central_neutro.robustez_conjunta.decomposicao.so_lpa_pp', 1, suf=' p.p.')} |",
+         f"| Duração base | {n(d['so_cap_pp'], 'central_neutro.robustez_conjunta.decomposicao.so_cap_pp', 1, suf=' p.p.')} |",
+         f"| Taxa de desconto | {n(d['so_ke_pp'], 'central_neutro.robustez_conjunta.decomposicao.so_ke_pp', 1, suf=' p.p.')} |",
+         f"| Interação (conjunto − soma) | {n(d['interacao_pp'], 'central_neutro.robustez_conjunta.decomposicao.interacao_pp', 1, suf=' p.p.')} |"]
+    out += "\n\n" + "\n".join(t)
+    g = cn["gate_recomputado"]
+    out += (f"\n\nSob o caso neutro, a profundidade recomendada do processo passa a ser "
+            f"{humano(g['modo'])} — o empilhamento conservador é o que define o tratamento "
+            "do caso, e esta tabela torna isso auditável.")
+    return out
+
+
+def secao_ke_dossier(dados):
+    """v3.2 (R4): dossiê da taxa de desconto — duas rotas, prêmio de tamanho, grade."""
+    kd = dados["res"].get("ke_dossier")
+    if not kd:
+        return None
+    pu, rl = kd["rota_paridade_us"], kd["rota_local"]
+    pt = kd["premio_tamanho"]
+    out = (f"A taxa de desconto do caso foi escolhida com as duas rotas na mesa: paridade "
+           f"internacional em {br(100 * pu['total'], 2)}% e construção local em "
+           f"{br(100 * rl['total'], 2)}%; escolhida "
+           f"{n(100 * kd['escolhido'], 'ke_dossier.escolhido', 2, suf='%')}. Prêmio de "
+           f"tamanho/iliquidez: {br(100 * pt['valor_pp'], 1)} p.p. — critério: {pt['criterio']}")
+    if kd.get("reconciliacao_hurdle"):
+        out += f" Reconciliação com o retorno exigido: {kd['reconciliacao_hurdle']}"
+    t = ["| Taxa | Valor central ponderado | Prêmio do preço atual |", "|---|---|---|"]
+    for i, g in enumerate(kd["grade_ke"]):
+        t.append(f"| {br(100 * g['ke'], 1)}% | "
+                 f"{n(g['central_ponderado'], f'ke_dossier.grade_ke[{i}].central_ponderado')} | "
+                 f"{n(g['premio_pct'], f'ke_dossier.grade_ke[{i}].premio_pct', 1, suf='%')} |")
+    out += ("\n\nA grade abaixo mostra a sensibilidade do caso à taxa — a maior alavanca "
+            "isolada do valor por ação:\n\n" + "\n".join(t))
+    return out
+
+
+def secao_implicitos(dados):
+    """v3.2 (R3): o que os múltiplos de referência exigiriam — decomposição por driver."""
+    imp = _get(dados["res"], "validacao_multiplos.implicitos")
+    if not imp:
+        return None
+    linhas = ["| Referência | Múltiplo | Duração implícita | Crescimento implícito | Taxa implícita |",
+              "|---|---|---|---|---|"]
+    rotulos = {"historico_proprio": "Mediana histórica própria", "comparaveis": "Mediana dos pares"}
+    algum = False
+    for chave, rotulo in rotulos.items():
+        d = imp.get(chave)
+        if not d:
+            continue
+        algum = True
+        cap_txt = (f"{br(d['cap_implicito'], 1)} anos" if d.get("cap_implicito") is not None
+                   else "fora de faixas plausíveis")
+        g_txt = (f"{br(100 * d['g_implicito'], 1)}%" if d.get("g_implicito") is not None
+                 else "fora de faixas plausíveis")
+        ke_txt = (f"{br(100 * d['ke_implicito'], 1)}%" if d.get("ke_implicito") is not None
+                  else "fora de faixas plausíveis")
+        linhas.append(f"| {rotulo} | {n(d['multiplo'], f'validacao_multiplos.implicitos.{chave}.multiplo', 2, suf='x')} | "
+                      f"{cap_txt} | {g_txt} | {ke_txt} |")
+    if not algum:
+        return None
+    return ("Para cada múltiplo de referência, o que ele exigiria de premissas (um driver por "
+            "vez, demais no caso base) — a leitura de QUAL driver o mercado precifica "
+            "diferente:\n\n" + "\n".join(linhas))
+
+
 def secao_cenarios(dados):
     res = dados["res"]
     cen = _premissas_cenarios(dados)
@@ -1117,6 +1199,8 @@ def compor(ns, out_nome="relatorio.md"):
     # Seção de Valuation orientada à decisão: conclusões primeiro (bloco de valor,
     # acima), depois fundamentos e sensibilidades — tudo gerado por chave.
     partes.append("# Valuation\n\n## Cenários\n\n" + secao_cenarios(dados))
+    if dados["res"].get("central_neutro"):
+        partes.append("## Caso central neutro e robustez conjunta\n\n" + secao_central_neutro(dados))
     if dados["res"].get("fatos_reformulado"):
         partes.append("## Série reformulada e aplicabilidade das âncoras\n\n" + secao_reformulado(dados))
     if dados["res"].get("ebit_justo"):
@@ -1124,11 +1208,16 @@ def compor(ns, out_nome="relatorio.md"):
     partes.append("## Matrizes de sensibilidade (preço por ação)\n\n" + secao_matrizes(dados))
     partes.append("## O que o preço atual embute\n\n" + secao_reverse(dados))
     partes.append("## Validação por múltiplos\n\n" + secao_multiplos(dados))
+    _imp = secao_implicitos(dados)
+    if _imp:
+        partes.append("### O que os múltiplos de referência exigiriam\n\n" + _imp)
     if graf_pe:
         partes.append("### Múltiplos P/L históricos\n\n"
                       f"![P/L histórico da companhia com mediana e ± 1 desvio-padrão]({graf_pe})")
     partes.append("## Retorno e crença por faixa de entrada\n\n" + secao_ladder(dados))
     partes.append("## Elasticidades (o que move o valor por ação)\n\n" + secao_elasticidades(dados))
+    if dados["res"].get("ke_dossier"):
+        partes.append("## Dossiê da taxa de desconto\n\n" + secao_ke_dossier(dados))
     if dados["res"].get("sensibilidade_phi"):
         partes.append("## Sensibilidade a spread terminal\n\n" + secao_phi(dados))
     partes.append("# Verificação independente\n\n" + secao_auditoria(dados))

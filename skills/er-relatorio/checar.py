@@ -194,6 +194,18 @@ def checar_valuation(ns, faltas, avisos):
         if engine_v31 and _get(res, "sensibilidade_phi") is None:
             faltas.append("resultados.json: chave obrigatória ausente (engine v3.1+): "
                           "sensibilidade_phi (saída de primeira classe, default φ=0)")
+        engine_v32 = engine_v3 and len(partes_v) > 1 and partes_v[1].isdigit() and int(partes_v[1]) >= 2
+        if engine_v32 and _get(res, "validacao_multiplos.implicitos") is None:
+            faltas.append("resultados.json: chave obrigatória ausente (engine v3.2+): "
+                          "validacao_multiplos.implicitos (decomposição do prêmio por driver — R3)")
+        if res.get("central_neutro") is not None:
+            for sub in ("precos", "robustez_conjunta", "gate_recomputado"):
+                if _get(res, f"central_neutro.{sub}") is None:
+                    faltas.append(f"resultados.json: central_neutro presente sem {sub}")
+        if res.get("ke_dossier") is not None:
+            for sub in ("rota_paridade_us", "rota_local", "premio_tamanho", "grade_ke"):
+                if _get(res, f"ke_dossier.{sub}") is None:
+                    faltas.append(f"resultados.json: ke_dossier presente sem {sub}")
         if res.get("fatos_reformulado") is not None:
             for sub in ("serie", "diagnostico", "gates_aplicabilidade"):
                 if _get(res, f"fatos_reformulado.{sub}") is None:
