@@ -155,3 +155,47 @@ def test_reformulado_roic_declarado_divergente_erro():
 def test_reformulado_ausente_nao_emite_bloco():
     res = rodar_fixture(FIX_TFCO4)
     assert "fatos_reformulado" not in res
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — Gates H7 (PROVISÓRIOS n=3): A1-A3 eliminatórios; A4/F1/F2 flags
+# Séries reais: TF (B0/h6_h7 → EQUITY_OK com flag de FLEV) e PVV (→ GATE_DISPARA)
+# ---------------------------------------------------------------------------
+
+SERIE_PVV = [
+    # EoP usados como e_medio/e_fim (aproximação de teste; não muda o veredicto);
+    # nd reconstruído de FLEV×E (h6_h7); nie=0 → ni≡nopat (identidade preservada)
+    dict(ano=2022, receita=10000.0, nopat=-44361.6, noa_medio=30012.9, nd_medio=37637.8,
+         e_medio=-7624.9, e_fim=-7624.9, nie_pos_imposto=0.0, ni_recorrente=-44361.6),
+    dict(ano=2023, receita=10000.0, nopat=-29990.1, noa_medio=19610.5, nd_medio=45335.1,
+         e_medio=-25724.6, e_fim=-25724.6, nie_pos_imposto=0.0, ni_recorrente=-29990.1),
+    dict(ano=2024, receita=10000.0, nopat=-15110.0, noa_medio=16742.3, nd_medio=15328.0,
+         e_medio=1414.3, e_fim=1414.3, nie_pos_imposto=0.0, ni_recorrente=-15110.0),
+    dict(ano=2025, receita=10000.0, nopat=-13504.7, noa_medio=20370.2, nd_medio=11158.5,
+         e_medio=9211.7, e_fim=9211.7, nie_pos_imposto=0.0, ni_recorrente=-13504.7),
+]
+
+
+def test_gates_h7_tf_equity_ok():
+    res = rodar_fixture(FIX_TFCO4, com_reformulado)
+    g7 = res["fatos_reformulado"]["gates_aplicabilidade"]
+    assert g7["calibracao"] == "PROVISORIO_N3"
+    assert g7["ancora_equity"] == "EQUITY_OK"
+    assert g7["ancora_primaria_recomendada"] == "EQUITY"
+    assert g7["eliminatorios"]["a1_e_positivo"]["passa"] is True
+    assert g7["eliminatorios"]["a2_mediana_e_noa"]["passa"] is True
+    assert g7["eliminatorios"]["a3_lucro_recorrente"]["passa"] is True
+    codigos = [f["codigo"] for f in g7["flags"]]
+    assert "FLEV_CRUZA_SINAL" in codigos       # net cash transitório: flag, NUNCA eliminatório
+    assert "NBC_INSTAVEL" not in codigos       # |FLEV| médio TF < 0,20 (limiar de materialidade)
+    assert "recalibra" in g7["nota_recalibracao"].lower()
+
+
+def test_gates_h7_pvv_dispara():
+    res = rodar_fixture(FIX_TFCO4, lambda inp: com_reformulado(inp, SERIE_PVV))
+    g7 = res["fatos_reformulado"]["gates_aplicabilidade"]
+    assert g7["ancora_equity"] == "GATE_DISPARA"
+    assert g7["ancora_primaria_recomendada"] == "OPERACIONAL"
+    assert g7["eliminatorios"]["a1_e_positivo"]["passa"] is False
+    assert g7["eliminatorios"]["a2_mediana_e_noa"]["passa"] is False
+    assert g7["eliminatorios"]["a3_lucro_recorrente"]["passa"] is False

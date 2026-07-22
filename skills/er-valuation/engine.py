@@ -832,6 +832,81 @@ def bloco_matrizes(inp, econ):
 REF_TOL_REL = 0.005      # inputs coletados à mão: invariantes com 0,5% relativo (B0: resíduos reais < 0,01%)
 REF_ND_MINUSCULO = 0.02  # |ND médio| < 2% do NOA => NBC sem significado (TF 2024: base pequena, evidência FASE A)
 
+# Gates H7 — LIMIARES PROVISÓRIOS, calibrados em n=3 casos (TF, Lopes, PVV; FASE A + B0).
+# Condição 7 da aprovação (2026-07-21): RECALIBRAR a cada caso novo aplicado; os valores
+# abaixo separam os 3 casos com folga, mas n=3 não é amostra — revisar limiares quando a
+# jurisprudência crescer, registrando a mudança no CHANGELOG.
+H7_CALIBRACAO = "PROVISORIO_N3"
+H7_MIN_E_NOA_MEDIANA = 0.30   # zona de separação medida: PVV máx −0,04 vs TF/Lopes mín 0,93
+H7_ND_IMATERIAL = 0.10        # |ND|/NOA médio < 10%: ND imaterial → diagnóstico da ponte fraco
+H7_NBC_RATIO_MAX = 2.0        # |NBC| max/min > 2 (ou sinal instável) com FLEV material: NBC não interpretável
+H7_FLEV_MATERIAL = 0.20       # F1 só relevante com alavancagem média material
+
+
+def _gates_h7(serie):
+    """H7: gate de aplicabilidade da âncora equity em DOIS níveis (evidência FASE A/B0):
+    ELIMINATÓRIOS (decidem a âncora): A1 E>0 em toda a janela; A2 mediana(E/NOA) >= 0,30;
+    A3 lucro recorrente (último E mediana) > 0. FLAGS (degradam o diagnóstico da ponte/NBC,
+    NUNCA a âncora — TF passa com 1-2 cruzamentos benignos de FLEV): A4 FLEV cruza sinal;
+    F1 NBC instável com FLEV material; F2 ND imaterial."""
+    import statistics
+    e_fins = [float(s["e_fim"]) for s in serie]
+    e_noa = [float(s["e_medio"]) / float(s["noa_medio"]) for s in serie]
+    nis = [float(s["ni_recorrente"]) for s in serie]
+    flevs = [float(s["flev"]) for s in serie]
+    nbcs = [float(s["nbc"]) for s in serie if s["nbc"] is not None]
+    ndnoas = [abs(float(s["nd_medio"])) / abs(float(s["noa_medio"])) for s in serie]
+
+    a1 = all(e > 0 for e in e_fins)
+    med_enoa = statistics.median(e_noa)
+    a2 = med_enoa >= H7_MIN_E_NOA_MEDIANA
+    med_ni = statistics.median(nis)
+    a3 = (nis[-1] > 0) and (med_ni > 0)
+
+    flags = []
+    cruzamentos = sum(1 for a, b in zip(flevs, flevs[1:]) if a * b < 0)
+    if cruzamentos > 0:
+        flags.append({"codigo": "FLEV_CRUZA_SINAL",
+                      "detalhe": f"{cruzamentos} cruzamento(s) de sinal do FLEV na janela — "
+                                 "ponte e NBC devem ser lidos com cautela nesses anos "
+                                 "(não expulsa a âncora: evidência TF, net cash transitório)"})
+    flev_medio = sum(abs(x) for x in flevs) / len(flevs)
+    nbc_ratio = None
+    if nbcs and min(abs(x) for x in nbcs) > 1e-12:
+        nbc_ratio = max(abs(x) for x in nbcs) / min(abs(x) for x in nbcs)
+    nbc_sinal_estavel = bool(nbcs) and (all(x > 0 for x in nbcs) or all(x < 0 for x in nbcs))
+    if flev_medio >= H7_FLEV_MATERIAL and ((nbc_ratio is not None and nbc_ratio > H7_NBC_RATIO_MAX)
+                                           or not nbc_sinal_estavel):
+        flags.append({"codigo": "NBC_INSTAVEL",
+                      "detalhe": f"|FLEV| médio {flev_medio:.3f} com NBC instável (razão "
+                                 f"{'%.2f' % nbc_ratio if nbc_ratio else 'n/a'}, sinal estável "
+                                 f"{nbc_sinal_estavel}) — NUNCA publicar NBC como custo de dívida"})
+    ndnoa_medio = sum(ndnoas) / len(ndnoas)
+    if ndnoa_medio < H7_ND_IMATERIAL:
+        flags.append({"codigo": "ND_IMATERIAL",
+                      "detalhe": f"|ND|/NOA médio {ndnoa_medio:.3f} < {H7_ND_IMATERIAL}: dívida "
+                                 "líquida imaterial — decomposição da ponte pouco informativa"})
+
+    ok = a1 and a2 and a3
+    return {
+        "calibracao": H7_CALIBRACAO,
+        "ancora_equity": "EQUITY_OK" if ok else "GATE_DISPARA",
+        "ancora_primaria_recomendada": "EQUITY" if ok else "OPERACIONAL",
+        "eliminatorios": {
+            "a1_e_positivo": {"passa": a1, "min_e_fim": round(min(e_fins), 2)},
+            "a2_mediana_e_noa": {"passa": a2, "valor": round(med_enoa, 4),
+                                 "limiar": H7_MIN_E_NOA_MEDIANA},
+            "a3_lucro_recorrente": {"passa": a3, "ultimo": round(nis[-1], 2),
+                                    "mediana": round(med_ni, 2)},
+        },
+        "flags": flags,
+        "limiares": {"mediana_e_noa": H7_MIN_E_NOA_MEDIANA, "nd_imaterial": H7_ND_IMATERIAL,
+                     "nbc_ratio_max": H7_NBC_RATIO_MAX, "flev_material": H7_FLEV_MATERIAL},
+        "nota_recalibracao": ("Limiares PROVISÓRIOS calibrados em n=3 (TF, Lopes, PVV — FASE "
+                              "A/B0): RECALIBRAR a cada caso novo aplicado, registrando a "
+                              "revisão no CHANGELOG (condição 7 da aprovação da FASE B)."),
+    }
+
 
 def bloco_fatos_reformulado(inp):
     """H1/H6 (v3.1.0): série reformulada OPCIONAL (gating por presença) validada na
@@ -933,7 +1008,8 @@ def bloco_fatos_reformulado(inp):
     if n < 4:
         validacoes.append(f"NOTA: série curta ({n} anos; recomendado 5-6 + TTM)")
     return {"unidade": ref.get("unidade"), "fonte": ref.get("fonte"),
-            "serie": serie, "diagnostico": diagnostico, "validacoes": validacoes}
+            "serie": serie, "diagnostico": diagnostico, "validacoes": validacoes,
+            "gates_aplicabilidade": _gates_h7(serie)}
 
 
 PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
