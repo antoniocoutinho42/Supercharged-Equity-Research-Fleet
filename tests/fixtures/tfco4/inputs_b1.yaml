@@ -1,0 +1,126 @@
+# inputs.yaml RECONSTRUÍDO do relatorio_final_1.pdf (TFCO4) — FASE A, evidência
+# Fonte única: C:/Claude/referencia/relatorio_final_1.pdf (namespace original não existe nesta máquina).
+# Cada campo anotado com a página (p.N) do PDF de onde foi extraído.
+# Campos marcados [RECONSTRUÍDO] não têm valor explícito no PDF — valor inferido/sintetizado
+# para permitir re-execução; NÃO tratar como fato da análise original.
+
+meta:
+  ticker: TFCO4
+  nome: "Track&Field Co S.A."            # p.1
+  moeda: BRL                             # p.1
+  preco_atual: 14.99                     # p.1 "Preço de referência: BRL 14,99 (2026-07-20)"
+  data_preco: "2026-07-20"               # p.1
+  fonte_preco: "agregador (nao especificado no PDF)"   # [RECONSTRUÍDO] red team cita Fundamentus/investidor10
+  acoes_mi: 153.2                        # p.7/p.10 "meta.acoes_mi = 153,2mi, reconciliado com market cap e LPA"
+
+fatos:
+  # LPA base do motor: hurdle.lpa_base = 0,95 (p.9, memorando §1) — "reportado/TTM"
+  lpa_ajustado_fy: 0.95                  # p.9 (base ADJUSTED do motor = TTM/reportado 0,95; ajustado da CIA 1,12 foi RECUSADO)
+  lpa_gaap_fy: 0.93                      # p.9 §2 "Cross-check GAAP (LPA 0,93)"; p.11 "LPA GAAP 0,93-0,94 = NI FY2025 ~R$142,3mi / 153,2mi"
+  divida_bruta_mi: 178.8                 # p.4 Pilar 3 "dívida bruta R$178,8mi essencialmente arrendamentos IFRS-16"
+  divida_liquida_mi: 115.2               # p.4 Pilar 3 "dívida líquida R$115,2mi"
+  # PL R$588,4mi (p.4): de = 178,8/588,4 = 0,304; nde = 115,2/588,4 = 0,196 — coincide com
+  # p.8 R1 "uso os DE/NDE medidos (0,304/0,196)" e p.10 "(DE−NDE)=caixa/PL=0,108"
+  de: 0.304                              # p.8 / p.10
+  nde: 0.196                             # p.8 / p.10
+  # ev_ebitda_atual = 9,69 (p.12, nota c) => EBITDA_TTM = (14,99*153,2 + 115,2)/9,69 ≈ 248,9
+  ebitda_adj_ttm_mi: 248.9               # [RECONSTRUÍDO] de ev_ebitda_atual 9,69 (p.12); coerente com ND/EBITDA ~0,46x (p.4)
+  consenso: {mediana: 19.0, fonte: "p.3 'consenso (~R$19)' — min/max nao publicados no PDF"}  # [PARCIALMENTE RECONSTRUÍDO]
+
+  multiplos_historicos:
+    pe:
+      min: 13.0                          # p.6 "Banda histórica própria (FY2020-FY2025) 13,00 / mediana 20,00 / 45,00"
+      mediana: 20.0                      # p.6
+      max: 45.0                          # p.6
+      janela: "FY2020-FY2025"            # p.6
+      base: ADJUSTED                     # p.6 "Múltiplo atual (PE, base ADJUSTED)" — n.b.: 15,78x = 14,99/0,95
+      fonte: "PDF p.6 (fonte primaria da banda nao citada no PDF)"
+
+  series_historicas:                     # p.3-4: receita 267 (2020) -> 1.046 (2025); lucro 25,8 -> 142,3; ROE 2020 ~12,8%, 2021-25 25-29%
+    # [RECONSTRUÍDO] apenas extremos e qualitativos publicados; anos intermediarios ausentes do texto
+    - {ano: 2020, receita: 267,  lucro_liquido: 25.8,  roe: 0.128}   # p.4 "2020 ~12,8% na COVID"; p.11 F-02
+    - {ano: 2025, receita: 1046, lucro_liquido: 142.3, roe: 0.25}    # p.11 F-02; ROE 25-29% 2021-25 (F-11); investidor10 24,35% (p.11)
+
+  pares:                                 # p.6: "Mediana dos pares (n=4) 5,24x"; nomes p.6/p.9: SBFG3, VULC3, AZZA3, LREN3
+    # [RECONSTRUÍDO] P/L individual de cada par NAO publicado no PDF; valores sintetizados
+    # para reproduzir mediana 5,24 (n=4). Texto p.9: "varejo ciclico de qualidade inferior a 4-6x".
+    - {nome: "SBFG3 (Grupo SBF)", pe: 4.60, fonte: "[RECONSTRUÍDO p/ mediana 5,24]"}
+    - {nome: "VULC3 (Vulcabras)", pe: 5.00, fonte: "[RECONSTRUÍDO p/ mediana 5,24]"}
+    - {nome: "AZZA3 (Azzas 2154)", pe: 5.48, fonte: "[RECONSTRUÍDO p/ mediana 5,24]"}
+    - {nome: "LREN3 (Renner)", pe: 12.00, fonte: "[RECONSTRUÍDO p/ mediana 5,24]"}
+
+  duracao:                               # dossiê de duração consumido por cap_check.py — p.4 Pilar 6 + p.9 §3
+    consolidada:
+      persistencia_spread_anos: 5        # p.4/p.7/p.9 "persistência verificável e consolidada = 5 anos (série pública desde o IPO 2020)"
+      fonte: "ROE 25-29% vs custo de capital ref. ~13-14%, 2021-2025; 2020 ~12,8% COVID (p.4)"
+    fontes_estruturais:                  # p.9 §3 (cap_check: banda moat claro 12-18 a partir destas fontes)
+      - {nome: "marca com margem bruta ~60%", evidencia: "pricing power sustentado (p.4 Pilar 6)"}
+      - {nome: "rede de franquias asset-light", evidencia: "435 lojas, ~40 aberturas/ano a capital de franqueado (p.4)"}
+      - {nome: "ecossistema TFSports", evidencia: "~1,2mi usuarios, 4.200+ eventos/ano (p.4)"}
+    renovacao_moat:
+      evidencia: "reinvestimento a ROIC 26% com ROIIC alto (receita 4x, lucro 5,5x em 5 anos); novo formato ~2x; On; Europa (p.4)"
+    vetores_erosao:                      # p.4 Pilar 6 "Vetores de erosão (ESTIMATIVA)"
+      - {nome: "concorrencia athleisure", status: "ABERTO", materialidade: "média", probabilidade: "média", horizonte_anos: 5}
+      - {nome: "moda + ciclo de consumo BR", status: "ABERTO", materialidade: "média", probabilidade: "média", horizonte_anos: 4}
+      - {nome: "execucao Europa", status: "ABERTO", materialidade: "baixa", probabilidade: "média", horizonte_anos: 5}
+      - {nome: "IA (substituicao/compressao)", status: "ABERTO", materialidade: "baixa", probabilidade: "baixa", horizonte_anos: 5}
+    precedentes:                         # p.4 "Taxa-base honesta"
+      - {nome: "Lululemon", anos: 20}
+      - {nome: "Nike", anos: 25}
+      - {nome: "Inditex", anos: 25}
+
+premissas:
+  ke_hurdle: 0.13                        # p.9 "hurdle.ke = 0,13 (retorno exigido pelo usuário)"
+  ke_economico: [0.13, 0.14, 0.15]       # p.9 "grade de Ke CAPM 13/14/15%", central 14%
+  cap_teto_defensavel: 15                # p.9 "cap.teto_defensavel = 15"
+  cap_confianca: MEDIA                   # p.9 "cap.confianca = MEDIA"
+  justificativa_cap: >                   # p.9 §3 (cap.justificativa_cap, resumo fiel)
+    Sobrescrita PARA BAIXO da banda cap_check moat-claro (12-18): persistência de spread
+    verificável e consolidada de apenas 5 anos (série pública desde o IPO 2020; operação
+    privada desde 1988 não verificável em filings), moat de marca/comunidade (não switching
+    contratual) e quatro vetores de erosão ABERTOS (concorrência athleisure, ciclo de consumo
+    BR, execução Europa, IA). Base = 12 (piso da banda), bull = 15 (dentro da banda), bear = 7
+    (fade rápido se SSS desacelera/satura). Confiança MEDIA com spread bear-bull alargado.
+  justificativa_cenarios: >              # p.5 "Fundamentação do CAP por cenário"
+    Bear (CAP 7): SSS desacelera sobre base difícil, saturação de rede e ciclo de consumo BR
+    encurtam a duração do spread. Base (CAP 12): moat renovado no ritmo histórico, runway de
+    lojas (BR subpenetrado) e digital. Bull (CAP 15): execução de marca + Europa + On ampliam
+    o runway até a banda do moat claro.
+  justificativa_g: >                     # p.5 "Fundamentação do crescimento (g) por cenário"
+    Bear (g 6%): mix franquia (margem menor) e ciclo comprimem o crescimento de lucro bem
+    abaixo do CAGR histórico. Base (g 12%): crescimento orgânico de lucro maturando dos
+    ~20-25% recentes com diluição gradual de margem por mix. Bull (g 17%): reaceleração de
+    SSS, novo formato (~2x), On e Europa. Teto de coerência g < ROE respeitado.
+  justificativa_roe: >                   # p.5 "Fundamentação do ROE por cenário"
+    Bear (ROE 18%): compressão de margem pelo mix e desalavancagem operacional, ainda acima
+    do custo de capital. Base (ROE 22%): ROE meio de ciclo abaixo do pico corrente (~25%)
+    por mix e normalização dos add-backs. Bull (ROE 25%): manutenção do giro asset-light e
+    do pricing power (margem bruta ~60%). ROE de pico NÃO extrapolado.
+  cenarios:                              # p.5 tabela "Cenários"
+    bear: {prob: 0.30, g: 0.06, roe: 0.18, cap: 7}
+    base: {prob: 0.50, g: 0.12, roe: 0.22, cap: 12}
+    bull: {prob: 0.20, g: 0.17, roe: 0.25, cap: 15}
+  multiplos_validacao:
+    metrica_primaria: PE                 # p.10 "validacao_multiplos (base PE, ADJUSTED)"
+    base_lucro: ADJUSTED                 # p.6/p.10
+    limiar_divergencia: 0.30             # [RECONSTRUÍDO] limiar nao publicado; divergencias -56,1% e +67,6% = DIVERGE_MATERIAL
+  resolucao_divergencia:
+    via: EXPLICACAO_FUNDAMENTADA         # p.9 "Via: EXPLICACAO_FUNDAMENTADA"
+    texto: >                             # p.6/p.9 (íntegra resumida da resolução publicada)
+      Duas pernas em direções opostas, resolvidas separadamente. (1) vs. PARES (+67,6%; justo
+      8,78x acima da mediana 5,24x): não é divergência a corrigir — pares BR (SBFG3 ROE 13%,
+      VULC3, AZZA3 ROE 10%, LREN3) são varejo cíclico de qualidade inferior a 4-6x; o justo já
+      concede ~68% de prêmio endógeno via ROE/g/CAP superiores; piso confirma que o modelo não
+      é pessimista demais. (2) vs. HISTÓRIA PRÓPRIA (−56,1%; justo 8,78x abaixo da mediana
+      20x): tensão real, não reconciliada inflando premissas — a diferença é inteiramente
+      g × duração; o preço/história embute CAP implícito 42,9a, g implícito 26,2% e Ke ~8,8%,
+      indefensáveis ex-ante (persistência verificável 5a, moat não contratual, vetores
+      abertos, compressão de margem por mix em curso). Observável que arbitra: SSS + aberturas
+      líquidas + economia unitária do novo formato, 4-8 trimestres.
+  ms_minima: 0.12                        # p.10 "ms_minima = 0,12 sob o hurdle ponderado R$9,01"
+  limitrofe_teto: 1.10                   # [RECONSTRUÍDO] valor nao publicado no PDF; default do exemplo VRSK
+  ladder_precos: [12, 10, 9, 8]          # p.7/p.10 tabela do ladder (12,00 / 10,00 / 9,00 / 8,00)
+
+gate:                                    # p.9 §4
+  limiar_cap_implicito_vs_teto: 2.0      # p.9 "gate.razoes: cap_implicito/teto = 2,86 >= 2,0"
+  limiar_preco_vs_bull_econ: 1.4         # [RECONSTRUÍDO] razao 1,17 "nao gatilhou" (p.9); limiar nao publicado — default 1,4 do exemplo
