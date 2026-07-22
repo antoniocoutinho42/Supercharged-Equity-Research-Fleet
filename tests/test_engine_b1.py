@@ -199,3 +199,70 @@ def test_gates_h7_pvv_dispara():
     assert g7["eliminatorios"]["a1_e_positivo"]["passa"] is False
     assert g7["eliminatorios"]["a2_mediana_e_noa"]["passa"] is False
     assert g7["eliminatorios"]["a3_lucro_recorrente"]["passa"] is False
+
+
+# ---------------------------------------------------------------------------
+# Task 5 — ebit_justo núcleo: cenários margem×giro, cadeia (1−t)(1−d), bridge, preço
+# Razão da cadeia validada contra o JM medido no B0: C193/C187 = 4,200650.../6,429566...
+# ---------------------------------------------------------------------------
+
+JM_RATIO_EBITDA_NOPAT = 4.200650004719926 / 6.429566333754988   # (1−t)(1−d) do JM (B0, 1e-12)
+T_OPER = 0.30                                                    # t do JM
+D_JM = 1.0 - JM_RATIO_EBITDA_NOPAT / (1.0 - T_OPER)              # d implícito do JM
+
+
+def com_operacional(inp, margens=None, giros=None, nopat_fy=100.0, claims=None,
+                    wacc=0.14, com_ebitda=True):
+    margens = margens or {"bear": 0.13, "base": 0.15, "bull": 0.17}
+    giros = giros or {"bear": 1.5, "base": 1.6, "bull": 1.7}
+    inp["fatos"]["nopat_fy_mi"] = nopat_fy
+    if com_ebitda:
+        inp["fatos"]["da_sobre_ebitda"] = D_JM
+    inp["fatos"]["claims_bridge"] = claims if claims is not None else [
+        {"nome": "divida_bruta", "valor_mi": -500.0, "fonte": "teste"},
+        {"nome": "caixa_livre", "valor_mi": 50.0, "fonte": "teste"},
+    ]
+    inp["premissas"]["operacional"] = {
+        "wacc": wacc, "fonte_wacc": "dossiê de Ke (teste)",
+        "aliquota_operacional": T_OPER, "fonte_aliquotas": "teste",
+        "cenarios": {n: {"margem_nopat": margens[n], "giro_noa": giros[n]}
+                     for n in ("bear", "base", "bull")},
+    }
+
+
+def test_ebit_justo_nucleo():
+    res = rodar_fixture(FIX_TFCO4, com_operacional)
+    ej = res["ebit_justo"]
+    cen_eq = carregar(FIX_TFCO4)["premissas"]["cenarios"]
+    for n in ("bear", "base", "bull"):
+        c = ej["cenarios"][n]
+        roic = c["margem_nopat"] * c["giro_noa"]
+        assert c["roic"] == pytest.approx(roic, abs=1e-9)
+        # identidade do motor único: mesma pl_justo, inputs operacionais, trailing, de=nde=0
+        esperado = engine.pl_justo(cen_eq[n]["g"], roic, cen_eq[n]["cap"], 0.14, 0.0, 0.0, 1.0)
+        assert c["ev_nopat_justo"] == pytest.approx(esperado, abs=5e-5)   # JSON 4 casas
+        assert c["ev_ebit_justo"] == pytest.approx(esperado * (1 - T_OPER), abs=1e-4)
+        assert c["ev_ebitda_justo"] == pytest.approx(esperado * JM_RATIO_EBITDA_NOPAT, abs=1e-4)
+    b = ej["cenarios"]["base"]
+    assert b["rir_implicito_terminal"] == pytest.approx(0.12 / (0.15 * 1.6), abs=1e-6)
+    assert ej["bridge"]["total_mi"] == pytest.approx(-450.0, abs=1e-9)
+    assert b["ev_mi"] == pytest.approx(b["ev_nopat_justo"] * 100.0, abs=1e-2)
+    assert b["equity_mi"] == pytest.approx(b["ev_mi"] - 450.0, abs=1e-2)
+    acoes = res["meta"]["acoes_mi"]
+    assert b["preco"] == pytest.approx(b["equity_mi"] / acoes, abs=1e-2)
+    assert ej["ponderado_preco"] == pytest.approx(
+        0.30 * ej["cenarios"]["bear"]["preco"] + 0.50 * b["preco"] + 0.20 * ej["cenarios"]["bull"]["preco"], abs=0.02)
+    assert "trailing" in ej["convencao"]
+
+
+def test_ebit_justo_recusa_g_maior_que_roic():
+    def quebra(inp):
+        com_operacional(inp, margens={"bear": 0.05, "base": 0.05, "bull": 0.05},
+                        giros={"bear": 1.0, "base": 1.0, "bull": 1.0})  # roic 0,05 < g bull 0,17
+    with pytest.raises(ValueError, match="roic|ROIC"):
+        rodar_fixture(FIX_TFCO4, quebra)
+
+
+def test_ebit_justo_ausente_nao_emite_bloco():
+    res = rodar_fixture(FIX_TFCO4)
+    assert "ebit_justo" not in res

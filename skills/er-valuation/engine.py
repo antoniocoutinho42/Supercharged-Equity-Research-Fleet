@@ -1012,6 +1012,120 @@ def bloco_fatos_reformulado(inp):
             "gates_aplicabilidade": _gates_h7(serie)}
 
 
+def bloco_ebit_justo(inp, econ):
+    """H9/H4 (v3.1.0): âncora operacional no MOTOR ÚNICO — a MESMA pl_justo com
+    inputs operacionais (g, ROIC = margem×giro, CAP, WACC), convenção TRAILING,
+    de=nde=0 (o bracket equity não se aplica ao EV). Identidade medida no B0:
+    EV/NOPAT forward do JM = (1+g) × pl_justo trailing, e o fator SÓ vale com
+    m_terminal=1 — por isso o bloco NUNCA converte para forward. Cadeia:
+    EV/EBIT = (1−t)×EV/NOPAT; EV/EBITDA = ×(1−d). Bridge de claims (H4): equity
+    = EV + Σ claims assinados (dívida negativa; caixa/NOL positivos). Cenários
+    g/cap/prob/m_terminal HERDADOS de premissas.cenarios (uma única tabela —
+    anti-empilhamento); a rentabilidade operacional entra como margem×giro por
+    cenário (história→números). WACC é RECEBIDO como premissa documentada (H8),
+    nunca derivado do balanço. Gating por presença: sem premissas.operacional o
+    bloco não existe."""
+    p, f, meta = inp["premissas"], inp["fatos"], inp["meta"]
+    op = p.get("operacional")
+    if not op:
+        return None
+    nomes = ("bear", "base", "bull")
+    erros = []
+    nopat_fy = f.get("nopat_fy_mi")
+    if nopat_fy is None or float(nopat_fy) <= 0:
+        erros.append("fatos.nopat_fy_mi ausente ou <= 0: base trailing da âncora operacional; "
+                     "sem NOPAT representativo a âncora não roda (base não normalizada → "
+                     "registre a limitação, não force)")
+    wacc = op.get("wacc")
+    if not isinstance(wacc, (int, float)) or float(wacc) <= 0:
+        erros.append("premissas.operacional.wacc ausente ou <= 0 — o WACC é RECEBIDO como "
+                     "premissa documentada (H8); o engine nunca o deriva do balanço")
+    if not str(op.get("fonte_wacc", "")).strip():
+        erros.append("premissas.operacional.fonte_wacc obrigatória (dossiê de Ke/WACC com as "
+                     "duas rotas — H8)")
+    t = op.get("aliquota_operacional")
+    if not isinstance(t, (int, float)) or not (0.0 <= float(t) < 1.0):
+        erros.append("premissas.operacional.aliquota_operacional ausente ou fora de [0,1) — "
+                     "camada de imposto da cadeia EV/EBIT (H5)")
+    if not str(op.get("fonte_aliquotas", "")).strip():
+        erros.append("premissas.operacional.fonte_aliquotas obrigatória (H5: alíquota é input "
+                     "documentado por companhia, nunca constante universal)")
+    cen_op = op.get("cenarios") or {}
+    if sorted(cen_op.keys()) != sorted(nomes):
+        erros.append("premissas.operacional.cenarios deve conter exatamente bear, base e bull "
+                     "(margem_nopat e giro_noa por cenário)")
+    claims = f.get("claims_bridge")
+    if not isinstance(claims, list):
+        erros.append("fatos.claims_bridge ausente: o bridge EV→equity exige a lista de claims "
+                     "(H4; pode ser vazia apenas com ND≈0 e nota) — sinal = contribuição ao "
+                     "equity (dívida negativa; caixa/NOL positivos)")
+    else:
+        for i, c in enumerate(claims):
+            if not (isinstance(c, dict) and c.get("nome") and c.get("valor_mi") is not None
+                    and str(c.get("fonte", "")).strip()):
+                erros.append(f"claims_bridge[{i}]: exige nome, valor_mi e fonte")
+    acoes = meta.get("acoes_mi")
+    if not acoes:
+        erros.append("meta.acoes_mi obrigatório para o preço por ação da âncora operacional")
+    cen_eq = p.get("cenarios", {})
+    roics = {}
+    if not erros:
+        for n in nomes:
+            c = cen_op[n]
+            mg, gr = c.get("margem_nopat"), c.get("giro_noa")
+            if not (isinstance(mg, (int, float)) and isinstance(gr, (int, float))
+                    and float(mg) > 0 and float(gr) > 0):
+                erros.append(f"cenário operacional {n}: margem_nopat e giro_noa devem ser > 0")
+                continue
+            roics[n] = float(mg) * float(gr)
+            if float(cen_eq[n]["g"]) >= roics[n]:
+                erros.append(f"cenário {n}: g ({cen_eq[n]['g']}) >= roic operacional "
+                             f"({roics[n]:.4f} = margem×giro) implica reinvestimento > 100% — "
+                             "incoerente; reveja margem/giro ou g")
+    dsobre = f.get("da_sobre_ebitda")
+    if dsobre is not None and not (0.0 <= float(dsobre) < 1.0):
+        erros.append("fatos.da_sobre_ebitda fora de [0,1)")
+    if erros:
+        raise ValueError("ebit_justo: inputs recusados pelo engine:\n- " + "\n- ".join(erros))
+
+    t = float(t)
+    total_claims = round(sum(float(c["valor_mi"]) for c in claims), 2)
+    out_cen = {}
+    for n in nomes:
+        g_, cap_ = float(cen_eq[n]["g"]), float(cen_eq[n]["cap"])
+        m_t = _m_terminal(cen_eq[n])
+        roic = roics[n]
+        evn = pl_justo(g_, roic, cap_, float(wacc), 0.0, 0.0, m_t)
+        ev_mi = evn * float(nopat_fy)
+        eq_mi = ev_mi + total_claims
+        out_cen[n] = {
+            "margem_nopat": float(cen_op[n]["margem_nopat"]),
+            "giro_noa": float(cen_op[n]["giro_noa"]),
+            "roic": round(roic, 6),
+            "rir_implicito_terminal": round(g_ / roic, 6),
+            "ev_nopat_justo": round(evn, 4),
+            "ev_ebit_justo": round(evn * (1.0 - t), 4),
+            "ev_mi": round(ev_mi, 2),
+            "equity_mi": round(eq_mi, 2),
+            "preco": round(eq_mi / float(acoes), 2),
+        }
+        if dsobre is not None:
+            out_cen[n]["ev_ebitda_justo"] = round(evn * (1.0 - t) * (1.0 - float(dsobre)), 4)
+    ponderado = round(_pond(cen_eq, {n: out_cen[n]["preco"] for n in nomes}), 2)
+    return {
+        "wacc": float(wacc),
+        "fonte_wacc": str(op["fonte_wacc"]),
+        "aliquotas": {"operacional": t},
+        "cenarios": out_cen,
+        "ponderado_preco": ponderado,
+        "bridge": {"claims": claims, "total_mi": total_claims,
+                   "convencao_sinal": "valor_mi = contribuição ao EQUITY (dívida negativa; "
+                                      "caixa livre/NOL positivos)"},
+        "convencao": "trailing (mesma convenção do motor equity); comparação com múltiplos "
+                     "forward exige ×(1+g) e SÓ vale com m_terminal=1 (fator medido no B0)",
+    }
+
+
 PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
 
 
@@ -1115,6 +1229,9 @@ def rodar(inp):
     }
     if fatos_ref is not None:                  # gating por presença (nunca retroativo)
         res["fatos_reformulado"] = fatos_ref
+    ebit = bloco_ebit_justo(inp, econ)
+    if ebit is not None:
+        res["ebit_justo"] = ebit
     return res
 
 
