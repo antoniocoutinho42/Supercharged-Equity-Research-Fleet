@@ -180,7 +180,8 @@ def main(argv=None):
     # claims.yaml e estado.yaml (Task 3.1): opcionais, best-effort — congelados
     # QUANDO existirem no ns, sem quebrar o snapshot se ausentes ou se a cópia
     # falhar por algum motivo do SO.
-    for nome_opcional in ("claims.yaml", "estado.yaml"):
+    # B3: classificacao.yaml congelado junto — o Auditor audita um ledger IMUTÁVEL.
+    for nome_opcional in ("claims.yaml", "estado.yaml", "classificacao.yaml"):
         origem_opcional = os.path.join(ns, nome_opcional)
         if os.path.isfile(origem_opcional):
             try:

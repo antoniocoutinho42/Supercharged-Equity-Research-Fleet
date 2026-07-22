@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "classificacao.schema.json",
+  "title": "Ledger de classificação por natureza econômica (B3/H2)",
+  "description": "TODA linha do balanço reportado classificada pelo Analista com justificativa de uma linha + fonte, sem resíduo. Classes fixas e poucas; as rubricas variam por empresa (SEM dicionário — decisão ratificada na FASE A: zero rubricas em comum entre os quatro modelos de referência). Linhas ambíguas são flagadas para o contraditório do Auditor. O arquivo é congelado no snapshot do run (o Auditor audita um ledger imutável).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ticker", "fonte", "data_balanco", "norma_contabil", "linhas", "totais_reportados"],
+  "properties": {
+    "ticker": {"type": "string", "minLength": 1},
+    "fonte": {"type": "string", "minLength": 3,
+              "description": "Filing primário de onde o balanço foi lido (DFP/ITR/10-K...)"},
+    "data_balanco": {"type": "string", "minLength": 4},
+    "norma_contabil": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regime", "leasing_pacote"],
+      "properties": {
+        "regime": {"enum": ["IFRS_CPC", "US_GAAP", "J_GAAP_STUB", "CAS_STUB", "IND_AS_STUB"],
+                   "description": "Detectado na coleta pelo tipo de filing; stubs exigem escalada (checklist não codificada)"},
+        "leasing_pacote": {"enum": ["IFRS16_PURO", "AS_IF_RENT", "ASC842_NATIVO"],
+                           "description": "UM pacote por análise, travado (H3) — misturar fluxo de um pacote com estoque de outro foi o erro clássico medido nas referências"},
+        "fonte_filing": {"type": "string"},
+        "ajustes_aplicados": {"type": "array", "items": {"type": "string"},
+                              "description": "Normalizações aplicadas NA COLETA (o engine é agnóstico); obrigatório quando o pacote de leasing não é o nativo do regime"}
+      }
+    },
+    "linhas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rubrica", "valor", "classe", "justificativa", "fonte"],
+        "properties": {
+          "rubrica": {"type": "string", "minLength": 1},
+          "valor": {"type": "number"},
+          "classe": {"enum": ["ATIVO_OPERACIONAL", "PASSIVO_OPERACIONAL",
+                              "ATIVO_FINANCEIRO", "PASSIVO_FINANCEIRO", "EQUITY"]},
+          "justificativa": {"type": "string", "minLength": 10,
+                            "description": "Uma linha, pelo critério de NATUREZA (nasce da operação? rende/custa juros? existiria 100% equity-financiada?)"},
+          "fonte": {"type": "string", "minLength": 1},
+          "ambigua": {"type": "boolean",
+                      "description": "true => entra no contraditório do Auditor (re-derivação independente)"},
+          "claim_bridge": {"type": ["string", "null"],
+                           "description": "Classificação DUPLA (H4): como a linha entra no bridge EV→equity (ex.: divida, caixa_livre, nol, minoritarios, puts); null = não é claim do bridge"}
+        }
+      }
+    },
+    "totais_reportados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ativo_total", "passivo_total", "equity_total"],
+      "properties": {
+        "ativo_total": {"type": "number"},
+        "passivo_total": {"type": "number"},
+        "equity_total": {"type": "number"}
+      }
+    }
+  }
+}

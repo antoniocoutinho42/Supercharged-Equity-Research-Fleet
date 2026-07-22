@@ -86,6 +86,7 @@ def _acha_saida(ns):
 
 def checar_dossie(ns, faltas, avisos):
     faltas += [f"arquivo ausente: {a}" for a in _existe(ns, "dossie.md", "inputs_valuation.md", "inputs.yaml")]
+    checar_classificacao(ns, faltas, avisos)   # B3: gating por presença (ausente = nada)
     # R1: julgamento metodológico prévio, produzido antes/junto da coleta.
     metodo = _carregar_metodo(ns, faltas)
     if metodo:
@@ -422,6 +423,53 @@ def _carregar_metodo(ns, faltas):
     except Exception as exc:
         faltas.append(f"metodo.yaml ilegível: {exc}")
         return None
+
+
+CLASSIFICACAO_TOL_REL = 0.005  # mesmos 0,5% dos invariantes do engine (inputs coletados à mão)
+
+
+def checar_classificacao(ns, faltas, avisos):
+    """B3/H2: ledger de classificação por natureza — GATING POR PRESENÇA (ausente =
+    nada; análises antigas intactas). Presente: valida contra o schema e verifica os
+    INVARIANTES na carga (somas por classe ≡ totais reportados; ativo ≡ passivo +
+    equity, o que garante CE≡NOA por construção). Linhas ambíguas viram AVISO
+    direcionado ao contraditório do Auditor — nunca resíduo silencioso."""
+    caminho = os.path.join(ns, "classificacao.yaml")
+    if not os.path.exists(caminho):
+        return
+    erros_schema = _validar_contra_schema(caminho, "classificacao")
+    if erros_schema:
+        faltas += [f"classificacao.yaml: {e}" for e in erros_schema]
+        return
+    led = _carrega_yaml(caminho)
+    somas = {c: 0.0 for c in ("ATIVO_OPERACIONAL", "PASSIVO_OPERACIONAL",
+                              "ATIVO_FINANCEIRO", "PASSIVO_FINANCEIRO", "EQUITY")}
+    ambiguas = []
+    for ln in led["linhas"]:
+        somas[ln["classe"]] += float(ln["valor"])
+        if ln.get("ambigua"):
+            ambiguas.append(ln["rubrica"])
+    tot = led["totais_reportados"]
+
+    def _confere(nome, soma, alvo):
+        if abs(soma - float(alvo)) > CLASSIFICACAO_TOL_REL * max(1.0, abs(float(alvo))):
+            faltas.append(f"classificacao.yaml: invariante violado — {nome}: soma das classes "
+                          f"{soma:.2f} != total reportado {float(alvo):.2f} (nenhuma linha do "
+                          "balanço pode ficar órfã; a exaustividade vem da obrigação de "
+                          "classificar TUDO)")
+
+    _confere("ativo (operacional + financeiro)",
+             somas["ATIVO_OPERACIONAL"] + somas["ATIVO_FINANCEIRO"], tot["ativo_total"])
+    _confere("passivo (operacional + financeiro)",
+             somas["PASSIVO_OPERACIONAL"] + somas["PASSIVO_FINANCEIRO"], tot["passivo_total"])
+    _confere("equity", somas["EQUITY"], tot["equity_total"])
+    _confere("balanço (ativo vs passivo + equity)",
+             float(tot["ativo_total"]),
+             float(tot["passivo_total"]) + float(tot["equity_total"]))
+    if ambiguas:
+        avisos.append(f"classificacao.yaml: {len(ambiguas)} linha(s) ambígua(s) para o "
+                      f"contraditório do Auditor (re-derivação independente da classe): "
+                      f"{', '.join(ambiguas[:5])}")
 
 
 def checar_claims(ns, faltas, avisos):

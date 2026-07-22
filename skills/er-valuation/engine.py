@@ -317,6 +317,35 @@ def bloco_validacao(inp):
     if str(p.get("cap_confianca", "")).upper() not in ("ALTA", "MEDIA", "MÉDIA", "BAIXA"):
         erros.append("premissas.cap_confianca deve ser ALTA, MEDIA ou BAIXA")
 
+    # B3/H13 — norma contábil: o engine é AGNÓSTICO (normalização acontece na coleta);
+    # aqui só validação dos enums (erro) e a TRAVA H3×H13 (aviso nomeado): pacote de
+    # leasing não-nativo do regime sem ajuste declarado é a mistura clássica medida
+    # nas referências (TF: −6,15% na ponte; EV/EBITDA 7,82x vs 8,48x).
+    nc = f.get("norma_contabil")
+    if nc is not None:
+        regimes = ("IFRS_CPC", "US_GAAP", "J_GAAP_STUB", "CAS_STUB", "IND_AS_STUB")
+        pacotes = ("IFRS16_PURO", "AS_IF_RENT", "ASC842_NATIVO")
+        if not isinstance(nc, dict) or nc.get("regime") not in regimes:
+            erros.append(f"fatos.norma_contabil.regime inválido (aceitos: {', '.join(regimes)})")
+        elif nc.get("leasing_pacote") not in pacotes:
+            erros.append(f"fatos.norma_contabil.leasing_pacote inválido (aceitos: "
+                         f"{', '.join(pacotes)}) — UM pacote por análise, travado (H3)")
+        else:
+            nativo = {"US_GAAP": "ASC842_NATIVO"}.get(nc["regime"])
+            nao_nativo = (nativo is not None and nc["leasing_pacote"] != nativo) or \
+                         (nc["regime"] == "IFRS_CPC" and nc["leasing_pacote"] == "ASC842_NATIVO")
+            if nao_nativo and not (nc.get("ajustes_aplicados") or []):
+                avisos.append("PACOTE_LEASING_NAO_NATIVO: leasing_pacote "
+                              f"{nc['leasing_pacote']} não é o nativo do regime {nc['regime']} "
+                              "e nenhum ajuste de conversão foi declarado em "
+                              "ajustes_aplicados — a conversão explícita na coleta é "
+                              "obrigatória (trava H3×H13; misturar pacotes foi o erro "
+                              "clássico medido nas referências)")
+            if str(nc["regime"]).endswith("_STUB"):
+                avisos.append(f"NORMA_CONTABIL_STUB: regime {nc['regime']} sem checklist "
+                              "codificada — escalar ao Coordenador (escopo B3: IFRS/CPC e "
+                              "US GAAP; demais regimes são stub por decisão ratificada)")
+
     # R2 — input estrutural nunca zerado por lacuna de coleta (regra dura).
     _, _, medido = _de_nde(inp)
     if not medido:
@@ -1673,6 +1702,8 @@ def rodar(inp):
     kdossier = bloco_ke_dossier(inp, econ)
     if kdossier is not None:
         res["ke_dossier"] = kdossier
+    if inp["fatos"].get("norma_contabil") is not None:   # B3/H13: eco de rastreabilidade
+        res["norma_contabil"] = inp["fatos"]["norma_contabil"]
     return res
 
 
