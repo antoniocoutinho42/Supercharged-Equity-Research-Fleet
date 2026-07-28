@@ -40,7 +40,15 @@ jobs:
       - name: Empacotar ZIP
         run: zip -r "equity-research-fleet-${GITHUB_REF_NAME}.zip" . -x '.git/*' -x '.github/*' -x '.superpowers/*' -x '**/__pycache__/*' -x 'docs/fontes/*' -x 'tests/*'
 
+      - name: Corpo do release (opcional, docs/releases/<tag>.md)
+        id: notas
+        run: |
+          if [ -f "docs/releases/${GITHUB_REF_NAME}.md" ]; then
+            echo "path=docs/releases/${GITHUB_REF_NAME}.md" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publicar release
         uses: softprops/action-gh-release@v2
         with:
           files: equity-research-fleet-${{ github.ref_name }}.zip
+          body_path: ${{ steps.notas.outputs.path }}
