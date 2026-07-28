@@ -324,6 +324,20 @@ chk_bool("G5 ROE×g: célula (roe bear=11%, g bull=13%) é null por retenção >
          res_gx["matrizes"]["economico"]["roe_x_g"]["precos"]["bear"]["bull"] is None)
 
 print("=" * 100)
+print("CAMADA H — v3.3.0: regressão byte-a-byte + rota consistente + paridade decomposta")
+print("=" * 100)
+import json as _json  # noqa: E402
+with open(os.path.join(AQUI, "golden_v320_vrsk.json"), "r", encoding="utf-8") as _fh:
+    _golden_v320 = _json.load(_fh)
+for _chave, _valor in sorted(_golden_v320.items()):
+    chk_bool(f"H0 regressão v3.2.0 byte-a-byte: chave '{_chave}' idêntica",
+             _json.dumps(res.get(_chave), sort_keys=True, ensure_ascii=False)
+             == _json.dumps(_valor, sort_keys=True, ensure_ascii=False))
+chk_bool("H0b golden VRSK sem bloco operacional: chaves novas AUSENTES (gating por presença)",
+         "paridade_decomposta" not in res and "ke_alavancagem" not in res
+         and "ebit_justo" not in res)
+
+print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")
     sys.exit(1)
