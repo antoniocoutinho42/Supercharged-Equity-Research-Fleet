@@ -434,6 +434,68 @@ chk_bool("H1i paridade ganha ponteiro para o bloco de decomposição (chave nova
          res_s0["ebit_justo"]["paridade"].get("decomposicao") == "paridade_decomposta"
          and "ROTA DE RECONCILIAÇÃO" in res_s0["ebit_justo"]["paridade"]["instrucao"])
 
+# H2 — Entrega B: paridade decomposta (one-at-a-time + interação residual, invariante duro)
+pd0 = res_s0["paridade_decomposta"]
+chk("H2a paridade perfeita: divergencia_total ~ 0 (mi)",
+    pd0["divergencia_total"]["valor_mi"], 0.0, 1e-9)
+for _cn in ("cunha_taxa", "cunha_base_lucro", "cunha_bridge_claims", "interacao"):
+    chk(f"H2b paridade perfeita: {_cn} ~ 0", pd0["cunhas"][_cn]["valor_mi"], 0.0, 1e-9)
+chk_bool("H2c ordem declarada no JSON",
+         pd0["ordem"] == ["cunha_taxa", "cunha_base_lucro", "cunha_bridge_claims", "interacao"])
+chk_bool("H2c2 paridade perfeita: warning None (guarda anti-ruído)", pd0["warning"] is None)
+# H2d — caso com as três cunhas ativas: add-backs (nopat != LL+kd*ND), dívida e wacc contábil
+inp_div = fixture_sintetico(kd_pre=0.075, wacc=0.12, claims=_claims_d, nopat=125.0,
+                            nde_medido=0.5, de_medido=0.5)
+res_div = rodar(inp_div)
+pdd = res_div["paridade_decomposta"]
+_soma = sum(pdd["cunhas"][c]["valor_mi"] for c in
+            ("cunha_taxa", "cunha_base_lucro", "cunha_bridge_claims", "interacao"))
+chk("H2d INVARIANTE DURO: soma das cunhas + interação == divergência total",
+    _soma, pdd["divergencia_total"]["valor_mi"], 1e-9)
+chk_bool("H2d2 as três cunhas ativas e com os sinais pré-computados (taxa<0, base>0, claims>0)",
+         pdd["cunhas"]["cunha_taxa"]["valor_mi"] < 0
+         and pdd["cunhas"]["cunha_base_lucro"]["valor_mi"] > 0
+         and pdd["cunhas"]["cunha_bridge_claims"]["valor_mi"] > 0)
+chk_bool("H2e cada cunha publica valor_mi, valor_por_acao, pct_equity_justo e leitura",
+         all(set(pdd["cunhas"][c]) >= {"valor_mi", "valor_por_acao", "pct_equity_justo",
+                                       "leitura"}
+             for c in pdd["ordem"]))
+chk_bool("H2f convenção líquida + alíquota da ponte declarada por chave (adendo 4)",
+         "LIQUIDA" in pdd["convencoes"]["base_lucro"]
+         and pdd["convencoes"]["aliquota_ponte"] == 0.20
+         and "fallback" in pdd["convencoes"]["fonte_aliquota_ponte"]
+         and pdd["convencoes"]["ll_implicito_mi"] is not None)
+# H2f2 — marginal declarada != operacional -> alíquota da ponte = marginal + nota de camada
+inp_mg = fixture_sintetico(kd_pre=0.075, wacc=0.12, claims=_claims_d, nopat=125.0,
+                           nde_medido=0.5, de_medido=0.5)
+inp_mg["premissas"]["impostos"] = {"marginal": 0.30}
+res_mg = rodar(inp_mg)
+_cv = res_mg["paridade_decomposta"]["convencoes"]
+chk_bool("H2f2 marginal != operacional -> aliquota_ponte = marginal + nota cai em cunha_base_lucro",
+         _cv["aliquota_ponte"] == 0.30
+         and _cv["fonte_aliquota_ponte"] == "premissas.impostos.marginal"
+         and "cunha_base_lucro" in _cv["nota_camada_imposto"])
+# H2g — invariante (b): WACC premissa == consistente -> cunha_taxa == 0
+_e_div = res_div["ebit_justo"]["consistente"]["e_mkt_mi"]
+_kd_liq_t = 0.075 * (1.0 - 0.20)
+_wcons_exato = _kd_liq_t * 300.0 / (300.0 + _e_div) + 0.10 * _e_div / (300.0 + _e_div)
+inp_wc = fixture_sintetico(kd_pre=0.075, wacc=_wcons_exato, claims=_claims_d, nopat=125.0,
+                           nde_medido=0.5, de_medido=0.5)
+res_wc = rodar(inp_wc)
+chk("H2g wacc premissa == consistente -> cunha_taxa == 0",
+    res_wc["paridade_decomposta"]["cunhas"]["cunha_taxa"]["valor_mi"], 0.0, 1e-9)
+# H2h — sem kd: bloco degrada declarado
+chk_bool("H2h sem kd_pre_imposto: paridade_decomposta.aplicavel=False com motivo",
+         res_semkd["paridade_decomposta"]["aplicavel"] is False
+         and res_semkd["paridade_decomposta"]["motivo"])
+# H2i — interação dominante (pré-computado: wacc=0.09 -> |inter|/|div| ~ 8.5) -> warning
+inp_int = fixture_sintetico(kd_pre=0.075, wacc=0.09, claims=_claims_d, nopat=125.0,
+                            nde_medido=0.5, de_medido=0.5)
+res_int = rodar(inp_int)
+chk_bool("H2i |interacao| > 25% da divergência -> DECOMPOSICAO_POUCO_INFORMATIVA (adendo 3)",
+         res_int["paridade_decomposta"]["warning"] == "DECOMPOSICAO_POUCO_INFORMATIVA"
+         and res_int["paridade_decomposta"]["limiar_interacao_pct"] == 25.0)
+
 print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")

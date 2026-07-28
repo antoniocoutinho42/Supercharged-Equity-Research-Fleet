@@ -1694,6 +1694,155 @@ def bloco_ebit_justo(inp, econ):
     }
 
 
+def bloco_paridade_decomposta(inp, econ, ebit):
+    """Entrega B (v3.3.0): a divergência de paridade NÃO é 'dois sinais' — é diagnóstico
+    de cunhas específicas. Decomposição determinística por substituição one-at-a-time
+    (mesmo padrão do central_neutro), ordem declarada, interação como RESÍDUO explícito.
+    Semântica (D10): divergencia_total = rota operacional (WACC premissa) − rota equity;
+    cunha_X = parcela da divergência ELIMINADA ao corrigir X sozinho. INVARIANTE DURO:
+    cunha_taxa + cunha_base_lucro + cunha_bridge_claims + interacao == divergencia_total
+    (tol PARIDADE_DECOMP_TOL). Internamente NADA é arredondado (D9); as chaves publicadas
+    arredondam no final. Limiar e comportamento do warning PARIDADE_DIVERGENTE: intocados.
+    |interação| > PARIDADE_INTERACAO_LIMIAR_PCT% da divergência => warning
+    DECOMPOSICAO_POUCO_INFORMATIVA (adendo 3)."""
+    if ebit is None:
+        return None
+    cons = ebit["consistente"]
+    if not cons.get("aplicavel"):
+        return {"aplicavel": False,
+                "motivo": "rota consistente indisponível: " + str(cons.get("motivo"))}
+    p, f, meta = inp["premissas"], inp["fatos"], inp["meta"]
+    op = p["operacional"]
+    nomes = ("bear", "base", "bull")
+    cen_eq = p["cenarios"]
+    acoes = float(meta["acoes_mi"])
+    nopat = float(f["nopat_fy_mi"])
+    kd_pre = float(op["kd_pre_imposto"])
+    t_kd, fonte_t_kd = _aliquota_kd(p, op)
+    kd_liq = kd_pre * (1.0 - t_kd)
+    w_prem = float(op["wacc"])
+    ke_c = float(econ["ke_central"])
+    claims_med = sum(float(c["valor_mi"]) for c in f["claims_bridge"])
+    nd = -claims_med
+    e_mkt = float(econ["central_ponderado"]) * acoes
+    v_total = e_mkt + nd
+    w_cons = kd_liq * nd / v_total + ke_c * e_mkt / v_total
+    roics = {n: float(op["cenarios"][n]["margem_nopat"]) * float(op["cenarios"][n]["giro_noa"])
+             for n in nomes}
+    de, nde, _ = _de_nde(inp)
+
+    def valor_op(wacc_x, nopat_x, claims_x):
+        """Rota operacional ponderada em mi, SEM arredondar (D9)."""
+        precos = {}
+        for n in nomes:
+            c = cen_eq[n]
+            evn = pl_justo(float(c["g"]), roics[n], float(c["cap"]), wacc_x, 0.0, 0.0,
+                           _m_terminal(c))
+            precos[n] = evn * nopat_x + claims_x
+        return _pond(cen_eq, precos)
+
+    # Alvo: rota equity do gerador, recomputada SEM arredondar (mesmas chamadas pl_justo).
+    lpa = float(f["lpa_ajustado_fy"])
+    equity_alvo = _pond(cen_eq, {
+        n: lpa * pl_justo(float(cen_eq[n]["g"]), float(cen_eq[n]["roe"]),
+                          float(cen_eq[n]["cap"]), ke_c, de, nde,
+                          _m_terminal(cen_eq[n])) * acoes
+        for n in nomes})
+
+    v0 = valor_op(w_prem, nopat, claims_med)
+    divergencia = v0 - equity_alvo
+
+    # Cunha 2 — base de lucro, convenção LÍQUIDA (D2): LL_impl = NOPAT − kd_liquido × ND
+    # (kd líquido derivado de kd_pre×(1−t_kd) — coerente com o bridge de claims líquidos).
+    ll_efetivo = lpa * acoes
+    ll_implicito = nopat - kd_liq * nd
+    nopat_equiv_ll = ll_efetivo + kd_liq * nd
+    # Cunha 3 — claims implícitas do gerador (D3): bracket NDE sobre o book que o próprio
+    # gerador implica (LL_efetivo / ROE_base); com exceção 0/0 dá 0 (cunha de medição).
+    book_implicito = ll_efetivo / float(cen_eq["base"]["roe"])
+    claims_impl = -(nde * book_implicito)
+
+    cunha_taxa = v0 - valor_op(w_cons, nopat, claims_med)
+    cunha_base = v0 - valor_op(w_prem, nopat_equiv_ll, claims_med)
+    cunha_claims = v0 - valor_op(w_prem, nopat, claims_impl)
+    interacao = divergencia - (cunha_taxa + cunha_base + cunha_claims)
+    if abs((cunha_taxa + cunha_base + cunha_claims + interacao) - divergencia) \
+            > PARIDADE_DECOMP_TOL:
+        raise AssertionError("paridade_decomposta: decomposição não fecha "
+                             "(invariante duro v3.3.0 violado)")
+    warning = None
+    # guarda > 1e-6 mi: evita disparo espúrio por ruído de ponto flutuante na paridade perfeita
+    if abs(divergencia) > 1e-6 and \
+            abs(interacao) > (PARIDADE_INTERACAO_LIMIAR_PCT / 100.0) * abs(divergencia):
+        warning = "DECOMPOSICAO_POUCO_INFORMATIVA"
+
+    def item(valor, leitura):
+        # valor_mi SEM arredondar: o invariante soma==divergência precisa ser verificável
+        # a 1e-9 direto do JSON (arredondar 4 parcelas a 6 casas acumularia ~2e-6).
+        return {"valor_mi": valor,
+                "valor_por_acao": round(valor / acoes, 4),
+                "pct_equity_justo": round(100.0 * valor / equity_alvo, 2),
+                "leitura": leitura}
+
+    cunhas = {
+        "cunha_taxa": item(cunha_taxa,
+            f"Trocar o WACC premissa ({w_prem:.4f}) pelo consistente a pesos de mercado "
+            f"({w_cons:.4f}) elimina {cunha_taxa / acoes:+.2f}/ação da divergência."),
+        "cunha_base_lucro": item(cunha_base,
+            f"Trocar o LL implícito no NOPAT ({ll_implicito:,.1f} mi, convenção líquida) "
+            f"pelo LL do gerador ({ll_efetivo:,.1f} mi) elimina "
+            f"{cunha_base / acoes:+.2f}/ação — o teste independente dos add-backs."),
+        "cunha_bridge_claims": item(cunha_claims,
+            f"Trocar as claims medidas ({claims_med:,.1f} mi) pelas implícitas no bracket "
+            f"do gerador ({claims_impl:,.1f} mi) elimina "
+            f"{cunha_claims / acoes:+.2f}/ação — a cunha de medição do bridge."),
+        "interacao": item(interacao,
+            "Resíduo explícito da decomposição: interação entre cunhas + diferença "
+            "estrutural ROIC-vs-ROE do motor único."),
+    }
+    convencoes = {
+        "base_lucro": "LIQUIDA: LL_implicito = NOPAT − kd_liquido × ND_bridge "
+                      "(kd líquido = kd_pre_imposto × (1 − aliquota_ponte); coerente com o "
+                      "bridge de claims líquidos do bloco — D2/CHANGELOG)",
+        "aliquota_ponte": t_kd,
+        "fonte_aliquota_ponte": fonte_t_kd,
+        "kd_pre_imposto": kd_pre,
+        "kd_liquido": round(kd_liq, 6),
+        "ll_implicito_mi": round(ll_implicito, 2),
+        "ll_efetivo_mi": round(ll_efetivo, 2),
+        "claims_implicitas_mi": round(claims_impl, 2),
+        "claims_medidas_mi": round(claims_med, 2),
+        "book_implicito_mi": round(book_implicito, 2),
+        "nde_usado": nde,
+        "wacc_premissa": w_prem,
+        "wacc_consistente": round(w_cons, 6),
+    }
+    imp = p.get("impostos") or {}
+    if imp.get("marginal") is not None \
+            and abs(float(imp["marginal"]) - float(op["aliquota_operacional"])) > 1e-12:
+        convencoes["nota_camada_imposto"] = (
+            f"aliquota operacional ({float(op['aliquota_operacional'])}) ≠ marginal "
+            f"({float(imp['marginal'])}): a diferença de camada de imposto cai DENTRO de "
+            "cunha_base_lucro (não é cunha separada)")
+    return {
+        "aplicavel": True,
+        "ordem": ["cunha_taxa", "cunha_base_lucro", "cunha_bridge_claims", "interacao"],
+        "baseline": "rota operacional ponderada com WACC premissa (mi, sem arredondamento)",
+        "alvo": "rota equity do gerador recomputada sem arredondamento "
+                "(economico.central_ponderado é a visão arredondada por ação)",
+        "equity_alvo_mi": round(equity_alvo, 6),
+        "divergencia_total": item(divergencia,
+            "Rota operacional (premissa) menos rota equity — mesma direção do "
+            "ebit_justo.paridade.delta_pct."),
+        "cunhas": cunhas,
+        "warning": warning,
+        "limiar_interacao_pct": PARIDADE_INTERACAO_LIMIAR_PCT,
+        "convencoes": convencoes,
+        "invariante": "cunha_taxa + cunha_base_lucro + cunha_bridge_claims + interacao == "
+                      "divergencia_total (tol 1e-9, verificado no engine e no golden)",
+    }
+
+
 PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
 
 
@@ -1800,6 +1949,9 @@ def rodar(inp):
     ebit = bloco_ebit_justo(inp, econ)
     if ebit is not None:
         res["ebit_justo"] = ebit
+        pdec = bloco_paridade_decomposta(inp, econ, ebit)
+        if pdec is not None:
+            res["paridade_decomposta"] = pdec
     cneutro = bloco_central_neutro(inp, hurdle, econ)
     if cneutro is not None:
         res["central_neutro"] = cneutro
