@@ -1328,6 +1328,20 @@ def bloco_central_neutro(inp, hurdle, econ):
 
 
 EBIT_PARIDADE_LIMIAR_PCT = 10.0  # |delta| acima disso => PARIDADE_DIVERGENTE (warning, condição 3)
+KE_REALAVANCAGEM_DRIFT_PP = 0.5  # v3.3.0 (C): drift de Ke re-alavancado contábil vs mercado
+PARIDADE_DECOMP_TOL = 1e-9       # v3.3.0 (B): fechamento exato da decomposição (invariante duro)
+PARIDADE_INTERACAO_LIMIAR_PCT = 25.0  # v3.3.0 (B): |interação| acima disso (% da divergência)
+                                      # => DECOMPOSICAO_POUCO_INFORMATIVA
+
+
+def _aliquota_kd(p, op):
+    """v3.3.0: alíquota da camada de dívida (deriva kd líquido e a ponte NOPAT→LL).
+    Marginal declarada tem precedência; fallback para a operacional, sempre declarado."""
+    imp = p.get("impostos") or {}
+    if imp.get("marginal") is not None:
+        return float(imp["marginal"]), "premissas.impostos.marginal"
+    return (float(op["aliquota_operacional"]),
+            "premissas.operacional.aliquota_operacional (fallback: marginal não declarada)")
 
 
 def bloco_ebit_justo(inp, econ):
@@ -1368,6 +1382,14 @@ def bloco_ebit_justo(inp, econ):
     if not str(op.get("fonte_aliquotas", "")).strip():
         erros.append("premissas.operacional.fonte_aliquotas obrigatória (H5: alíquota é input "
                      "documentado por companhia, nunca constante universal)")
+    kd_in = op.get("kd_pre_imposto")
+    if kd_in is not None:
+        if not isinstance(kd_in, (int, float)) or float(kd_in) <= 0:
+            erros.append("premissas.operacional.kd_pre_imposto, quando declarado, deve ser "
+                         "numérico > 0 (custo de dívida PRÉ-imposto, fração — v3.3.0)")
+        elif not str(op.get("fonte_kd", "")).strip():
+            erros.append("premissas.operacional.fonte_kd obrigatória quando kd_pre_imposto é "
+                         "declarado (mesma disciplina do fonte_wacc — H8)")
     cen_op = op.get("cenarios") or {}
     if sorted(cen_op.keys()) != sorted(nomes):
         erros.append("premissas.operacional.cenarios deve conter exatamente bear, base e bull "
@@ -1453,6 +1475,83 @@ def bloco_ebit_justo(inp, econ):
                       "obrigatória no relatório; NÃO bloqueia publicação (decisão registrada; "
                       "reavaliar após 3 análises reais)."),
     }
+
+    paridade["decomposicao"] = "paridade_decomposta"  # v3.3.0: warning referencia o bloco novo
+
+    # ------------------------------------------------------------------
+    # v3.3.0 — Entrega A: rota operacional nas DUAS taxas.
+    # ------------------------------------------------------------------
+    def _cadeia(nopat_x, wacc_x):
+        """Cadeia EV/NOPAT → EV/EBIT=(1−t) → EV/EBITDA=×(1−d) por cenário, numa taxa dada."""
+        cen_out = {}
+        for n in nomes:
+            c = cen_eq[n]
+            evn = pl_justo(float(c["g"]), roics[n], float(c["cap"]), wacc_x, 0.0, 0.0,
+                           _m_terminal(c))
+            ev_mi = evn * nopat_x
+            eq_mi = ev_mi + total_claims
+            cen_out[n] = {"ev_nopat_justo": round(evn, 4),
+                          "ev_ebit_justo": round(evn * (1.0 - t), 4),
+                          "ev_mi": round(ev_mi, 2),
+                          "equity_mi": round(eq_mi, 2),
+                          "preco": round(eq_mi / float(acoes), 2)}
+            if dsobre is not None:
+                cen_out[n]["ev_ebitda_justo"] = round(evn * (1.0 - t) * (1.0 - float(dsobre)), 4)
+        return cen_out
+
+    # Rota PREMISSA: espelho compacto das chaves existentes (mesmos números; aditivo — D8).
+    premissa = {"wacc": float(wacc),
+                "cenarios": {n: {k: v for k, v in out_cen[n].items()
+                                 if k in ("ev_nopat_justo", "ev_ebit_justo", "ev_ebitda_justo",
+                                          "ev_mi", "equity_mi", "preco")}
+                             for n in nomes},
+                "ponderado_preco": ponderado}
+
+    # Rota CONSISTENTE: WACC a pesos de MERCADO. E_mkt é OUTPUT do gerador equity (que não
+    # depende do WACC) — sem circularidade, sem solver. ND medida do bridge de claims
+    # (= −Σ claims, identidade equity = EV + Σ claims — D1). Input primitivo: kd_pre_imposto;
+    # o WACC usa o líquido kd_pre×(1−t_kd), alíquota declarada por chave (adendo 1).
+    e_mkt_mi = float(econ["central_ponderado"]) * float(acoes)
+    nd_bridge_mi = -total_claims
+    ke_c = float(econ["ke_central"])
+    kd_pre = op.get("kd_pre_imposto")
+    v_total = e_mkt_mi + nd_bridge_mi
+    if kd_pre is None:
+        consistente = {"aplicavel": False,
+                       "motivo": "premissas.operacional.kd_pre_imposto ausente — sem custo de "
+                                 "dívida medido o WACC consistente não é calculável (campo "
+                                 "opcional v3.3.0; degrade declarado, rota premissa intacta)"}
+    elif v_total <= 0:
+        consistente = {"aplicavel": False,
+                       "motivo": "E_mkt + ND do bridge <= 0 — pesos de mercado degenerados "
+                                 "(claims líquidos positivos excedem o equity justo)"}
+    else:
+        kd_pre = float(kd_pre)
+        t_kd, fonte_t_kd = _aliquota_kd(p, op)
+        kd_liq = kd_pre * (1.0 - t_kd)
+        wacc_cons = kd_liq * nd_bridge_mi / v_total + ke_c * e_mkt_mi / v_total
+        cen_cons = _cadeia(float(nopat_fy), wacc_cons)
+        consistente = {
+            "aplicavel": True,
+            "wacc_consistente": round(wacc_cons, 6),
+            "ke": ke_c,
+            "kd_pre_imposto": kd_pre,
+            "kd_liquido": round(kd_liq, 6),
+            "aliquota_kd": t_kd,
+            "fonte_aliquota_kd": fonte_t_kd,
+            "fonte_kd": str(op["fonte_kd"]),
+            "e_mkt_mi": round(e_mkt_mi, 2),
+            "ancora_e_mkt": "economico.central_ponderado × meta.acoes_mi (equity justo do "
+                            "gerador principal, âncora econômica central)",
+            "nd_bridge_mi": round(nd_bridge_mi, 2),
+            "peso_equity": round(e_mkt_mi / v_total, 6),
+            "peso_divida": round(nd_bridge_mi / v_total, 6),
+            "cenarios": cen_cons,
+            "ponderado_preco": round(_pond(cen_eq, {n: cen_cons[n]["preco"] for n in nomes}), 2),
+            "nota": "Sem circularidade nem solver: E_mkt vem do gerador equity, que não depende "
+                    "do WACC; a teoria exige pesos a valor de MERCADO (pesos contábeis geram a "
+                    "cunha de taxa isolada em paridade_decomposta.cunha_taxa).",
+        }
 
     # Reverse operacional: o que o preço exige nos drivers operacionais (base do cenário base).
     base_eq = cen_eq["base"]
@@ -1586,6 +1685,8 @@ def bloco_ebit_justo(inp, econ):
                    "convencao_sinal": "valor_mi = contribuição ao EQUITY (dívida negativa; "
                                       "caixa livre/NOL positivos)"},
         "paridade": paridade,
+        "premissa": premissa,
+        "consistente": consistente,
         "reverse": reverse,
         "elasticidades": elast,
         "convencao": "trailing (mesma convenção do motor equity); comparação com múltiplos "

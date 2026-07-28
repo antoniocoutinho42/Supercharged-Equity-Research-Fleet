@@ -337,6 +337,103 @@ chk_bool("H0b golden VRSK sem bloco operacional: chaves novas AUSENTES (gating p
          "paridade_decomposta" not in res and "ke_alavancagem" not in res
          and "ebit_justo" not in res)
 
+
+def fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=(), nopat=None, pl_contabil=None,
+                      nde_medido=0.0, de_medido=0.0):
+    """Caso sintético mínimo e CONSISTENTE (v3.3.0): margem×giro == ROE por cenário,
+    NOPAT default == LPA×ações, grade de Ke com central 10%, aliquota operacional 20%
+    (=> kd_liquido derivado = 0.075 × 0.8 = 0.06)."""
+    acoes = 100.0
+    lpa = 1.0
+    fx = {
+        "meta": {"ticker": "SINT", "nome": "Sintético", "moeda": "USD",
+                 "preco_atual": 12.0, "acoes_mi": acoes},
+        "fatos": {
+            "lpa_ajustado_fy": lpa,
+            "de": de_medido, "nde": nde_medido,
+            "nopat_fy_mi": (lpa * acoes) if nopat is None else nopat,
+            "claims_bridge": [dict(c) for c in claims],
+        },
+        "premissas": {
+            "ke_economico": [0.09, 0.10, 0.11],
+            "cap_teto_defensavel": 15,
+            "cap_confianca": "MEDIA",
+            "justificativa_cap": "caso sintético de teste do invariante de paridade v3.3.0",
+            "justificativa_cenarios": "caso sintético de teste do invariante de paridade v3.3.0",
+            "cenarios": {
+                "bear": {"prob": 0.25, "g": 0.03, "roe": 0.15, "cap": 8},
+                "base": {"prob": 0.50, "g": 0.05, "roe": 0.15, "cap": 10},
+                "bull": {"prob": 0.25, "g": 0.07, "roe": 0.15, "cap": 12},
+            },
+            "multiplos_validacao": {"metrica_primaria": "PE", "base_lucro": "ADJUSTED",
+                                    "limiar_divergencia": 0.30},
+            "operacional": {
+                "wacc": wacc, "fonte_wacc": "teste sintético (fixture v3.3.0)",
+                "kd_pre_imposto": kd_pre, "fonte_kd": "teste sintético (fixture v3.3.0)",
+                "aliquota_operacional": 0.20, "fonte_aliquotas": "teste sintético",
+                "cenarios": {"bear": {"margem_nopat": 0.15, "giro_noa": 1.0},
+                             "base": {"margem_nopat": 0.15, "giro_noa": 1.0},
+                             "bull": {"margem_nopat": 0.15, "giro_noa": 1.0}},
+            },
+        },
+    }
+    if pl_contabil is not None:
+        fx["fatos"]["pl_contabil_mi"] = pl_contabil
+    fx["_hash_inputs"] = "sintetico_teste"
+    return fx
+
+
+# H1 — Entrega A: rota consistente com ND=0 -> wacc_consistente == ke_central
+res_s0 = rodar(fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=()))
+eb0 = res_s0["ebit_justo"]
+chk_bool("H1a ebit_justo.premissa espelha as chaves existentes byte-a-byte",
+         all(eb0["premissa"]["cenarios"][n]["preco"] == eb0["cenarios"][n]["preco"]
+             and eb0["premissa"]["cenarios"][n]["ev_nopat_justo"] == eb0["cenarios"][n]["ev_nopat_justo"]
+             and eb0["premissa"]["cenarios"][n]["ev_ebit_justo"] == eb0["cenarios"][n]["ev_ebit_justo"]
+             for n in ("bear", "base", "bull"))
+         and eb0["premissa"]["wacc"] == eb0["wacc"]
+         and eb0["premissa"]["ponderado_preco"] == eb0["ponderado_preco"])
+chk("H1b ND=0: wacc_consistente == ke_central (pesos 100% equity)",
+    eb0["consistente"]["wacc_consistente"], 0.10, 1e-12)
+chk_bool("H1c consistente declara âncora do E_mkt e ND do bridge",
+         "central_ponderado" in eb0["consistente"]["ancora_e_mkt"]
+         and eb0["consistente"]["nd_bridge_mi"] == 0.0
+         and eb0["consistente"]["aplicavel"] is True)
+_c = eb0["consistente"]["cenarios"]["base"]
+chk("H1d cadeia consistente: ev_ebit == ev_nopat*(1-t)",
+    _c["ev_ebit_justo"], round(_c["ev_nopat_justo"] * (1 - 0.20), 4), 1e-9)
+# H1e — com dívida: wacc_consistente reproduz a fórmula de pesos de mercado (kd LÍQUIDO)
+_claims_d = ({"nome": "dívida líquida", "valor_mi": -300.0, "fonte": "teste"},)
+res_s1 = rodar(fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=_claims_d))
+eb1 = res_s1["ebit_justo"]["consistente"]
+_e, _nd = eb1["e_mkt_mi"], eb1["nd_bridge_mi"]
+chk("H1e wacc_consistente == kd_liq*ND/(ND+E) + ke*E/(ND+E)",
+    eb1["wacc_consistente"],
+    round(0.06 * _nd / (_nd + _e) + 0.10 * _e / (_nd + _e), 6), 1e-9)
+chk("H1e2 kd_liquido derivado = kd_pre × (1 − t_kd) = 0.075 × 0.8",
+    eb1["kd_liquido"], 0.06, 1e-12)
+chk_bool("H1f nd_bridge = -total de claims (D1)", _nd == 300.0)
+# H1g — kd_pre_imposto sem fonte_kd -> recusa (disciplina H8)
+inp_kdsf = fixture_sintetico()
+inp_kdsf["premissas"]["operacional"].pop("fonte_kd")
+try:
+    rodar(inp_kdsf)
+    chk_bool("H1g kd_pre_imposto sem fonte_kd -> recusa", False)
+except ValueError as exc:
+    chk_bool("H1g kd_pre_imposto sem fonte_kd -> recusa", "fonte_kd" in str(exc))
+# H1h — sem kd_pre_imposto: consistente degrada declarado, rota premissa intacta
+inp_semkd = fixture_sintetico()
+inp_semkd["premissas"]["operacional"].pop("kd_pre_imposto")
+inp_semkd["premissas"]["operacional"].pop("fonte_kd")
+res_semkd = rodar(inp_semkd)
+chk_bool("H1h sem kd_pre_imposto: consistente.aplicavel=False com motivo; premissa intacta",
+         res_semkd["ebit_justo"]["consistente"]["aplicavel"] is False
+         and "kd_pre_imposto" in res_semkd["ebit_justo"]["consistente"]["motivo"]
+         and res_semkd["ebit_justo"]["ponderado_preco"] is not None)
+chk_bool("H1i paridade ganha ponteiro para o bloco de decomposição (chave nova, instrucao intocada)",
+         res_s0["ebit_justo"]["paridade"].get("decomposicao") == "paridade_decomposta"
+         and "ROTA DE RECONCILIAÇÃO" in res_s0["ebit_justo"]["paridade"]["instrucao"])
+
 print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")
