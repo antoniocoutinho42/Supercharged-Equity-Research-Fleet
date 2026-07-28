@@ -36,7 +36,10 @@ ARQUIVOS_BASE = ("dossie.md", "valuation.md", "red_team.md", "claims.yaml",
 
 
 def _rodar(argv):
-    return subprocess.run([PYTHON] + argv, capture_output=True, text=True)
+    # encoding explícito: checar/engine emitem UTF-8; text=True usaria o codepage do
+    # Windows (cp1252) e quebraria os asserts com acentos (falha local-only, CI passa)
+    return subprocess.run([PYTHON] + argv, capture_output=True, text=True,
+                          encoding="utf-8")
 
 
 def _checar(ns, etapa):
