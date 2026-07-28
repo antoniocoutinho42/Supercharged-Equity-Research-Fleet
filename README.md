@@ -3,6 +3,28 @@
 Plugin Claude que empacota o fleet de equity research buy-side de Antonio: dossiê,
 valuation determinístico, auditoria e relatório institucional.
 
+## v2.2.0 — paridade exata em taxa e divergência decomposta (engine v3.3.0, ADITIVO)
+
+Rota de reconciliação exata em taxa e divergência das âncoras devolvida DECOMPOSTA por
+cunha nomeada (plano + adendo aprovados em
+`docs/superpowers/plans/2026-07-28-engine-v330-paridade-consistente.md`). Tudo ADITIVO com
+gating por presença — regressão byte-a-byte v3.2.0 travada em
+`skills/er-valuation/tests/golden_v320_vrsk.json` (camada H0 do golden):
+
+- **WACC consistente** (`ebit_justo.premissa`/`ebit_justo.consistente`): pesos a valor de
+  MERCADO com E_mkt do próprio gerador (sem circularidade, sem solver); input primitivo
+  `kd_pre_imposto` (H8), kd líquido derivado com alíquota declarada por chave; cadeia
+  EV/NOPAT→EBIT→EBITDA nas duas taxas.
+- **`paridade_decomposta`**: cunhas one-at-a-time (taxa, base de lucro em convenção
+  LÍQUIDA, bridge de claims) + interação residual explícita; invariante duro
+  soma==divergência (1e-9, no engine e no golden); `PARIDADE_DIVERGENTE` referencia o
+  bloco (limiar e não-bloqueio inalterados); `DECOMPOSICAO_POUCO_INFORMATIVA` quando
+  |interação| > 25% da divergência.
+- **`ke_alavancagem`** (flag, não gerador): Ku_MM vs Ku_HP com Kd pré-imposto e fórmulas
+  declaradas; VTS=t×ND com premissa e viés declarados; ND/E contábil vs mercado e alerta
+  de drift de Ke re-alavancado > 0,5 p.p. (`fatos.pl_contabil_mi` opcional).
+- Pendências registradas para a v3.4 do engine: `docs/backlog-engine-v34.md`.
+
 ## v2.1.0 — upgrade metodológico (FASE B; engine v3.2.0, ADITIVO)
 
 Metodologia adjudicada contra quatro modelos de referência (FASE A + verificação B0) e

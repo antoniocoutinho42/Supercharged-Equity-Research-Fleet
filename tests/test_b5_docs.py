@@ -38,8 +38,12 @@ def test_rotulos_de_versao():
     assert "valuation-engine v3" in s and "valuation-engine v2 " not in s
     assert "valuation-engine v3" in _ler("skills", "er-valuation", "inputs_exemplo_vrsk.yaml")
     plugin = json.loads(_ler(".claude-plugin", "plugin.json"))
-    assert plugin["version"] == "2.1.0"
-    assert "v3.2.0" in _ler("README.md")
+    assert plugin["version"] == "2.2.0"
+    readme = _ler("README.md")
+    assert "v3.3.0" in readme and "v3.2.0" in readme
+    marketplace = json.loads(_ler(".claude-plugin", "marketplace.json"))
+    assert marketplace["plugins"][0]["version"] == plugin["version"], \
+        "marketplace.json defasado do plugin.json (aconteceu na v2.1.0; travado desde a v2.2.0)"
 
 
 def test_mandatos_citam_blocos_novos():
