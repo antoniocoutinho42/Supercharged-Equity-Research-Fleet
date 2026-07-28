@@ -496,6 +496,50 @@ chk_bool("H2i |interacao| > 25% da divergência -> DECOMPOSICAO_POUCO_INFORMATIV
          res_int["paridade_decomposta"]["warning"] == "DECOMPOSICAO_POUCO_INFORMATIVA"
          and res_int["paridade_decomposta"]["limiar_interacao_pct"] == 25.0)
 
+# H3 — Entrega C: Ku nas duas convenções DECLARADAS (Kd PRÉ-imposto — adendo 1) + drift
+inp_ka = fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=_claims_d, pl_contabil=200.0,
+                           nde_medido=0.5, de_medido=0.5)
+res_ka = rodar(inp_ka)
+ka = res_ka["ke_alavancagem"]
+_e, _nd, _t = ka["e_mkt_mi"], ka["nd_bridge_mi"], ka["vts"]["aliquota"]
+_vts = _t * _nd
+chk("H3a VTS = t x ND (perpetuidade a Kd — D4)", ka["vts"]["valor_mi"], round(_vts, 2), 0.01)
+chk("H3b Ku_MM == [Ke*E + Kd_pre*(ND-VTS)] / [E + ND - VTS]",
+    ka["ku_mm"]["valor"],
+    round((0.10 * _e + 0.075 * (_nd - _vts)) / (_e + _nd - _vts), 6), 1e-9)
+chk("H3c Ku_HP == (Ke*E + Kd_pre*ND) / (E + ND)",
+    ka["ku_harris_pringle"]["valor"],
+    round((0.10 * _e + 0.075 * _nd) / (_e + _nd), 6), 1e-9)
+chk_bool("H3d VTS>0 -> Ku_MM != Ku_HP (esperado, não é bug) e nenhuma promovida a 'a' resposta",
+         ka["ku_mm"]["valor"] != ka["ku_harris_pringle"]["valor"]
+         and "julgamento do Modelador" in ka["nota_convencoes"])
+_ku_hp_exato = (0.10 * _e + 0.075 * _nd) / (_e + _nd)  # sem arredondamento intermediário
+_ke_rc = _ku_hp_exato + (_ku_hp_exato - 0.075) * _nd / 200.0
+chk("H3e drift: ke_realavancado_contabil na convenção HP com Kd pré-imposto (D6/adendo 1)",
+    ka["alavancagem"]["ke_realavancado_contabil"], round(_ke_rc, 6), 1e-6)
+chk_bool("H3f alerta de drift quando > 0,5 p.p. (constante nomeada como limiar)",
+         ka["alavancagem"]["limiar_drift_pp"] == 0.5
+         and ka["alavancagem"]["alerta_drift"] == (ka["alavancagem"]["drift_pp"] > 0.5))
+chk_bool("H3g ND/E contábil vs mercado reportados lado a lado",
+         ka["alavancagem"]["nd_e_mkt"] == round(_nd / _e, 4)
+         and ka["alavancagem"]["nd_e_contabil"] == round(_nd / 200.0, 4))
+chk_bool("H3h nota: Ke flat do gerador é aproximação da média da trajetória",
+         "aproximação da média da trajetória" in ka["nota_ke_flat"])
+chk_bool("H3i Kd das fórmulas de Ku é o PRÉ-imposto, declarado por chave (adendo 1)",
+         ka["kd_pre_imposto"] == 0.075 and "PRÉ-imposto" in ka["convencao_kd"])
+chk_bool("H3k VTS: premissa de dívida constante e viés declarados (adendo 2)",
+         "constante" in ka["vts"]["premissa"].lower() and "subestima" in ka["vts"]["vies"])
+# H3l — sem pl_contabil: drift degrada com nota; bloco ainda emite os dois Ku
+inp_ka2 = fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=_claims_d)
+res_ka2 = rodar(inp_ka2)
+chk_bool("H3l sem fatos.pl_contabil_mi: nd_e_contabil=None com nota, Ku presentes",
+         res_ka2["ke_alavancagem"]["alavancagem"]["nd_e_contabil"] is None
+         and "pl_contabil_mi" in res_ka2["ke_alavancagem"]["alavancagem"]["nota"]
+         and res_ka2["ke_alavancagem"]["ku_mm"]["valor"] is not None)
+# H3m — sem kd: degrade declarado
+chk_bool("H3m sem kd_pre_imposto: ke_alavancagem.aplicavel=False",
+         res_semkd["ke_alavancagem"]["aplicavel"] is False)
+
 print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")

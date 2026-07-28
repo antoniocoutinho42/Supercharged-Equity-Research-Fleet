@@ -1843,6 +1843,95 @@ def bloco_paridade_decomposta(inp, econ, ebit):
     }
 
 
+def bloco_ke_alavancagem(inp, econ, ebit):
+    """Entrega C (v3.3.0): diagnóstico de alavancagem — FLAG, não gerador. Ku implícito
+    nas DUAS convenções de política de dívida, com fórmula exata declarada:
+    MM/textbook (dívida pré-determinada; VTS descontado a Kd, com net-off) e
+    Harris–Pringle (dívida rebalanceada a D/V constante; SEM net-off — o shield tem o
+    risco do negócio). Divergem sempre que VTS > 0 — esperado, não é bug; qual se
+    aplica é julgamento do Modelador sobre a política de dívida REAL. Ambas usam
+    E_mkt do gerador, Kd PRÉ-imposto (adendo 1) e VTS = t × ND (perpetuidade a Kd —
+    D4, premissa e viés declarados na saída)."""
+    if ebit is None:
+        return None
+    cons = ebit["consistente"]
+    if not cons.get("aplicavel"):
+        return {"aplicavel": False,
+                "motivo": "rota consistente indisponível: " + str(cons.get("motivo"))}
+    p, f, meta = inp["premissas"], inp["fatos"], inp["meta"]
+    op = p["operacional"]
+    ke = float(econ["ke_central"])
+    kd_pre = float(op["kd_pre_imposto"])
+    acoes = float(meta["acoes_mi"])
+    e_mkt = float(econ["central_ponderado"]) * acoes
+    nd = -sum(float(c["valor_mi"]) for c in f["claims_bridge"])
+    imp = p.get("impostos") or {}
+    if imp.get("marginal") is not None:
+        t_vts, fonte_t = float(imp["marginal"]), "premissas.impostos.marginal"
+    else:
+        t_vts = float(op["aliquota_operacional"])
+        fonte_t = "premissas.operacional.aliquota_operacional (fallback: marginal não declarada)"
+    vts = t_vts * nd
+    den_mm = e_mkt + nd - vts
+    ku_mm = ((ke * e_mkt + kd_pre * (nd - vts)) / den_mm) if abs(den_mm) > 1e-9 else None
+    ku_hp = (ke * e_mkt + kd_pre * nd) / (e_mkt + nd)
+    out = {
+        "aplicavel": True,
+        "ke": ke,
+        "kd_pre_imposto": kd_pre,
+        "convencao_kd": "Ku (MM e HP) e a re-alavancagem usam Kd PRÉ-imposto; o WACC "
+                        "consistente (ebit_justo.consistente) usa o líquido "
+                        "kd_pre × (1 − t) — adendo 1 da aprovação",
+        "e_mkt_mi": round(e_mkt, 2),
+        "nd_bridge_mi": round(nd, 2),
+        "vts": {"valor_mi": round(vts, 2),
+                "formula": "VTS = t × ND (PV perpétuo dos tax shields descontado a Kd: "
+                           "t·Kd·ND/Kd — forma fechada)",
+                "premissa": "dívida CONSTANTE e perpétua (VTS = t×ND = PV a Kd de t·Kd·ND)",
+                "vies": "subestima o VTS quando a dívida CRESCE (caso de referência: 9,00 vs "
+                        "15,86); com Ke > Kd, VTS subestimado implica Ku_MM SUBESTIMADO "
+                        "(Ku_HP não usa VTS)",
+                "aliquota": t_vts, "fonte_aliquota": fonte_t},
+        "ku_mm": {"valor": round(ku_mm, 6) if ku_mm is not None else None,
+                  "formula": "Ku_MM = [Ke·E_mkt + Kd·(ND − VTS)] / [E_mkt + ND − VTS] "
+                             "(equivale a Ke = Ku + (Ku − Kd)·(ND − VTS)/E_mkt)",
+                  "politica": "dívida PRÉ-DETERMINADA; VTS descontado a Kd (MM 1963)"},
+        "ku_harris_pringle": {"valor": round(ku_hp, 6),
+                              "formula": "Ku_HP = (Ke·E_mkt + Kd·ND) / (E_mkt + ND) "
+                                         "(equivale a Ke = Ku + (Ku − Kd)·ND/E_mkt, SEM o "
+                                         "termo −VTS)",
+                              "politica": "dívida REBALANCEADA a D/V de mercado constante; "
+                                          "shield com o risco do negócio (Harris–Pringle "
+                                          "1985)"},
+        "nota_convencoes": "As duas convenções divergem sempre que VTS > 0 — esperado, não é "
+                           "bug. Nenhuma é promovida a 'a' resposta: a política de dívida REAL "
+                           "(pré-determinada vs rebalanceada) decide qual se aplica, e isso é "
+                           "julgamento do Modelador, não do engine.",
+        "nota_ke_flat": "O Ke flat do gerador é aproximação da média da trajetória de "
+                        "alavancagem; este diagnóstico quantifica quando a aproximação importa.",
+    }
+    alav = {"nd_e_mkt": round(nd / e_mkt, 4)}
+    pl_cont = f.get("pl_contabil_mi")
+    if pl_cont is not None and float(pl_cont) > 0:
+        e_cont = float(pl_cont)
+        ke_rc = ku_hp + (ku_hp - kd_pre) * nd / e_cont
+        drift_pp = abs(ke_rc - ke) * 100.0
+        alav.update({
+            "nd_e_contabil": round(nd / e_cont, 4),
+            "ke_realavancado_contabil": round(ke_rc, 6),
+            "convencao_drift": "Harris–Pringle (sem net-off de VTS — D6), Kd pré-imposto",
+            "drift_pp": round(drift_pp, 2),
+            "limiar_drift_pp": KE_REALAVANCAGEM_DRIFT_PP,
+            "alerta_drift": drift_pp > KE_REALAVANCAGEM_DRIFT_PP,
+        })
+    else:
+        alav["nd_e_contabil"] = None
+        alav["nota"] = ("fatos.pl_contabil_mi ausente — ND/E contábil e o alerta de drift de "
+                        "Ke re-alavancado degradam com nota (campo opcional novo, v3.3.0)")
+    out["alavancagem"] = alav
+    return out
+
+
 PHI_GRID = (0.0, 0.25, 0.5, 1.0)  # φ>1 = spread terminal > spread de franquia: incoerente (B0/φ*)
 
 
@@ -1952,6 +2041,9 @@ def rodar(inp):
         pdec = bloco_paridade_decomposta(inp, econ, ebit)
         if pdec is not None:
             res["paridade_decomposta"] = pdec
+        keal = bloco_ke_alavancagem(inp, econ, ebit)
+        if keal is not None:
+            res["ke_alavancagem"] = keal
     cneutro = bloco_central_neutro(inp, hurdle, econ)
     if cneutro is not None:
         res["central_neutro"] = cneutro
