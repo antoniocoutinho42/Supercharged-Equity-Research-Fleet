@@ -77,9 +77,6 @@ recomendar auditoria ao Coordenador. `--selftest` valida a régua.
   obrigatória no relatório e **não bloqueia a publicação** (condição 3 da aprovação;
   decisão a reavaliar após 3 análises reais). A divergência isola wedges REAIS (ex.:
   add-backs na base de lucro — o teste independente dos ajustes).
-- **Impostos em camadas (H5)**: `aliquota_operacional` entra na cadeia do `ebit_justo`;
-  marginal/terminal são eco documentado (`premissas.impostos`); terminal não declarada gera
-  aviso (a diferença 27%→34% moveu o EV do caso de referência em −12,6%).
 - **Paridade decomposta e WACC consistente (v3.3.0).** A divergência de paridade não é
   "dois sinais": é diagnóstico de cunhas específicas. Com `premissas.operacional.
   kd_pre_imposto` declarado (input primitivo; o engine deriva o kd líquido com alíquota
@@ -94,6 +91,9 @@ recomendar auditoria ao Coordenador. `--selftest` valida a régua.
   (condição 3) ficam INALTERADOS. `ke_alavancagem` quantifica quando o Ke flat importa
   (Ku MM vs Harris–Pringle, Kd pré-imposto; VTS = t×ND com premissa e viés declarados — a
   política de dívida real é julgamento do Modelador).
+- **Impostos em camadas (H5)**: `aliquota_operacional` entra na cadeia do `ebit_justo`;
+  marginal/terminal são eco documentado (`premissas.impostos`); terminal não declarada gera
+  aviso (a diferença 27%→34% moveu o EV do caso de referência em −12,6%).
 
 ## 3. Fluxo de uso (Modelador)
 

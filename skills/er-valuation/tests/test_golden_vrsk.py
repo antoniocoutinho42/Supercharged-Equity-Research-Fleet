@@ -540,6 +540,21 @@ chk_bool("H3l sem fatos.pl_contabil_mi: nd_e_contabil=None com nota, Ku presente
 chk_bool("H3m sem kd_pre_imposto: ke_alavancagem.aplicavel=False",
          res_semkd["ke_alavancagem"]["aplicavel"] is False)
 
+# H3n — pl_contabil_mi declarado inválido -> recusa nomeada (paridade com kd_pre_imposto)
+inp_plx = fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=_claims_d, pl_contabil=-5.0)
+try:
+    rodar(inp_plx)
+    chk_bool("H3n pl_contabil_mi <= 0 declarado -> recusa nomeada", False)
+except ValueError as exc:
+    chk_bool("H3n pl_contabil_mi <= 0 declarado -> recusa nomeada",
+             "pl_contabil_mi" in str(exc))
+# H3o — ND < 0 (caixa líquido): semântica declarada, não número mudo
+_claims_cash = ({"nome": "caixa líquido", "valor_mi": 200.0, "fonte": "teste"},)
+res_nc = rodar(fixture_sintetico(kd_pre=0.075, wacc=0.10, claims=_claims_cash))
+chk_bool("H3o ND<0: nota de net cash declarada (VTS negativo = drag fiscal do caixa)",
+         res_nc["ke_alavancagem"]["nd_bridge_mi"] < 0
+         and "caixa" in res_nc["ke_alavancagem"].get("nota_net_cash", "").lower())
+
 # H4 — SemVer: as três entregas exigem minor bump com CHANGELOG
 from engine import ENGINE_VERSION as _EV  # noqa: E402
 chk_bool("H4a ENGINE_VERSION == 3.3.0", _EV == "3.3.0")

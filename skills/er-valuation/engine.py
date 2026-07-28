@@ -1400,6 +1400,11 @@ def bloco_ebit_justo(inp, econ):
         elif not str(op.get("fonte_kd", "")).strip():
             erros.append("premissas.operacional.fonte_kd obrigatória quando kd_pre_imposto é "
                          "declarado (mesma disciplina do fonte_wacc — H8)")
+    pl_cont_in = f.get("pl_contabil_mi")
+    if pl_cont_in is not None and (not isinstance(pl_cont_in, (int, float))
+                                   or float(pl_cont_in) <= 0):
+        erros.append("fatos.pl_contabil_mi, quando declarado, deve ser numérico > 0 "
+                     "(patrimônio líquido contábil em mi — v3.3.0)")
     cen_op = op.get("cenarios") or {}
     if sorted(cen_op.keys()) != sorted(nomes):
         erros.append("premissas.operacional.cenarios deve conter exatamente bear, base e bull "
@@ -1875,12 +1880,7 @@ def bloco_ke_alavancagem(inp, econ, ebit):
     acoes = float(meta["acoes_mi"])
     e_mkt = float(econ["central_ponderado"]) * acoes
     nd = -sum(float(c["valor_mi"]) for c in f["claims_bridge"])
-    imp = p.get("impostos") or {}
-    if imp.get("marginal") is not None:
-        t_vts, fonte_t = float(imp["marginal"]), "premissas.impostos.marginal"
-    else:
-        t_vts = float(op["aliquota_operacional"])
-        fonte_t = "premissas.operacional.aliquota_operacional (fallback: marginal não declarada)"
+    t_vts, fonte_t = _aliquota_kd(p, op)
     vts = t_vts * nd
     den_mm = e_mkt + nd - vts
     ku_mm = ((ke * e_mkt + kd_pre * (nd - vts)) / den_mm) if abs(den_mm) > 1e-9 else None
@@ -1925,12 +1925,14 @@ def bloco_ke_alavancagem(inp, econ, ebit):
     if pl_cont is not None and float(pl_cont) > 0:
         e_cont = float(pl_cont)
         ke_rc = ku_hp + (ku_hp - kd_pre) * nd / e_cont
-        drift_pp = abs(ke_rc - ke) * 100.0
+        # comparação sobre o valor PUBLICADO (padrão da casa: mesmo critério do diverge
+        # da paridade) — evita alerta True com drift_pp exibido exatamente no limiar
+        drift_pp = round(abs(ke_rc - ke) * 100.0, 2)
         alav.update({
             "nd_e_contabil": round(nd / e_cont, 4),
             "ke_realavancado_contabil": round(ke_rc, 6),
             "convencao_drift": "Harris–Pringle (sem net-off de VTS — D6), Kd pré-imposto",
-            "drift_pp": round(drift_pp, 2),
+            "drift_pp": drift_pp,
             "limiar_drift_pp": KE_REALAVANCAGEM_DRIFT_PP,
             "alerta_drift": drift_pp > KE_REALAVANCAGEM_DRIFT_PP,
         })
@@ -1939,6 +1941,12 @@ def bloco_ke_alavancagem(inp, econ, ebit):
         alav["nota"] = ("fatos.pl_contabil_mi ausente — ND/E contábil e o alerta de drift de "
                         "Ke re-alavancado degradam com nota (campo opcional novo, v3.3.0)")
     out["alavancagem"] = alav
+    if nd < 0:
+        out["nota_net_cash"] = ("ND do bridge < 0 (caixa líquido): as fórmulas seguem válidas "
+                                "como extensão algébrica, mas a leitura inverte — VTS negativo "
+                                "é drag fiscal do caixa, peso de dívida negativo desalavanca e "
+                                "Ku pode exceder Ke; interprete como diagnóstico de net cash, "
+                                "não de alavancagem")
     return out
 
 
