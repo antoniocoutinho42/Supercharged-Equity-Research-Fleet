@@ -51,6 +51,16 @@ import sys
 from datetime import datetime, timezone
 
 # CHANGELOG
+# v3.3.0 (2026-07-28): paridade EXATA em taxa + divergência DECOMPOSTA (aditivo; gerador
+#   intocado; média entre rotas segue proibida — divergência é diagnóstico, não "dois sinais").
+#   (A) ebit_justo.premissa/consistente: WACC a pesos de MERCADO (E_mkt = equity justo do
+#       gerador × ações, sem circularidade; ND = −Σ claims); input primitivo kd_pre_imposto
+#       (H8); WACC e ponte NOPAT→LL usam kd_pre×(1−t), alíquota declarada por chave.
+#   (B) paridade_decomposta: cunhas one-at-a-time (taxa; base de lucro em convenção LÍQUIDA,
+#       onde cai a diferença de camada de imposto; bridge de claims) + interação residual;
+#       INVARIANTE soma==divergência (1e-9); PARIDADE_DIVERGENTE referencia o bloco (limiar
+#       intocado); DECOMPOSICAO_POUCO_INFORMATIVA se |interação| > 25%. (C) ke_alavancagem
+#       (flag): Ku_MM vs Ku_HP, Kd PRÉ-imposto; VTS=t×ND declarado; drift Ke > 0,5 p.p.
 # v3.2.0 (2026-07-21): FASE B/B2 — respostas R2–R5 por chave (aditivo; núcleo intocado):
 #   (R2) central_neutro (gating por presença): caso conjunto moderado {lpa, cap_base, ke}
 #        com justificativa própria; robustez_conjunta com decomposição one-at-a-time e
@@ -169,7 +179,7 @@ from datetime import datetime, timezone
 # v1.1.0 (2026-07-12): Bracket com DE/NDE; sinal de entrada em 3 estados;
 #       gate renomeado para PROFUNDIDADE (SUMARIA | PADRAO | REFORCADA).
 # v1.0.0: versão inicial calibrada no caso VRSK.
-ENGINE_VERSION = "3.2.0"
+ENGINE_VERSION = "3.3.0"
 
 # ----------------------------------------------------------------------------
 # Núcleo matemático (inalterado desde v1.1.0 — coberto por golden tests)

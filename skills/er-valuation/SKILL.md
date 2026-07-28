@@ -22,6 +22,9 @@ Responder em PT-BR, tom profissional e direto.
 | Âncora operacional (v3.1; rota de RECONCILIAÇÃO, não terceiro sinal) | EV/NOPAT justo pela MESMA fórmula com inputs operacionais (margem×giro→ROIC, WACC recebido como premissa, trailing); cadeia EV/EBIT=(1−t)× e EV/EBITDA=×(1−d); bridge de claims; reversa e elasticidades operacionais; tabela história→premissa→implícito | `ebit_justo` |
 | Série reformulada + aplicabilidade (v3.1) | Série 5-6a validada NA CARGA (CE≡NOA; ponte≡direto; base MÉDIA p/ diagnóstico, EoP proibido); ROIIC/RiR em janela acumulada; gates da âncora patrimonial | `fatos_reformulado` (+ `gates_aplicabilidade`) |
 | Caso central neutro (v3.2, R2) | As três alavancas (base de lucro, CAP base, Ke) movidas juntas para valores neutros com justificativa própria; decomposição one-at-a-time + interação; gate recomputado | `central_neutro` |
+| Rota consistente em taxa (v3.3) | WACC a pesos de MERCADO na rota de reconciliação (E_mkt = equity justo do gerador; ND do bridge; kd_pre_imposto primitivo, kd líquido derivado), lado a lado com o WACC premissa; cadeia EV/NOPAT→EBIT→EBITDA nas duas taxas | `ebit_justo.consistente` |
+| Paridade decomposta (v3.3) | Divergência das âncoras decomposta por cunha nomeada one-at-a-time (taxa, base de lucro, bridge de claims) + interação residual; invariante soma==divergência (1e-9); interação dominante vira warning próprio | `paridade_decomposta` |
+| Diagnóstico de alavancagem (v3.3) | Ku implícito nas duas convenções (MM/textbook e Harris–Pringle, Kd pré-imposto) com fórmula declarada, ND/E contábil vs mercado e alerta de drift de Ke re-alavancado (>0,5 p.p.) — flag, nunca gerador | `ke_alavancagem` |
 | Dossiê de Ke (v3.2, R4) | DUAS rotas obrigatórias (paridade-US e build local) + prêmio de tamanho com critério (mesmo zero) + grade de Ke em torno do central | `ke_dossier` |
 | Implícitos dos múltiplos (v3.2, R3) | CAP/g/Ke que justificariam a mediana histórica e a dos pares — decomposição do prêmio por driver em tabela | `validacao_multiplos.implicitos` |
 | Spread terminal (v3.1, H11) | Grade φ∈{0; 0,25; 0,5; 1} na âncora econômica central + CAP equivalente; default do motor é φ=0 | `sensibilidade_phi` |
@@ -77,6 +80,20 @@ recomendar auditoria ao Coordenador. `--selftest` valida a régua.
 - **Impostos em camadas (H5)**: `aliquota_operacional` entra na cadeia do `ebit_justo`;
   marginal/terminal são eco documentado (`premissas.impostos`); terminal não declarada gera
   aviso (a diferença 27%→34% moveu o EV do caso de referência em −12,6%).
+- **Paridade decomposta e WACC consistente (v3.3.0).** A divergência de paridade não é
+  "dois sinais": é diagnóstico de cunhas específicas. Com `premissas.operacional.
+  kd_pre_imposto` declarado (input primitivo; o engine deriva o kd líquido com alíquota
+  declarada por chave), o engine emite a rota operacional TAMBÉM no `wacc_consistente`
+  (pesos a valor de MERCADO, com E_mkt = equity justo do gerador — pesos contábeis são
+  artefato metodológico, não sinal) e decompõe a divergência em `paridade_decomposta`:
+  cunha de taxa, cunha de base de lucro (ponte NOPAT→LL na convenção líquida — o teste
+  independente dos add-backs; a diferença de camada de imposto cai nesta cunha) e cunha do
+  bridge de claims, com interação residual explícita e invariante duro (soma == divergência,
+  1e-9). |interação| > 25% da divergência vira `DECOMPOSICAO_POUCO_INFORMATIVA`. O warning
+  `PARIDADE_DIVERGENTE` referencia o bloco; limiar de 10% e o não-bloqueio de publicação
+  (condição 3) ficam INALTERADOS. `ke_alavancagem` quantifica quando o Ke flat importa
+  (Ku MM vs Harris–Pringle, Kd pré-imposto; VTS = t×ND com premissa e viés declarados — a
+  política de dívida real é julgamento do Modelador).
 
 ## 3. Fluxo de uso (Modelador)
 

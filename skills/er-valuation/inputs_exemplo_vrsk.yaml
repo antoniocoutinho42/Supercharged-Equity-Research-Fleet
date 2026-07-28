@@ -33,6 +33,10 @@ fatos:                        # dono: ANALISTA (G2). Nada aqui sem fonte.
   # declarada (ver bloco premissas), como no caso auditado original.
   ebitda_gaap_ttm_mi: 1694
   ebitda_adj_ttm_mi: 1750
+  # NOVO v3.3.0 (OPCIONAL): patrimônio líquido contábil (mi) — alimenta ND/E contábil e o
+  # alerta de drift de Ke re-alavancado em ke_alavancagem. Ausente = diagnóstico degrada
+  # com nota. Exemplo VRSK: não coletado na sessão original (por isso comentado).
+  # pl_contabil_mi: 9300
   consenso: {min: 185, max: 272, mediana: 225, fonte: "compilação sell-side, jul/2026"}
 
   multiplos_historicos:       # banda 5-10a da PRÓPRIA companhia, base declarada por métrica
@@ -133,6 +137,15 @@ premissas:                    # dono: MODELADOR (G3). Defesa obrigatória no val
   ms_minima: 0.12
   limitrofe_teto: 1.10
   ladder_precos: [80, 65, 55, 52]
+  # NOVO v3.3.0 (OPCIONAIS, dentro de premissas.operacional — só relevantes quando o bloco
+  # operacional existe; este exemplo não o usa):
+  #   kd_pre_imposto: 0.058   # custo de dívida PRÉ-imposto (fração), input PRIMITIVO. O
+  #                           # engine deriva kd_liquido = kd_pre×(1−t), com t = impostos.
+  #                           # marginal (fallback: aliquota_operacional), declarado por
+  #                           # chave. Habilita ebit_justo.consistente (WACC a pesos de
+  #                           # MERCADO), paridade_decomposta e ke_alavancagem. Ausente =
+  #                           # os três degradam com aplicavel=false (default seguro).
+  #   fonte_kd: "..."         # obrigatória quando kd_pre_imposto é declarado (H8).
 
 gate:                         # limiares de proporcionalidade (Coordenador pode sobrescrever)
   limiar_preco_vs_bull_econ: 1.4

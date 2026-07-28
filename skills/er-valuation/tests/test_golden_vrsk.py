@@ -540,6 +540,10 @@ chk_bool("H3l sem fatos.pl_contabil_mi: nd_e_contabil=None com nota, Ku presente
 chk_bool("H3m sem kd_pre_imposto: ke_alavancagem.aplicavel=False",
          res_semkd["ke_alavancagem"]["aplicavel"] is False)
 
+# H4 — SemVer: as três entregas exigem minor bump com CHANGELOG
+from engine import ENGINE_VERSION as _EV  # noqa: E402
+chk_bool("H4a ENGINE_VERSION == 3.3.0", _EV == "3.3.0")
+
 print("=" * 100)
 if FALHAS:
     print(f"RESULTADO: {len(FALHAS)} FALHA(S): {FALHAS}")
