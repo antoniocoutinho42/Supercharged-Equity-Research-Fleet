@@ -1,0 +1,18 @@
+{
+  "formula_version": "K3-vF19-2026-08-03 / manual-v2.2.1",
+  "source_formula_sha256_stored": "ed5163103b73a226d47692ad6a9595416ce38ea2e2e9ea0d217072d4243b5420",
+  "copiado_de": "C:\\Users\\antonio.coutinho\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\a285574f-1119-487a-a43f-55b8af2000fd\\d23d90b0-93a5-47f5-bbb9-17f459f7e5f7\\skills\\justified-pe-valuation",
+  "copiado_em": "2026-08-05",
+  "contagem_suite_observada": {
+    "fonte_com_node": "SUITE PASS: 282 passed, 0 failed, 0 skipped, 282 total  (formula_version: K3-vF19-2026-08-03 / manual-v2.2.1)",
+    "plugin_sem_espelho_local": "SUITE PASS: 281 passed, 0 failed, 1 skipped, 282 total  (formula_version: K3-vF19-2026-08-03 / manual-v2.2.1)",
+    "nota": "SKILL.md da skill standalone cita 259 checks: contagem antiga pré-patch 1.1.0 (a seção 18, funding α-adjusted, adicionou 21 checks). Mesma formula_version; granularidade de contagem, não divergência de metodologia."
+  },
+  "arquivos": {
+    "references/Justified_PE_AI_Manual_v2.2.1.md": "6ac38371d19ddc006a484e22339f07f2dfa774af81919f5fac9a0fc6063085b6",
+    "references/K3_Regression_Tests_v2.2.1.json": "833a7e13dd298b36dd350a547b909a43acf9cd506616c28b01c3197d4c74fc93",
+    "scripts/valuation_engine.py": "c5fac06408824c3badbb2db619ec179709eac278f95efb34e9924d2d6704970c",
+    "scripts/input_validator.py": "cef72707532f6dded6907fcb74a384f47d05f99da589057de9dee8f08d73f4da",
+    "scripts/run_regressions.py": "ea2e8443290a979b21fb59a5b61ddc40ad518d4f4f5adfa56920a7f143a59455"
+  }
+}

@@ -1,0 +1,968 @@
+{
+  "formula_version": "K3-vF19-2026-08-03 / manual-v2.2.1",
+  "source_workbook": {
+    "file_name": "Justified_Multiples_Model.Excel_vF19 (03.08.26)_2Phases_Fade_ROE(1).xlsx",
+    "sha256": "15a10de2b78af4a8acb050faaa4ce3b0e000a559fc3ac6ac3e911b9c18a2fb5b"
+  },
+  "source_cell": "JM 2 phases + Fade ROE!K3",
+  "source_formula_sha256": {
+    "stored_formula_without_trailing_newline": "ed5163103b73a226d47692ad6a9595416ce38ea2e2e9ea0d217072d4243b5420",
+    "display_formula_without_trailing_newline": "7ee5505bb0f93e830c159707ec372ca70e145d1d26c558ca404706a7d2efbc69"
+  },
+  "classification_vocabulary": [
+    "FORMULA FACT",
+    "MATHEMATICAL INVARIANT",
+    "DAMODARAN-BACKED ECONOMIC GUIDANCE",
+    "CASE-BASE REGRESSION ANCHOR",
+    "HOUSE HEURISTIC / REVIEW PRIOR"
+  ],
+  "global_warning": "Partial sensitivities are pure one-input changes that hold all other inputs constant. They are local implementation anchors, not universal economic rules and not necessarily economically self-consistent scenarios.",
+  "base_case": {
+    "name": "vF19 exact cell-value base case",
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "inputs": {
+      "ROE1": 0.10846315789473689,
+      "ROE2": 0.43447894736842096,
+      "g1": 0.12,
+      "g2": 0.15,
+      "Ke1": 0.22,
+      "Ke2": 0.16,
+      "n1": 5,
+      "n2": 12,
+      "NDE1": 0.6,
+      "NDE2": 0.2,
+      "GDE1": 0.8,
+      "GDE2": 0.3,
+      "F": 5,
+      "g_T": 0.05,
+      "Kd_F2": 0.11,
+      "t": 0.3
+    },
+    "input_units": {
+      "ROE1": "decimal",
+      "ROE2": "decimal",
+      "g1": "decimal",
+      "g2": "decimal",
+      "Ke1": "decimal",
+      "Ke2": "decimal",
+      "n1": "years",
+      "n2": "years",
+      "NDE1": "net debt ratio to K3 book-model equity",
+      "NDE2": "net debt ratio to K3 book-model equity",
+      "GDE1": "gross debt ratio to K3 book-model equity",
+      "GDE2": "gross debt ratio to K3 book-model equity",
+      "F": "years",
+      "g_T": "decimal",
+      "Kd_F2": "decimal",
+      "t": "decimal"
+    },
+    "derived": {
+      "alpha1": 0.7999999999999999,
+      "alpha2": 0.9,
+      "rz": 1.3333333333333335,
+      "kd_at": 0.077,
+      "fade_prefix": 8.091772946388359
+    },
+    "expected_blocks": {
+      "V_F1": 0.44777708179487147,
+      "V_F2": 26.531888901979215,
+      "Bridge": -2.5006012464438787,
+      "Fade_Dividends": 6.169099958094935,
+      "Terminal_Book_PV": 5.917724448075871,
+      "V_Fade": 12.086824406170805
+    },
+    "expected_total": 36.56588914350101,
+    "workbook_cached_total": 36.565889143501,
+    "direct_yearly_recurrence_total": 36.56588914350114,
+    "tolerance": 1e-10,
+    "normalization_context": {
+      "NI0": 5.75,
+      "expected_equity_value": 210.25386257513082,
+      "expected_forward_PE": 32.64811530669733,
+      "expected_implied_Book0": 59.37499999999998,
+      "expected_implied_PB0": 3.5411176854758883,
+      "units": {
+        "NI0": "currency units",
+        "expected_equity_value": "same currency units",
+        "expected_forward_PE": "multiple",
+        "expected_implied_Book0": "same currency units",
+        "expected_implied_PB0": "multiple"
+      }
+    }
+  },
+  "invariants": [
+    {
+      "id": "base_conversion",
+      "classification": "MATHEMATICAL INVARIANT",
+      "expressions": {
+        "equity_value": "K3 * NI0",
+        "forward_PE": "K3 / (1 + g1)",
+        "implied_Book0": "NI0 * (1 + g1) / ROE1",
+        "implied_PB0": "K3 * ROE1 / (1 + g1)"
+      },
+      "domain_notes": {
+        "earnings_scale": "Use when normalized NI0 and ROE1 are nonzero.",
+        "singular_scale": "Use the exact direct P/B companion form when ROE1 equals zero or earnings normalization is singular."
+      },
+      "expected": {
+        "equity_value": 210.25386257513082,
+        "forward_PE": 32.64811530669733,
+        "implied_Book0": 59.37499999999998,
+        "implied_PB0": 3.5411176854758883
+      },
+      "tolerance": 1e-10
+    },
+    {
+      "id": "no_excess_return_limit",
+      "classification": "MATHEMATICAL INVARIANT",
+      "inputs": {
+        "ROE1": 0.18,
+        "ROE2": 0.14,
+        "g1": 0.08,
+        "g2": 0.05,
+        "Ke1": 0.18,
+        "Ke2": 0.14,
+        "n1": 4,
+        "n2": 7,
+        "NDE1": 0.25,
+        "NDE2": 0.25,
+        "GDE1": 0.25,
+        "GDE2": 0.25,
+        "F": 6,
+        "g_T": 0.03,
+        "Kd_F2": 0.11,
+        "t": 0.3
+      },
+      "conditions": [
+        "ROE1 equals Ke1",
+        "ROE2 equals Ke2",
+        "capital structure is constant",
+        "cash is zero because GDE equals NDE",
+        "economic recapitalization is zero"
+      ],
+      "expected": {
+        "trailing_PE": 6.0,
+        "forward_PE": 5.555555555555555,
+        "implied_PB0": 1.0,
+        "Bridge": 0.0
+      },
+      "tolerance": 1e-12
+    },
+    {
+      "id": "closed_vs_direct_yearly_recurrence",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "expected_closed_total": 36.56588914350101,
+      "expected_direct_total": 36.56588914350114,
+      "expected_maximum_absolute_block_or_total_difference": 1.28e-13,
+      "tolerance": 1e-12
+    },
+    {
+      "id": "terminal_no_excess_return",
+      "classification": "FORMULA FACT",
+      "assertions": {
+        "ROE_T": "Ke2",
+        "terminal_PB": 1.0,
+        "terminal_value": "Book_T",
+        "g_T_role": "finite fade-path endpoint only"
+      }
+    }
+  ],
+  "partial_sensitivities": [
+    {
+      "id": "n1_plus_1_year",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "n1",
+      "base_value": 5,
+      "delta": 1,
+      "bumped_value": 6,
+      "unit": "years",
+      "expected_total": 33.67417335483201,
+      "expected_percent_change": -0.07908233209701554,
+      "expected_sign": "negative in this base case",
+      "tolerance": 1e-10,
+      "warning": "The sign of n1 depends on the relative economics of F1 versus the displaced future regimes."
+    },
+    {
+      "id": "n2_plus_1_year",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "n2",
+      "base_value": 12,
+      "delta": 1,
+      "bumped_value": 13,
+      "unit": "years",
+      "expected_total": 38.55075759200698,
+      "expected_percent_change": 0.054281968659819935,
+      "expected_sign": "positive",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "n2_minus_1_year",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "n2",
+      "base_value": 12,
+      "delta": -1,
+      "bumped_value": 11,
+      "unit": "years",
+      "expected_total": 34.56376096935584,
+      "expected_percent_change": -0.054753985778601466,
+      "expected_sign": "negative",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "fade_plus_1_year",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "F",
+      "base_value": 5,
+      "delta": 1,
+      "bumped_value": 6,
+      "unit": "years",
+      "expected_total": 37.504320192422426,
+      "expected_percent_change": 0.02566411130435231,
+      "expected_sign": "positive",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "fade_minus_1_year",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "F",
+      "base_value": 5,
+      "delta": -1,
+      "bumped_value": 4,
+      "unit": "years",
+      "expected_total": 35.60819680681104,
+      "expected_percent_change": -0.026190866928780476,
+      "expected_sign": "negative",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "roe1_plus_1pp",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "ROE1",
+      "base_value": 0.10846315789473689,
+      "delta": 0.01,
+      "bumped_value": 0.11846315789473688,
+      "unit": "decimal; delta equals 1 percentage point",
+      "expected_total": 33.80815256918267,
+      "expected_percent_change": -0.07541828296573738,
+      "expected_sign": "negative in this base case",
+      "tolerance": 1e-10,
+      "warning": "ROE1 also inversely anchors implied Book0 and the scale reaching F2."
+    },
+    {
+      "id": "roe2_plus_1pp",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "ROE2",
+      "base_value": 0.43447894736842096,
+      "delta": 0.01,
+      "bumped_value": 0.444478947368421,
+      "unit": "decimal; delta equals 1 percentage point",
+      "expected_total": 37.586630471230464,
+      "expected_percent_change": 0.027915123948541343,
+      "expected_sign": "positive",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "g2_plus_1pp",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "g2",
+      "base_value": 0.15,
+      "delta": 0.01,
+      "bumped_value": 0.16,
+      "unit": "decimal; delta equals 1 percentage point",
+      "expected_total": 38.37747949160262,
+      "expected_percent_change": 0.04954317782324713,
+      "expected_sign": "positive in this base case",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "ke2_minus_50bps",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "Ke2",
+      "base_value": 0.16,
+      "delta": -0.005,
+      "bumped_value": 0.155,
+      "unit": "decimal; delta equals -50 basis points",
+      "linked_fixed_relationships": {
+        "ROE_T": "Ke2"
+      },
+      "expected_total": 38.05260869535441,
+      "expected_percent_change": 0.04065864625960125,
+      "expected_sign": "positive",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "ke1_minus_50bps",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "Ke1",
+      "base_value": 0.22,
+      "delta": -0.005,
+      "bumped_value": 0.215,
+      "unit": "decimal; delta equals -50 basis points",
+      "expected_total": 37.32044317348188,
+      "expected_percent_change": 0.020635462384618997,
+      "expected_sign": "positive",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "gde2_plus_10pp",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "GDE2",
+      "base_value": 0.3,
+      "delta": 0.1,
+      "bumped_value": 0.4,
+      "unit": "decimal ratio to K3 book-model equity; delta equals 10 percentage points",
+      "expected_total": 39.0232277110267,
+      "expected_percent_change": 0.06720303061364064,
+      "expected_sign": "positive pure partial",
+      "tolerance": 1e-10,
+      "warning": "A real leverage change normally requires re-deriving ROE2 and Ke2."
+    },
+    {
+      "id": "nde2_plus_10pp",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "NDE2",
+      "base_value": 0.2,
+      "delta": 0.1,
+      "bumped_value": 0.30000000000000004,
+      "unit": "decimal ratio to K3 book-model equity; delta equals 10 percentage points",
+      "expected_total": 31.90396819126051,
+      "expected_percent_change": -0.1274937123488239,
+      "expected_sign": "negative pure partial",
+      "tolerance": 1e-10,
+      "warning": "A real leverage/cash change normally requires re-deriving ROE2 and Ke2."
+    }
+  ],
+  "convexity_grids": [
+    {
+      "id": "g2_convexity_grid",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "g2",
+      "input_unit": "decimal",
+      "output_unit": "trailing P/E multiple",
+      "warning": "Implementation/nonlinearity test only; values are not calibration ranges.",
+      "points": [
+        { "input": 0.05, "expected_total": 24.051507795234482 },
+        { "input": 0.1, "expected_total": 29.21951637438114 },
+        { "input": 0.15, "expected_total": 36.56588914350101 },
+        { "input": 0.2, "expected_total": 47.088042032352064 },
+        { "input": 0.25, "expected_total": 62.230423351198354 }
+      ],
+      "expected_shape": "strictly increasing and convex over listed points",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "ke2_convexity_grid",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "Ke2",
+      "input_unit": "decimal",
+      "output_unit": "trailing P/E multiple",
+      "linked_fixed_relationships": {
+        "ROE_T": "Ke2"
+      },
+      "warning": "Implementation/nonlinearity test only; values are not calibration ranges.",
+      "points": [
+        { "input": 0.12, "expected_total": 51.05400281900744 },
+        { "input": 0.14, "expected_total": 43.02133884572049 },
+        { "input": 0.16, "expected_total": 36.56588914350101 },
+        { "input": 0.18, "expected_total": 31.338564570780786 },
+        { "input": 0.2, "expected_total": 27.074236978594662 }
+      ],
+      "expected_shape": "strictly decreasing and nonlinear over listed points",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "gT_sensitivity_by_fade_duration",
+      "classification": "CASE-BASE REGRESSION ANCHOR",
+      "changed_input": "g_T",
+      "delta": 0.01,
+      "input_unit": "decimal; delta equals 1 percentage point",
+      "warning": "The effect grows with F because g_T affects a longer finite path; it is not a perpetual-growth test.",
+      "points": [
+        { "F": 3, "base_total": 34.63036763989134, "bumped_total": 34.645799801611716, "expected_percent_change": 0.00044562511957280115 },
+        { "F": 5, "base_total": 36.56588914350101, "bumped_total": 36.59552758476837, "expected_percent_change": 0.0008105489012188993 },
+        { "F": 10, "base_total": 41.0786572816046, "bumped_total": 41.16144382554306, "expected_percent_change": 0.0020153176714354792 },
+        { "F": 20, "base_total": 48.94109026216828, "bumped_total": 49.17842610732589, "expected_percent_change": 0.004849418839797837 }
+      ],
+      "tolerance": 1e-10
+    }
+  ],
+  "boundary_tests": [
+    {
+      "id": "first_F2_year_belongs_to_F2",
+      "classification": "FORMULA FACT",
+      "base_case_override": { "n2": 1 },
+      "discount_denominator": "(1 + Ke1)^n1 * (1 + Ke2)",
+      "expected_closed_V_F2": 2.317788390817612,
+      "expected_direct_first_year_F2_PV": 2.317788390817624,
+      "expected_absolute_difference": 1.2e-14,
+      "tolerance": 1e-12
+    },
+    {
+      "id": "zero_bridge_condition",
+      "classification": "MATHEMATICAL INVARIANT",
+      "condition": "GDE2 * ((1 + NDE1) / (1 + NDE2)) equals GDE1",
+      "base_case_override": { "GDE2": 0.6 },
+      "expected_Bridge": 0.0,
+      "tolerance": 1e-12
+    },
+    {
+      "id": "zero_fade_condition",
+      "classification": "MATHEMATICAL INVARIANT",
+      "base_case_override": { "F": 0 },
+      "expected_Fade_Dividends": 0.0,
+      "expected_Terminal_Book_PV": 8.091772946388359,
+      "expected_V_Fade": 8.091772946388359,
+      "tolerance": 1e-12
+    },
+    {
+      "id": "F1_Ke_equals_g_limit",
+      "classification": "MATHEMATICAL INVARIANT",
+      "base_case_override": { "Ke1": 0.12 },
+      "condition": "Ke1 equals g1",
+      "expected_V_F1": 0.5745341614906857,
+      "expected_total": 55.96488056202319,
+      "expected_behavior": "finite exact IF-limit branch",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "F2_Ke_equals_g_limit",
+      "classification": "MATHEMATICAL INVARIANT",
+      "base_case_override": { "Ke2": 0.15 },
+      "linked_fixed_relationships": { "ROE_T": "Ke2" },
+      "condition": "Ke2 equals g2",
+      "expected_V_F2": 28.055316869722898,
+      "expected_total": 39.62054975162651,
+      "expected_behavior": "finite exact IF-limit branch",
+      "tolerance": 1e-10
+    },
+    {
+      "id": "terminal_book_closure",
+      "classification": "FORMULA FACT",
+      "assertions": {
+        "final_fade_ROE": "Ke2",
+        "terminal_PB": 1.0,
+        "terminal_value_basis": "Book_T"
+      }
+    }
+  ],
+  "input_contract": {
+    "identity": "GDE - NDE = Cash / Equity",
+    "INVALID": [
+      {
+        "condition": "any input is NaN, positive infinity or negative infinity",
+        "classification": "INVALID",
+        "reason": "K3 requires finite real inputs.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — all inputs must be finite."
+      },
+      {
+        "condition": "n1 < 0 or n2 < 0 or F < 0",
+        "classification": "INVALID",
+        "reason": "Phase durations cannot be negative.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — n1, n2 and F must be non-negative integers."
+      },
+      {
+        "condition": "n1, n2 or F is not an integer",
+        "classification": "INVALID",
+        "reason": "K3 uses discrete annual periods and SEQUENCE(F).",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — n1, n2 and F must be integers."
+      },
+      {
+        "condition": "Ke1 <= -1",
+        "classification": "INVALID",
+        "reason": "1 + Ke1 is non-positive and cannot be used as the phase-1 discount base.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — Ke1 must be greater than -1."
+      },
+      {
+        "condition": "Ke2 <= -1",
+        "classification": "INVALID",
+        "reason": "1 + Ke2 is non-positive and cannot be used as the phase-2/fade discount base.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — Ke2 must be greater than -1."
+      },
+      {
+        "condition": "g1 <= -1",
+        "classification": "INVALID",
+        "reason": "1 + g1 is non-positive and breaks the proportional earnings/book path.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — g1 must be greater than -1."
+      },
+      {
+        "condition": "g2 <= -1",
+        "classification": "INVALID",
+        "reason": "1 + g2 is non-positive and breaks the proportional earnings/book path.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — g2 must be greater than -1."
+      },
+      {
+        "condition": "any fade-path g_k <= -1",
+        "classification": "INVALID",
+        "reason": "The fade growth product and logarithm require 1 + g_k > 0.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — every fade growth point must be greater than -1."
+      },
+      {
+        "condition": "1 + NDE2 = 0",
+        "classification": "INVALID",
+        "reason": "rz = (1 + NDE1) / (1 + NDE2) has a zero denominator.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — NDE2 cannot equal -1."
+      },
+      {
+        "condition": "GDE1 < 0 or GDE2 < 0",
+        "classification": "INVALID",
+        "reason": "Gross debt cannot be negative under the canonical definition.",
+        "permitted_implementation": "none until corrected",
+        "expected_agent_message": "INVALID INPUT — GDE1 and GDE2 must be non-negative."
+      },
+      {
+        "condition": "GDE1 < NDE1",
+        "classification": "INVALID",
+        "reason": "GDE1 - NDE1 = Cash/Equity would imply negative cash.",
+        "permitted_implementation": "correct the phase-1 gross/net-debt definitions before valuation",
+        "expected_agent_message": "INVALID INPUT — GDE1 must be greater than or equal to NDE1."
+      },
+      {
+        "condition": "GDE2 < NDE2",
+        "classification": "INVALID",
+        "reason": "GDE2 - NDE2 = Cash/Equity would imply negative cash.",
+        "permitted_implementation": "correct the phase-2 gross/net-debt definitions before valuation",
+        "expected_agent_message": "INVALID INPUT — GDE2 must be greater than or equal to NDE2."
+      }
+    ],
+    "SUPPORTED_BOUNDARY": [
+      {
+        "condition": "n1 = 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "F1 has no cash-flow years but still supplies boundary-scale inputs.",
+        "permitted_implementation": "canonical K3",
+        "expected_agent_message": "SUPPORTED BOUNDARY — V_F1 is zero; retain ROE1, g1 and F1 structure."
+      },
+      {
+        "condition": "n2 = 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "The model moves directly from the F1/F2 boundary into fade.",
+        "permitted_implementation": "canonical K3",
+        "expected_agent_message": "SUPPORTED BOUNDARY — V_F2 is zero; retain F2 inputs for fade entry."
+      },
+      {
+        "condition": "F = 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "Fade dividends are zero and terminal book is recognized at the end of F2.",
+        "permitted_implementation": "canonical K3 F=0 branch",
+        "expected_agent_message": "SUPPORTED BOUNDARY — use the exact zero-fade branch."
+      },
+      {
+        "condition": "Ke1 = g1",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "The apparent annuity singularity has an exact finite limit.",
+        "permitted_implementation": "exact F1 limit branch",
+        "expected_agent_message": "SUPPORTED BOUNDARY — use the exact Ke1=g1 limit."
+      },
+      {
+        "condition": "Ke2 = g2",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "The apparent annuity singularity has an exact finite limit.",
+        "permitted_implementation": "exact F2 limit branch",
+        "expected_agent_message": "SUPPORTED BOUNDARY — use the exact Ke2=g2 limit."
+      },
+      {
+        "condition": "ROE1 < 0 or ROE2 < 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "Negative regime returns are mathematically supported when scale and signs are coherent.",
+        "permitted_implementation": "canonical K3 when ROE1 and ROE2 are nonzero",
+        "expected_agent_message": "SUPPORTED BOUNDARY — preserve block signs and report Equity Value when P/E is not interpretable."
+      },
+      {
+        "condition": "NI0 < 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "Equity Value can remain meaningful even though trailing P/E loses intuitive cheap/expensive interpretation.",
+        "permitted_implementation": "canonical K3 times coherent normalized NI0",
+        "expected_agent_message": "SUPPORTED BOUNDARY — report Equity Value and P/B, not a cheap/expensive negative P/E."
+      },
+      {
+        "condition": "NDE1 < 0 or NDE2 < 0",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "Negative net debt represents net cash when GDE remains non-negative and GDE >= NDE.",
+        "permitted_implementation": "canonical K3",
+        "expected_agent_message": "SUPPORTED BOUNDARY — verify required versus distributable cash."
+      },
+      {
+        "condition": "g > ROE",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "The distribution ratio can be negative and represent external equity funding.",
+        "permitted_implementation": "canonical K3 with funding review",
+        "expected_agent_message": "SUPPORTED BOUNDARY — negative FCFE is funding, not an automatic rejection."
+      },
+      {
+        "condition": "g > Ke in a finite phase",
+        "classification": "SUPPORTED_BOUNDARY",
+        "reason": "Finite-phase growth above the discount rate does not create a perpetuity singularity.",
+        "permitted_implementation": "canonical K3",
+        "expected_agent_message": "SUPPORTED BOUNDARY — validate finite duration and economic funding."
+      }
+    ],
+    "REVIEW": [
+      {
+        "condition": "t < 0 or t > 1",
+        "classification": "REVIEW",
+        "reason": "Mathematically finite but outside the usual tax-rate interval.",
+        "permitted_implementation": "run only with documented economic rationale",
+        "expected_agent_message": "REVIEW — unusual tax-rate convention."
+      },
+      {
+        "condition": "Kd_F2 < 0",
+        "classification": "REVIEW",
+        "reason": "Negative debt cost can be mathematically evaluated but is economically unusual.",
+        "permitted_implementation": "run only with documented economic rationale",
+        "expected_agent_message": "REVIEW — negative debt cost requires evidence."
+      },
+      {
+        "condition": "Ke1 <= Kd_F2 or Ke2 <= Kd_F2",
+        "classification": "REVIEW",
+        "reason": "The relative risk ordering is economically unusual but not a mathematical domain failure.",
+        "permitted_implementation": "run only after risk-definition reconciliation",
+        "expected_agent_message": "REVIEW — reconcile equity and debt risk conventions."
+      },
+      {
+        "condition": "NDE1 or NDE2 is near -1 without NDE2 equaling -1",
+        "classification": "REVIEW",
+        "reason": "rz approaches zero or becomes very large and can be numerically/economically sensitive.",
+        "permitted_implementation": "run with explicit sensitivity and precision checks",
+        "expected_agent_message": "REVIEW — NDE2 near -1 creates extreme rebasing."
+      },
+      {
+        "condition": "GDE - NDE > 1",
+        "classification": "REVIEW",
+        "reason": "Cash/Equity above 100% is supported but requires normalization and liquidity classification.",
+        "permitted_implementation": "run with documented cash classification",
+        "expected_agent_message": "REVIEW — cash/equity exceeds 100%."
+      },
+      {
+        "condition": "returns, growth or leverage are economically extreme",
+        "classification": "REVIEW",
+        "reason": "Mathematical validity does not prove economic plausibility.",
+        "permitted_implementation": "run with documented evidence and sensitivities",
+        "expected_agent_message": "REVIEW — extreme economic input requires support."
+      },
+      {
+        "condition": "capital structure is incompatible with funding access or inputs lack coherent economic interpretation",
+        "classification": "REVIEW",
+        "reason": "The formula can return a number for a non-executable scenario.",
+        "permitted_implementation": "recalibrate or label as a non-executable diagnostic",
+        "expected_agent_message": "REVIEW — mathematical output is not an economically executable scenario."
+      },
+      {
+        "condition": "1e-12 <= abs(Ke-g) < 1e-6 in F1 or F2",
+        "classification": "REVIEW",
+        "reason": "The standard 1-r^n branch is numerically ill-conditioned near r=1.",
+        "permitted_implementation": "use the exact limit or stable log1p/expm1 evaluation and compare with high precision",
+        "expected_agent_message": "REVIEW: numerically ill-conditioned standard branch."
+      }
+    ],
+    "SUPPORTED_VIA_COMPANION_IMPLEMENTATION": [
+      {
+        "condition": "ROE1 = 0",
+        "classification": "SUPPORTED_VIA_COMPANION_IMPLEMENTATION",
+        "reason": "Literal K3 divides by ROE1 and the converted P/B path is infinity times zero.",
+        "permitted_implementation": "direct algebraically cancelled P/B companion form",
+        "expected_agent_message": "SUPPORTED BOUNDARY VIA COMPANION IMPLEMENTATION — do not evaluate literal K3 first."
+      },
+      {
+        "condition": "ROE2 = 0",
+        "classification": "SUPPORTED_VIA_COMPANION_IMPLEMENTATION",
+        "reason": "ROE2/ROE1 multiplies an annuity containing division by ROE2; the terms cancel algebraically.",
+        "permitted_implementation": "A2_cancelled and V_F2_cancelled",
+        "expected_agent_message": "SUPPORTED BOUNDARY VIA CANCELLED IMPLEMENTATION — literal K3 remains singular."
+      },
+      {
+        "condition": "P/E normalization is singular and Book0 is coherent",
+        "classification": "SUPPORTED_VIA_COMPANION_IMPLEMENTATION",
+        "reason": "Equity Value can be scaled directly from economic book without introducing a new economic input.",
+        "permitted_implementation": "K_PB times Book0",
+        "expected_agent_message": "SUPPORTED VIA COMPANION IMPLEMENTATION — use Book0 as valuation scale."
+      }
+    ]
+  },
+  "numeric_stability_contract": {
+    "classification": "MATHEMATICAL INVARIANT",
+    "formula_change_permitted": false,
+    "review_zone": "1e-12 <= abs(Ke - g) < 1e-6",
+    "review_message": "REVIEW: numerically ill-conditioned standard branch",
+    "required_code_implementation": [
+      "use the exact limit when appropriate",
+      "or evaluate 1-r^n stably with log1p/expm1",
+      "compare against high-precision arithmetic",
+      "apply the same discipline to F1 and F2"
+    ],
+    "base_case_near_F1_limit": {
+      "override": { "Ke1": "g1 + 1e-12" },
+      "actual_binary_difference": 1.0000056338554941e-12,
+      "standard_double_precision_V_F1": 0.5744493264483829,
+      "exact_limit_V_F1": 0.5745341614906857,
+      "expected_relative_error": -0.00014765883038658778,
+      "test_result": "degradation must be detected"
+    }
+  },
+  "pb_companion_form": {
+    "classification": "MATHEMATICAL INVARIANT",
+    "role": "exact algebraic reparameterization of K3, not a separate engine",
+    "valuation_scale": "Book0",
+    "economic_input_count": 16,
+    "formulas": {
+      "K_PB": "PB_F1 + PB_F2 + PB_Bridge + PB_Fade",
+      "ROE1_nonzero_equivalence": "K3 * ROE1 / (1 + g1)",
+      "PB_F1_standard": "(ROE1-alpha1*g1) * (1-((1+g1)/(1+Ke1))^n1) / (Ke1-g1)",
+      "PB_F1_limit": "(ROE1-alpha1*g1) * n1 / (1+g1)",
+      "A2_cancelled_standard": "(ROE2-alpha2*g2)*(1+g2)*(1-((1+g2)/(1+Ke2))^n2)/(Ke2-g2)",
+      "A2_cancelled_limit": "(ROE2-alpha2*g2)*n2",
+      "PB_F2": "((1+g1)^n1/(1+g2))*rz/(1+Ke1)^n1*A2_cancelled",
+      "PB_Bridge": "((1+g1)^n1/(1+Ke1)^n1)*(GDE2*rz-GDE1)*(1+kd_at)/(1+Ke2)",
+      "PB_pref": "(1+g1)^n1*rz/(1+Ke1)^n1*((1+g2)/(1+Ke2))^n2",
+      "PB_Fade_F_zero": "PB_pref",
+      "PB_Fade_F_positive": "PB_pref*(sum_k(prod_g(k)*(ROE_k-alpha2*g_k)/(1+Ke2)^k)+product_k(1+g_k)/(1+Ke2)^F)",
+      "equity_value": "K_PB * Book0"
+    }
+  },
+  "pb_equivalence_tests": {
+    "classification": "MATHEMATICAL INVARIANT",
+    "seed": 22021,
+    "executed_case_count": 24,
+    "coverage": [
+      "ROE1 positive",
+      "ROE1 negative",
+      "ROE2 positive",
+      "ROE2 negative",
+      "n1=0",
+      "n2=0",
+      "F=0",
+      "Ke1=g1",
+      "Ke2=g2",
+      "negative growth",
+      "different capital structures"
+    ],
+    "base_case": {
+      "direct_PB": 3.5411176854758883,
+      "K3_times_ROE1_div_1_plus_g1": 3.5411176854758883,
+      "tolerance": 1e-12
+    },
+    "maximum_absolute_PB_difference_across_cases": 2.6645352591003757e-15,
+    "maximum_absolute_literal_vs_cancelled_V_F2_difference": 1.4210854715202004e-14,
+    "case_ids": [
+      "base",
+      "negative_roe1",
+      "negative_roe2",
+      "both_roes_negative",
+      "n1_zero",
+      "n2_zero",
+      "fade_zero",
+      "ke1_equals_g1",
+      "ke2_equals_g2",
+      "negative_g1",
+      "negative_g2",
+      "different_structures",
+      "seeded_01",
+      "seeded_02",
+      "seeded_03",
+      "seeded_04",
+      "seeded_05",
+      "seeded_06",
+      "seeded_07",
+      "seeded_08",
+      "seeded_09",
+      "seeded_10",
+      "seeded_11",
+      "seeded_12"
+    ]
+  },
+  "roe1_zero_pb_boundary": {
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "support_classification": "SUPPORTED_VIA_COMPANION_IMPLEMENTATION",
+    "base_case_override": { "ROE1": 0, "Book0": 100 },
+    "expected": {
+      "PB_F1": -0.3340174988523891,
+      "PB_F2": 2.5694039778758824,
+      "PB_Bridge": -0.242163489129302,
+      "PB_Fade": 1.1705135214396996,
+      "K_PB": 3.163736511333891,
+      "Equity_Value": 316.3736511333891
+    },
+    "tolerance": 1e-10,
+    "prohibited_path": "evaluate K3 and then multiply by ROE1"
+  },
+  "roe2_zero_cancelled_boundary": {
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "support_classification": "SUPPORTED_VIA_COMPANION_IMPLEMENTATION",
+    "base_case_override": { "ROE2": 0 },
+    "expected": {
+      "V_F1": 0.44777708179487147,
+      "V_F2_cancelled": -11.960122850842113,
+      "Bridge": -2.5006012464438787,
+      "Fade_Dividends": 0.312049950182806,
+      "Terminal_Book_PV": 5.917724448075871,
+      "V_Fade": 6.229774398258678,
+      "K3_equivalent_total": -7.783172617232443
+    },
+    "tolerance": 1e-10,
+    "literal_K3_status": "numerically singular and not valid at ROE2=0"
+  },
+  "n1_zero_still_scales_book": {
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "formula_behavior_classification": "FORMULA FACT",
+    "base_case_override": { "n1": 0 },
+    "expected": {
+      "V_F1": 0,
+      "V_F2": 40.68901814220827,
+      "Bridge": -3.834895052473763,
+      "V_Fade": 18.53622331079799,
+      "K3": 55.3903464005325,
+      "K3_with_ROE1_plus_1pp": 50.71460185810262,
+      "ROE1_plus_1pp_percent_change": -0.084414430425
+    },
+    "assertion": "ROE1, g1 and F1 structure remain boundary-scale inputs even though V_F1 equals zero.",
+    "tolerance": 1e-10
+  },
+  "n1_zero_g1_proportionality": {
+    "classification": "MATHEMATICAL INVARIANT",
+    "condition": "n1=0 and every other input is fixed",
+    "expression": "K3(g1_new)/K3(g1_old) = (1+g1_new)/(1+g1_old)",
+    "base_case_test": {
+      "old_g1": 0.12,
+      "new_g1": 0.13,
+      "old_K3": 55.3903464005325,
+      "new_K3": 55.88490306482296,
+      "expected_percent_change": 0.008928571429,
+      "exact_ratio_change": 0.008928571428571175
+    },
+    "tolerance": 1e-12
+  },
+  "n2_zero_boundary": {
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "formula_behavior_classification": "FORMULA FACT",
+    "base_case_override": { "n2": 0 },
+    "expected": {
+      "V_F1": 0.44777708179487147,
+      "V_F2": 0,
+      "Bridge": -2.5006012464438787,
+      "V_Fade": 13.410161228069203,
+      "K3": 11.357337063420196
+    },
+    "interpretation": "No full-spread F2 years; transition directly into fade while retaining ROE2, Ke2, g2 and F2 structure.",
+    "tolerance": 1e-10
+  },
+  "negative_roe1_equity_value_path": {
+    "classification": "CASE-BASE REGRESSION ANCHOR",
+    "support_classification": "FORMULA FACT",
+    "base_case_override": { "ROE1": -0.08, "NI0": -2.0 },
+    "expected": {
+      "V_F1": 8.573115803877988,
+      "V_F2": -35.97165569026235,
+      "Bridge": 3.390288847810229,
+      "Fade_Dividends": -8.364000785290822,
+      "Terminal_Book_PV": -8.023188514864971,
+      "V_Fade": -16.38718930015579,
+      "trailing_PE": -40.39544033872993,
+      "implied_Book0": 28.0,
+      "Equity_Value": 80.79088067745985,
+      "implied_PB0": 2.885388595623566
+    },
+    "required_interpretation": [
+      "negative P/E is not intuitively cheap or expensive",
+      "Equity Value remains positive",
+      "P/B remains positive",
+      "opposite block signs do not automatically indicate an error",
+      "loss-to-profit transition occurs at a regime boundary",
+      "constant proportional growth cannot cross zero within one phase"
+    ],
+    "tolerance": 1e-10
+  },
+  "distress_scenario_protocol": {
+    "classification": "DAMODARAN-BACKED ECONOMIC GUIDANCE",
+    "formula": "sum_s(p_s * Equity_Value_s)",
+    "two_state_formula": "p_survival * Equity_Value_K3_going_concern + (1-p_survival) * Equity_Recovery_Value_failure",
+    "rules": [
+      "probabilities sum to 100%",
+      "each going-concern state uses internally coherent K3 inputs",
+      "recovery is residual equity value after debt, costs and senior claims and may equal zero",
+      "systematic risk within each state remains in that state's Ke",
+      "do not count the same event in both probability and an arbitrary Ke premium",
+      "the blend is named Probability-weighted Equity Value and is not named K3",
+      "do not report blended P/E unless the earnings base is coherent and the label is derived blended P/E"
+    ],
+    "regressions": [
+      {
+        "id": "survival_probability_one",
+        "classification": "MATHEMATICAL INVARIANT",
+        "inputs": { "p_survival": 1.0 },
+        "expected_Probability_weighted_Equity_Value": 210.25386257513082,
+        "tolerance": 1e-12
+      },
+      {
+        "id": "sixty_percent_survival_zero_recovery",
+        "classification": "CASE-BASE REGRESSION ANCHOR",
+        "inputs": { "p_survival": 0.60, "Equity_Recovery_Value_failure": 0 },
+        "expected_Probability_weighted_Equity_Value": 126.15231754507849,
+        "tolerance": 1e-12
+      }
+    ]
+  },
+  "fair_value_funding_equivalence": {
+    "classification": "MATHEMATICAL INVARIANT",
+    "inputs": {
+      "Current_holder_Equity_Value_before_issue": 100,
+      "Current_shares": 10,
+      "Value_per_current_share": 10,
+      "New_capital_required": 25,
+      "Fair_value_issue_price": 10,
+      "New_shares": 2.5
+    },
+    "expected": {
+      "Post_money_total_equity_value": 125,
+      "Old_holder_ownership": 0.80,
+      "Old_holder_value_after_issue": 100,
+      "Value_per_original_share": 10
+    },
+    "assertions": [
+      "a fair-value issuance does not change existing holders' economic value per original share",
+      "negative FCFE already reflects the funding requirement",
+      "no generic dilution haircut is applied",
+      "future fair-value funding shares are not added again to the current-share denominator"
+    ],
+    "tolerance": 1e-12
+  },
+  "country_risk_convention_metadata": {
+    "classification": "DAMODARAN-BACKED ECONOMIC GUIDANCE",
+    "formula": "Ke = Default-free Risk-free Rate in valuation currency + Bottom-up Beta * Mature-Market ERP + lambda_company * CRP",
+    "lambda_company_basis": [
+      "operations",
+      "revenues",
+      "assets",
+      "customers",
+      "economic risk"
+    ],
+    "multinational_rule": "use documented weighted economic exposure",
+    "double_counting_controls": [
+      "do not add lambda*CRP when the selected ERP already fully embeds country premium without explicit reconciliation",
+      "do not count sovereign risk in both the risk-free rate and CRP",
+      "keep currency, inflation and nominal/real terms consistent"
+    ]
+  },
+  "hurdle_output_label": {
+    "classification": "HOUSE HEURISTIC / REVIEW PRIOR",
+    "permitted_labels": [
+      "Hurdle-conditioned Equity Value",
+      "Required-return scenario value"
+    ],
+    "prohibited_labels": [
+      "fair value",
+      "pure target IRR solve",
+      "automatically implied IRR"
+    ],
+    "economic_note": "Changing Ke also changes ROE_T, fade and terminal economics inside K3.",
+    "true_target_return_solve": "freeze the economic trajectory and solve only price/rate outside K3",
+    "permitted_operational_use": "purchase ceiling conditional on K3 economic conventions"
+  }
+}

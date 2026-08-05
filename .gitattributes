@@ -1,0 +1,4 @@
+# Cópia congelada K3 V2.2.1 (byte a byte, sha256 em manifest_copia.json):
+# nunca converter EOL nestes paths — qualquer conversão quebra o congelamento.
+skills/er-motor-k3/references/** -text
+skills/er-motor-k3/scripts/** -text
