@@ -80,9 +80,15 @@ def ns(tmp_path):
     return d
 
 
+import os
+
+ENV_UTF8 = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+
+
 def run_build(ns, *args):
     return subprocess.run([sys.executable, str(BUILD), str(ns), *args],
-                          capture_output=True, text=True, encoding="utf-8", timeout=300)
+                          capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", env=ENV_UTF8, timeout=300)
 
 
 def test_html_emitido_autocontido_numeros_batem(ns):
@@ -157,7 +163,8 @@ def test_recusa_paridade_divergente(ns, tmp_path):
     js.write_text(texto.replace("(gT - g2) * k / F", "(gT - g2) * k / (F * 1.001)"),
                   encoding="utf-8")
     r = subprocess.run([sys.executable, str(skills_tmp / "er-relatorio-html" / "build_report.py"),
-                        str(ns)], capture_output=True, text=True, encoding="utf-8", timeout=300)
+                        str(ns)], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", env=ENV_UTF8, timeout=300)
     assert r.returncode == 1, r.stdout + r.stderr
     assert "diverg" in (r.stdout + r.stderr).lower()
     assert not (ns / "relatorio" / "relatorio_TST3.html").exists()

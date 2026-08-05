@@ -1,132 +1,104 @@
-# equity-research-fleet
+# equity-research-fleet v3
 
-Plugin Claude que empacota o fleet de equity research buy-side de Antonio: dossiê,
-valuation determinístico, auditoria e relatório institucional.
+Plugin de equity research centrado no Analista: **2 agentes, 4 skills, matemática 100% em motor
+determinístico congelado, dados financeiros exclusivamente via OpenBB e entrega em HTML
+interativo de 2 abas**. Desenho completo (fonte de verdade):
+[`docs/desenho-workflow-equity-research-fleet-v3.md`](docs/desenho-workflow-equity-research-fleet-v3.md).
 
-## v2.2.0 — paridade exata em taxa e divergência decomposta (engine v3.3.0, ADITIVO)
+## Arquitetura
 
-Rota de reconciliação exata em taxa e divergência das âncoras devolvida DECOMPOSTA por
-cunha nomeada (plano + adendo aprovados em
-`docs/superpowers/plans/2026-07-28-engine-v330-paridade-consistente.md`). Tudo ADITIVO com
-gating por presença — regressão byte-a-byte v3.2.0 travada em
-`skills/er-valuation/tests/golden_v320_vrsk.json` (camada H0 do golden):
+- **Analista** — o loop principal (não é subagente). Coordena o processo, pesquisa o
+  qualitativo, reconstrói o financeiro histórico, calibra os 16 inputs, opera o engine e assina
+  o conteúdo. Workflow: skill [`er-analise`](skills/er-analise/SKILL.md) (fases F0–F11, modo
+  "somente valuation", P2 por materialidade, memória durável).
+- **Data Manager** — único subagente ([`agents/data-manager.md`](agents/data-manager.md)), dono
+  exclusivo das chamadas OpenBB (exceção única: snapshot de perfil/preço do briefing, F1).
+  Doutrina: skill [`er-dados-openbb`](skills/er-dados-openbb/SKILL.md) (mapa real de endpoints,
+  ledger de proveniência, gaps MATERIAL/NÃO-MATERIAL, validade de preço >24h útil).
+- **Motor** — skill [`er-motor-k3`](skills/er-motor-k3/SKILL.md): cópia congelada da metodologia
+  Justified P/E V2.2.1 (manual de calibração, engine, validador de contrato de inputs e suíte
+  canônica de regressão). Sem workflow standalone — quem orquestra é o fleet.
+- **Relatório** — skill [`er-relatorio-html`](skills/er-relatorio-html/SKILL.md):
+  `build_report.py` (builder determinístico, único caminho de emissão) + template de 2 abas
+  (Valuation interativo com recálculo ao vivo · Análise com Positives/Negatives, gráficos
+  interativos e calibração) + `checar_relatorio.py` (QC pós-emissão). uPlot 1.6.27 (MIT)
+  vendorizado; arquivo final autocontido, zero rede.
 
-- **WACC consistente** (`ebit_justo.premissa`/`ebit_justo.consistente`): pesos a valor de
-  MERCADO com E_mkt do próprio gerador (sem circularidade, sem solver); input primitivo
-  `kd_pre_imposto` (H8), kd líquido derivado com alíquota declarada por chave; cadeia
-  EV/NOPAT→EBIT→EBITDA nas duas taxas.
-- **`paridade_decomposta`**: cunhas one-at-a-time (taxa, base de lucro em convenção
-  LÍQUIDA, bridge de claims) + interação residual explícita; invariante duro
-  soma==divergência (1e-9, no engine e no golden); `PARIDADE_DIVERGENTE` referencia o
-  bloco (limiar e não-bloqueio inalterados); `DECOMPOSICAO_POUCO_INFORMATIVA` quando
-  |interação| > 25% da divergência.
-- **`ke_alavancagem`** (flag, não gerador): Ku_MM vs Ku_HP com Kd pré-imposto e fórmulas
-  declaradas; VTS=t×ND com premissa e viés declarados; ND/E contábil vs mercado e alerta
-  de drift de Ke re-alavancado > 0,5 p.p. (`fatos.pl_contabil_mi` opcional).
-- Pendências registradas para a v3.4 do engine: `docs/backlog-engine-v34.md`.
+QC por código, não por agente: **SUITE PASS** da regressão canônica antes de qualquer entrega,
+**banner de paridade Python↔JS verde** no HTML (self-test no load; pré-verificação sob node no
+build, com recusa em divergência) e **`checar_relatorio.py` exit 0** (estrutura, log de
+consistência número↔chave, paridade, autocontenção, gráficos, números órfãos).
 
-## v2.1.0 — upgrade metodológico (FASE B; engine v3.2.0, ADITIVO)
+## Fluxo (modo completo)
 
-Metodologia adjudicada contra quatro modelos de referência (FASE A + verificação B0) e
-exercitada no caso TFCO4 (`docs/impacto_TFCO4.md`). Tudo com GATING POR PRESENÇA — inputs
-antigos produzem as chaves antigas idênticas (exceto `engine.{versao,gerado_em}`):
+Intake → briefing (1 página) → grill-me (modo → hurdle, **sem default** → validação de
+premissas → perguntas específicas) → estudo do método + arquétipo → despacho do DM em background
+→ qualitativa ∥ coleta → financeira histórica → calibração dos 16 inputs × cenários → engine
+(SUITE PASS → value → sensibilidades → congelar → market-implied → hurdle rotulada) → checkpoint
+opcional → HTML de 2 abas → memória durável por código. Detalhe fase a fase em
+[`skills/er-analise/references/fases.md`](skills/er-analise/references/fases.md).
 
-- **Âncora operacional** `ebit_justo` no motor único (margem×giro→ROIC, WACC como premissa,
-  trailing; bridge de claims; paridade das âncoras como warning com nota) + série reformulada
-  `fatos.reformulado` com invariantes na carga e gates de aplicabilidade (provisórios n=3).
-- **R2–R5**: `central_neutro` + robustez conjunta; `validacao_multiplos.implicitos`;
-  `ke_dossier` (duas rotas + prêmio de tamanho com critério + grade); cap_check v2.1
-  (confiança da banda separada; ônus de sobrescrever para baixo).
-- **Spread terminal**: `sensibilidade_phi` de primeira classe, exclusão mútua com `m_terminal`.
-- **Classificação por natureza**: `classificacao.yaml` (schema + invariantes + congelamento no
-  snapshot) e `fatos.norma_contabil` com trava de pacote de leasing — sem dicionário de rubricas.
-
-## v2.0.0 — correções sistêmicas pós-feedback do caso HG (BREAKING)
-
-Engine v3.0.0 e processo revisados; o contrato de inputs MUDA:
-
-- **R1** Julgamento metodológico prévio (`metodo.yaml`, `schemas/metodo.schema.json`):
-  aderência do P/L Justo ao modelo de negócio decidida ANTES da coleta completa e
-  revisitada antes do valuation (`checar.py` bloqueia sem ele).
-- **R2** `fatos.de`/`fatos.nde` (dívida bruta/PL e dívida líquida/PL) nunca mais são
-  zerados por lacuna: engine recusa sem `premissas.excecao_de_nde` (motivo econômico +
-  faixa alternativa) e calcula a sensibilidade da premissa substituta.
-- **R3** `premissas.ke_hurdle` é OPCIONAL e exclusivamente informado pelo usuário
-  (nenhum default de 12%); ausente, tudo degrada para a âncora econômica
-  (`sinais.entrada = SEM_HURDLE`).
-- **R4** Elasticidades com experimento declarado (`elasticidades.experimento`) e
-  alertas de sinal contraintuitivo bloqueantes (`premissas.respostas_sinais`).
-- **R5** `DIVERGE_MATERIAL` bloqueia a publicação sem `premissas.resolucao_divergencia`.
-- **R6** Relatório em duas audiências: corpo institucional (linter em
-  `checar.py --etapa relatorio`) + anexo técnico; matrizes de sensibilidade 3×3
-  (`matrizes` no engine); gráficos com rótulos de dados.
-- **R7** Auditoria proporcional: recomputo independente restrito a gatilhos.
-
-## Estrutura
+## Workspace por análise
 
 ```
-.claude-plugin/plugin.json   Manifesto do plugin
-skills/
-  er-valuation/               Motor determinístico de valuation (P/L Justo, cap_check, golden tests)
-    SKILL.md
-    engine.py
-    cap_check.py
-    inputs_exemplo_vrsk.yaml
-    tests/test_golden_vrsk.py
-  er-relatorio/                Composição e renderização do relatório final (PDF institucional)
-    SKILL.md
-    compor.py
-    checar.py
-    render_pdf.py
-    template.css
-docs/fontes/                  Mandatos originais (Analista, Coordenador, Modelador, PM, Auditor, Redator)
+analises/<TICKER>/
+├── 00_briefing.md · 01_grill_me.md · notas.md
+├── dados/            # domínio do Data Manager (categoria.json + ledger.md + pedidos.md)
+├── qualitativa.md · financeira.md · calibracao.md
+├── case.json         # input do engine
+├── analise.json      # conteúdo da aba 2 (placeholders {{r:...}}/{{c:...}}/{{d:...}})
+├── saida/results.json
+└── relatorio/relatorio_<TICKER>.html
+analises/_memoria/<TICKER>.md   # nota durável, gerada por scripts/memoria.py
 ```
 
-As duas skills (`er-valuation` e `er-relatorio`) são cópias byte-a-byte das versões
-originais (`valuation-engine` e `research-report`), apenas com o campo `name` do
-frontmatter do `SKILL.md` renomeado para casar com o novo namespace do plugin.
-Descriptions e corpo não foram alterados.
+## Metodologia — versão e disciplina de sincronização
+
+O motor é **cópia byte a byte** da skill de usuário `justified-pe-valuation` (que permanece
+INTOCADA e continua sendo o caminho para valuation standalone fora do fleet):
+
+- Metodologia: **Justified P/E V2.2.1 (congelada)** —
+  `formula_version: K3-vF19-2026-08-03 / manual-v2.2.1`
+- sha256 da fórmula-fonte (stored, sem newline final):
+  `ed5163103b73a226d47692ad6a9595416ce38ea2e2e9ea0d217072d4243b5420`
+- Íntegra da cópia (origem, data, contagem observada da suíte e sha256 por arquivo, incluindo o
+  espelho `k3_engine.js` e o uPlot vendorizado):
+  [`skills/er-motor-k3/manifest_copia.json`](skills/er-motor-k3/manifest_copia.json)
+
+**Disciplina de sincronização:** qualquer evolução futura da metodologia precisa ser replicada
+MANUALMENTE nos dois lugares (skill standalone e esta cópia), por decisão humana. O teste
+`tests/test_motor_k3.py` compara os arquivos copiados com o manifest a cada execução — qualquer
+alteração local quebra a suíte. Nenhuma matemática de valuation é escrita à mão em prosa, Python
+novo ou JS novo (o único motor JS é o `k3_engine.js` copiado e verificado por paridade).
+
+## Regras invioláveis (Seção 9 do desenho)
+
+Metodologia congelada · regression gate + paridade + checar antes de qualquer entrega · dados
+financeiros só OpenBB via DM · gaps MATERIAL perguntam, NÃO-MATERIAL degradam com nota (janela
+curta de fundamentals inclusa — gráficos usam a "janela máxima disponível" declarada no próprio
+gráfico) · hurdle sem default e sempre rotulada · market-implied nunca recalibra · grill-me é
+evidência, não fato · `notas.md` por fase · memória por código · sem guardrails, sem auditor,
+sem portfolio fit, sem PDF (carteira → skill `portfolio-construction`, fora do fleet).
 
 ## Como rodar os testes
-
-Requer Python 3 com `pyyaml` instalado (`pip install pyyaml`) — o `engine.py` usa
-`pyyaml` para ler inputs em `.yaml` (com fallback documentado para `.json` caso a
-biblioteca não esteja disponível).
-
-Da raiz do repositório:
-
-```bash
-python skills/er-valuation/tests/test_golden_vrsk.py
-```
-
-O teste resolve o `engine.py` e o `inputs_exemplo_vrsk.yaml` por caminho relativo ao
-próprio arquivo de teste (via `__file__`), portanto funciona a partir da raiz do repo
-sem depender do diretório de trabalho.
-
-**Não use `pytest` para rodar o golden test.** `test_golden_vrsk.py` é um script
-standalone (chama `sys.exit(...)` no nível de módulo), não um módulo de testes no
-estilo pytest — coletar esse arquivo via pytest quebra a coleta com
-`INTERNALERROR` (o `SystemExit` escapa do import). A execução correta é sempre
-direta:
-
-```bash
-python skills/er-valuation/tests/test_golden_vrsk.py
-```
-
-Via pytest (usa `pyproject.toml`, `testpaths = ["tests"]`): `tests/` contém a
-suíte pytest real (196 testes, fora de `skills/`) cobrindo pipeline, schemas,
-delta, memória, skills de domínio e a regressão de fixture FNV.
 
 ```bash
 python -m pytest tests/ -q
 ```
 
-O golden do valuation-engine e o selftest do `cap_check` continuam fora do
-pytest (scripts standalone, ver seção acima):
-
 ```bash
-python skills/er-valuation/tests/test_golden_vrsk.py
-python skills/er-valuation/cap_check.py --selftest
+python skills/er-motor-k3/scripts/run_regressions.py
 ```
 
-No Windows, se `python` não estiver disponível via PATH, tente `py -3`.
+- Dependências de teste: Python 3.12+, `pytest`, `pyyaml`. O engine e os builders são stdlib pura.
+- **Node.js** (opcional, recomendado): com `node` no PATH, o teste de paridade Python↔JS roda de
+  verdade e o `build_report.py` ganha o gate de recusa por divergência no build (sem node, a
+  paridade é verificada pelo self-test do browser no load — banner verde continua obrigatório).
+  No CI (ubuntu + setup-node) a paridade roda sempre.
+- Windows: os arquivos congelados são protegidos de conversão de EOL por `.gitattributes`.
+
+## CI e release
+
+`ci.yml`: pytest (inclui SUITE PASS, paridade e builders) + sanity do manifesto, em todo push/PR.
+`release.yml` (tag `v*`): valida tag == versão do `plugin.json`, empacota ZIP e publica GitHub
+Release com corpo opcional de `docs/releases/<tag>.md`.
