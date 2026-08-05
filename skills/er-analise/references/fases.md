@@ -83,6 +83,8 @@ Sequência inegociável:
 1. Montar `case.json` (schema no SKILL.md do er-motor-k3; `market.price_date` e
    `market.price_source` preenchidos; preço com mais de 24h úteis está VENCIDO — pedir recoleta).
 2. `python skills/er-motor-k3/scripts/run_regressions.py` → SUITE PASS obrigatório.
+   (O CLI congelado do engine NÃO cria diretório: criar `analises/<TICKER>/saida/` antes do
+   `--out`. O `build_report.py` cria sozinho.)
 3. `value` → ler `validation` e `sanity_notes`; resolver INVALID (corrigir, nunca forçar);
    justificar cada REVIEW em `calibracao.md`.
 4. Sensibilidades 1D/2D nos drivers que REALMENTE importam para esta empresa (prioridade quando
