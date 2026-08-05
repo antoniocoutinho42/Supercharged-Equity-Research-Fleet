@@ -48,7 +48,8 @@ def make_analise():
         "financeira_html": "<p>Ultimo fechamento: {{d:precos.json:results.1.close|2}}.</p>",
         "calibracao_racional_html": "<p><b>ROE2</b>: sustentado por vantagem de custo.</p>",
         "riscos_html": "<p>Risco regulatorio.</p>",
-        "market_pricing_html": "<p>O preco embute K3 de {{r:scenarios.base.K3_trailing_PE|x}}.</p>",
+        "market_pricing_html": "<p>O preco embute K3 de {{r:scenarios.base.K3_trailing_PE|x}} "
+                               "e ROE2 market-implied de {{m:ROE2.implied|pct1}}.</p>",
         "limitacoes_html": "<p>Janela de demonstracoes limitada.</p>",
         "fontes_html": "<p><a href=\"https://exemplo.com/ri\">RI da companhia</a></p>",
         "charts": [{
@@ -113,7 +114,8 @@ def test_html_emitido_autocontido_numeros_batem(ns):
     k3 = results["scenarios"]["base"]["K3_trailing_PE"]
     assert f"{vps:,.2f}" in html
     assert f"{k3:.2f}x" in html
-    assert "{{r:" not in html and "{{c:" not in html and "{{d:" not in html
+    assert ("{{r:" not in html and "{{c:" not in html and "{{d:" not in html
+            and "{{m:" not in html)
     assert "24.10" in html  # placeholder de dados/ (results.1.close = 24.1) resolvido
 
     # log de consistencia embutido com fonte/chave/valor
@@ -137,6 +139,78 @@ def test_placeholder_orfao_recusa(ns):
     (ns / "analise.json").write_text(json.dumps(analise, ensure_ascii=False), encoding="utf-8")
     r = run_build(ns)
     assert r.returncode == 1
+    assert "placeholder" in (r.stdout + r.stderr).lower()
+    assert not (ns / "relatorio" / "relatorio_TST3.html").exists()
+
+
+CAMPOS_IMPLIED = {"param", "base_value", "implied", "implied_display", "label",
+                  "interpretation", "nearest_value", "nearest_metric"}
+
+
+def test_market_implied_json_persistido(ns):
+    r = run_build(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    mi_path = ns / "saida" / "market_implied.json"
+    assert mi_path.exists(), "saida/market_implied.json nao foi persistido"
+    mi = json.loads(mi_path.read_text(encoding="utf-8"))
+    assert set(mi) == {"meta", "params"}
+
+    results = json.loads((ns / "saida" / "results.json").read_text(encoding="utf-8"))
+    assert mi["meta"]["gerado_por"] == "build_report.py"
+    assert mi["meta"]["engine_version"] == results["engine_version"]
+    assert mi["meta"]["scenario"] == "base"
+    assert mi["meta"]["price_per_share"] == 25.0
+    assert isinstance(mi["meta"]["nota"], str) and mi["meta"]["nota"]
+
+    roe2 = mi["params"]["ROE2"]
+    assert set(roe2) == CAMPOS_IMPLIED
+    esperado = ve.solve_market_implied(make_case(), "base", "ROE2")["solution"]
+    assert roe2["implied"] == pytest.approx(esperado, rel=0, abs=1e-12)
+    assert roe2["param"] == "ROE2"
+    assert roe2["nearest_value"] is None and roe2["nearest_metric"] is None
+
+    # n2 e inteiro: sem solucao exata -> nearest_* preenchidos a partir de sol["nearest"]
+    sol_n2 = ve.solve_market_implied(make_case(), "base", "n2")
+    n2 = mi["params"]["n2"]
+    assert set(n2) == CAMPOS_IMPLIED
+    assert n2["nearest_value"] == sol_n2["nearest"]["value"]
+    assert n2["nearest_metric"] == pytest.approx(sol_n2["nearest"]["metric"], rel=0, abs=1e-12)
+
+    # a tabela do HTML sai do MESMO objeto (mesma ordem, mesmos valores)
+    html = (ns / "relatorio" / "relatorio_TST3.html").read_text(encoding="utf-8")
+    data = json.loads(re.search(r"var REPORT_DATA = (\{.*?\});\n</script>", html, re.S).group(1))
+    assert [row["param"] for row in data["market_implied"]] == list(mi["params"])
+    for row in data["market_implied"]:
+        assert row["implied"] == pytest.approx(mi["params"][row["param"]]["implied"], rel=0, abs=1e-12)
+
+
+def test_placeholder_m_resolve_e_loga(ns):
+    r = run_build(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    html = (ns / "relatorio" / "relatorio_TST3.html").read_text(encoding="utf-8")
+    mi = json.loads((ns / "saida" / "market_implied.json").read_text(encoding="utf-8"))
+    esperado = f"{100 * mi['params']['ROE2']['implied']:.1f}%"
+    assert esperado in html
+    assert "{{m:" not in html
+
+    m = re.search(r'<script type="application/json" id="log-consistencia">(.*?)</script>',
+                  html, re.S)
+    log = json.loads(m.group(1))
+    entradas = [e for e in log if e["fonte"] == "saida/market_implied.json"]
+    assert entradas, log
+    e = entradas[0]
+    assert e["chave"] == "ROE2.implied"
+    assert e["texto"] == esperado
+    assert e["valor"] == pytest.approx(mi["params"]["ROE2"]["implied"], rel=0, abs=1e-12)
+
+
+@pytest.mark.parametrize("ph", ["{{m:ROE2.inexistente|2}}", "{{m:XX.implied|2}}"])
+def test_placeholder_m_invalido_recusa(ns, ph):
+    analise = json.loads((ns / "analise.json").read_text(encoding="utf-8"))
+    analise["sumario_html"] = f"<p>{ph}</p>"
+    (ns / "analise.json").write_text(json.dumps(analise, ensure_ascii=False), encoding="utf-8")
+    r = run_build(ns)
+    assert r.returncode == 1, r.stdout + r.stderr
     assert "placeholder" in (r.stdout + r.stderr).lower()
     assert not (ns / "relatorio" / "relatorio_TST3.html").exists()
 

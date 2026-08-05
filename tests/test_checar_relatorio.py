@@ -90,7 +90,10 @@ def make_analise(res_base, roe2_base):
         "financeira_html": "<p>Ultimo fechamento: {{d:precos.json:results.-1.close|2}}.</p>",
         "calibracao_racional_html": "<p><b>ROE2</b>: sustentado por vantagem de custo.</p>",
         "riscos_html": "<p>Risco regulatorio.</p>",
-        "market_pricing_html": "<p>O preco embute K3 de {{r:scenarios.base.K3_trailing_PE|x}}.</p>",
+        "market_pricing_html": "<p>O preco embute K3 de {{r:scenarios.base.K3_trailing_PE|x}} "
+                               "e ROE2 market-implied de {{m:ROE2.implied|pct1}}; a duracao "
+                               "market-implied mais proxima e {{m:n2.nearest_value|2}} "
+                               "(atinge {{m:n2.nearest_metric|2}}/acao).</p>",
         "limitacoes_html": "<p>Janela de demonstracoes limitada.</p>",
         "fontes_html": "<p><a href=\"https://exemplo.com/ri\">RI da companhia</a></p>",
         "charts": charts,
@@ -194,6 +197,75 @@ def test_numero_livre_marcado_passa(ns):
                                 "garantida.</p>")
     (ns / "analise.json").write_text(json.dumps(analise, ensure_ascii=False), encoding="utf-8")
     rebuild(ns)
+    r = run_checar(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "LIMPO" in r.stdout
+
+
+RE_LOG = re.compile(r'<script type="application/json" id="log-consistencia">(.*?)</script>', re.S)
+
+
+def ler_log(ns):
+    return json.loads(RE_LOG.search(html_path(ns).read_text(encoding="utf-8")).group(1))
+
+
+# --- market-implied auditavel (namespace m:) ---------------------------------
+
+def test_citacao_market_implied_legitima_exit0(ns):
+    log = ler_log(ns)
+    assert any(e["fonte"] == "saida/market_implied.json" and e["chave"] == "ROE2.implied"
+               for e in log), log
+    assert any(e["fonte"] == "saida/market_implied.json" and e["chave"] == "n2.nearest_value"
+               for e in log), log
+    r = run_checar(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "LIMPO" in r.stdout
+
+
+def test_market_implied_adulterado_a_mao_acusa_log(ns):
+    mi_path = ns / "saida" / "market_implied.json"
+    mi = json.loads(mi_path.read_text(encoding="utf-8"))
+    mi["params"]["ROE2"]["implied"] = mi["params"]["ROE2"]["implied"] + 0.05
+    mi_path.write_text(json.dumps(mi, ensure_ascii=False), encoding="utf-8")
+    r = run_checar(ns)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "[log]" in r.stdout, r.stdout
+
+
+def test_market_implied_ausente_acusa_log(ns):
+    (ns / "saida" / "market_implied.json").unlink()
+    r = run_checar(ns)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "[log]" in r.stdout, r.stdout
+
+
+# --- tokenizador de [numeros] sem falsos positivos ---------------------------
+
+def _acrescenta_sumario(ns, trecho):
+    analise = json.loads((ns / "analise.json").read_text(encoding="utf-8"))
+    analise["sumario_html"] += trecho
+    (ns / "analise.json").write_text(json.dumps(analise, ensure_ascii=False), encoding="utf-8")
+    rebuild(ns)
+
+
+def test_referencia_de_secao_e_versao_nao_sao_falsos_positivos(ns):
+    _acrescenta_sumario(ns, "<p>Conforme o manual §4.1, a metodologia V2.2.1 "
+                            "permanece congelada.</p>")
+    r = run_checar(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "LIMPO" in r.stdout
+
+
+def test_decimal_ptbr_orfao_reporta_token_inteiro(ns):
+    _acrescenta_sumario(ns, "<p>Negocia a 3,74x o book.</p>")
+    r = run_checar(ns)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "[numeros]" in r.stdout, r.stdout
+    assert "'3,74x'" in r.stdout, r.stdout
+
+
+def test_decimal_ptbr_em_num_livre_passa(ns):
+    _acrescenta_sumario(ns, '<p>Negocia a <span class="num-livre">3,74x</span> o book.</p>')
     r = run_checar(ns)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "LIMPO" in r.stdout

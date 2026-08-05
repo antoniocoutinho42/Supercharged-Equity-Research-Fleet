@@ -26,7 +26,8 @@ python skills/er-relatorio-html/checar_relatorio.py analises/<TICKER>        # Q
 
 Entradas no namespace: `case.json` (schema do er-motor-k3), `analise.json` (aba 2, contrato
 abaixo), `dados/*.json` (fonte das séries). Saídas: `saida/results.json` (engine, fonte de
-verdade) e `relatorio/relatorio_<TICKER>.html` (autocontido, zero rede).
+verdade), `saida/market_implied.json` (diagnóstico reverso, auditável) e
+`relatorio/relatorio_<TICKER>.html` (autocontido, zero rede).
 
 ## 2. Recusas do builder (nada é emitido)
 
@@ -48,10 +49,24 @@ Campos (todos opcionais, mas o modo completo exige o conjunto que a Seção 8 do
 `default_scenario`.
 
 **Números em prosa**: todo número de valuation citado nos fragmentos DEVE usar placeholder —
-`{{r:<chave>|<fmt>}}` (results.json), `{{c:<chave>|<fmt>}}` (case.json),
-`{{d:<arquivo>:<chave>|<fmt>}}` (dados/). Formatos: `2` (decimais), `pct1` (percentual),
-`x` (múltiplo). O builder resolve, registra no log de consistência embutido e RECUSA placeholder
-órfão. Número livre legítimo (ano, fato qualitativo com fonte própria) → envolva em
+
+- `{{r:<chave>|<fmt>}}` → `saida/results.json` (ex.: `{{r:scenarios.base.value_per_share|2}}`)
+- `{{c:<chave>|<fmt>}}` → `case.json` (ex.: `{{c:market.price_per_share|2}}`)
+- `{{d:<arquivo>:<chave>|<fmt>}}` → `dados/<arquivo>` (ex.: `{{d:precos.json:results.-1.close|2}}`)
+- `{{m:<PARAM>.implied|<fmt>}}` → `saida/market_implied.json`, `params.<PARAM>.implied`
+- `{{m:<PARAM>.base_value|<fmt>}}` → idem, valor base do Analista no diagnóstico reverso
+- `{{m:<PARAM>.nearest_value|<fmt>}}` / `{{m:<PARAM>.nearest_metric|<fmt>}}` → param inteiro sem
+  solução exata (n2): valor mais próximo e a métrica que ele atinge
+
+Formatos: `2` (decimais), `pct1` (percentual), `x` (múltiplo). O builder resolve, registra no log
+de consistência embutido e RECUSA placeholder órfão (param inexistente ou campo nulo inclusive).
+
+**Market-implied em prosa**: o diagnóstico reverso é calculado uma única vez pelo builder,
+persistido em `saida/market_implied.json` (a mesma fonte da tabela market-implied da aba 1) e
+re-resolvido pelo `checar_relatorio.py`. Todo valor market-implied citado em prosa DEVE usar o
+namespace `m:` — `num-livre` NÃO é aceitável para ele.
+
+Número livre legítimo (ano, fato qualitativo com fonte própria) → envolva em
 `<span class="num-livre">…</span>`; o checar não o audita, mas exige a marcação.
 
 ## 4. Spec de gráfico (`charts[]`)

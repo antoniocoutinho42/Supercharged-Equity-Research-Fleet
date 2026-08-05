@@ -11,6 +11,7 @@
 e grava:
 
   <ns>/saida/results.json                — saída integral do engine (fonte de verdade)
+  <ns>/saida/market_implied.json         — diagnóstico reverso rotulado (auditável)
   <ns>/relatorio/relatorio_<TICKER>.html — o relatório
 
 Recusas (exit 1, nada é emitido):
@@ -30,6 +31,14 @@ consistência embutido (script#log-consistencia), que o checar_relatorio.py audi
   {{c:market.price_per_share|2}}             -> case.json
   {{d:precos.json:results.-1.close|2}}       -> dados/<arquivo>, chave pontilhada
                                                 (índices inteiros p/ listas; -1 = último)
+  {{m:ROE2.implied|pct1}}                    -> saida/market_implied.json,
+  {{m:n2.nearest_value|2}}                      params.<PARAM>.<campo>
+  {{m:n2.nearest_metric|2}}
+
+O namespace `m:` torna o market-implied AUDITÁVEL: o diagnóstico reverso é
+calculado uma única vez, persistido em saida/market_implied.json (mesma fonte da
+tabela do HTML) e re-resolvido pelo checar_relatorio.py. Valor market-implied
+citado em prosa DEVE usar `m:` — num-livre não é aceitável para ele.
 
 Números livres legítimos (anos, fatos qualitativos) podem ser marcados com
 <span class="num-livre">…</span> — o checar não os audita.
@@ -54,7 +63,10 @@ import valuation_engine as ve  # noqa: E402
 
 PCT_PARAMS = {"ROE1", "ROE2", "g1", "g2", "Ke1", "Ke2", "g_T", "Kd_F2", "t"}
 
-RE_PLACEHOLDER = re.compile(r"\{\{([rcd]):([^}|]+?)(?:\|([a-z0-9]+))?\}\}")
+RE_PLACEHOLDER = re.compile(r"\{\{([rcdm]):([^}|]+?)(?:\|([a-z0-9]+))?\}\}")
+
+FONTE_IMPLIED = "saida/market_implied.json"
+NOTA_IMPLIED = "diagnóstico reverso rotulado — nunca recalibra o fair value"
 RE_RECURSO_EXTERNO = (
     re.compile(r"(?:src|srcset)\s*=\s*[\"']https?://", re.I),
     re.compile(r"<link[^>]+href\s*=\s*[\"']https?://", re.I),
@@ -105,12 +117,13 @@ def fmt_placeholder(valor, spec: str | None) -> str:
 
 
 class Resolvedor:
-    """Resolve placeholders {{r:...}}/{{c:...}}/{{d:...}} e acumula o log."""
+    """Resolve placeholders {{r:...}}/{{c:...}}/{{d:...}}/{{m:...}} e acumula o log."""
 
-    def __init__(self, results: dict, case: dict, dados_dir: Path):
+    def __init__(self, results: dict, case: dict, dados_dir: Path, implied: dict | None = None):
         self.results = results
         self.case = case
         self.dados_dir = dados_dir
+        self.implied = implied or {"meta": {}, "params": {}}
         self._dados_cache: dict[str, object] = {}
         self.log: list[dict] = []
         self.erros: list[str] = []
@@ -120,6 +133,8 @@ class Resolvedor:
             return get_path(self.results, chave), "results.json", chave
         if tipo == "c":
             return get_path(self.case, chave), "case.json", chave
+        if tipo == "m":
+            return get_path(self.implied, f"params.{chave}"), FONTE_IMPLIED, chave
         arquivo, _, resto = chave.partition(":")
         if arquivo not in self._dados_cache:
             p = self.dados_dir / arquivo
@@ -159,20 +174,32 @@ def fmt_param(param, v):
     return f"{v:.2f}x"
 
 
-def build_implied(case, params, notes):
-    if not (case.get("market") or {}).get("price_per_share"):
-        return []
-    rows = []
+def build_implied(case, params, notes, engine_version=None):
+    """Diagnóstico reverso do cenário base, calculado UMA vez e persistível.
+
+    Devolve {"meta": {...}, "params": {<PARAM>: {...}}} — a mesma estrutura gravada
+    em saida/market_implied.json, resolvida pelo namespace `m:` e re-auditada pelo
+    checar_relatorio.py. A tabela do HTML sai deste mesmo objeto (implied_rows).
+    """
+    price = (case.get("market") or {}).get("price_per_share")
+    obj = {"meta": {"gerado_por": "build_report.py", "engine_version": engine_version,
+                    "scenario": "base", "price_per_share": price, "nota": NOTA_IMPLIED},
+           "params": {}}
+    if not price:
+        return obj
     for p in params:
         sol = ve.solve_market_implied(case, "base", p)
         if "error" in sol:
             continue
         implied = sol.get("solution")
         display = fmt_param(p, implied)
+        nearest_value = nearest_metric = None
         if implied is None and sol.get("nearest"):
-            display = (f"~{fmt_param(p, sol['nearest']['value'])} mais próximo "
-                       f"(atinge {sol['nearest']['metric']:.2f}/ação)")
-            implied = sol["nearest"]["value"]
+            nearest_value = sol["nearest"]["value"]
+            nearest_metric = sol["nearest"]["metric"]
+            display = (f"~{fmt_param(p, nearest_value)} mais próximo "
+                       f"(atinge {nearest_metric:.2f}/ação)")
+            implied = nearest_value
         base_v = sol["base_value"]
         interp = notes.get(p)
         if not interp and implied is not None and isinstance(base_v, (int, float)):
@@ -181,10 +208,17 @@ def build_implied(case, params, notes):
                       f"{fmt_param(p, base_v)} ({direcao}).")
         elif not interp:
             interp = sol.get("reason") or ""
-        rows.append({"param": p, "base_value": base_v, "base_display": fmt_param(p, base_v),
-                     "implied": implied, "implied_display": display,
-                     "label": sol.get("label"), "interpretation": interp})
-    return rows
+        obj["params"][p] = {"param": p, "base_value": base_v, "implied": implied,
+                            "implied_display": display, "label": sol.get("label"),
+                            "interpretation": interp, "nearest_value": nearest_value,
+                            "nearest_metric": nearest_metric}
+    return obj
+
+
+def implied_rows(implied: dict) -> list:
+    """Linhas da tabela do HTML — projeção do MESMO objeto persistido (sem recálculo)."""
+    return [{**v, "base_display": fmt_param(v["param"], v["base_value"])}
+            for v in (implied.get("params") or {}).values()]
 
 
 def build_presets(case, presets):
@@ -294,8 +328,16 @@ def main(argv=None) -> int:
     (saida / "results.json").write_text(
         json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # 3. resolver placeholders da aba 2
-    res = Resolvedor(results, case, ns / "dados")
+    # 3. market-implied: calculado UMA vez, persistido e auditável (namespace m:)
+    implied_params = analise.get("market_implied_params", ["ROE2", "g2", "Ke2", "n2"])
+    implied = build_implied(case, implied_params,
+                            analise.get("implied_interpretations", {}),
+                            results.get("engine_version"))
+    (saida / "market_implied.json").write_text(
+        json.dumps(implied, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # 4. resolver placeholders da aba 2
+    res = Resolvedor(results, case, ns / "dados", implied)
     campos_html = ["sumario_html", "perfil_html", "qualitativa_html", "financeira_html",
                    "calibracao_racional_html", "riscos_html", "market_pricing_html",
                    "limitacoes_html", "fontes_html"]
@@ -316,7 +358,7 @@ def main(argv=None) -> int:
             print("ERRO:", e)
         return fail("placeholders não resolvidos na aba 2 — recuso emitir o relatório.")
 
-    # 4. payload por cenário com python_expected (self-test do browser)
+    # 5. payload por cenário com python_expected (self-test do browser)
     scen_payload = {}
     for name, sc in case["scenarios"].items():
         r = results["scenarios"][name]
@@ -338,7 +380,6 @@ def main(argv=None) -> int:
         }
 
     market = case.get("market", {}) or {}
-    implied_params = analise.get("market_implied_params", ["ROE2", "g2", "Ke2", "n2"])
     data = {
         "modo": a.modo,
         "company": case.get("company", "Company"),
@@ -351,8 +392,7 @@ def main(argv=None) -> int:
         "shares_diluted_t0": market.get("shares_diluted_t0"),
         "default_scenario": analise.get("default_scenario", "base"),
         "scenarios": scen_payload,
-        "market_implied": build_implied(case, implied_params,
-                                        analise.get("implied_interpretations", {})),
+        "market_implied": implied_rows(implied),
         "sensitivity_presets": build_presets(case, analise.get("sensitivity_presets")
                                              or default_presets(case)),
         "sensitivity_default": analise.get("sensitivity_default", "ROE2"),
@@ -375,7 +415,7 @@ def main(argv=None) -> int:
                            ["calibracao_racional_html", "limitacoes_html", "fontes_html"]
                            if analise_resolvida.get(k)}
 
-    # 5. montagem
+    # 6. montagem
     template = (ASSETS / "template_relatorio.html").read_text(encoding="utf-8")
     html = (template
             .replace("__PAGE_TITLE__", f"{data['company']} — Equity Research (K3 V2.2.1)")
@@ -386,7 +426,7 @@ def main(argv=None) -> int:
             .replace("__LOG_CONSISTENCIA__", json.dumps(res.log, ensure_ascii=False))
             .replace("__REPORT_DATA__", json.dumps(data, ensure_ascii=False)))
 
-    # 6. autocontenção (belt and braces — o checar repete)
+    # 7. autocontenção (belt and braces — o checar repete)
     corpo_sem_anchors = re.sub(r"<a\s[^>]*href\s*=\s*[\"']https?://[^>]*>", "", html, flags=re.I)
     for rx in RE_RECURSO_EXTERNO:
         m = rx.search(corpo_sem_anchors)
@@ -397,7 +437,7 @@ def main(argv=None) -> int:
     out.write_text(html, encoding="utf-8")
     print(f"relatorio escrito: {out} ({len(html) / 1024:.0f} KiB); results: {saida / 'results.json'}")
 
-    # 7. pré-verificação de paridade sob node (recusa em divergência)
+    # 8. pré-verificação de paridade sob node (recusa em divergência)
     node = shutil.which("node")
     if node:
         vectors = [{"name": n, "inputs": s["inputs"], "NI0": s["NI0"], "Book0": s["Book0"],

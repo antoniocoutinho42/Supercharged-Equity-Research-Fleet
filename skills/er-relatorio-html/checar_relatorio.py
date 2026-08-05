@@ -21,10 +21,12 @@ Exit 1: imprime CADA violação em linha própria, prefixada pela categoria:
                   header.fair_value_base_ps == value_per_share do cenário
                   default. Bloco ausente = violação.
   [log]           cada entrada do script#log-consistencia re-resolvida na
-                  fonte declarada (results.json / case.json / dados/<arquivo>;
-                  chave pontilhada, índices de lista, -1 permitido): valor
-                  bate (tol 1e-9), texto == re-formatação do valor da fonte e
-                  texto aparece no HTML. Bloco ausente = violação.
+                  fonte declarada (results.json / case.json / dados/<arquivo> /
+                  saida/market_implied.json — nesta, a chave é <PARAM>.<campo>
+                  navegada sob params.; chave pontilhada, índices de lista, -1
+                  permitido): valor bate (tol 1e-9), texto == re-formatação do
+                  valor da fonte e texto aparece no HTML. Bloco ausente =
+                  violação; fonte citada com arquivo inexistente = violação.
   [paridade]      chamada k3SelfTest presente, elemento id="parity" presente,
                   REPORT_DATA.parity_vectors não-vazio; COM node, o engine
                   EMBUTIDO no HTML é extraído e re-executado (--selftest)
@@ -43,8 +45,10 @@ Exit 1: imprime CADA violação em linha própria, prefixada pela categoria:
   [numeros]       números órfãos na prosa (campos *_html + header.sintese +
                   positives/negatives): todo candidato numérico fora de
                   <span class="num-livre"> deve constar em algum texto do log
-                  de consistência; anos (19|20)\\d{2} inteiros não são
-                  candidatos.
+                  de consistência. Referências de seção (§4.1) e versões
+                  (V2.2.1) são removidas antes de tokenizar; inteiros puros
+                  (anos inclusive) não são candidatos; decimal PT-BR é UM token
+                  (3,74x continua violação, reportada inteira).
 
 Sem dependências fora da stdlib.
 """
@@ -85,10 +89,20 @@ RE_SELFTEST_CALL = re.compile(r"\bk3SelfTest\s*\(")
 RE_SCRIPT_SIMPLES = re.compile(r"<script>(.*?)</script>", re.S)
 MARCA_ENGINE = "k3_engine.js — Justified P/E"
 
+FONTE_IMPLIED = "saida/market_implied.json"
+
 RE_NUM_LIVRE = re.compile(r'<span class="num-livre">.*?</span>', re.S)
 RE_TAG = re.compile(r"<[^>]+>")
+# ruído removido ANTES de tokenizar: referência de seção do manual e versão colada
+RE_REF_SECAO = re.compile(r"§\s*\d+(?:\.\d+)*")
+RE_VERSAO = re.compile(r"\bV\d+(?:\.\d+)+", re.I)
+# um número = UM token; alternativas em ordem (milhar inglês, percentual, múltiplo,
+# decimal solto — PT-BR com vírgula inclusive). Inteiros puros ficam FORA.
 RE_NUM_CANDIDATO = re.compile(
-    r"\b\d{1,3}(?:,\d{3})+\.\d+\b|\b\d+\.\d+%?\b|\b\d+(?:\.\d+)?x\b|\b\d+%\b")
+    r"\d{1,3}(?:,\d{3})+(?:\.\d+)?(?:%|x)?"
+    r"|\d+(?:[.,]\d+)?\s*%"
+    r"|\d+(?:[.,]\d+)?x"
+    r"|\d+[.,]\d+")
 RE_ANO = re.compile(r"(19|20)\d{2}")
 
 
@@ -234,6 +248,7 @@ def checar_log(chk: Checador, html: str, case: dict, results: dict, ns: Path):
         return None
 
     dados_cache: dict[str, object] = {}
+    implied_cache: list = []  # [obj|None] — lido no máximo uma vez
     for i, e in enumerate(log):
         fonte, chave = e.get("fonte"), e.get("chave")
         rot = f"log[{i}] ({e.get('onde')}: {fonte}:{chave})"
@@ -241,6 +256,17 @@ def checar_log(chk: Checador, html: str, case: dict, results: dict, ns: Path):
             base = results
         elif fonte == "case.json":
             base = case
+        elif fonte == FONTE_IMPLIED:
+            if not implied_cache:
+                p = ns / FONTE_IMPLIED
+                implied_cache.append(json.loads(p.read_text(encoding="utf-8"))
+                                     if p.exists() else None)
+            base = implied_cache[0]
+            if not chk.check("log", base is not None,
+                             f"{rot}: arquivo {FONTE_IMPLIED} inexistente no namespace "
+                             "(o relatório cita market-implied sem a fonte persistida)"):
+                continue
+            chave = f"params.{chave}" if isinstance(chave, str) else chave
         elif isinstance(fonte, str) and fonte.startswith("dados/"):
             if fonte not in dados_cache:
                 p = ns / fonte
@@ -432,6 +458,8 @@ def checar_numeros(chk: Checador, data: dict | None, log: list | None):
     for campo, conteudo in campos:
         limpo = RE_NUM_LIVRE.sub(" ", conteudo)  # num-livre não é auditado
         limpo = RE_TAG.sub(" ", limpo)
+        limpo = RE_REF_SECAO.sub(" ", limpo)     # §4.1 não é candidato numérico
+        limpo = RE_VERSAO.sub(" ", limpo)        # V2.2.1 idem
         vistos: set[str] = set()
         for tok in RE_NUM_CANDIDATO.findall(limpo):
             if tok in vistos:
