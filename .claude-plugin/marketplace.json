@@ -4,15 +4,15 @@
     "name": "Antonio Coutinho"
   },
   "metadata": {
-    "description": "Marketplace do fleet de equity research buy-side: dossiê, valuation determinístico, auditoria e relatório institucional",
-    "version": "2.2.0"
+    "description": "Marketplace do fleet de equity research v3: Analista + Data Manager, motor K3 V2.2.1 congelado, dados via OpenBB, relatório HTML interativo de 2 abas",
+    "version": "3.0.0"
   },
   "plugins": [
     {
       "name": "equity-research-fleet",
       "source": "./",
-      "description": "Fleet de equity research buy-side: dossiê, valuation determinístico, auditoria e relatório institucional",
-      "version": "2.2.0",
+      "description": "Fleet de equity research v3: Analista + Data Manager, motor K3 V2.2.1 congelado, dados via OpenBB, relatório HTML interativo de 2 abas",
+      "version": "3.0.0",
       "author": {
         "name": "Antonio Coutinho"
       }
