@@ -13,6 +13,15 @@
     "references/K3_Regression_Tests_v2.2.1.json": "833a7e13dd298b36dd350a547b909a43acf9cd506616c28b01c3197d4c74fc93",
     "scripts/valuation_engine.py": "c5fac06408824c3badbb2db619ec179709eac278f95efb34e9924d2d6704970c",
     "scripts/input_validator.py": "cef72707532f6dded6907fcb74a384f47d05f99da589057de9dee8f08d73f4da",
-    "scripts/run_regressions.py": "ea2e8443290a979b21fb59a5b61ddc40ad518d4f4f5adfa56920a7f143a59455"
+    "scripts/run_regressions.py": "ea2e8443290a979b21fb59a5b61ddc40ad518d4f4f5adfa56920a7f143a59455",
+    "../er-relatorio-html/assets/k3_engine.js": "daa86275b7c2795610ad0f7debdec969936fd379a12830a607dd238009372047",
+    "../er-relatorio-html/assets/uPlot.iife.min.js": "18dd3f1a54320f5e28a6655e11b79a5a3a30e329eb0d01b97d0b0b1ceae3ed10",
+    "../er-relatorio-html/assets/uPlot.min.css": "df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04"
+  },
+  "vendor_uplot": {
+    "versao": "1.6.27",
+    "licenca": "MIT (arquivo uPlot.LICENSE ao lado dos assets)",
+    "origem": "https://unpkg.com/uplot@1.6.27/dist/ (baixado 2026-08-05, aprovado por Antonio)",
+    "nota": "espelho JS k3_engine.js copiado byte a byte da skill justified-pe-valuation (mesma origem da cópia acima)"
   }
 }

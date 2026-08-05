@@ -2,3 +2,6 @@
 # nunca converter EOL nestes paths — qualquer conversão quebra o congelamento.
 skills/er-motor-k3/references/** -text
 skills/er-motor-k3/scripts/** -text
+skills/er-relatorio-html/assets/k3_engine.js -text
+skills/er-relatorio-html/assets/uPlot.iife.min.js -text
+skills/er-relatorio-html/assets/uPlot.min.css -text

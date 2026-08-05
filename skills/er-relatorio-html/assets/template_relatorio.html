@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__PAGE_TITLE__</title>
+<style>
+/* ============ uPlot (vendor, MIT) ============ */
+__UPLOT_CSS__
+</style>
+<style>
+:root{--ink:#1a1d24;--muted:#6a7180;--line:#e3e6ec;--bg:#f7f8fa;--card:#fff;
+--accent:#002060;--accent-soft:#eef1f8;--pos:#1a7f37;--neg:#b42318;--warn:#8a6d00}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+font:14px/1.55 "Segoe UI",system-ui,-apple-system,Arial,sans-serif;padding:0 0 60px}
+.wrap{max-width:980px;margin:0 auto;padding:0 18px}
+h1{font-size:22px;margin:6px 0 2px}
+h2{font-size:16px;margin:0 0 10px;color:var(--accent)}
+h3{font-size:14px;margin:16px 0 6px}
+h4{font-size:13.5px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+.muted{color:var(--muted)}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+#parity{padding:9px 18px;font-size:12.5px;border-bottom:1px solid var(--line)}
+#parity.ok{background:#e8f5ec;color:#14532d}
+#parity.bad{background:#fdecea;color:#7f1d1d;font-weight:600}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:130px}
+.kpi .l{font-size:11px;color:var(--muted)} .kpi .v{font-size:16.5px;font-weight:600} .kpi .d{font-size:11px;color:var(--muted)}
+.sintese{font-size:13px;margin:8px 0 0;padding:8px 12px;background:var(--accent-soft);border-radius:8px}
+/* top-level tabs */
+.toptabs{display:flex;gap:6px;margin:16px 0 0;border-bottom:2px solid var(--line)}
+.toptab{border:none;background:none;font:600 14px/1 inherit;padding:11px 20px;cursor:pointer;color:var(--muted);
+border-bottom:3px solid transparent;margin-bottom:-2px}
+.toptab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tabpane{display:none} .tabpane.active{display:block}
+/* scenario tabs (aba 1) */
+.tabs{display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 16px;cursor:pointer;font-size:13px}
+.tab.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right}
+th{color:var(--muted);font-weight:600}
+td:first-child,th:first-child{text-align:left}
+tr.modified{background:#fff8e6}
+.chip{display:inline-block;font-size:10.5px;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px}
+.chip.mod{background:#fde68a;color:#78350f}
+.chip.st{background:var(--accent-soft);color:var(--accent)}
+.inp input{width:105px;text-align:right;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font:inherit}
+.btn:hover{background:var(--accent-soft)}
+.msg{font-size:12.5px;padding:6px 10px;border-radius:8px;background:var(--accent-soft);margin:6px 0}
+.msg.invalid{background:#fdecea;color:#7f1d1d}
+.note{font-size:12px;color:var(--muted)}
+.res-big{font-size:17px;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.bar-row{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:12.5px}
+.bar-name{width:150px;text-align:right;color:var(--muted)}
+.bar-track{flex:1;background:var(--bg);border-radius:4px;height:14px;position:relative}
+.bar{height:14px;border-radius:4px} .bar.p{background:#9db3d9} .bar.n{background:#e3a09a} .bar.t{background:var(--accent)}
+.bar-val{width:90px;font-variant-numeric:tabular-nums}
+.sens-grid td.hot{background:var(--accent-soft);font-weight:700}
+/* aba 2 */
+.pn{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:860px){.pn{grid-template-columns:1fr}}
+.pn .bloco{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.pn h3{margin:0 0 8px;font-size:13.5px}
+.pn.positivos h3{color:var(--pos)}
+.pn ul{margin:0;padding-left:18px} .pn li{margin:4px 0}
+.narr p{margin:8px 0} .narr ul{margin:6px 0;padding-left:20px}
+.chart-card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0;overflow-x:auto}
+.chart-window-note{font-size:11.5px;color:var(--warn);margin:2px 0 8px}
+.chart-caption{font-size:12px;color:var(--muted);margin-top:6px}
+.chart-degraded{font-size:12.5px;color:var(--neg);background:#fdecea;border-radius:8px;padding:8px 10px;margin:6px 0}
+footer{max-width:980px;margin:26px auto 0;padding:0 18px;font-size:11.5px;color:var(--muted)}
+@media print{.toptabs,.tabs,.btn,select{display:none}.tabpane{display:block}.card{border:none;page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div id="parity">Verificando paridade do engine…</div>
+
+<div class="wrap">
+  <header>
+    <h1 id="h-company"></h1>
+    <div class="sub" id="h-sub"></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="sintese" id="h-sintese" style="display:none"></div>
+  </header>
+
+  <div class="toptabs">
+    <button class="toptab active" data-pane="pane-val" id="toptab-val">Valuation</button>
+    <button class="toptab" data-pane="pane-analise" id="toptab-analise">Análise</button>
+  </div>
+
+  <!-- ================= ABA 1 — VALUATION INTERATIVO ================= -->
+  <div class="tabpane active" id="pane-val">
+
+    <div class="card">
+      <h2>Valuation Assumptions <span class="chip st" id="scen-chip"></span></h2>
+      <p class="note">Edite qualquer input para recalcular o valuation ao vivo — mesma matemática V2.2.1 congelada
+        (espelho JS verificado; banner acima). Valores originais do Analista preservados na coluna própria.</p>
+      <div class="tabs" id="scen-tabs"></div>
+      <table id="assump-tbl"></table>
+      <p style="margin:10px 0 0"><button class="btn" onclick="resetScenario()">Restaurar calibração original</button>
+      <span class="muted" id="mod-count"></span></p>
+      <div id="val-msgs"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Valuation Results</h2>
+        <p class="note" id="res-label"></p>
+        <table id="res-tbl"></table>
+      </div>
+      <div class="card">
+        <h2>Valuation Bridge <span class="muted" style="font-size:12px">(por unidade de escala)</span></h2>
+        <p class="note">Decomposição em blocos: V_F1 + V_F2 + Bridge + V_fade (identidade de quatro blocos do K3).</p>
+        <div id="bridge"></div>
+      </div>
+    </div>
+
+    <div class="card" id="sec-scen-summary">
+      <h2>Scenario Summary</h2>
+      <p class="note">Todos os cenários com os inputs correntes (edições suas incluídas, marcadas).</p>
+      <table id="scen-tbl"></table>
+    </div>
+
+    <div class="card">
+      <h2>Sensitivity Analysis</h2>
+      <p class="note">1D ao vivo em torno dos valores correntes do cenário ativo. Tabelas 2D pré-computadas
+        pelo engine Python na calibração original do Analista.</p>
+      <p style="margin:6px 0">
+        <label>Input: <select id="sens-param"></select></label>
+        <span class="muted" id="sens-range"></span>
+      </p>
+      <table id="sens-tbl"></table>
+      <div id="sens-presets"></div>
+    </div>
+
+    <div class="card" id="sec-implied" style="display:none">
+      <h2>What Is the Market Pricing?</h2>
+      <p class="note">Diagnóstico reverso rotulado: resolve cada premissa isoladamente até o preço de mercado,
+        mantidas as demais na calibração base. Nunca recalibra o fair value.</p>
+      <table id="implied-tbl"></table>
+    </div>
+
+  </div>
+
+  <!-- ================= ABA 2 — ANÁLISE ================= -->
+  <div class="tabpane" id="pane-analise">
+
+    <div class="card" id="sec-posneg" style="display:none">
+      <h2>Positives / Negatives</h2>
+      <div class="pn">
+        <div class="bloco positivos"><h3 class="pos">Positives</h3><ul id="pn-pos"></ul></div>
+        <div class="bloco"><h3 class="neg">Negatives</h3><ul id="pn-neg"></ul></div>
+      </div>
+    </div>
+
+    <div class="card narr" id="sec-sumario" style="display:none">
+      <h2>Sumário executivo</h2>
+      <div id="narr-sumario"></div>
+    </div>
+
+    <div class="card narr" id="sec-perfil" style="display:none">
+      <h2>Perfil, modelo de negócio e análise qualitativa</h2>
+      <div id="narr-perfil"></div>
+      <div id="narr-qualitativa"></div>
+    </div>
+
+    <div class="card narr" id="sec-financeira" style="display:none">
+      <h2>Análise financeira histórica</h2>
+      <div id="narr-financeira"></div>
+      <div id="charts-financeira"></div>
+    </div>
+
+    <div class="card" id="sec-calibracao" style="display:none">
+      <h2>Calibração — 16 inputs × cenários</h2>
+      <p class="note">Valores da calibração congelada do Analista (os mesmos do case.json; a aba Valuation
+        permite simulação sem alterar esta tabela). Racional e evidência por input abaixo.</p>
+      <table id="calib-tbl"></table>
+      <div class="narr" id="calib-racional"></div>
+    </div>
+
+    <div class="card narr" id="sec-riscos" style="display:none">
+      <h2>Riscos e cenários alternativos</h2>
+      <div id="narr-riscos"></div>
+    </div>
+
+    <div class="card narr" id="sec-pricing" style="display:none">
+      <h2>What Is the Market Pricing? — leitura</h2>
+      <div id="narr-pricing"></div>
+    </div>
+
+    <div class="card narr" id="sec-limitacoes" style="display:none">
+      <h2>Limitações de dados e fontes</h2>
+      <div id="narr-limitacoes"></div>
+      <div id="narr-fontes"></div>
+    </div>
+
+  </div>
+</div>
+
+<footer id="foot"></footer>
+
+<script>
+/* ============ engine determinístico (espelho verificado — não editar) ============ */
+__K3_ENGINE_JS__
+</script>
+<script>
+/* ============ uPlot (vendor, MIT — não editar) ============ */
+__UPLOT_JS__
+</script>
+<script>
+/* ============ adaptador de gráficos do fleet ============ */
+__CHARTS_JS__
+</script>
+<script type="application/json" id="log-consistencia">__LOG_CONSISTENCIA__</script>
+<script>
+/* ============ dados do relatório (gerados por build_report.py) ============ */
+var REPORT_DATA = __REPORT_DATA__;
+</script>
+<script>
+"use strict";
+var E = (typeof K3Engine !== "undefined") ? K3Engine : null;
+var D = REPORT_DATA;
+var MODO_VALUATION = (D.modo === "valuation");
+var state = { scen: D.default_scenario || Object.keys(D.scenarios)[0], live: {}, editingDisabled: false };
+Object.keys(D.scenarios).forEach(function (s) {
+  state.live[s] = JSON.parse(JSON.stringify(D.scenarios[s].inputs));
+});
+
+var UNITS = {
+  ROE1:["%","retorno F1 sobre book inicial"], ROE2:["%","retorno sustentável alvo F2"],
+  g1:["%","crescimento lucro/book F1"], g2:["%","crescimento lucro/book F2"],
+  Ke1:["%","custo de equity F1"], Ke2:["%","custo de equity F2/fade (= ROE terminal)"],
+  n1:["anos","duração do regime atual"], n2:["anos","anos de spread F2 pleno (CAP)"],
+  NDE1:["x","dívida líquida / book equity, F1"], NDE2:["x","dívida líquida / book equity, F2"],
+  GDE1:["x","dívida bruta / book equity, F1"], GDE2:["x","dívida bruta / book equity, F2"],
+  F:["anos","anos de fade (ROE2 -> Ke2)"], g_T:["%","crescimento no fim do fade (não perpétuo)"],
+  Kd_F2:["%","custo de dívida F2 (só na ponte)"], t:["%","alíquota (carry da ponte)"]
+};
+var PCT = {ROE1:1,ROE2:1,g1:1,g2:1,Ke1:1,Ke2:1,g_T:1,Kd_F2:1,t:1};
+var INTP = {n1:1,n2:1,F:1};
+
+function fmtN(x, nd) {
+  if (x === null || x === undefined || !isFinite(x)) return "n/a";
+  return x.toLocaleString("en-US", {minimumFractionDigits: nd===undefined?2:nd, maximumFractionDigits: nd===undefined?2:nd});
+}
+function fmtPct(x, nd) { return x===null||x===undefined||!isFinite(x) ? "n/a" : (100*x).toFixed(nd===undefined?1:nd) + "%"; }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+
+/* ---------- self-test de paridade no load ---------- */
+(function verify() {
+  var box = el("parity");
+  if (!E) { box.className = "bad"; box.textContent = "ENGINE AUSENTE — arquivo gerado sem o espelho verificado. Não use os valores interativos."; state.editingDisabled = true; return; }
+  var vectors = [];
+  Object.keys(D.scenarios).forEach(function (s) {
+    var sc = D.scenarios[s];
+    if (sc.python_expected) vectors.push({ name: s, inputs: sc.inputs, NI0: sc.NI0, Book0: sc.Book0, expected: sc.python_expected });
+  });
+  if (D.parity_vectors) vectors = vectors.concat(D.parity_vectors);
+  var t = E.k3SelfTest(vectors, 1e-6);
+  if (t.pass) {
+    box.className = "ok";
+    box.innerHTML = "&#10003; Paridade verificada: o espelho JavaScript desta página reproduziu o engine Python V2.2.1 em " +
+      t.checks + " checks (max |diff| " + t.max_abs_diff.toExponential(1) + "). As edições interativas usam a mesma matemática congelada." +
+      (D.regression_summary ? " Suíte canônica de regressão no build: " + D.regression_summary.passed + "/" + D.regression_summary.total + " PASS." : "");
+  } else {
+    box.className = "bad";
+    box.innerHTML = "&#9888; DIVERGÊNCIA DE ENGINE — o espelho embutido não reproduziu o engine Python (" +
+      t.failures.length + " diferenças). Edição interativa desativada; confie apenas nos valores congelados do Analista. " + esc(t.failures[0] || "");
+    state.editingDisabled = true;
+  }
+})();
+
+/* ---------- cabeçalho comum ---------- */
+(function header() {
+  el("h-company").textContent = D.company + (D.ticker ? " (" + D.ticker + ")" : "");
+  var precoTxt = (D.price_per_share != null)
+    ? " · preço usado: " + fmtN(D.price_per_share) + " " + (D.currency || "") +
+      (D.price_date ? " em " + D.price_date : "") + (D.price_source ? " (" + D.price_source + ")" : "")
+    : " · sem preço de mercado";
+  el("h-sub").textContent = "Equity Research Fleet v3 · Justified P/E V2.2.1 · análise de " + (D.valuation_date || "") + precoTxt +
+    " · engine: " + (E ? E.ENGINE_VERSION : "n/a");
+  document.title = D.company + " — Equity Research (K3 V2.2.1)";
+  if (D.header && D.header.sintese) { el("h-sintese").style.display = ""; el("h-sintese").textContent = D.header.sintese; }
+})();
+
+function currentScenario() { return D.scenarios[state.scen]; }
+function liveInputs() { return state.live[state.scen]; }
+function runLive(scenName) {
+  var sc = D.scenarios[scenName];
+  return E.valueScenario(state.live[scenName], sc.NI0 == null ? null : sc.NI0,
+    sc.Book0 == null ? null : sc.Book0,
+    sc.shares_diluted_t0 || D.shares_diluted_t0 || null, D.price_per_share || null);
+}
+
+/* ---------- abas top-level ---------- */
+(function toptabs() {
+  var tabs = document.querySelectorAll(".toptab");
+  Array.prototype.forEach.call(tabs, function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(tabs, function (x) { x.className = "toptab"; });
+      Array.prototype.forEach.call(document.querySelectorAll(".tabpane"), function (p) { p.className = "tabpane"; });
+      b.className = "toptab active";
+      el(b.getAttribute("data-pane")).className = "tabpane active";
+    };
+  });
+  if (MODO_VALUATION) el("toptab-analise").textContent = "Premissas";
+})();
+
+/* ---------- abas de cenário ---------- */
+function renderTabs() {
+  var t = el("scen-tabs"); t.innerHTML = "";
+  Object.keys(D.scenarios).forEach(function (s) {
+    var b = document.createElement("button");
+    b.className = "tab" + (s === state.scen ? " active" : "");
+    b.textContent = s + (D.scenarios[s].weight != null ? " (" + Math.round(D.scenarios[s].weight * 100) + "%)" : "");
+    b.onclick = function () { state.scen = s; renderAll(); };
+    t.appendChild(b);
+  });
+}
+
+/* ---------- tabela de premissas editável ---------- */
+function renderAssumptions() {
+  var sc = currentScenario(), live = liveInputs();
+  el("scen-chip").textContent = "cenário: " + state.scen;
+  var rows = ['<tr><th>Input</th><th>Corrente</th><th>Original (Analista)</th><th style="text-align:left">Unidade / interpretação</th></tr>'];
+  E.CANONICAL_INPUTS.forEach(function (k) {
+    var mod = live[k] !== sc.inputs[k];
+    var shown = PCT[k] ? (100 * live[k]) : live[k];
+    var orig = PCT[k] ? (100 * sc.inputs[k]).toFixed(2) + "%" : String(sc.inputs[k]);
+    rows.push('<tr class="' + (mod ? "modified" : "") + '"><td>' + k +
+      (mod ? '<span class="chip mod">modificado</span>' : "") + "</td>" +
+      '<td class="inp"><input type="number" step="' + (INTP[k] ? "1" : "0.1") + '" data-k="' + k + '" value="' +
+      (INTP[k] ? live[k] : (Math.round(shown * 1e6) / 1e6)) + '"' + (state.editingDisabled ? " disabled" : "") + "></td>" +
+      '<td>' + orig + "</td>" +
+      '<td style="text-align:left" class="muted">' + (PCT[k] ? "% — " : (UNITS[k][0] === "anos" ? "anos — " : "razão — ")) + UNITS[k][1] + "</td></tr>");
+  });
+  var scaleRows = [];
+  if (sc.NI0 != null) scaleRows.push(["NI0 (escala do valuation)", fmtN(sc.NI0), "lucro líquido trailing normalizado"]);
+  if (sc.Book0 != null) scaleRows.push(["Book0 (escala do valuation)", fmtN(sc.Book0), "book equity econômico"]);
+  scaleRows.push(["Ações diluídas (t=0)", fmtN(sc.shares_diluted_t0 || D.shares_diluted_t0, 2), "apenas ações diluídas correntes — sem ações futuras de funding"]);
+  if (D.price_per_share != null) scaleRows.push(["Preço de mercado", fmtN(D.price_per_share), "referência para upside e reverse solves"]);
+  scaleRows.forEach(function (r) {
+    rows.push('<tr><td class="muted">' + r[0] + '</td><td>' + r[1] + '</td><td></td><td style="text-align:left" class="muted">' + r[2] + "</td></tr>");
+  });
+  el("assump-tbl").innerHTML = rows.join("");
+  Array.prototype.forEach.call(el("assump-tbl").querySelectorAll("input"), function (inp) {
+    inp.onchange = function () {
+      var k = inp.getAttribute("data-k");
+      var v = parseFloat(inp.value);
+      if (!isFinite(v)) return;
+      liveInputs()[k] = INTP[k] ? Math.round(v) : (PCT[k] ? v / 100 : v);
+      setTimeout(renderAll, 0);
+    };
+  });
+  var nmod = E.CANONICAL_INPUTS.filter(function (k) { return live[k] !== sc.inputs[k]; }).length;
+  el("mod-count").textContent = nmod ? nmod + " input(s) modificados — resultados refletem suas edições" : "todos os inputs na calibração do Analista";
+}
+function resetScenario() {
+  state.live[state.scen] = JSON.parse(JSON.stringify(currentScenario().inputs));
+  renderAll();
+}
+
+/* ---------- resultados ---------- */
+function renderResults() {
+  var r = runLive(state.scen);
+  var box = el("val-msgs"); box.innerHTML = "";
+  var v = r.validation;
+  (v.invalid || []).forEach(function (m) { box.innerHTML += '<div class="msg invalid">' + esc(m) + "</div>"; });
+  (v.companion || []).concat(v.review || [], v.boundaries || []).forEach(function (m) {
+    box.innerHTML += '<div class="msg">' + esc(m) + "</div>";
+  });
+  var tbl = el("res-tbl");
+  if (!r.computed) {
+    tbl.innerHTML = '<tr><td class="neg">INVALID INPUT — corrija domínio ou estrutura antes do valuation.</td></tr>';
+    el("bridge").innerHTML = ""; renderScenSummary(); return;
+  }
+  var up = r.vs_market ? r.vs_market.upside : null;
+  var lbl = (currentScenario().label_mode === "hurdle") ? "Hurdle-conditioned Equity Value" : "Current-holder Equity Value";
+  el("res-label").textContent = lbl + " — rota: " + r.route + " · status: " + v.status;
+  var rows = [];
+  rows.push(['Equity Value', '<span class="res-big">' + fmtN(r.equity_value) + "</span>"]);
+  rows.push(['Valor por ação', '<span class="res-big">' + fmtN(r.value_per_share) + "</span>"]);
+  if (D.price_per_share != null) rows.push(["Preço de mercado", fmtN(D.price_per_share)]);
+  if (up !== null) rows.push(["Upside / downside", '<span class="' + (up >= 0 ? "pos" : "neg") + '"><b>' + fmtPct(up) + "</b></span>"]);
+  rows.push(["Trailing P/L justo (K3)" + (r.pe_interpretable ? "" : " — não interpretável"), fmtN(r.K3_trailing_PE) + "x"]);
+  rows.push(["Forward P/L (K3/(1+g1))", r.forward_PE === null ? "n/a" : fmtN(r.forward_PE) + "x"]);
+  rows.push(["P/B0 implícito", fmtN(r.implied_PB0) + "x"]);
+  if (r.implied_Book0 != null) rows.push(["Book0 implícito", fmtN(r.implied_Book0)]);
+  if (r.fcfe_distribution_ratio_F1 !== null && r.fcfe_distribution_ratio_F1 !== undefined)
+    rows.push(["Equity reinv. req. / Net FCFE distr. — F1 <span class='muted'>(α·g/ROE)</span>",
+      fmtPct(r.equity_reinvestment_ratio_F1) + " / " + fmtPct(r.fcfe_distribution_ratio_F1)]);
+  if (r.fcfe_distribution_ratio_F2 !== null && r.fcfe_distribution_ratio_F2 !== undefined)
+    rows.push(["Equity reinv. req. / Net FCFE distr. — F2 <span class='muted'>(α·g/ROE)</span>",
+      fmtPct(r.equity_reinvestment_ratio_F2) + " / " + fmtPct(r.fcfe_distribution_ratio_F2)]);
+  if (r.funding && (r.funding.net_distribution_negative_F1 || r.funding.net_distribution_negative_F2 ||
+      (r.funding.fade_years_with_negative_distribution || []).length))
+    rows.push(["Status de funding", '<span class="neg">Distribuição líquida negativa (1−α·g/ROE&lt;0): equity externo já embutido no FCFE — sem haircut adicional de diluição</span>']);
+  el("res-tbl").innerHTML = rows.map(function (rr) {
+    return "<tr><td>" + rr[0] + "</td><td>" + rr[1] + "</td></tr>";
+  }).join("");
+  renderBridge(r);
+  renderScenSummary();
+}
+
+function renderBridge(r) {
+  var blocks = r.blocks || r.pb_blocks;
+  if (!blocks) { el("bridge").innerHTML = ""; return; }
+  var keys = r.blocks ? ["V_F1", "V_F2", "Bridge", "Fade_Dividends", "Terminal_Book_PV"]
+                      : ["PB_F1", "PB_F2", "PB_Bridge", "PB_Fade_Dividends", "PB_Terminal_Book_PV"];
+  var total = r.blocks ? r.K3_trailing_PE : r.K_PB;
+  var maxAbs = Math.max.apply(null, keys.map(function (k) { return Math.abs(blocks[k]); }).concat([Math.abs(total)]));
+  var html = keys.map(function (k) {
+    var v = blocks[k]; var w = maxAbs ? Math.max(1, 100 * Math.abs(v) / maxAbs) : 1;
+    return '<div class="bar-row"><div class="bar-name">' + k + '</div><div class="bar-track">' +
+      '<div class="bar ' + (v >= 0 ? "p" : "n") + '" style="width:' + w + '%"></div></div>' +
+      '<div class="bar-val">' + fmtN(v, 3) + "</div></div>";
+  }).join("");
+  var wT = maxAbs ? Math.max(1, 100 * Math.abs(total) / maxAbs) : 1;
+  html += '<div class="bar-row" style="border-top:1px solid var(--line);padding-top:6px"><div class="bar-name"><b>' +
+    (r.blocks ? "K3 total" : "K_PB total") + '</b></div><div class="bar-track"><div class="bar t" style="width:' + wT +
+    '%"></div></div><div class="bar-val"><b>' + fmtN(total, 3) + "</b></div></div>";
+  el("bridge").innerHTML = html;
+}
+
+/* ---------- resumo de cenários ---------- */
+function renderScenSummary() {
+  var rows = ['<tr><th>Cenário</th><th>Status</th><th>K3 (P/L)</th><th>Equity Value</th><th>Valor / ação</th><th>Upside</th><th>Peso</th></tr>'];
+  var pw = 0, pwOk = true, wSum = 0;
+  Object.keys(D.scenarios).forEach(function (s) {
+    var r = runLive(s);
+    var sc = D.scenarios[s];
+    var up = r.vs_market ? r.vs_market.upside : null;
+    var edited = E.CANONICAL_INPUTS.some(function (k) { return state.live[s][k] !== sc.inputs[k]; });
+    if (sc.weight != null && r.equity_value != null) { pw += sc.weight * r.equity_value; wSum += sc.weight; } else if (sc.weight != null) pwOk = false;
+    rows.push("<tr" + (s === state.scen ? ' style="background:var(--accent-soft)"' : "") + "><td>" + s +
+      (edited ? ' <span class="chip mod">editado</span>' : "") + "</td><td>" + (r.computed ? r.validation.status : "INVALID") +
+      "</td><td>" + (r.computed ? fmtN(r.K3_trailing_PE) : "—") + "</td><td>" + (r.computed ? fmtN(r.equity_value) : "—") +
+      "</td><td>" + (r.computed ? fmtN(r.value_per_share) : "—") + "</td><td>" +
+      (up === null ? "n/a" : '<span class="' + (up >= 0 ? "pos" : "neg") + '">' + fmtPct(up) + "</span>") + "</td><td>" +
+      (sc.weight != null ? Math.round(sc.weight * 100) + "%" : "—") + "</td></tr>");
+  });
+  if (wSum > 0 && pwOk && Math.abs(wSum - 1) < 1e-9) {
+    var pps = (D.shares_diluted_t0 ? pw / D.shares_diluted_t0 : null);
+    rows.push('<tr><td><b>Probability-weighted Equity Value</b> <span class="muted">(não é K3)</span></td><td></td><td></td><td><b>' +
+      fmtN(pw) + "</b></td><td><b>" + fmtN(pps) + "</b></td><td>" +
+      (pps && D.price_per_share ? '<span class="' + (pps / D.price_per_share - 1 >= 0 ? "pos" : "neg") + '">' + fmtPct(pps / D.price_per_share - 1) + "</span>" : "") +
+      "</td><td>100%</td></tr>");
+  }
+  el("scen-tbl").innerHTML = rows.join("");
+}
+
+/* ---------- sensibilidade ---------- */
+function sensValues(param) {
+  var v = liveInputs()[param];
+  if (INTP[param]) {
+    var base = Math.round(v);
+    return [-4, -2, -1, 0, 1, 2, 4].map(function (d) { return Math.max(0, base + d); })
+      .filter(function (x, i, a) { return a.indexOf(x) === i; });
+  }
+  var span = PCT[param] ? Math.max(0.02, Math.abs(v) * 0.4) : Math.max(0.1, Math.abs(v) * 0.5);
+  return [-1, -0.5, -0.25, 0, 0.25, 0.5, 1].map(function (f) { return v + f * span; });
+}
+function renderSens() {
+  var sel = el("sens-param");
+  if (!sel.options.length) {
+    E.CANONICAL_INPUTS.forEach(function (k) {
+      var o = document.createElement("option"); o.value = k; o.textContent = k; sel.appendChild(o);
+    });
+    sel.value = D.sensitivity_default || "ROE2";
+    sel.onchange = renderSens;
+  }
+  var param = sel.value;
+  var sc = currentScenario();
+  var vals = sensValues(param);
+  var rows = E.sensitivity1d(liveInputs(), sc.NI0 == null ? null : sc.NI0, sc.Book0 == null ? null : sc.Book0,
+    sc.shares_diluted_t0 || D.shares_diluted_t0 || null, D.price_per_share || null, param, vals);
+  el("sens-range").textContent = "cenário: " + state.scen + " — varredura em torno do valor corrente " +
+    (PCT[param] ? fmtPct(liveInputs()[param]) : liveInputs()[param]);
+  var h = ['<tr><th>' + param + "</th><th>K3 (P/L)</th><th>Equity Value</th><th>Valor / ação</th><th>Upside</th></tr>"];
+  rows.forEach(function (r) {
+    var cur = r.value === (INTP[param] ? Math.round(liveInputs()[param]) : liveInputs()[param]);
+    h.push("<tr" + (cur ? ' style="background:var(--accent-soft)"' : "") + "><td>" +
+      (PCT[param] ? fmtPct(r.value) : r.value) + "</td><td>" + (r.computed ? fmtN(r.K3_trailing_PE) : r.status) +
+      "</td><td>" + fmtN(r.equity_value) + "</td><td>" + fmtN(r.value_per_share) + "</td><td>" +
+      (r.upside === null ? "n/a" : '<span class="' + (r.upside >= 0 ? "pos" : "neg") + '">' + fmtPct(r.upside) + "</span>") + "</td></tr>");
+  });
+  el("sens-tbl").innerHTML = h.join("");
+  renderSensPresets();
+}
+function renderSensPresets() {
+  var host = el("sens-presets"); host.innerHTML = "";
+  (D.sensitivity_presets || []).forEach(function (p) {
+    var h = ["<h3 style='font-size:13.5px;margin:18px 0 6px'>" + esc(p.title) + " <span class='muted'>(" + esc(p.metric_label || "valor por ação") + ", engine Python @ calibração base)</span></h3>"];
+    h.push('<table class="sens-grid"><tr><th>' + p.param_rows + " \\ " + p.param_cols + "</th>" +
+      p.values_cols.map(function (c) { return "<th>" + (p.cols_pct ? fmtPct(c) : c) + "</th>"; }).join("") + "</tr>");
+    p.grid.forEach(function (row, ri) {
+      h.push("<tr><td><b>" + (p.rows_pct ? fmtPct(p.values_rows[ri]) : p.values_rows[ri]) + "</b></td>" +
+        row.map(function (cell, ci) {
+          var hot = p.base_cell && p.base_cell[0] === ri && p.base_cell[1] === ci;
+          return "<td" + (hot ? ' class="hot"' : "") + ">" + fmtN(cell, p.decimals != null ? p.decimals : 2) + "</td>";
+        }).join("") + "</tr>");
+    });
+    h.push("</table>");
+    host.innerHTML += h.join("");
+  });
+}
+
+/* ---------- market implied ---------- */
+function renderImplied() {
+  if (!D.market_implied || !D.market_implied.length) return;
+  el("sec-implied").style.display = "";
+  var h = ['<tr><th>Premissa</th><th>Base Case</th><th>Market-Implied</th><th style="text-align:left">Interpretação</th></tr>'];
+  D.market_implied.forEach(function (m) {
+    h.push("<tr><td>" + m.param + (m.label ? ' <span class="chip st">' + esc(m.label) + "</span>" : "") + "</td><td>" +
+      esc(m.base_display || m.base_value) + "</td><td>" + esc(m.implied_display || (m.implied == null ? "sem solução válida no domínio" : m.implied)) +
+      '</td><td style="text-align:left">' + (m.interpretation ? esc(m.interpretation) : "") + "</td></tr>");
+  });
+  el("implied-tbl").innerHTML = h.join("");
+}
+
+/* ---------- aba 2 — análise ---------- */
+function renderAnalise() {
+  var A = D.analise || {};
+  if (A.positives && A.positives.length || A.negatives && A.negatives.length) {
+    el("sec-posneg").style.display = "";
+    el("pn-pos").innerHTML = (A.positives || []).map(function (x) { return "<li>" + x + "</li>"; }).join("");
+    el("pn-neg").innerHTML = (A.negatives || []).map(function (x) { return "<li>" + x + "</li>"; }).join("");
+  }
+  [["sumario", A.sumario_html], ["riscos", A.riscos_html], ["pricing", A.market_pricing_html]].forEach(function (p) {
+    if (p[1]) { el("sec-" + p[0]).style.display = ""; el("narr-" + p[0]).innerHTML = p[1]; }
+  });
+  if (A.perfil_html || A.qualitativa_html) {
+    el("sec-perfil").style.display = "";
+    if (A.perfil_html) el("narr-perfil").innerHTML = A.perfil_html;
+    if (A.qualitativa_html) el("narr-qualitativa").innerHTML = A.qualitativa_html;
+  }
+  if (A.financeira_html || (A.charts && A.charts.length)) {
+    el("sec-financeira").style.display = "";
+    if (A.financeira_html) el("narr-financeira").innerHTML = A.financeira_html;
+    if (A.charts && A.charts.length && typeof FleetCharts !== "undefined") {
+      FleetCharts.renderAllCharts("charts-financeira", A.charts);
+    }
+  }
+  if (A.limitacoes_html || A.fontes_html) {
+    el("sec-limitacoes").style.display = "";
+    if (A.limitacoes_html) el("narr-limitacoes").innerHTML = A.limitacoes_html;
+    if (A.fontes_html) el("narr-fontes").innerHTML = A.fontes_html;
+  }
+  renderCalibracao(A);
+}
+
+function renderCalibracao(A) {
+  var scens = Object.keys(D.scenarios);
+  if (!scens.length) return;
+  el("sec-calibracao").style.display = "";
+  var rows = ['<tr><th>Input</th>' + scens.map(function (s) { return "<th>" + s + "</th>"; }).join("") +
+    '<th style="text-align:left">Unidade / interpretação</th></tr>'];
+  E.CANONICAL_INPUTS.forEach(function (k) {
+    rows.push("<tr><td>" + k + "</td>" + scens.map(function (s) {
+      var v = D.scenarios[s].inputs[k];
+      return "<td>" + (PCT[k] ? fmtPct(v, 2) : (INTP[k] ? v : fmtN(v))) + "</td>";
+    }).join("") + '<td style="text-align:left" class="muted">' + UNITS[k][1] + "</td></tr>");
+  });
+  var escala =['<tr><td class="muted">Escala (NI0 / Book0)</td>' + scens.map(function (s) {
+    var sc = D.scenarios[s];
+    return "<td>" + (sc.NI0 != null ? "NI0 " + fmtN(sc.NI0) : (sc.Book0 != null ? "Book0 " + fmtN(sc.Book0) : "—")) + "</td>";
+  }).join("") + '<td style="text-align:left" class="muted">escala do valuation, não é 17º input</td></tr>'];
+  var pesos = ['<tr><td class="muted">Peso</td>' + scens.map(function (s) {
+    var w = D.scenarios[s].weight;
+    return "<td>" + (w != null ? Math.round(w * 100) + "%" : "—") + "</td>";
+  }).join("") + '<td style="text-align:left" class="muted">pesos opcionais (probability-weighted fora do K3)</td></tr>'];
+  el("calib-tbl").innerHTML = rows.join("") + escala.join("") + pesos.join("");
+  if (A && A.calibracao_racional_html) el("calib-racional").innerHTML = A.calibracao_racional_html;
+}
+
+/* ---------- KPIs e rodapé ---------- */
+function renderKpis() {
+  var H = D.header || {};
+  var k = [];
+  if (H.fair_value_base_ps != null) k.push(["Fair value base / ação", fmtN(H.fair_value_base_ps), D.currency || ""]);
+  if (D.price_per_share != null) k.push(["Preço de mercado", fmtN(D.price_per_share), D.currency || ""]);
+  if (H.upside_base != null) k.push(["Upside (base)", fmtPct(H.upside_base), "vs mercado"]);
+  if (H.faixa_bear_bull) k.push(["Faixa bear–bull / ação", H.faixa_bear_bull, D.currency || ""]);
+  if (H.k3_base != null) k.push(["Trailing P/L justo (base)", fmtN(H.k3_base) + "x", "K3"]);
+  if (H.hurdle_ps != null) k.push(["Hurdle-conditioned / ação", fmtN(H.hurdle_ps), "rotulado — não é fair value"]);
+  el("kpis").innerHTML = k.map(function (x) {
+    return '<div class="kpi"><div class="l">' + x[0] + '</div><div class="v">' + x[1] + '</div><div class="d">' + x[2] + "</div></div>";
+  }).join("");
+}
+(function footer() {
+  el("foot").innerHTML =
+    "Metodologia: Justified P/E closed formula V2.2.1 (congelada) — K3, duas fases + fade linear de ROE até Ke2, " +
+    "P/B terminal = 1 (TV = book terminal). Convenções: P/L trailing sobre NI0 normalizado; GDE/NDE sobre book equity do modelo K3; " +
+    "valor por ação diluída corrente em t=0 (sem haircut genérico de diluição). " +
+    "Valores interativos calculados por espelho JavaScript verificado contra o engine Python (banner no topo). " +
+    "Valores reverse/implied são diagnósticos rotulados. Dados financeiros coletados via OpenBB; janelas e lacunas declaradas " +
+    "na seção Limitações de dados. Este relatório não constitui recomendação de investimento.";
+})();
+
+function renderAll() {
+  renderTabs(); renderAssumptions(); renderResults(); renderSens();
+}
+renderTabs(); renderAssumptions(); renderResults(); renderSens();
+renderImplied(); renderAnalise(); renderKpis();
+</script>
+</body>
+</html>
