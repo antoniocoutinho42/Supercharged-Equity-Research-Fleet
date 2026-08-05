@@ -112,6 +112,12 @@ def fmt_placeholder(valor, spec: str | None) -> str:
         return f"{100.0 * valor:.{nd}f}%"
     if spec == "x":
         return f"{valor:.2f}x"
+    if spec.startswith("bi"):  # cifras de balanço em bilhões: "10.53"
+        nd = int(spec[2:] or "2")
+        return f"{valor / 1e9:,.{nd}f}"
+    if spec.startswith("mi"):  # em milhões
+        nd = int(spec[2:] or "1")
+        return f"{valor / 1e6:,.{nd}f}"
     nd = int(spec)
     return f"{valor:,.{nd}f}"
 

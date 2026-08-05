@@ -133,6 +133,26 @@ def test_html_emitido_autocontido_numeros_batem(ns):
     assert data["header"]["fair_value_base_ps"] == pytest.approx(vps)
 
 
+def test_formato_bi_e_mi(ns):
+    """Cifras de balanço em bilhões/milhões: auditáveis por placeholder, não num-livre."""
+    analise = json.loads((ns / "analise.json").read_text(encoding="utf-8"))
+    analise["financeira_html"] = ("<p>Escala: {{d:grandes.json:ativo|bi}} bi e "
+                                 "{{d:grandes.json:ativo|mi}} mi.</p>")
+    (ns / "analise.json").write_text(json.dumps(analise, ensure_ascii=False), encoding="utf-8")
+    (ns / "dados" / "grandes.json").write_text(json.dumps({"ativo": 10530000000}),
+                                               encoding="utf-8")
+    r = run_build(ns)
+    assert r.returncode == 0, r.stdout + r.stderr
+    html = (ns / "relatorio" / "relatorio_TST3.html").read_text(encoding="utf-8")
+    assert "10.53 bi" in html
+    assert "10,530.0 mi" in html
+    log = json.loads(re.search(
+        r'<script type="application/json" id="log-consistencia">(.*?)</script>', html, re.S).group(1))
+    entradas = [e for e in log if e["fonte"] == "dados/grandes.json"]
+    assert len(entradas) == 2
+    assert all(e["valor"] == 10530000000 for e in entradas)
+
+
 def test_placeholder_orfao_recusa(ns):
     analise = json.loads((ns / "analise.json").read_text(encoding="utf-8"))
     analise["sumario_html"] = "<p>{{r:scenarios.base.chave_inexistente|2}}</p>"
