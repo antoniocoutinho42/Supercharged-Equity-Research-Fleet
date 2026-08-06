@@ -1,7 +1,7 @@
 {
   "formula_version": "K3-vF19-2026-08-03 / manual-v2.2.1",
   "source_formula_sha256_stored": "ed5163103b73a226d47692ad6a9595416ce38ea2e2e9ea0d217072d4243b5420",
-  "copiado_de": "C:\\Users\\antonio.coutinho\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\a285574f-1119-487a-a43f-55b8af2000fd\\d23d90b0-93a5-47f5-bbb9-17f459f7e5f7\\skills\\justified-pe-valuation",
+  "copiado_de": "skill de usuário `justified-pe-valuation` (pacote anthropic-skills), no diretório de skills gerenciado pelo app Claude. O caminho absoluto é EFÊMERO (muda a cada sessão) e por isso não é registrado aqui: para relocalizar a origem, invoque a skill `anthropic-skills:justified-pe-valuation` e use o base directory que ela informa. A identidade da cópia é dada por formula_version + source_formula_sha256_stored + os sha256 por arquivo abaixo, não pelo caminho.",
   "copiado_em": "2026-08-05",
   "contagem_suite_observada": {
     "fonte_com_node": "SUITE PASS: 282 passed, 0 failed, 0 skipped, 282 total  (formula_version: K3-vF19-2026-08-03 / manual-v2.2.1)",
