@@ -57,7 +57,12 @@ canônica congelada. O motor K3 / Justified P/E é removido integralmente.
 
 **Entra:**
 
-- Vendor congelado `skills/er-multiplos-justos/` (cópia read-only da skill v9.24 + manifest de hashes).
+- Vendor congelado em `vendor/multiplos-justos/`, na raiz do repositório (cópia read-only da skill
+  v9.24), com a skill `er-multiplos-justos` guardando índice e manifest de hashes. **O pacote fica
+  fora de `skills/` por necessidade**: ele traz o próprio `SKILL.md` declarando
+  `name: multiplos-justos`, e sob `skills/` um loader que varra recursivamente registraria uma
+  segunda skill com esse nome, colidindo com a skill standalone do usuário. Invariante travada por
+  teste — nenhum `SKILL.md` aninhado sob `skills/`.
 - Skill `er-valuation` (wrapper de orquestração), `er-evidencia` (doutrina de pesquisa e proveniência),
   agente `pesquisa-evidencia` (tipo único, N instâncias paralelas).
 - Espelho JS do núcleo da `multiplos-justos` com teste de paridade e falha fechada.
@@ -93,7 +98,7 @@ agente pesquisa-evidencia (tipo único, instanciado N vezes com mandatos distint
 
 | Skill | Papel | Regra dura |
 |---|---|---|
-| `er-multiplos-justos` | Vendor congelado: `SKILL.md`, `aplicacao.md`, `derivacao.md`, `paper-*.md`, `scripts/justos.py`, `scripts/testes.py` + manifest de hashes | **Índice, não paráfrase.** Diz o que existe, onde está, qual hash e quando ler cada arquivo. Zero reprodução de metodologia. Read-only: alteração local quebra a suíte |
+| `er-multiplos-justos` | Índice + manifest de hashes do vendor congelado, que vive em `vendor/multiplos-justos/` na raiz do repositório: `SKILL.md`, `aplicacao.md`, `derivacao.md`, `paper-*.md`, `scripts/justos.py`, `scripts/testes.py` | **Índice, não paráfrase.** Diz o que existe, onde está, qual hash e quando ler cada arquivo. Zero reprodução de metodologia. Read-only: alteração local quebra a suíte. O pacote fica fora de `skills/` para não ser descoberto como skill (colisão de nome) |
 | `er-valuation` | Wrapper de orquestração | Chama o motor; **nunca reimplementa conta**. Dono do contrato do caso, das rotas, da composição de cenários, da ponte para preço, da reversa e das sensibilidades |
 | `er-evidencia` | Doutrina de pesquisa e proveniência | Agnóstica de fonte. Dona do schema do ledger, da hierarquia por claim, da reconciliação e da classificação de gaps |
 | `er-analise` | Workflow master | Quatro marcos, autonomia por default, política de interrupção, regras invioláveis |
