@@ -211,9 +211,9 @@ def validar(caso: Caso) -> None:
     """Valida um caso já carregado; levanta `CasoInvalido` na primeira violação.
 
     Ordem de verificação: campos de topo -> rota -> métrica x rota ->
-    ponte x rota -> ações diluídas -> cada cenário (âncora, triângulo,
-    premissas obrigatórias, premissas desconhecidas). Não modifica `caso`;
-    não preenche nada — só confirma ou recusa.
+    ponte x rota -> ações diluídas -> preço -> cada cenário (âncora,
+    triângulo, premissas obrigatórias, premissas desconhecidas). Não
+    modifica `caso`; não preenche nada — só confirma ou recusa.
     """
     _validar_campos_de_topo(caso)
 
@@ -222,6 +222,7 @@ def validar(caso: Caso) -> None:
     _validar_metrica(caso, rota)
     _validar_ponte(caso, rota)
     _validar_acoes_diluidas(caso)
+    _validar_preco(caso)
 
     cenarios = caso["cenarios"]
     if not cenarios:
@@ -348,6 +349,43 @@ def _validar_acoes_diluidas(caso: Caso) -> None:
             "diluídas precisa ser um número finito e positivo — é o "
             "denominador de Equity por ação em toda rota."
         )
+
+
+def _validar_preco(caso: Caso) -> None:
+    """Valida o bloco 'preco': presença, tipo, valor positivo, fonte e data.
+
+    `avaliar()` lê `caso["preco"]["valor"]` para calcular o upside de cada
+    cenário contra o valor que o motor devolve — sem esta validação aqui, um
+    caso sem 'preco' (ou com 'preco.valor' ausente ou inválido) passava pelo
+    portão e só quebrava depois, com `KeyError` cru, longe desta causa.
+    'fonte' e 'data' não entram em conta nenhuma, mas um preço sem origem e
+    sem data não é auditável.
+    """
+    preco = caso.get("preco")
+    if not isinstance(preco, dict):
+        raise CasoInvalido(
+            f"campo 'preco' ausente ou não é um objeto: {preco!r}. O caso "
+            "precisa declarar o preço observado (valor, fonte, data) — é "
+            "contra ele que o upside de cada cenário é calculado."
+        )
+
+    valor = preco.get("valor")
+    if not _numero_valido(valor) or not math.isfinite(valor) or valor <= 0:
+        raise CasoInvalido(
+            f"'preco.valor' inválido: {valor!r}. O preço observado precisa "
+            "ser um número finito e positivo — é o denominador do upside "
+            "calculado contra o valor que o motor devolve."
+        )
+
+    for campo in ("fonte", "data"):
+        item = preco.get(campo)
+        if not isinstance(item, str) or not item.strip():
+            raise CasoInvalido(
+                f"campo 'preco.{campo}' ausente ou vazio: {item!r}. Um "
+                f"preço sem {campo} não é auditável — a metodologia exige "
+                "rastrear de onde veio e quando foi observado cada preço "
+                "usado no caso."
+            )
 
 
 def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:

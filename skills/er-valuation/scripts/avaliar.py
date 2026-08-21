@@ -178,10 +178,11 @@ def escrever(resultados: dict, destino: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Saída deste processo pode carregar acento/símbolo do que `caso.py` ou o
-    # motor recusaram (CasoInvalido, MotorFalhou) — sem isto, um console
-    # Windows PT-BR sem PYTHONUTF8 pode estourar UnicodeEncodeError ao
-    # imprimir, mascarando o erro real. Mesma disciplina de `motor.executar`.
+    # Saída deste processo pode carregar acento/símbolo de qualquer recusa
+    # que este CLI converte em mensagem (CasoInvalido, MotorFalhou, caminho
+    # inexistente, JSON malformado, falha ao gravar --out) — sem isto, um
+    # console Windows PT-BR sem PYTHONUTF8 pode estourar UnicodeEncodeError
+    # ao imprimir, mascarando o erro real. Mesma disciplina de `motor.executar`.
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
@@ -193,11 +194,22 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         resultados = avaliar(carregar(args.caso))
+    except FileNotFoundError as erro:
+        print(f"arquivo de caso não encontrado: '{args.caso}' ({erro}).", file=sys.stderr)
+        return 1
+    except json.JSONDecodeError as erro:
+        print(f"'{args.caso}' não é um JSON válido: {erro}.", file=sys.stderr)
+        return 1
     except (CasoInvalido, MotorFalhou) as erro:
         print(str(erro), file=sys.stderr)
         return 1
 
-    escrever(resultados, args.out)
+    try:
+        escrever(resultados, args.out)
+    except OSError as erro:
+        print(f"não foi possível gravar '{args.out}': {erro}.", file=sys.stderr)
+        return 1
+
     return 0
 
 

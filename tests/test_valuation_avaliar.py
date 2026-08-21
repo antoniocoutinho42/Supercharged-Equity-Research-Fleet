@@ -108,3 +108,71 @@ def test_cli_recusa_caso_invalido_com_exit_1(tmp_path):
         capture_output=True, text=True, encoding="utf-8", timeout=120)
     assert r.returncode == 1
     assert "convenção terminal" in (r.stdout + r.stderr)
+
+
+# --------------------------------------------------------------------------
+# FIX 2: o CLI tem de tratar todo erro alcançável de forma limpa — não só
+# CasoInvalido/MotorFalhou. `carregar` pode levantar FileNotFoundError
+# (caminho ruim) e json.JSONDecodeError (JSON malformado); a escrita de
+# --out pode levantar OSError. Sem tratamento, os três vazam traceback cru
+# para o usuário, mesmo saindo com código 1 (comportamento padrão do
+# Python para exceção não capturada) — o bug não é o exit code, é o
+# traceback bruto substituindo uma mensagem legível em PT-BR.
+# --------------------------------------------------------------------------
+
+def test_cli_recusa_caminho_inexistente_sem_traceback(tmp_path):
+    inexistente = tmp_path / "nao_existe.json"
+    r = subprocess.run(
+        [sys.executable, str(SCRIPTS / "avaliar.py"), str(inexistente), "--out", str(tmp_path / "x.json")],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+    saida = r.stdout + r.stderr
+    assert r.returncode == 1
+    assert "Traceback" not in saida
+    assert str(inexistente) in saida
+
+
+def test_cli_recusa_json_malformado_sem_traceback(tmp_path):
+    ruim = tmp_path / "ruim.json"
+    ruim.write_text("{ nao e json", encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, str(SCRIPTS / "avaliar.py"), str(ruim), "--out", str(tmp_path / "x.json")],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+    saida = r.stdout + r.stderr
+    assert r.returncode == 1
+    assert "Traceback" not in saida
+
+
+def test_cli_recusa_falha_ao_gravar_out_sem_traceback(tmp_path):
+    destino = tmp_path / "pasta_inexistente" / "out.json"
+    r = subprocess.run(
+        [sys.executable, str(SCRIPTS / "avaliar.py"),
+         str(FIXTURES / "caso_minimo_firm.json"), "--out", str(destino)],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+    saida = r.stdout + r.stderr
+    assert r.returncode == 1
+    assert "Traceback" not in saida
+    assert str(destino) in saida
+
+
+# --------------------------------------------------------------------------
+# FIX 3: MotorFalhou alcançando o CLI não tinha teste, embora CasoInvalido
+# tivesse. Gatilho: 'tv' com um valor que caso.py aceita — é string
+# presente e não-nula, e caso.py não valida 'tv' contra o vocabulário
+# fechado do motor (TVS = book/convergencia/gordon/ic/spread), só presença
+# e tipo — mas que o motor congelado recusa via `choices` do argparse
+# (saída não-zero). Confirmado manualmente antes deste teste: este 'tv'
+# atravessa `caso.validar` sem recusa e só é pego no subprocess do motor.
+# --------------------------------------------------------------------------
+
+def test_cli_recusa_motor_falhou_sem_traceback(tmp_path):
+    ruim = tmp_path / "tv_desconhecido_do_motor.json"
+    c = json.loads((FIXTURES / "caso_minimo_firm.json").read_text(encoding="utf-8"))
+    c["cenarios"]["base"]["premissas"]["tv"] = "nao_existe"
+    ruim.write_text(json.dumps(c), encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, str(SCRIPTS / "avaliar.py"), str(ruim), "--out", str(tmp_path / "x.json")],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+    saida = r.stdout + r.stderr
+    assert r.returncode == 1
+    assert "Traceback" not in saida
+    assert "nao_existe" in saida

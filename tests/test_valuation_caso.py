@@ -416,3 +416,113 @@ def test_premissa_opcional_equity_nula_e_permitida(campo):
     c = _equity()
     c["cenarios"]["base"]["premissas"][campo] = None
     validar(c)
+
+
+# --------------------------------------------------------------------------
+# preco: bloco obrigatório, com valor positivo e fonte/data auditáveis.
+# avaliar() lê caso["preco"]["valor"] para calcular o upside — sem esta
+# validação aqui, um caso sem 'preco' (ou com 'preco.valor' ausente/inválido)
+# passava pelo portão e só quebrava depois, com KeyError cru, longe desta
+# causa. Ambas as fixtures já carregam um bloco 'preco' completo, então
+# continuam válidas sem alteração.
+# --------------------------------------------------------------------------
+
+def test_preco_ausente_recusa():
+    c = _firm()
+    del c["preco"]
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_nulo_recusa():
+    c = _firm()
+    c["preco"] = None
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_nao_e_objeto_recusa():
+    c = _firm()
+    c["preco"] = 55.0
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_valor_ausente_recusa():
+    c = _firm()
+    del c["preco"]["valor"]
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_valor_nulo_recusa():
+    c = _firm()
+    c["preco"]["valor"] = None
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_valor_nao_numerico_recusa():
+    c = _firm()
+    c["preco"]["valor"] = "cinquenta e cinco"
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+@pytest.mark.parametrize("valor", [float("nan"), float("inf"), float("-inf")])
+def test_preco_valor_nao_finito_recusa(valor):
+    c = _firm()
+    c["preco"]["valor"] = valor
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+@pytest.mark.parametrize("valor", [0, 0.0, -10.0])
+def test_preco_valor_nao_positivo_recusa(valor):
+    c = _firm()
+    c["preco"]["valor"] = valor
+    with pytest.raises(CasoInvalido, match="preco"):
+        validar(c)
+
+
+def test_preco_fonte_ausente_recusa():
+    c = _firm()
+    del c["preco"]["fonte"]
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
+
+
+def test_preco_fonte_vazia_recusa():
+    c = _firm()
+    c["preco"]["fonte"] = ""
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
+
+
+def test_preco_fonte_nao_e_string_recusa():
+    c = _firm()
+    c["preco"]["fonte"] = 123
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
+
+
+def test_preco_data_ausente_recusa():
+    c = _firm()
+    del c["preco"]["data"]
+    with pytest.raises(CasoInvalido, match="data"):
+        validar(c)
+
+
+def test_preco_data_vazia_recusa():
+    c = _firm()
+    c["preco"]["data"] = ""
+    with pytest.raises(CasoInvalido, match="data"):
+        validar(c)
+
+
+def test_preco_completo_na_rota_equity_e_valida():
+    validar(_equity())
+
+
+def test_preco_completo_na_rota_firm_e_valida():
+    validar(_firm())
