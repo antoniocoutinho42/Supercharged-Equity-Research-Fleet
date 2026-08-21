@@ -34,8 +34,7 @@ def test_er_valuation_da_v4_nao_e_a_da_v2():
     voltando com o mesmo nome.
     """
     nova = RAIZ / "skills" / "er-valuation"
-    if not nova.exists():
-        return  # ainda nao criada nesta altura da v4
+    assert nova.exists()
     assert not (nova / "scripts" / "cap_check.py").exists(), "cap_check da v2 ressuscitou"
     for arq in nova.rglob("*.py"):
         texto = arq.read_text(encoding="utf-8")

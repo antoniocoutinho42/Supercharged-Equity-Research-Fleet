@@ -20,6 +20,7 @@ definidos aqui; nenhum deles reabre esta validação.
 """
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,24 @@ class CasoInvalido(Exception):
     módulo — quem decide o exit code do processo é o CLI de `avaliar.py`,
     não a camada de validação.
     """
+
+
+def _finito(valor: Any) -> bool:
+    """True a menos que `valor` seja um número não-finito (NaN ou ±Infinity).
+
+    `json.loads` aceita os literais não-padrão `NaN`, `Infinity` e
+    `-Infinity`; um deles em qualquer campo numérico envenena a conta a
+    jusante em silêncio — e o serializador do motor transforma float
+    não-finito em `null` mais adiante, longe desta causa. Valores que não
+    são número (`str`, `bool`, `None`, `dict`, `list`) não são
+    responsabilidade desta função — passam livres; a validade deles é
+    checada por quem chama.
+    """
+    if isinstance(valor, bool):
+        return True
+    if isinstance(valor, (int, float)):
+        return math.isfinite(valor)
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -71,6 +90,26 @@ _PREMISSAS_POR_ROTA: dict[str, frozenset] = {
 _PREMISSAS_OBRIGATORIAS_POR_ROTA: dict[str, frozenset] = {
     "firm": PREMISSAS_OBRIGATORIAS_FIRM,
     "equity": PREMISSAS_OBRIGATORIAS_EQUITY,
+}
+
+# --------------------------------------------------------------------------
+# Vocabulário do triângulo g = RiR x retorno, por rota.
+#
+# A identidade tem 3 variáveis nomeadas: a taxa de crescimento (g), o
+# retorno (roic na rota firm, roe na rota equity) e a taxa de reinvestimento
+# (rir). O caso declara exatamente duas como input e a terceira como
+# output — inputs e output juntos têm de ser uma permutação exata deste
+# conjunto de 3, nunca um subconjunto (menos de 3 nomes distintos), nunca
+# um superconjunto (nome de fora da identidade, mesmo que seja premissa
+# válida da rota, como 'wacc').
+# --------------------------------------------------------------------------
+
+TRIANGULO_FIRM: frozenset = frozenset({"g", "roic", "rir"})
+TRIANGULO_EQUITY: frozenset = frozenset({"g", "roe", "rir"})
+
+_TRIANGULO_POR_ROTA: dict[str, frozenset] = {
+    "firm": TRIANGULO_FIRM,
+    "equity": TRIANGULO_EQUITY,
 }
 
 # --------------------------------------------------------------------------
@@ -128,6 +167,19 @@ _RAZOES_CAMPOS_DE_TOPO: dict[str, str] = {
     "cenarios": "sem ao menos um cenário não há nada para o motor rodar.",
 }
 
+# Destes seis campos de topo, só estes três não têm validador dedicado a
+# jusante que já rejeitaria `None` por conta própria: 'rota' cai em
+# `_validar_rota` (rejeita `None` como rota desconhecida), 'acoes_diluidas'
+# cai em `_validar_acoes_diluidas` (rejeita `None` por não ser número), e
+# 'cenarios' cai no `if not cenarios` de `validar` (rejeita `None` por ser
+# falsy). Sem esta checagem aqui, um `null` explícito nestes três passava
+# a checagem de presença (`campo in caso` é verdadeiro) e nunca mais era
+# examinado — `null` é uma saída bem plausível de um template ou de um
+# agente upstream, não uma allowance deliberada para estes campos.
+_CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE: frozenset = frozenset({
+    "companhia", "moeda", "data_analise",
+})
+
 
 def validar(caso: Caso) -> None:
     """Valida um caso já carregado; levanta `CasoInvalido` na primeira violação.
@@ -158,7 +210,13 @@ def validar(caso: Caso) -> None:
 
 def _validar_campos_de_topo(caso: Caso) -> None:
     for campo, razao in _RAZOES_CAMPOS_DE_TOPO.items():
-        if campo not in caso:
+        ausente = campo not in caso
+        nulo = (
+            not ausente
+            and campo in _CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE
+            and caso[campo] is None
+        )
+        if ausente or nulo:
             raise CasoInvalido(
                 f"campo obrigatório ausente no caso: '{campo}'. {razao}"
             )
@@ -178,6 +236,15 @@ def _validar_metrica(caso: Caso, rota: str) -> None:
     aceitas = METRICAS_POR_ROTA[rota]
 
     if tipo in aceitas:
+        valor = metrica_base.get("valor")
+        if not _finito(valor):
+            raise CasoInvalido(
+                f"'metrica_base.valor' não é um número finito: {valor!r}. "
+                "NaN e Infinity não são escala válida — o motor recebe "
+                "essa métrica direto, sem conversão, e o serializador do "
+                "motor transforma float não-finito em `null` mais adiante, "
+                "longe desta causa."
+            )
         return
 
     if tipo in METRICAS_FORA_DA_FATIA:
@@ -215,18 +282,47 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
             "seria silenciar um dado que não se aplica; remova o campo."
         )
 
+    if rota == "firm":
+        # Presença do bloco já está confirmada acima; falta confirmar que
+        # está COMPLETO. Somar (ordem e sinal do waterfall) é
+        # responsabilidade de `ponte.py` — aqui só se valida presença e
+        # tipo de cada linha, para que o `KeyError` de uma linha faltando
+        # vire backstop defensivo em `ponte.py`, nunca o erro que o
+        # usuário vê primeiro.
+        ponte = caso["ponte"] or {}
+        for linha in CAMPOS_DA_PONTE:
+            valor = ponte.get(linha)
+            if (
+                valor is None
+                or isinstance(valor, bool)
+                or not isinstance(valor, (int, float))
+            ):
+                raise CasoInvalido(
+                    f"campo 'ponte.{linha}' ausente ou não numérico na "
+                    f"rota firm: {valor!r}. A ponte tem de declarar todas "
+                    f"as linhas ({', '.join(CAMPOS_DA_PONTE)}) antes de "
+                    "somar."
+                )
+            if not _finito(valor):
+                raise CasoInvalido(
+                    f"campo 'ponte.{linha}' não é um número finito: "
+                    f"{valor!r}. NaN e Infinity não são valor válido de "
+                    "linha da ponte — envenenam a soma em silêncio."
+                )
+
 
 def _validar_acoes_diluidas(caso: Caso) -> None:
     acoes = caso["acoes_diluidas"]
     if (
         isinstance(acoes, bool)
         or not isinstance(acoes, (int, float))
+        or not math.isfinite(acoes)
         or acoes <= 0
     ):
         raise CasoInvalido(
             f"'acoes_diluidas' inválido: {acoes!r}. O número de ações "
-            "diluídas precisa ser positivo — é o denominador de Equity "
-            "por ação em toda rota."
+            "diluídas precisa ser um número finito e positivo — é o "
+            "denominador de Equity por ação em toda rota."
         )
 
 
@@ -253,18 +349,28 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
 
     inputs = triangulo["inputs"]
     output = triangulo["output"]
-    if output in inputs:
+    vocabulario = _TRIANGULO_POR_ROTA[rota]
+    if (
+        len(inputs) != 2
+        or output in inputs
+        or set(inputs) | {output} != vocabulario
+    ):
         raise CasoInvalido(
-            f"{prefixo}: triângulo inconsistente — o output '{output}' "
-            f"está repetido entre os inputs {inputs}. O output tem de ser "
-            "a variável que sobra, não uma das duas declaradas como input."
+            f"{prefixo}: triângulo inconsistente — inputs {inputs!r} e "
+            f"output {output!r} têm de formar uma permutação exata de "
+            f"{sorted(vocabulario)}: exatamente dois inputs distintos, um "
+            "output que não repete nenhum dos inputs, e as três variáveis "
+            f"dentro do vocabulário do triângulo da rota '{rota}'. O "
+            "output tem de ser a variável que sobra, não uma das duas "
+            "declaradas como input, nem uma variável de fora da "
+            "identidade g = RiR x retorno."
         )
 
     premissas = cenario.get("premissas") or {}
 
     obrigatorias = _PREMISSAS_OBRIGATORIAS_POR_ROTA[rota]
     for campo in sorted(obrigatorias):
-        if campo in premissas:
+        if campo in premissas and premissas[campo] is not None:
             continue
         if campo == "tv":
             raise CasoInvalido(
@@ -288,6 +394,13 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
                 f"'{rota}'. Chave que o motor não conhece é erro de "
                 "digitação, não extensão silenciosa do vocabulário — "
                 f"premissas aceitas: {', '.join(sorted(permitidas))}."
+            )
+        valor = premissas[campo]
+        if not _finito(valor):
+            raise CasoInvalido(
+                f"{prefixo}: premissa '{campo}' não é um número finito: "
+                f"{valor!r}. NaN e Infinity não são valor válido de "
+                "premissa — envenenam toda conta a jusante em silêncio."
             )
 
 
