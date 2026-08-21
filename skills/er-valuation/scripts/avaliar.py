@@ -25,6 +25,17 @@ Por cenário, a rota do caso decide o fluxo:
   prontos — não há ponte de dívida nesta rota (`caso.py` já recusa um caso
   equity que declare `ponte`).
 
+`caso["moeda"]` é sempre repassado ao motor como `--moeda` (nas duas rotas) —
+`caso.py` já exige e valida esse campo; sem repassá-lo, toda saída carregava
+o aviso falso do motor de moeda/regime não declarados, causado pelo wrapper.
+
+Todo valor que este módulo lê ou copia da saída do motor (`EV`, `Equity`,
+`Preco_acao`, o múltiplo do ramo NOPAT, os múltiplos copiados para a saída)
+passa por `_exigir_valor`: o serializador do motor converte float não-finito
+em `null` e sai com código 0 mesmo assim — um `null` aqui vira `MotorFalhou`
+nomeando o campo, nunca um valor inventado nem um `null` silencioso dentro de
+`resultados.json`.
+
 A saída é determinística: função pura do `caso` recebido, sem hora de
 execução, caminho absoluto ou qualquer valor do ambiente. A data que aparece
 no resultado é `data_analise`, do próprio caso.
@@ -51,8 +62,49 @@ _MULTIPLOS_POR_ROTA: dict[str, tuple[str, ...]] = {
 }
 
 
+def _exigir_valor(saida_motor: dict, campo: str) -> float:
+    """Devolve `saida_motor[campo]`, recusando com `MotorFalhou` se for `None`.
+
+    Único ponto de normalização (FIX 1, revisão final): o serializador do
+    motor congelado converte todo float não-finito (NaN, Infinity) em
+    `null` — e o processo ainda assim sai com código 0, porque a recusa
+    nunca chega a acontecer no motor; ele só devolve um número que não dá
+    para representar em JSON. Sem esta guarda, esse `null` ou vira
+    `TypeError` cru na primeira conta a jusante (o múltiplo do ramo NOPAT
+    entra direto numa multiplicação) ou é copiado, em silêncio, para dentro
+    de `resultados.json` (quando o campo só é passthrough, como os
+    múltiplos que `_monta_cenario` copia) — os dois sintomas achados na
+    revisão, um crash e um dado envenenado.
+
+    Toda leitura de EV/Equity/Preco_acao/múltiplo vinda do motor passa por
+    aqui — nunca por uma checagem própria em cada consumidor — para que um
+    builder de relatório futuro, que só lê o `resultados.json` já escrito
+    por este módulo, herde a garantia de que esses campos nunca são `null`
+    em vez de ter de repetir a checagem.
+
+    Nunca substitui um valor: o `None` é recusado, nunca trocado por um
+    default — refusing é o comportamento certo aqui também, e a mensagem
+    ecoa os `diagnosticos` do próprio motor, porque é ele quem explica o
+    porquê (gp sem âncora, ROIC_TV ausente sob 'gordon' etc.), não este
+    wrapper.
+    """
+    valor = saida_motor.get(campo)
+    if valor is None:
+        diagnosticos = saida_motor.get("diagnosticos") or []
+        detalhe = "\n".join(f"- {d}" for d in diagnosticos) or "(nenhum)"
+        raise MotorFalhou(
+            f"motor devolveu 'null' para '{campo}': o serializador do "
+            "motor converte todo float não-finito (NaN ou Infinity) em "
+            "`null` e o processo sai com código 0 mesmo assim — este "
+            "wrapper recusa em vez de propagar um null silencioso para "
+            "resultados.json ou quebrar com TypeError cru na conta "
+            f"seguinte.\ndiagnósticos do motor:\n{detalhe}"
+        )
+    return valor
+
+
 def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
-                   nd_efetivo: float, acoes: float) -> tuple[dict, dict, str]:
+                   nd_efetivo: float, acoes: float, moeda: str) -> tuple[dict, dict, str]:
     """Roda o motor para um cenário da rota firm; devolve (saída, valor, álgebra).
 
     `tipo_metrica` já chegou validado por `caso.py` como 'EBITDA' ou 'NOPAT'
@@ -63,16 +115,17 @@ def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
 
     if tipo_metrica == "EBITDA":
         escala = {"ebitda": valor_metrica, "nd": nd_efetivo, "acoes": acoes}
-        saida = rodar("firm", premissas, escala)
+        saida = rodar("firm", premissas, escala, moeda)
         valor = {
-            "EV": saida["EV"],
-            "Equity": saida["Equity"],
-            "preco_acao": saida["Preco_acao"],
+            "EV": _exigir_valor(saida, "EV"),
+            "Equity": _exigir_valor(saida, "Equity"),
+            "preco_acao": _exigir_valor(saida, "Preco_acao"),
         }
         algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
-        saida = rodar("firm", premissas, None)
-        ev = saida["EV/NOPAT_curr"] * valor_metrica
+        saida = rodar("firm", premissas, None, moeda)
+        multiplo = _exigir_valor(saida, "EV/NOPAT_curr")
+        ev = multiplo * valor_metrica
         equity = ev - nd_efetivo
         preco_acao = equity / acoes
         valor = {"EV": ev, "Equity": equity, "preco_acao": preco_acao}
@@ -84,7 +137,8 @@ def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
     return saida, valor, algebra
 
 
-def _cenario_equity(cenario: dict, valor_metrica: float, acoes: float) -> tuple[dict, dict, str]:
+def _cenario_equity(cenario: dict, valor_metrica: float, acoes: float,
+                     moeda: str) -> tuple[dict, dict, str]:
     """Roda o motor para um cenário da rota equity; devolve (saída, valor, álgebra).
 
     Sem ponte: a rota equity chega em Equity diretamente (P/L x LL) — não há
@@ -92,8 +146,11 @@ def _cenario_equity(cenario: dict, valor_metrica: float, acoes: float) -> tuple[
     """
     premissas = cenario["premissas"]
     escala = {"ni": valor_metrica, "acoes": acoes}
-    saida = rodar("equity", premissas, escala)
-    valor = {"Equity": saida["Equity"], "preco_acao": saida["Preco_acao"]}
+    saida = rodar("equity", premissas, escala, moeda)
+    valor = {
+        "Equity": _exigir_valor(saida, "Equity"),
+        "preco_acao": _exigir_valor(saida, "Preco_acao"),
+    }
     algebra = "Equity = PL_curr x LL (motor); rota equity nao usa ponte"
     return saida, valor, algebra
 
@@ -108,7 +165,8 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
     saiu do motor (mais a álgebra de escala, quando aplicável).
     """
     chaves_multiplo = _MULTIPLOS_POR_ROTA[rota]
-    multiplos = {chave: saida_motor[chave] for chave in chaves_multiplo if chave in saida_motor}
+    multiplos = {chave: _exigir_valor(saida_motor, chave)
+                 for chave in chaves_multiplo if chave in saida_motor}
     upside = valor["preco_acao"] / preco_valor - 1
 
     return {
@@ -136,14 +194,27 @@ def avaliar(caso: dict) -> dict:
     metrica = caso["metrica_base"]
     acoes = caso["acoes_diluidas"]
     preco_valor = caso["preco"]["valor"]
+    moeda = caso["moeda"]
+
+    # FIX 5 (revisão final): SKILL.md documenta metrica_base como (tipo,
+    # valor, fonte) e caso.py agora valida 'fonte' com a mesma disciplina de
+    # 'preco.fonte' — mas a saída cortava para {tipo, valor}, descartando
+    # periodo e fonte, enquanto 'preco' abaixo mantém as duas. A
+    # métrica-base é a escala de todo o valuation; não é o único número do
+    # caso sem proveniência no resultado. 'periodo' continua opcional — só
+    # entra quando presente no caso, do jeito que já era antes desta fatia.
+    metrica_saida: dict = {"tipo": metrica["tipo"], "valor": metrica["valor"]}
+    if metrica.get("periodo") is not None:
+        metrica_saida["periodo"] = metrica["periodo"]
+    metrica_saida["fonte"] = metrica["fonte"]
 
     resultado: dict = {
         "companhia": caso["companhia"],
         "ticker": caso.get("ticker"),
-        "moeda": caso["moeda"],
+        "moeda": moeda,
         "data_analise": caso["data_analise"],
         "rota": rota,
-        "metrica_base": {"tipo": metrica["tipo"], "valor": metrica["valor"]},
+        "metrica_base": metrica_saida,
         "preco": caso["preco"],
         "acoes_diluidas": acoes,
     }
@@ -155,11 +226,11 @@ def avaliar(caso: dict) -> dict:
         nd_efetivo = ponte["nd_efetivo"]
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra = _cenario_firm(
-                cenario, metrica["tipo"], metrica["valor"], nd_efetivo, acoes)
+                cenario, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
     else:  # equity
         for nome, cenario in caso["cenarios"].items():
-            saida, valor, algebra = _cenario_equity(cenario, metrica["valor"], acoes)
+            saida, valor, algebra = _cenario_equity(cenario, metrica["valor"], acoes, moeda)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
 
     resultado["cenarios"] = cenarios

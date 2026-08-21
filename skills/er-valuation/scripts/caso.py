@@ -210,11 +210,28 @@ _CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE: frozenset = frozenset({
 def validar(caso: Caso) -> None:
     """Valida um caso já carregado; levanta `CasoInvalido` na primeira violação.
 
-    Ordem de verificação: campos de topo -> rota -> métrica x rota ->
-    ponte x rota -> ações diluídas -> preço -> cada cenário (âncora,
+    Ordem de verificação: o caso em si -> campos de topo -> rota -> métrica x
+    rota -> ponte x rota -> ações diluídas -> preço -> cada cenário (âncora,
     triângulo, premissas obrigatórias, premissas desconhecidas). Não
     modifica `caso`; não preenche nada — só confirma ou recusa.
+
+    Revisão final (FIX 3): doze formatos malformados achados por sondagem
+    manual escapavam desta função como AttributeError/TypeError cru — o
+    portão recusava ANTES de qualquer chamada ao motor, mas sem motivo
+    nomeado, porque o corpo desta função e das que ela chama presume tipo
+    (dict, list, str) em cada boundary sem checar. A guarda abaixo cobre o
+    caso raiz não sendo objeto (`None`, número, lista); as demais guardas de
+    container (metrica_base, ponte, cada cenário, triângulo) vivem nas
+    funções correspondentes, mais perto de onde o tipo importa.
     """
+    if not isinstance(caso, dict):
+        raise CasoInvalido(
+            f"caso.json inválido: o documento raiz tem de ser um objeto "
+            "(com as chaves companhia, moeda, data_analise, rota, "
+            f"metrica_base, acoes_diluidas, preco, cenarios), não "
+            f"{type(caso).__name__}: {caso!r}."
+        )
+
     _validar_campos_de_topo(caso)
 
     rota = caso["rota"]
@@ -230,6 +247,16 @@ def validar(caso: Caso) -> None:
             "nenhum cenário declarado em 'cenarios': a metodologia exige "
             "ao menos um cenário (bear, base ou bull), cada um com âncora "
             "e triângulo próprios — um caso sem cenário não avalia nada."
+        )
+    if not isinstance(cenarios, dict):
+        # Formato bem plausível de erro manual ou de agente upstream: uma
+        # lista de nomes ou de objetos de cenário, em vez do dict nome ->
+        # cenário que o resto desta função presume. `cenarios.items()` logo
+        # abaixo levantaria AttributeError cru sem esta guarda.
+        raise CasoInvalido(
+            f"campo 'cenarios' não é um objeto: {cenarios!r}. Tem de mapear "
+            "o nome de cada cenário (bear, base, bull) ao objeto do "
+            "cenário (âncora, triângulo, premissas) — não uma lista."
         )
     for nome, cenario in cenarios.items():
         _validar_cenario(nome, cenario, rota)
@@ -258,7 +285,15 @@ def _validar_rota(rota: Any) -> None:
 
 
 def _validar_metrica(caso: Caso, rota: str) -> None:
-    metrica_base = caso.get("metrica_base") or {}
+    metrica_base = caso.get("metrica_base")
+    if metrica_base is None:
+        metrica_base = {}
+    elif not isinstance(metrica_base, dict):
+        raise CasoInvalido(
+            f"'metrica_base' não é um objeto: {metrica_base!r}. Tem de "
+            "declarar tipo, valor, periodo e fonte — é a escala de todo "
+            "o valuation."
+        )
     tipo = metrica_base.get("tipo")
     aceitas = METRICAS_POR_ROTA[rota]
 
@@ -278,6 +313,20 @@ def _validar_metrica(caso: Caso, rota: str) -> None:
                 "essa métrica direto, sem conversão, e o serializador do "
                 "motor transforma float não-finito em `null` mais adiante, "
                 "longe desta causa."
+            )
+        # Revisão final (FIX 5): SKILL.md documenta metrica_base como
+        # (tipo, valor, fonte) — mas 'fonte' nunca era validada aqui, embora
+        # 'preco.fonte' já fosse (ver `_validar_preco`). A métrica-base é a
+        # escala de todo o valuation; deixá-la como o único número do caso
+        # sem proveniência auditável, enquanto o preço mantém a dele, é
+        # inverter a prioridade — mesma disciplina, mesma mensagem.
+        fonte = metrica_base.get("fonte")
+        if not isinstance(fonte, str) or not fonte.strip():
+            raise CasoInvalido(
+                f"campo 'metrica_base.fonte' ausente ou vazio: {fonte!r}. "
+                "Uma métrica-base sem fonte não é auditável — a "
+                "metodologia exige rastrear de onde veio a escala de todo "
+                "o valuation, do mesmo jeito que já exige para 'preco'."
             )
         return
 
@@ -323,7 +372,16 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
         # tipo de cada linha, para que o `KeyError` de uma linha faltando
         # vire backstop defensivo em `ponte.py`, nunca o erro que o
         # usuário vê primeiro.
-        ponte = caso["ponte"] or {}
+        ponte = caso["ponte"]
+        if ponte is None:
+            ponte = {}
+        elif not isinstance(ponte, dict):
+            # Revisão final (FIX 3): ponte como lista ou string levantava
+            # AttributeError cru no primeiro `.get()` da linha, abaixo.
+            raise CasoInvalido(
+                f"'ponte' não é um objeto: {ponte!r}. Declare cada linha "
+                f"({', '.join(CAMPOS_DA_PONTE)}) como campo do objeto."
+            )
         for linha in CAMPOS_DA_PONTE:
             valor = ponte.get(linha)
             if not _numero_valido(valor):
@@ -391,6 +449,15 @@ def _validar_preco(caso: Caso) -> None:
 def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
     prefixo = f"cenário '{nome}'"
 
+    if not isinstance(cenario, dict):
+        # Revisão final (FIX 3): um cenário individual como string ou lista
+        # (em vez do objeto ancora/triangulo/premissas) levantava
+        # AttributeError cru no `.get("ancora")` logo abaixo.
+        raise CasoInvalido(
+            f"{prefixo} não é um objeto: {cenario!r}. Cada cenário declara "
+            "'ancora', 'triangulo' e 'premissas'."
+        )
+
     if not cenario.get("ancora"):
         raise CasoInvalido(
             f"{prefixo} sem âncora: a metodologia exige um observável "
@@ -400,6 +467,15 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
         )
 
     triangulo = cenario.get("triangulo")
+    if triangulo is not None and not isinstance(triangulo, dict):
+        # Revisão final (FIX 3): triangulo como algo que não é `None` nem
+        # objeto (ex.: int) levantaria TypeError cru em "inputs" not in
+        # triangulo, logo abaixo — "in" exige um container.
+        raise CasoInvalido(
+            f"{prefixo}: 'triangulo' não é um objeto: {triangulo!r}. A "
+            "identidade g = RiR x retorno exige um objeto com 'inputs' "
+            "(lista de duas variáveis) e 'output' (a terceira)."
+        )
     if not triangulo or "inputs" not in triangulo or "output" not in triangulo:
         raise CasoInvalido(
             f"{prefixo} sem triângulo declarado: a identidade "
@@ -411,6 +487,23 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
 
     inputs = triangulo["inputs"]
     output = triangulo["output"]
+    if (
+        not isinstance(inputs, list)
+        or not all(isinstance(item, str) for item in inputs)
+        or not isinstance(output, str)
+    ):
+        # Revisão final (FIX 3): 'inputs' como int quebrava em len() logo
+        # abaixo (TypeError); 'inputs' como lista de listas, ou 'output'
+        # como lista, quebrava em set(inputs)/{output} (TypeError:
+        # unhashable type) — as três formas malformadas achadas na
+        # sondagem viram uma única recusa nomeada aqui, checando o tipo
+        # certo (lista de nomes-texto; nome-texto) antes de qualquer
+        # operação que presuma esse tipo.
+        raise CasoInvalido(
+            f"{prefixo}: triângulo com formato inválido — 'inputs' tem de "
+            "ser uma lista de nomes (texto) e 'output' tem de ser um nome "
+            f"(texto): inputs={inputs!r}, output={output!r}."
+        )
     vocabulario = _TRIANGULO_POR_ROTA[rota]
     if (
         len(inputs) != 2
@@ -433,6 +526,21 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
         )
 
     premissas = cenario.get("premissas") or {}
+
+    chaves_nao_textuais = [chave for chave in premissas if not isinstance(chave, str)]
+    if chaves_nao_textuais:
+        # Revisão final (FIX 3): JSON de verdade nunca produz chave
+        # não-string, mas caso.py aceita qualquer dict Python, inclusive um
+        # montado por outro código, não lido de arquivo. Sem esta guarda,
+        # `sorted(premissas)` mais abaixo levanta TypeError cru assim que
+        # mistura uma chave string com uma não-string (comparação entre
+        # tipos não é suportada em Python 3).
+        raise CasoInvalido(
+            f"{prefixo}: premissas com chave não textual: "
+            f"{chaves_nao_textuais!r}. Toda chave de premissa tem de ser "
+            "um nome (texto) — o motor traduz cada uma numa flag de linha "
+            "de comando."
+        )
 
     obrigatorias = _PREMISSAS_OBRIGATORIAS_POR_ROTA[rota]
     for campo in sorted(obrigatorias):

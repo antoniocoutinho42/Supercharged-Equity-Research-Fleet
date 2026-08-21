@@ -28,6 +28,13 @@ normaliza saída.
 - Default para escolha que a metodologia declara **sem default**. Caso
   incompleto é **recusado**, com o campo e a razão nomeados — a escolha é do
   analista, e silenciá-la com um padrão de fábrica seria decidir por ele.
+- Deixar um `null` do motor virar número ou vazar para `resultados.json`. O
+  serializador do motor congelado converte todo float não-finito (NaN,
+  Infinity) em `null` e sai com código 0 mesmo assim — todo valor que este
+  wrapper lê ou copia da saída do motor (EV, Equity, preço por ação,
+  múltiplos) é checado; um `null` vira recusa nomeada, ecoando os
+  diagnósticos do próprio motor, nunca um número inventado nem um `null`
+  silencioso no arquivo final.
 
 ## Módulos
 
@@ -44,9 +51,11 @@ normaliza saída.
 python skills/er-valuation/scripts/avaliar.py <caso.json> --out <resultados.json>
 ```
 
-Caso inválido sai com código 1 e a razão em stderr. O motor é chamado no
-interpretador corrente, com utf-8 fixo e bytecode desligado — a árvore
-congelada não é suja nem pelo uso.
+Caso inválido, ou motor que falhou (código != 0, saída não é JSON válido,
+timeout, ou um `null` onde deveria haver número), sai com código 1 e a razão
+em stderr. O motor é chamado no interpretador corrente, com utf-8 fixo,
+bytecode desligado e `--moeda` sempre repassado — a árvore congelada não é
+suja nem pelo uso.
 
 ## Contrato do caso
 

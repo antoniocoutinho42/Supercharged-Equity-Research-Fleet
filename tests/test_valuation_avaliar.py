@@ -1,3 +1,4 @@
+import filecmp
 import json
 import subprocess
 import sys
@@ -10,7 +11,8 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 SCRIPTS = RAIZ / "skills" / "er-valuation" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from caso import carregar  # noqa: E402
-from avaliar import avaliar, escrever  # noqa: E402
+from avaliar import _exigir_valor, avaliar, escrever  # noqa: E402
+from motor import MotorFalhou  # noqa: E402
 
 
 def _res_firm() -> dict:
@@ -56,23 +58,154 @@ def test_rota_equity_produz_equity_sem_ponte():
     assert "EV" not in v
 
 
+# --------------------------------------------------------------------------
+# Revisão final, FIX 1 (Crítico): o serializador do motor congelado converte
+# todo float não-finito (NaN, Infinity) em `null` e ainda assim sai com
+# código 0. Terminal 'gordon' sem 'roic_tv' é um caso que caso.validar()
+# aceita (roic_tv é opcional no schema — só é semanticamente exigido pelo
+# motor sob a convenção gordon) e que produz exatamente esse null. Sem
+# guarda, isso ou quebra com TypeError cru na primeira divisão (upside) ou —
+# pior — grava null em silêncio em resultados.json quando só um múltiplo
+# secundário nula e o preço sobrevive.
+# --------------------------------------------------------------------------
+
+def test_avaliar_recusa_quando_motor_devolve_null_por_nao_finito():
+    c = carregar(FIXTURES / "caso_minimo_firm.json")
+    del c["cenarios"]["base"]["premissas"]["roic_tv"]
+    with pytest.raises(MotorFalhou, match="EV") as excinfo:
+        avaliar(c)
+    mensagem = str(excinfo.value)
+    # diagnósticos do próprio motor têm de ser ecoados, não reinterpretados.
+    assert "RiR" in mensagem
+
+
+def test_exigir_valor_recusa_null_nomeando_campo_e_ecoando_diagnosticos():
+    """Unidade da normalização: _exigir_valor é o único ponto por onde toda
+    leitura de EV/Equity/Preco_acao/múltiplo do motor passa."""
+    saida = {"EV": None, "diagnosticos": ["diagnóstico de teste do motor"]}
+    with pytest.raises(MotorFalhou, match="EV") as excinfo:
+        _exigir_valor(saida, "EV")
+    assert "diagnóstico de teste do motor" in str(excinfo.value)
+
+
+def test_exigir_valor_devolve_o_valor_quando_nao_e_null():
+    saida = {"EV": 123.45, "diagnosticos": []}
+    assert _exigir_valor(saida, "EV") == 123.45
+
+
+def test_multiplo_copiado_null_recusa(monkeypatch):
+    """Um múltiplo secundário — só copiado para a saída, nunca usado em
+    conta — vindo null do motor tem de recusar também, não só EV/Equity/
+    Preco_acao. Motor mockado (sem subprocess) para isolar exatamente este
+    campo, com todo o resto do vetor válido."""
+    def _saida_com_multiplo_nulo(rota, premissas, escala, moeda=None):
+        return {
+            "EV/NOPAT_curr": 11.151, "EV/NOPAT_fwd": None,
+            "EV/EBITDA_curr": 6.6906, "EV/EBITDA_fwd": 6.372,
+            "EV": 6690.59, "Equity": 6190.59, "Preco_acao": 61.91,
+            "diagnosticos": ["diagnóstico de teste"],
+            "coerencia_vetor": {}, "convencao_temporal": "fim de ano",
+        }
+    monkeypatch.setattr("avaliar.rodar", _saida_com_multiplo_nulo)
+    c = carregar(FIXTURES / "caso_minimo_firm.json")
+    with pytest.raises(MotorFalhou, match=r"EV/NOPAT_fwd"):
+        avaliar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 2: roic_tv:null é ausência legítima segundo caso.py —
+# mas só de verdade se argv_para pular a premissa (não a transformar em
+# '--roic-tv None'). Sob tv='gordon' (a fixture padrão), roic_tv É exigido
+# pelo motor, então testar a null ali dispararia o null-guard do FIX 1, não
+# provaria nada sobre FIX 2. Sob tv != gordon, roic_tv é genuinamente
+# inerte — o cenário certo para prova de ponta a ponta com avaliar() real.
+# --------------------------------------------------------------------------
+
+def test_avaliar_aceita_premissa_opcional_nula_no_pipeline_completo():
+    c = carregar(FIXTURES / "caso_minimo_firm.json")
+    c["cenarios"]["base"]["premissas"]["tv"] = "convergencia"
+    c["cenarios"]["base"]["premissas"]["roic_tv"] = None
+    r = avaliar(c)
+    assert r["cenarios"]["base"]["valor"]["EV"] > 0
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 4: 'moeda' é obrigatório, validado por caso.py e ecoado
+# em resultados.json — mas nunca chegava ao motor. Toda saída deste pipeline
+# carregava o aviso falso "MOEDA/REGIME NÃO DECLARADOS", causado pelo
+# wrapper. Passar --moeda não muda nenhum número.
+# --------------------------------------------------------------------------
+
+def test_moeda_do_caso_e_repassada_ao_motor_sem_mudar_numeros():
+    r = _res_firm()
+    diagnosticos = r["cenarios"]["base"]["diagnosticos"]
+    assert not any("MOEDA/REGIME" in d for d in diagnosticos)
+    v = r["cenarios"]["base"]["valor"]
+    assert v["EV"] == pytest.approx(6690.59, abs=0.01)
+    assert v["preco_acao"] == pytest.approx(61.91, abs=0.01)
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 5: metrica_base.fonte é documentado no SKILL.md como
+# obrigatório, mas avaliar() cortava a saída para {tipo, valor} — descartando
+# periodo e fonte, enquanto 'preco' mantém as duas. A métrica-base é a escala
+# de todo o valuation; era o único número do caso sem proveniência no
+# arquivo final.
+# --------------------------------------------------------------------------
+
+def test_metrica_base_carrega_periodo_e_fonte_na_saida():
+    r = _res_firm()
+    m = r["metrica_base"]
+    assert m["tipo"] == "EBITDA" and m["valor"] == pytest.approx(1000.0)
+    assert m["fonte"] == "fixture sintética"
+    assert m["periodo"] == "2025A"
+
+
+def test_metrica_base_sem_periodo_nao_inclui_a_chave_na_saida():
+    """periodo continua opcional — só entra na saída quando presente no caso."""
+    c = carregar(FIXTURES / "caso_minimo_firm.json")
+    del c["metrica_base"]["periodo"]
+    r = avaliar(c)
+    assert "periodo" not in r["metrica_base"]
+    assert r["metrica_base"]["fonte"] == "fixture sintética"
+
+
 def test_escala_por_nopat_reconcilia_com_a_escala_por_ebitda():
-    """Mesma economia, duas rotas de escala: EV tem de bater.
+    """Mesma economia, duas rotas de escala: EV, Equity e preco_acao tem de bater.
 
     Com EBITDA 1000, d 20% e t 25%, o NOPAT coerente e 1000*(1-0.20)*(1-0.25) = 600.
-    EV/NOPAT_curr x 600 tem de dar o mesmo EV que EV/EBITDA_curr x 1000.
+    EV/NOPAT_curr x 600 tem de dar o mesmo EV que EV/EBITDA_curr x 1000 — e dali em
+    diante a ponte (Equity = EV - nd_efetivo) e a divisão por ações
+    (preco_acao = Equity / acoes_diluidas) são a única aritmética que este wrapper
+    faz fora do motor. FIX 6 (revisão final): antes só EV era conferido; um sinal
+    trocado em "ev - nd_efetivo" (para "ev + nd_efetivo", por exemplo) deixava a
+    suíte inteira verde. Equity e preco_acao aqui fecham essa lacuna.
     """
     c = carregar(FIXTURES / "caso_minimo_firm.json")
     c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "periodo": "2025A",
                          "fonte": "derivado do EBITDA da fixture"}
     r = avaliar(c)
-    assert r["cenarios"]["base"]["valor"]["EV"] == pytest.approx(6690.59, abs=0.05)
+    valor = r["cenarios"]["base"]["valor"]
+    assert valor["EV"] == pytest.approx(6690.59, abs=0.05)
+    assert valor["Equity"] == pytest.approx(6190.59, abs=0.05)
+    assert valor["preco_acao"] == pytest.approx(61.91, abs=0.05)
 
 
-def test_saida_e_deterministica():
-    a = json.dumps(_res_firm(), sort_keys=True, ensure_ascii=False)
-    b = json.dumps(_res_firm(), sort_keys=True, ensure_ascii=False)
-    assert a == b
+def test_saida_e_deterministica(tmp_path):
+    """FIX 7 (revisão final): a versão anterior comparava com sort_keys=True,
+    cancelando exatamente a diferença de ordem de chave que quebraria
+    byte-identidade — e rodava as duas chamadas no mesmo processo Python, sem
+    nunca provar nada sobre dois processos distintos. A garantia que importa é
+    byte a byte, entre duas invocações reais da CLI, sem normalizar nada."""
+    destino_a = tmp_path / "a.json"
+    destino_b = tmp_path / "b.json"
+    for destino in (destino_a, destino_b):
+        r = subprocess.run(
+            [sys.executable, str(SCRIPTS / "avaliar.py"),
+             str(FIXTURES / "caso_minimo_firm.json"), "--out", str(destino)],
+            capture_output=True, text=True, encoding="utf-8", timeout=120)
+        assert r.returncode == 0, r.stdout + r.stderr
+    assert filecmp.cmp(destino_a, destino_b, shallow=False)
 
 
 def test_saida_nao_carrega_hora_nem_caminho_absoluto():

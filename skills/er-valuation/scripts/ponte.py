@@ -37,9 +37,12 @@ def compor(ponte: dict) -> dict:
     """Soma linhas de balanço declaradas em net debt e parcelas de waterfall.
 
     Args:
-        ponte: Dicionário com linhas de balanço como números finitos positivos
-               (ou zero). KeyError se alguma linha faltar — validação de
-               presença é do `caso.py`.
+        ponte: Dicionário com linhas de balanço como números finitos —
+               positivos, negativos ou zero. Um valor negativo é legítimo
+               (ex.: uma linha de "outros ativos" que na verdade é passivo
+               líquido) e não é papel deste módulo recusar; validação de
+               tipo e finitude é do `caso.py`. KeyError se alguma linha
+               faltar — validação de presença também é do `caso.py`.
 
     Returns:
         Dicionário com:

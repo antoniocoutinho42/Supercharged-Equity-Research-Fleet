@@ -59,6 +59,61 @@ def test_argv_omite_premissa_ausente_em_vez_de_inventar_default():
     assert "--gp" not in argv_para("firm", premissas, None)
 
 
+# --------------------------------------------------------------------------
+# Revisão final, FIX 2: caso.py documenta None numa premissa opcional
+# (roic_tv, gp, roic_book...) como ausência legítima — mas argv_para só
+# pulava a CHAVE ausente, não a chave presente com valor None. O resultado
+# era '--roic-tv None' (string 'None' literal) na linha de comando, e o
+# motor recusa por tipo errado (float('None') não converte). argv_para tem
+# de espelhar a mesma leitura de None que caso.py já promete.
+# --------------------------------------------------------------------------
+
+def test_argv_omite_premissa_com_valor_none_em_vez_de_virar_string_none():
+    premissas = dict(PREMISSAS_FIRM)
+    premissas["roic_tv"] = None
+    argv = argv_para("firm", premissas, None)
+    assert "--roic-tv" not in argv
+    assert "None" not in argv
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 4: 'moeda' é campo de topo do caso — obrigatório,
+# validado e ecoado em resultados.json — mas nunca chegava ao motor, porque
+# argv_para só conhece premissas e escala. O motor aceita --moeda nas duas
+# rotas (ev e pe); sem ela, toda saída carrega o aviso falso "MOEDA/REGIME
+# NÃO DECLARADOS", causado pelo wrapper, não por uma omissão real do caso.
+# --------------------------------------------------------------------------
+
+def test_argv_inclui_moeda_quando_informada():
+    argv = argv_para("firm", PREMISSAS_FIRM, None, moeda="BRL-nominal")
+    assert "--moeda" in argv
+    assert argv[argv.index("--moeda") + 1] == "BRL-nominal"
+
+
+def test_argv_omite_moeda_quando_nao_informada():
+    argv = argv_para("firm", PREMISSAS_FIRM, None)
+    assert "--moeda" not in argv
+
+
+def test_argv_equity_tambem_inclui_moeda_quando_informada():
+    argv = argv_para("equity", PREMISSAS_EQUITY, None, moeda="BRL-nominal")
+    assert "--moeda" in argv
+    assert argv[argv.index("--moeda") + 1] == "BRL-nominal"
+
+
+def test_rodar_aceita_moeda_e_repassa_ao_motor():
+    """Prova de ponta a ponta (com subprocess real): passar moeda não muda
+    nenhum número — só troca o aviso 'MOEDA/REGIME NÃO DECLARADOS' por
+    ausência dele nos diagnósticos."""
+    sem = rodar("firm", PREMISSAS_FIRM, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0})
+    com = rodar("firm", PREMISSAS_FIRM, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0},
+                moeda="BRL-nominal")
+    assert sem["EV"] == pytest.approx(com["EV"])
+    assert sem["Preco_acao"] == pytest.approx(com["Preco_acao"])
+    assert any("MOEDA/REGIME" in d for d in sem["diagnosticos"])
+    assert not any("MOEDA/REGIME" in d for d in com["diagnosticos"])
+
+
 def test_rodar_firm_reproduz_os_numeros_do_motor():
     """Ancora capturada do vendor em 2026-08-21 — se mudar, o wrapper ou o motor mudou."""
     out = rodar("firm", PREMISSAS_FIRM, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0})

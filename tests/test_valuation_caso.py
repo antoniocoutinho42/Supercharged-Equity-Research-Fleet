@@ -509,20 +509,146 @@ def test_preco_fonte_nao_e_string_recusa():
 def test_preco_data_ausente_recusa():
     c = _firm()
     del c["preco"]["data"]
-    with pytest.raises(CasoInvalido, match="data"):
+    # FIX 9 (revisão final): match="data" também bate em mensagens de
+    # 'data_analise' — regex apertada para só poder casar com 'preco.data'.
+    with pytest.raises(CasoInvalido, match=r"preco\.data"):
         validar(c)
 
 
 def test_preco_data_vazia_recusa():
     c = _firm()
     c["preco"]["data"] = ""
-    with pytest.raises(CasoInvalido, match="data"):
+    with pytest.raises(CasoInvalido, match=r"preco\.data"):
         validar(c)
 
 
-def test_preco_completo_na_rota_equity_e_valida():
-    validar(_equity())
+# --------------------------------------------------------------------------
+# Revisão final, FIX 5: 'metrica_base.fonte' é documentado no SKILL.md como
+# obrigatório (tipo, valor, fonte), mas nunca era validado — a métrica-base é
+# a escala do valuation inteiro, e era o único número do caso sem
+# proveniência auditável, enquanto 'preco.fonte' já era exigido. Mesma
+# disciplina de _validar_preco: presente, string, não-vazia.
+# --------------------------------------------------------------------------
+
+def test_metrica_base_fonte_ausente_recusa():
+    c = _firm()
+    del c["metrica_base"]["fonte"]
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
 
 
-def test_preco_completo_na_rota_firm_e_valida():
-    validar(_firm())
+def test_metrica_base_fonte_vazia_recusa():
+    c = _firm()
+    c["metrica_base"]["fonte"] = ""
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
+
+
+def test_metrica_base_fonte_nao_e_string_recusa():
+    c = _firm()
+    c["metrica_base"]["fonte"] = 123
+    with pytest.raises(CasoInvalido, match="fonte"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 3: doze formatos malformados escapavam da validação como
+# AttributeError/TypeError cru em vez de CasoInvalido — o portão recusava
+# ANTES de qualquer chamada ao motor, mas sem motivo nomeado. Cada teste
+# abaixo reproduz um formato achado por sondagem manual na revisão: o caso
+# raiz não sendo objeto, um bloco-container (metrica_base/ponte/cenarios/
+# cenário individual/triângulo) vindo com o tipo errado, ou uma chave de
+# premissa não-textual — todos tinham de virar CasoInvalido, nomeando o
+# campo, nunca uma exceção Python interna vazando para quem chama.
+# --------------------------------------------------------------------------
+
+def test_caso_raiz_none_recusa():
+    with pytest.raises(CasoInvalido):
+        validar(None)
+
+
+def test_caso_raiz_numero_recusa():
+    with pytest.raises(CasoInvalido):
+        validar(42)
+
+
+def test_metrica_base_string_recusa():
+    c = _firm()
+    c["metrica_base"] = "EBITDA"
+    with pytest.raises(CasoInvalido, match="metrica_base"):
+        validar(c)
+
+
+def test_metrica_base_lista_recusa():
+    c = _firm()
+    c["metrica_base"] = ["EBITDA", 1000.0]
+    with pytest.raises(CasoInvalido, match="metrica_base"):
+        validar(c)
+
+
+def test_ponte_lista_recusa():
+    c = _firm()
+    c["ponte"] = [800.0, 300.0, 0.0, 0.0, 0.0]
+    with pytest.raises(CasoInvalido, match="ponte"):
+        validar(c)
+
+
+def test_ponte_string_recusa():
+    c = _firm()
+    c["ponte"] = "sem ponte"
+    with pytest.raises(CasoInvalido, match="ponte"):
+        validar(c)
+
+
+def test_cenarios_lista_recusa():
+    """Formato bem plausível de erro manual ou de agente upstream."""
+    c = _firm()
+    c["cenarios"] = ["base", "bull"]
+    with pytest.raises(CasoInvalido, match="cenarios"):
+        validar(c)
+
+
+def test_cenario_individual_string_recusa():
+    c = _firm()
+    c["cenarios"]["base"] = "cenario base"
+    with pytest.raises(CasoInvalido, match="cenário"):
+        validar(c)
+
+
+def test_cenario_individual_lista_recusa():
+    c = _firm()
+    c["cenarios"]["base"] = ["g", "roic"]
+    with pytest.raises(CasoInvalido, match="cenário"):
+        validar(c)
+
+
+def test_triangulo_inputs_inteiro_recusa():
+    c = _firm()
+    c["cenarios"]["base"]["triangulo"] = {"inputs": 2, "output": "rir"}
+    with pytest.raises(CasoInvalido, match="triângulo"):
+        validar(c)
+
+
+def test_triangulo_inputs_lista_de_listas_recusa():
+    c = _firm()
+    c["cenarios"]["base"]["triangulo"] = {"inputs": [["g"], ["roic"]], "output": "rir"}
+    with pytest.raises(CasoInvalido, match="triângulo"):
+        validar(c)
+
+
+def test_triangulo_output_lista_recusa():
+    c = _firm()
+    c["cenarios"]["base"]["triangulo"] = {"inputs": ["g", "roic"], "output": ["rir"]}
+    with pytest.raises(CasoInvalido, match="triângulo"):
+        validar(c)
+
+
+def test_premissa_com_chave_nao_textual_recusa():
+    """JSON de verdade nunca produz chave não-string, mas caso.py aceita
+    qualquer dict Python — inclusive um montado por outro código, não lido
+    de arquivo. Sem a guarda, sorted(premissas) quebra com TypeError assim
+    que mistura chave string e não-string (comparação entre tipos)."""
+    c = _firm()
+    c["cenarios"]["base"]["premissas"][5] = 10.0
+    with pytest.raises(CasoInvalido, match="premiss"):
+        validar(c)

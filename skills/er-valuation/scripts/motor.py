@@ -85,18 +85,29 @@ def _flag(chave: str) -> str:
     return _FLAGS_COM_HIFEN.get(chave, f"--{chave}")
 
 
-def argv_para(rota: str, premissas: dict, escala: dict | None) -> list[str]:
+def argv_para(rota: str, premissas: dict, escala: dict | None,
+              moeda: str | None = None) -> list[str]:
     """Monta `[subcomando, *flags]` para `rota` — sem executar nada.
 
     Não inclui o interpretador nem o caminho do script: só o subcomando
     (`ev` ou `pe`) e as flags. Cada chave de `premissas` vira uma flag com o
-    valor logo depois (exceto `mid_year`, booleana); chave ausente do dict
-    não produz flag nenhuma — nunca um valor inventado.
+    valor logo depois (exceto `mid_year`, booleana); chave ausente do dict,
+    OU presente com valor `None`, não produz flag nenhuma — nunca um valor
+    inventado. O `None` explícito importa: `caso.py` documenta `None` numa
+    premissa opcional (`roic_tv`, `gp`, `roic_book`...) como ausência
+    legítima, e sem pular esse caso aqui a flag vira `--roic-tv None`
+    (string literal `'None'`), que o motor recusa por tipo errado — os dois
+    módulos têm de concordar sobre o que `None` significa.
 
     `escala` é `None` (sem escala, o motor devolve só os múltiplos) ou o
     dict de métrica de escala da rota — `{"ebitda", "nd", "acoes"}` na rota
     firm, `{"ni", "acoes"}` na equity. Nenhuma chave de escala tem hífen na
     flag do motor, então a mesma tradução genérica de `_flag` se aplica.
+
+    `moeda` é o campo de topo do caso (não é premissa nem escala — por isso
+    é parâmetro à parte, nunca uma chave dentro de `premissas`): `None`
+    (default) não produz flag nenhuma; uma string produz `--moeda <valor>`,
+    aceita pelas duas rotas (`ev` e `pe`) do motor congelado.
     """
     argv = [SUBCOMANDO[rota]]
 
@@ -105,6 +116,8 @@ def argv_para(rota: str, premissas: dict, escala: dict | None) -> list[str]:
             if valor:
                 argv.append(_flag(chave))
             continue
+        if valor is None:
+            continue
         argv.append(_flag(chave))
         argv.append(str(valor))
 
@@ -112,6 +125,10 @@ def argv_para(rota: str, premissas: dict, escala: dict | None) -> list[str]:
         for chave, valor in escala.items():
             argv.append(_flag(chave))
             argv.append(str(valor))
+
+    if moeda:
+        argv.append("--moeda")
+        argv.append(str(moeda))
 
     return argv
 
@@ -170,6 +187,7 @@ def executar(argv: list[str], timeout: float = 120) -> dict:
         ) from erro
 
 
-def rodar(rota: str, premissas: dict, escala: dict | None = None) -> dict:
+def rodar(rota: str, premissas: dict, escala: dict | None = None,
+          moeda: str | None = None) -> dict:
     """Compõe `argv_para` e `executar`: monta o argv da rota e roda o motor."""
-    return executar(argv_para(rota, premissas, escala))
+    return executar(argv_para(rota, premissas, escala, moeda))
