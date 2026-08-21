@@ -652,3 +652,106 @@ def test_premissa_com_chave_nao_textual_recusa():
     c["cenarios"]["base"]["premissas"][5] = 10.0
     with pytest.raises(CasoInvalido, match="premiss"):
         validar(c)
+
+
+# --------------------------------------------------------------------------
+# Fatia B, Task 1: contrato dos blocos opcionais 'mercado', 'reversa' e
+# 'sensibilidades'. Os três são opcionais — as fixtures e testes da fatia A
+# continuam válidos sem eles. Mas 'reversa' presente exige 'mercado' (rf,
+# erp) e o eixo 'custo_capital', porque sem eles não há beta implícito — o
+# confronto que a reversa existe para produzir.
+# --------------------------------------------------------------------------
+
+def _reversa() -> dict:
+    return json.loads((FIXTURES / "caso_reversa_firm.json").read_text(encoding="utf-8"))
+
+
+def test_fixture_de_reversa_e_valida():
+    assert carregar(FIXTURES / "caso_reversa_firm.json")["reversa"]["eixos"]
+
+
+def test_caso_sem_blocos_novos_continua_valido():
+    """A fatia A nao pode ser quebrada: mercado/reversa/sensibilidades sao opcionais."""
+    assert carregar(FIXTURES / "caso_minimo_firm.json")["rota"] == "firm"
+
+
+def test_reversa_sem_custo_de_capital_recusa():
+    """Eixo obrigatorio da metodologia em toda rodada — omitir nao e escolha."""
+    c = _reversa()
+    c["reversa"]["eixos"] = ["crescimento", "rentabilidade"]
+    with pytest.raises(CasoInvalido, match="custo de capital"):
+        validar(c)
+
+
+def test_reversa_com_eixo_desconhecido_recusa():
+    c = _reversa()
+    c["reversa"]["eixos"] = ["custo_capital", "volatilidade"]
+    with pytest.raises(CasoInvalido, match="volatilidade"):
+        validar(c)
+
+
+def test_reversa_sem_bloco_mercado_recusa():
+    """Sem rf e erp nao ha beta implicito, e o beta implicito e o confronto."""
+    c = _reversa()
+    del c["mercado"]
+    with pytest.raises(CasoInvalido, match="mercado"):
+        validar(c)
+
+
+@pytest.mark.parametrize("campo", ["rf", "erp"])
+def test_reversa_sem_campo_de_mercado_recusa(campo):
+    c = _reversa()
+    del c["mercado"][campo]
+    with pytest.raises(CasoInvalido, match=campo):
+        validar(c)
+
+
+def test_reversa_aponta_cenario_inexistente_recusa():
+    c = _reversa()
+    c["reversa"]["cenario"] = "otimista"
+    with pytest.raises(CasoInvalido, match="otimista"):
+        validar(c)
+
+
+def test_beta_observado_invalido_recusa():
+    c = _reversa()
+    c["mercado"]["beta_observado"] = [1.4, 0.8]
+    with pytest.raises(CasoInvalido, match="beta"):
+        validar(c)
+
+
+def test_grade_1d_sem_pontos_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["pontos"] = []
+    with pytest.raises(CasoInvalido, match="pontos"):
+        validar(c)
+
+
+def test_grade_1d_com_premissa_fora_da_rota_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["premissa"] = "roe"
+    with pytest.raises(CasoInvalido, match="roe"):
+        validar(c)
+
+
+def test_grade_sem_triangulo_declarado_recusa():
+    """Grade sem configuracao do triangulo nao e reproduzivel."""
+    c = _reversa()
+    del c["sensibilidades"]["grades_1d"][0]["triangulo"]
+    with pytest.raises(CasoInvalido, match="triângulo"):
+        validar(c)
+
+
+def test_grade_2d_com_eixos_iguais_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_2d"][0]["premissa_y"] = "roic"
+    with pytest.raises(CasoInvalido, match="mesma premissa"):
+        validar(c)
+
+
+def test_sensibilidades_sem_reversa_e_permitido():
+    """Os dois blocos sao independentes."""
+    c = _reversa()
+    del c["reversa"]
+    del c["mercado"]
+    validar(c)

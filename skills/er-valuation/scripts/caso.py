@@ -172,6 +172,30 @@ CAMPOS_DA_PONTE: tuple = (
 )
 
 # --------------------------------------------------------------------------
+# Reversa: eixos aceitos e o que a metodologia torna obrigatório.
+#
+# EIXO_OBRIGATORIO ('custo_capital') não é um default que este módulo
+# preenche — é uma exigência da própria metodologia: o custo de capital
+# implícito é um dos dois únicos eixos com observável direto de mercado
+# para confrontar (o beta implícito, via CAPM invertido), o outro sendo o
+# próprio alvo de múltiplo. Um caso que declare 'reversa' sem esse eixo é
+# recusado, nunca completado em silêncio — mesma disciplina já aplicada à
+# convenção terminal ('tv').
+# --------------------------------------------------------------------------
+
+EIXOS_DE_REVERSA: frozenset = frozenset({
+    "custo_capital", "crescimento", "rentabilidade", "cap",
+})
+
+EIXO_OBRIGATORIO: str = "custo_capital"
+
+# Sem 'rf' e 'erp' não há como inverter o CAPM em beta implícito
+# (beta = (custo_implícito − rf) ÷ erp). Os dois só passam a ser exigidos
+# quando o caso declara 'reversa' — fora disso, 'mercado' é só um bloco
+# opcional.
+CAMPOS_DE_MERCADO_OBRIGATORIOS: tuple = ("rf", "erp")
+
+# --------------------------------------------------------------------------
 # Campos de topo obrigatórios e a razão de cada um.
 # --------------------------------------------------------------------------
 
@@ -212,8 +236,9 @@ def validar(caso: Caso) -> None:
 
     Ordem de verificação: o caso em si -> campos de topo -> rota -> métrica x
     rota -> ponte x rota -> ações diluídas -> preço -> cada cenário (âncora,
-    triângulo, premissas obrigatórias, premissas desconhecidas). Não
-    modifica `caso`; não preenche nada — só confirma ou recusa.
+    triângulo, premissas obrigatórias, premissas desconhecidas) -> blocos
+    opcionais 'mercado', 'reversa' e 'sensibilidades', só quando presentes.
+    Não modifica `caso`; não preenche nada — só confirma ou recusa.
 
     Revisão final (FIX 3): doze formatos malformados achados por sondagem
     manual escapavam desta função como AttributeError/TypeError cru — o
@@ -260,6 +285,11 @@ def validar(caso: Caso) -> None:
         )
     for nome, cenario in cenarios.items():
         _validar_cenario(nome, cenario, rota)
+
+    reversa_presente = caso.get("reversa") is not None
+    _validar_mercado(caso, reversa_presente)
+    _validar_reversa(caso, cenarios, rota)
+    _validar_sensibilidades(caso, cenarios, rota)
 
 
 def _validar_campos_de_topo(caso: Caso) -> None:
@@ -446,27 +476,15 @@ def _validar_preco(caso: Caso) -> None:
             )
 
 
-def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
-    prefixo = f"cenário '{nome}'"
+def _validar_triangulo(prefixo: str, triangulo: Any, rota: str) -> None:
+    """Valida a configuração do triângulo g = RiR x retorno.
 
-    if not isinstance(cenario, dict):
-        # Revisão final (FIX 3): um cenário individual como string ou lista
-        # (em vez do objeto ancora/triangulo/premissas) levantava
-        # AttributeError cru no `.get("ancora")` logo abaixo.
-        raise CasoInvalido(
-            f"{prefixo} não é um objeto: {cenario!r}. Cada cenário declara "
-            "'ancora', 'triangulo' e 'premissas'."
-        )
-
-    if not cenario.get("ancora"):
-        raise CasoInvalido(
-            f"{prefixo} sem âncora: a metodologia exige um observável "
-            "concreto por cenário (consenso, guidance vigente, histórico "
-            "normalizado, run-rate, pares diretos) — cenário sem âncora é "
-            "cenário inventado."
-        )
-
-    triangulo = cenario.get("triangulo")
+    Extraída de `_validar_cenario` (Fatia B, Task 1) para ser compartilhada
+    com as grades de sensibilidade, que declaram a mesma configuração por
+    grade — mesma identidade, mesmo vocabulário por rota, mesma exigência
+    de permutação exata. `prefixo` identifica quem está sendo validado
+    (um cenário ou uma grade) nas mensagens de recusa.
+    """
     if triangulo is not None and not isinstance(triangulo, dict):
         # Revisão final (FIX 3): triangulo como algo que não é `None` nem
         # objeto (ex.: int) levantaria TypeError cru em "inputs" not in
@@ -524,6 +542,29 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
             "declaradas como input, nem uma variável de fora da "
             "identidade g = RiR x retorno."
         )
+
+
+def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
+    prefixo = f"cenário '{nome}'"
+
+    if not isinstance(cenario, dict):
+        # Revisão final (FIX 3): um cenário individual como string ou lista
+        # (em vez do objeto ancora/triangulo/premissas) levantava
+        # AttributeError cru no `.get("ancora")` logo abaixo.
+        raise CasoInvalido(
+            f"{prefixo} não é um objeto: {cenario!r}. Cada cenário declara "
+            "'ancora', 'triangulo' e 'premissas'."
+        )
+
+    if not cenario.get("ancora"):
+        raise CasoInvalido(
+            f"{prefixo} sem âncora: a metodologia exige um observável "
+            "concreto por cenário (consenso, guidance vigente, histórico "
+            "normalizado, run-rate, pares diretos) — cenário sem âncora é "
+            "cenário inventado."
+        )
+
+    _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
 
     premissas = cenario.get("premissas") or {}
 
@@ -593,6 +634,232 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
                 f"{valor!r}. NaN e Infinity não são valor válido de "
                 "premissa — envenenam toda conta a jusante em silêncio."
             )
+
+
+# --------------------------------------------------------------------------
+# Fatia B, Task 1: blocos opcionais 'mercado', 'reversa' e 'sensibilidades'.
+#
+# Os três são opcionais — um caso sem eles é exatamente tão válido quanto
+# antes desta fatia. Mas 'reversa' presente muda o que 'mercado' exige
+# (rf, erp deixam de ser opcionais) e o que 'reversa.eixos' precisa conter
+# (custo_capital deixa de ser um eixo entre outros). Nenhuma das três
+# funções abaixo calcula nada — só confirma presença, tipo e consistência,
+# a mesma disciplina do resto do módulo.
+# --------------------------------------------------------------------------
+
+def _validar_mercado(caso: Caso, reversa_presente: bool) -> None:
+    """Valida o bloco opcional 'mercado'.
+
+    Sem 'reversa', 'mercado' é só um objeto opcional: só precisa ser um
+    dict quando presente, e 'beta_observado' (se presente) precisa ser uma
+    banda válida. Com 'reversa' presente, 'rf' e 'erp' passam a ser
+    obrigatórios — sem eles não há como inverter o CAPM em beta implícito.
+    """
+    mercado = caso.get("mercado")
+
+    if mercado is None:
+        if reversa_presente:
+            raise CasoInvalido(
+                "bloco 'reversa' presente sem bloco 'mercado': sem 'rf' e "
+                "'erp' não há beta implícito, e o beta implícito é o "
+                "confronto que a reversa existe para produzir. Declare "
+                "'mercado' com 'rf' e 'erp'."
+            )
+        return
+
+    if not isinstance(mercado, dict):
+        raise CasoInvalido(
+            f"campo 'mercado' não é um objeto: {mercado!r}. Declare 'rf', "
+            "'erp' e, opcionalmente, 'beta_observado', 'fonte' e 'data'."
+        )
+
+    if reversa_presente:
+        for campo in CAMPOS_DE_MERCADO_OBRIGATORIOS:
+            valor = mercado.get(campo)
+            if not _numero_valido(valor):
+                raise CasoInvalido(
+                    f"campo 'mercado.{campo}' ausente ou não numérico: "
+                    f"{valor!r}. Bloco 'reversa' presente exige 'rf' e "
+                    "'erp' — sem eles não há como calcular o beta "
+                    "implícito."
+                )
+            if not _finito(valor):
+                raise CasoInvalido(
+                    f"campo 'mercado.{campo}' não é um número finito: "
+                    f"{valor!r}. NaN e Infinity não são valor válido de "
+                    "mercado — envenenam o beta implícito em silêncio."
+                )
+
+    beta_observado = mercado.get("beta_observado")
+    if beta_observado is not None:
+        invalido = (
+            not isinstance(beta_observado, list)
+            or len(beta_observado) != 2
+            or not all(_numero_valido(v) and _finito(v) for v in beta_observado)
+            or not beta_observado[0] < beta_observado[1]
+        )
+        if invalido:
+            raise CasoInvalido(
+                f"'mercado.beta_observado' inválido: {beta_observado!r}. "
+                "Tem de ser uma lista [mínimo, máximo] com dois números "
+                "finitos e mínimo < máximo — é a banda de beta observado "
+                "contra a qual o beta implícito é confrontado."
+            )
+
+
+def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
+    """Valida o bloco opcional 'reversa': eixos, eixo obrigatório e cenário-alvo.
+
+    A exigência de 'mercado' (rf, erp) quando 'reversa' está presente já foi
+    confirmada por `_validar_mercado` antes desta função rodar — não é
+    responsabilidade dela.
+    """
+    reversa = caso.get("reversa")
+    if reversa is None:
+        return
+
+    if not isinstance(reversa, dict):
+        raise CasoInvalido(
+            f"campo 'reversa' não é um objeto: {reversa!r}. Declare "
+            "'cenario' e 'eixos'."
+        )
+
+    eixos = reversa.get("eixos")
+    if not isinstance(eixos, list) or not eixos:
+        raise CasoInvalido(
+            f"'reversa.eixos' ausente ou vazio: {eixos!r}. Declare ao "
+            f"menos um eixo dentre {', '.join(sorted(EIXOS_DE_REVERSA))}, "
+            "incluindo obrigatoriamente 'custo_capital' (custo de capital "
+            "implícito)."
+        )
+
+    desconhecidos = [eixo for eixo in eixos if eixo not in EIXOS_DE_REVERSA]
+    if desconhecidos:
+        raise CasoInvalido(
+            f"'reversa.eixos' contém eixo desconhecido: {desconhecidos!r}. "
+            f"Eixos aceitos: {', '.join(sorted(EIXOS_DE_REVERSA))}."
+        )
+
+    if EIXO_OBRIGATORIO not in eixos:
+        raise CasoInvalido(
+            f"'reversa.eixos' sem 'custo_capital' (custo de capital "
+            f"implícito): {eixos!r}. O custo de capital implícito é eixo "
+            "obrigatório da metodologia em toda rodada de reversa — sem "
+            "ele não há beta implícito, o único confronto direto contra "
+            "um observável de mercado além do próprio alvo de múltiplo. "
+            "Omitir não é escolha do analista."
+        )
+
+    cenario_nome = reversa.get("cenario")
+    if cenario_nome not in cenarios:
+        raise CasoInvalido(
+            f"'reversa.cenario' aponta para cenário inexistente: "
+            f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
+            "'cenarios'."
+        )
+
+
+def _validar_pontos(prefixo: str, pontos: Any) -> None:
+    """Valida 'pontos' de uma grade: lista não vazia de números finitos.
+
+    D5 do plano da fatia B: o caso declara os pontos explicitamente — nada
+    de faixa automática. Uma grade sem pontos não é reproduzível.
+    """
+    if (
+        not isinstance(pontos, list)
+        or not pontos
+        or not all(_numero_valido(v) and _finito(v) for v in pontos)
+    ):
+        raise CasoInvalido(
+            f"{prefixo}: 'pontos' ausente, vazio ou com valor não "
+            f"numérico: {pontos!r}. Cada grade declara os pontos do eixo "
+            "explicitamente — sem faixa automática, a grade não é "
+            "reproduzível."
+        )
+
+
+def _validar_grade_1d(grade: Any, rota: str, permitidas: frozenset) -> None:
+    if not isinstance(grade, dict):
+        raise CasoInvalido(
+            f"grade 1D de sensibilidade não é um objeto: {grade!r}. Cada "
+            "grade declara 'premissa', 'pontos' e 'triangulo'."
+        )
+
+    premissa = grade.get("premissa")
+    if premissa not in permitidas:
+        raise CasoInvalido(
+            f"grade 1D com premissa '{premissa}' fora do vocabulário da "
+            f"rota '{rota}': premissas aceitas: "
+            f"{', '.join(sorted(permitidas))}."
+        )
+
+    prefixo = f"grade 1D '{premissa}'"
+    _validar_pontos(prefixo, grade.get("pontos"))
+    _validar_triangulo(prefixo, grade.get("triangulo"), rota)
+
+
+def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
+    if not isinstance(grade, dict):
+        raise CasoInvalido(
+            f"grade 2D de sensibilidade não é um objeto: {grade!r}. Cada "
+            "grade declara 'premissa_x', 'premissa_y', 'pontos_x', "
+            "'pontos_y' e 'triangulo'."
+        )
+
+    premissa_x = grade.get("premissa_x")
+    premissa_y = grade.get("premissa_y")
+    for eixo, premissa in (("x", premissa_x), ("y", premissa_y)):
+        if premissa not in permitidas:
+            raise CasoInvalido(
+                f"grade 2D com premissa_{eixo} '{premissa}' fora do "
+                f"vocabulário da rota '{rota}': premissas aceitas: "
+                f"{', '.join(sorted(permitidas))}."
+            )
+
+    if premissa_x == premissa_y:
+        raise CasoInvalido(
+            f"grade 2D com premissa_x e premissa_y na mesma premissa "
+            f"'{premissa_x}': os dois eixos da grade têm de variar "
+            "premissas diferentes — do contrário a grade colapsa numa "
+            "diagonal, não num plano."
+        )
+
+    prefixo = f"grade 2D '{premissa_x}' x '{premissa_y}'"
+    _validar_pontos(f"{prefixo} (eixo x)", grade.get("pontos_x"))
+    _validar_pontos(f"{prefixo} (eixo y)", grade.get("pontos_y"))
+    _validar_triangulo(prefixo, grade.get("triangulo"), rota)
+
+
+def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
+    """Valida o bloco opcional 'sensibilidades': cenário-alvo e cada grade.
+
+    Independente de 'mercado'/'reversa' — os blocos não se exigem entre si.
+    """
+    sensibilidades = caso.get("sensibilidades")
+    if sensibilidades is None:
+        return
+
+    if not isinstance(sensibilidades, dict):
+        raise CasoInvalido(
+            f"campo 'sensibilidades' não é um objeto: {sensibilidades!r}. "
+            "Declare 'cenario', 'grades_1d' e 'grades_2d'."
+        )
+
+    cenario_nome = sensibilidades.get("cenario")
+    if cenario_nome not in cenarios:
+        raise CasoInvalido(
+            f"'sensibilidades.cenario' aponta para cenário inexistente: "
+            f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
+            "'cenarios'."
+        )
+
+    permitidas = _PREMISSAS_POR_ROTA[rota]
+
+    for grade in sensibilidades.get("grades_1d") or []:
+        _validar_grade_1d(grade, rota, permitidas)
+
+    for grade in sensibilidades.get("grades_2d") or []:
+        _validar_grade_2d(grade, rota, permitidas)
 
 
 def carregar(caminho: Path) -> Caso:
