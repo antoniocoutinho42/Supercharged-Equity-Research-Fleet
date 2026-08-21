@@ -39,10 +39,10 @@ conta de valuation é feita fora do motor: sem prosa, sem planilha, sem Python n
 `tests/test_vendor_multiplos_justos.py` confronta manifest e disco **nos dois sentidos** — arquivo
 alterado e arquivo a mais reprovam igualmente — e roda a suíte do vendor.
 
-O congelamento é auto-reforçado: `scripts/testes.py` faz lint semântico dos próprios docs do
-pacote, então editar a metodologia localmente quebra a suíte sem depender de ninguém lembrar da
-regra. **O vendor é read-only.** Evoluir a metodologia é decisão humana explícita — substituir o
-pacote inteiro, regenerar o manifest, rodar a suíte.
+A própria suíte do pacote reconfere o motor e os números ancorados nos docs a cada execução; o
+texto livre da metodologia não passa por essa reconferência e fica coberto só pelo sha256 acima.
+**O vendor é read-only.** Evoluir a metodologia é decisão humana explícita — substituir o pacote
+inteiro, regenerar o manifest, rodar a suíte.
 
 ## Fronteira
 

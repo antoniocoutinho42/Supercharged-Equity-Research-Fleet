@@ -44,20 +44,39 @@ def test_todo_arquivo_do_manifest_bate_no_disco():
     for rel, sha in _manifest()["arquivos"].items():
         alvo = VENDOR / rel
         assert alvo.is_file(), f"arquivo do manifest ausente no disco: {rel}"
-        assert _sha(alvo) == sha, f"arquivo do vendor ALTERADO: {rel}"
+        assert _sha(alvo) == sha, (
+            f"arquivo do vendor ALTERADO: {rel} "
+            "(se TODOS falharem juntos, suspeite de conversao de EOL fora do git)"
+        )
+
+
+def test_sha_do_motor_pinado_no_proprio_teste():
+    """Ancora fora do manifest: editar o motor E regenerar o manifest ainda reprova.
+
+    Mesmo idioma de tests/test_motor_k3.py, que fixa o sha da formula no teste.
+    """
+    assert _manifest()["arquivos"]["scripts/justos.py"] == (
+        "919c38eafc3bc327a0fbd79eded70163eb43abe368a22040d4f7c2f25bd49867"
+    )
 
 
 def test_disco_nao_tem_arquivo_fora_do_manifest():
     no_disco = {
         p.relative_to(VENDOR).as_posix()
         for p in VENDOR.rglob("*")
-        if p.is_file() and "__pycache__" not in p.parts
+        if p.is_file() and "__pycache__" not in p.relative_to(VENDOR).parts
     }
     assert no_disco == set(ARQUIVOS), (
         f"conjunto de arquivos do vendor divergiu do congelado: "
         f"sobrando={sorted(no_disco - set(ARQUIVOS))} "
         f"faltando={sorted(set(ARQUIVOS) - no_disco)}"
     )
+
+
+def test_vendor_sem_bytecode_compilado():
+    """.pyc sombreia o .py no import — o sha do fonte casaria com outro codigo rodando."""
+    pyc = sorted(p.relative_to(VENDOR).as_posix() for p in VENDOR.rglob("*.pyc"))
+    assert pyc == [], f"bytecode dentro da arvore congelada: {pyc}"
 
 
 def test_manifest_cobre_exatamente_os_arquivos_esperados():
@@ -95,8 +114,7 @@ def test_suite_completa_do_vendor_passa():
     assert "TODOS OS TESTES PASSARAM" in r.stdout, r.stdout[-2000:]
 
 
-DOCS_DO_VENDOR = ("SKILL.md", "references/aplicacao.md", "references/derivacao.md",
-                  "references/paper-multiplos-justos-v3.md")
+DOCS_DO_VENDOR = tuple(a for a in ARQUIVOS if a.endswith(".md") and a != "CHANGELOG.md")
 PROSCRITOS = ("g = RiR", "EV/EBITDA = EV/NOPAT", "FCFF = NOPAT", "P/VP = P/L")
 
 
@@ -105,7 +123,7 @@ def test_indice_aponta_para_todo_arquivo_do_vendor():
     assert idx.startswith("---"), "SKILL.md sem frontmatter"
     assert "name: er-multiplos-justos" in idx
     for rel in ARQUIVOS:
-        assert rel in idx, f"o indice nao aponta para {rel}"
+        assert f"vendor/multiplos-justos/{rel}" in idx, f"o indice nao aponta para {rel}"
     assert "manifest_vendor.json" in idx
 
 
@@ -120,9 +138,15 @@ def test_indice_nao_reproduz_metodologia():
                 assert trecho not in idx, f"copia literal de {rel}: {trecho[:60]}..."
 
 
+# Este teste guarda o REFACTOR (o arquivo continuar fora do glob raso), nao a
+# profundidade de varredura do loader de skills — essa e premissa, verificavel
+# so instalando o plugin e conferindo que `multiplos-justos` nao aparece na lista.
 def test_skill_md_do_vendor_fora_do_caminho_de_descoberta():
-    descobriveis = {p.resolve() for p in (RAIZ / "skills").glob("*/SKILL.md")}
-    assert (VENDOR / "SKILL.md").resolve() not in descobriveis, (
+    recursivo = {p.resolve() for p in (RAIZ / "skills").rglob("SKILL.md")}
+    raso = {p.resolve() for p in (RAIZ / "skills").glob("*/SKILL.md")}
+    alvo = (VENDOR / "SKILL.md").resolve()
+    assert alvo in recursivo, "premissa do teste mudou: o SKILL.md do vendor sumiu"
+    assert alvo not in raso, (
         "o SKILL.md do vendor declara `name: multiplos-justos` e colidiria com a skill "
         "standalone do usuario se fosse descoberto"
     )
