@@ -342,3 +342,77 @@ def test_triangulo_equity_aceita_qualquer_permutacao_valida(inputs, output):
     c = _equity()
     c["cenarios"]["base"]["triangulo"] = {"inputs": inputs, "output": output}
     validar(c)
+
+
+# --------------------------------------------------------------------------
+# FIX 5: 'metrica_base.valor' e o loop de premissas de `_validar_cenario`
+# chamavam `_finito` sem checar o tipo antes — e o próprio contrato de
+# `_finito` é explícito: valor não-numérico (None, str, bool, list, dict)
+# "passa livre; a validade dele é checada por quem chama". Os outros dois
+# pontos que chamam `_finito` (a ponte e `acoes_diluidas`) já checavam tipo
+# antes de chamar; estes dois não checavam — um `metrica_base.valor`
+# ausente ou uma premissa (wacc, g, roic...) de tipo errado chegava direto
+# ao motor sem recusa nomeada.
+# --------------------------------------------------------------------------
+
+def test_metrica_base_valor_none_recusa():
+    c = _firm()
+    c["metrica_base"]["valor"] = None
+    with pytest.raises(CasoInvalido, match="metrica_base"):
+        validar(c)
+
+
+def test_metrica_base_valor_nao_numerico_recusa():
+    c = _firm()
+    c["metrica_base"]["valor"] = "quinhentos"
+    with pytest.raises(CasoInvalido, match="metrica_base"):
+        validar(c)
+
+
+def test_metrica_base_valor_ausente_recusa():
+    c = _firm()
+    del c["metrica_base"]["valor"]
+    with pytest.raises(CasoInvalido, match="metrica_base"):
+        validar(c)
+
+
+@pytest.mark.parametrize("campo,valor_invalido", [("wacc", "dez"), ("g", [1, 2, 3])])
+def test_premissa_numerica_com_tipo_errado_recusa(campo, valor_invalido):
+    c = _firm()
+    c["cenarios"]["base"]["premissas"][campo] = valor_invalido
+    with pytest.raises(CasoInvalido, match=f"'{campo}'"):
+        validar(c)
+
+
+def test_premissa_bool_recusa_como_nao_numerica():
+    """bool é subclasse de int em Python, mas não é número válido de premissa."""
+    c = _firm()
+    c["cenarios"]["base"]["premissas"]["wacc"] = True
+    with pytest.raises(CasoInvalido, match="'wacc'"):
+        validar(c)
+
+
+@pytest.mark.parametrize("rota,campo,valor_legitimo", [
+    ("firm", "gp", 0.0),
+    ("equity", "nde", -15.0),
+    ("firm", "n", 7),
+])
+def test_premissa_com_valor_numerico_legitimo_e_aceita(rota, campo, valor_legitimo):
+    """Zero, negativo e int são números válidos — a guarda de tipo não pode confundi-los com ausência."""
+    c = _firm() if rota == "firm" else _equity()
+    c["cenarios"]["base"]["premissas"][campo] = valor_legitimo
+    validar(c)
+
+
+# --------------------------------------------------------------------------
+# Simetria de cobertura: equivalente de `test_premissa_opcional_firm_nula_e_permitida`
+# para a rota equity. roe_tv, roe_book e politica_tv só importam sob certas
+# convenções — None é legítimo para os três, tal como para os opcionais já
+# cobertos do lado firm.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("campo", ["roe_tv", "roe_book", "politica_tv"])
+def test_premissa_opcional_equity_nula_e_permitida(campo):
+    c = _equity()
+    c["cenarios"]["base"]["premissas"][campo] = None
+    validar(c)

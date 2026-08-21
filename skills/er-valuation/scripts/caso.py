@@ -54,6 +54,23 @@ def _finito(valor: Any) -> bool:
     return True
 
 
+def _numero_valido(valor: Any) -> bool:
+    """True se `valor` tem o tipo certo para ser número.
+
+    Recusa exatamente o que `_finito` deixa passar sem checar tipo: `None`
+    (ausente), `bool` (subclasse de `int` em Python, mas não é número para
+    fins desta validação) e qualquer outro tipo que não seja `int`/`float`.
+    Não checa finitude — isso é papel de `_finito`. Quem chama aplica as
+    duas em sequência: primeiro `_numero_valido` (é candidato a número?),
+    depois `_finito` (é finito?).
+    """
+    return (
+        valor is not None
+        and not isinstance(valor, bool)
+        and isinstance(valor, (int, float))
+    )
+
+
 # --------------------------------------------------------------------------
 # Vocabulário de premissas por rota.
 #
@@ -91,6 +108,15 @@ _PREMISSAS_OBRIGATORIAS_POR_ROTA: dict[str, frozenset] = {
     "firm": PREMISSAS_OBRIGATORIAS_FIRM,
     "equity": PREMISSAS_OBRIGATORIAS_EQUITY,
 }
+
+# Premissas cujo valor não é numérico — não passam pela guarda de tipo
+# `_numero_valido`/`_finito`. 'tv' (convenção terminal) e 'politica_tv'
+# (política associada) são string ("gordon", "book", "convergencia",
+# "encerra"); só a presença de 'tv' importa nesta fatia, e isso já é
+# checado em `_validar_cenario` antes deste ponto. 'mid_year' é a flag
+# booleana de convenção de meio de ano — bool é exatamente o tipo certo
+# para ela, ao contrário de toda outra premissa, onde bool é recusado.
+_PREMISSAS_NAO_NUMERICAS: frozenset = frozenset({"tv", "politica_tv", "mid_year"})
 
 # --------------------------------------------------------------------------
 # Vocabulário do triângulo g = RiR x retorno, por rota.
@@ -237,6 +263,13 @@ def _validar_metrica(caso: Caso, rota: str) -> None:
 
     if tipo in aceitas:
         valor = metrica_base.get("valor")
+        if not _numero_valido(valor):
+            raise CasoInvalido(
+                f"'metrica_base.valor' ausente ou não numérico: {valor!r}. "
+                "O motor recebe essa métrica direto, sem conversão, como "
+                "a escala de todo o valuation — sem um número de verdade "
+                "aqui não há nada para o motor rodar."
+            )
         if not _finito(valor):
             raise CasoInvalido(
                 f"'metrica_base.valor' não é um número finito: {valor!r}. "
@@ -292,11 +325,7 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
         ponte = caso["ponte"] or {}
         for linha in CAMPOS_DA_PONTE:
             valor = ponte.get(linha)
-            if (
-                valor is None
-                or isinstance(valor, bool)
-                or not isinstance(valor, (int, float))
-            ):
+            if not _numero_valido(valor):
                 raise CasoInvalido(
                     f"campo 'ponte.{linha}' ausente ou não numérico na "
                     f"rota firm: {valor!r}. A ponte tem de declarar todas "
@@ -313,12 +342,7 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
 
 def _validar_acoes_diluidas(caso: Caso) -> None:
     acoes = caso["acoes_diluidas"]
-    if (
-        isinstance(acoes, bool)
-        or not isinstance(acoes, (int, float))
-        or not math.isfinite(acoes)
-        or acoes <= 0
-    ):
+    if not _numero_valido(acoes) or not math.isfinite(acoes) or acoes <= 0:
         raise CasoInvalido(
             f"'acoes_diluidas' inválido: {acoes!r}. O número de ações "
             "diluídas precisa ser um número finito e positivo — é o "
@@ -352,7 +376,11 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
     vocabulario = _TRIANGULO_POR_ROTA[rota]
     if (
         len(inputs) != 2
-        or output in inputs
+        # 'output in inputs' seria redundante aqui: com len(inputs) == 2
+        # garantido acima, se output duplica um input, a união abaixo tem
+        # no máximo 2 elementos — nunca fecha com um vocabulário de 3
+        # nomes, então a cláusula de igualdade de conjuntos já cobre esse
+        # caso sozinha.
         or set(inputs) | {output} != vocabulario
     ):
         raise CasoInvalido(
@@ -396,6 +424,23 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
                 f"premissas aceitas: {', '.join(sorted(permitidas))}."
             )
         valor = premissas[campo]
+        if campo in _PREMISSAS_NAO_NUMERICAS or valor is None:
+            # 'tv'/'politica_tv' são string e 'mid_year' é bool — nenhuma
+            # das três passa pela guarda numérica. Um `None` sobrevivente
+            # até aqui só pode pertencer a uma premissa OPCIONAL: toda
+            # premissa obrigatória com valor `None` já foi recusada acima,
+            # no loop de `obrigatorias` — então `None` aqui é ausência
+            # legítima (roic_tv, gp etc. só importam sob certas
+            # convenções), não buraco de validação.
+            continue
+        if not _numero_valido(valor):
+            raise CasoInvalido(
+                f"{prefixo}: premissa '{campo}' ausente ou não numérica: "
+                f"{valor!r}. Toda premissa numérica tem de ser int ou "
+                "float — texto, bool ou outro tipo aqui envenena a conta "
+                "a jusante em silêncio, porque o motor recebe esse valor "
+                "direto, sem conversão."
+            )
         if not _finito(valor):
             raise CasoInvalido(
                 f"{prefixo}: premissa '{campo}' não é um número finito: "
