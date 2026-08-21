@@ -26,8 +26,8 @@ jobs:
           PYTHONUTF8: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/justos.py selftest
-          python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/testes.py
+          python vendor/multiplos-justos/scripts/justos.py selftest
+          python vendor/multiplos-justos/scripts/testes.py
 
       - name: pytest
         run: python -m pytest tests/ -q

@@ -13,7 +13,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 SKILL = RAIZ / "skills" / "er-multiplos-justos"
-VENDOR = SKILL / "vendor" / "multiplos-justos"
+VENDOR = RAIZ / "vendor" / "multiplos-justos"
 
 ARQUIVOS = (
     "CHANGELOG.md",
@@ -138,16 +138,27 @@ def test_indice_nao_reproduz_metodologia():
                 assert trecho not in idx, f"copia literal de {rel}: {trecho[:60]}..."
 
 
-# Este teste guarda o REFACTOR (o arquivo continuar fora do glob raso), nao a
-# profundidade de varredura do loader de skills — essa e premissa, verificavel
-# so instalando o plugin e conferindo que `multiplos-justos` nao aparece na lista.
-def test_skill_md_do_vendor_fora_do_caminho_de_descoberta():
-    recursivo = {p.resolve() for p in (RAIZ / "skills").rglob("SKILL.md")}
-    raso = {p.resolve() for p in (RAIZ / "skills").glob("*/SKILL.md")}
-    alvo = (VENDOR / "SKILL.md").resolve()
-    assert alvo in recursivo, "premissa do teste mudou: o SKILL.md do vendor sumiu"
-    assert alvo not in raso, (
-        "o SKILL.md do vendor declara `name: multiplos-justos` e colidiria com a skill "
-        "standalone do usuario se fosse descoberto"
+def test_nenhum_skill_md_aninhado_sob_skills():
+    """Invariante estrutural: nada sob skills/ tem SKILL.md aninhado.
+
+    Um SKILL.md mais fundo depende da profundidade de varredura do loader para
+    NAO ser descoberto — premissa que o repositorio nao controla. A regra aqui
+    e mais forte e verificavel: sob skills/, SKILL.md so existe em skills/<nome>/.
+    """
+    todos = {p.resolve() for p in (RAIZ / "skills").rglob("SKILL.md")}
+    de_topo = {p.resolve() for p in (RAIZ / "skills").glob("*/SKILL.md")}
+    aninhados = sorted(p.relative_to(RAIZ).as_posix() for p in todos - de_topo)
+    assert aninhados == [], (
+        f"SKILL.md aninhado sob skills/ — risco de descoberta e colisao de nome: {aninhados}"
     )
-    assert "name: multiplos-justos" in (VENDOR / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_pacote_vendorizado_vive_fora_de_skills():
+    """O pacote declara `name: multiplos-justos` e colidiria com a skill standalone."""
+    assert VENDOR.is_dir(), f"pacote vendorizado nao encontrado em {VENDOR}"
+    assert (RAIZ / "skills") not in VENDOR.parents, (
+        "o pacote vendorizado esta sob skills/ — pode ser descoberto como skill"
+    )
+    assert "name: multiplos-justos" in (VENDOR / "SKILL.md").read_text(encoding="utf-8"), (
+        "premissa do teste mudou: o pacote nao declara mais esse nome"
+    )

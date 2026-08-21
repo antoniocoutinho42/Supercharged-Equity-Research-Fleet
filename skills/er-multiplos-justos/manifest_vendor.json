@@ -5,10 +5,11 @@
   "raiz_do_pacote": "vendor/multiplos-justos",
   "origem": "pacote v9.24 da skill de usuario `multiplos-justos`, fornecido pelo dono (arquivo `multiplos-justos-v9 24.zip`). O caminho da skill instalada e EFEMERO e nao e registrado: a identidade da copia e dada por versao + os sha256 abaixo.",
   "read_only": "Copia congelada. Alterar scripts/justos.py ou os numeros ancorados nos docs quebra tests/test_vendor_multiplos_justos.py E a propria suite do vendor (scripts/testes.py reconfere motor e ancoras a cada execucao); o texto livre da metodologia nao passa por essa reconferencia e fica coberto so pelo sha256 abaixo. Evolucao da metodologia e decisao humana explicita: substituir o pacote inteiro e regenerar este manifest.",
-  "regenerar": "ver docs/superpowers/plans/2026-08-21-v4-item2-vendor-multiplos-justos.md, Task 1 Step 5",
+  "regenerar": "ver docs/superpowers/plans/2026-08-21-v4-item2-vendor-multiplos-justos.md, Task 1 Step 5. A raiz do pacote passou a ser vendor/ na raiz do repositorio, fora de skills/ (Task 2b).",
+  "por_que_fora_de_skills": "O pacote declara `name: multiplos-justos` no frontmatter do proprio SKILL.md. Sob skills/, um loader que varra recursivamente registraria uma segunda skill com esse nome, colidindo com a skill standalone do usuario. Fora de skills/, nenhuma profundidade de varredura o alcanca. Invariante travada em tests/test_vendor_multiplos_justos.py.",
   "suite": {
-    "selftest": "python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/justos.py selftest",
-    "completa": "python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/testes.py",
+    "selftest": "python vendor/multiplos-justos/scripts/justos.py selftest",
+    "completa": "python vendor/multiplos-justos/scripts/testes.py",
     "observado_em_2026-08-21": "selftest OK (0,2s); suite completa: TODOS OS TESTES PASSARAM (10,4s, exit 0) — portatil, sem rede e sem planilha externa"
   },
   "arquivos": {

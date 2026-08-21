@@ -6,9 +6,12 @@ description: USE QUANDO precisar da metodologia canônica de valuation do fleet 
 # er-multiplos-justos — índice do vendor congelado
 
 Este arquivo **não contém metodologia**. A metodologia canônica é a skill `multiplos-justos`
-v9.24, copiada byte a byte para `vendor/multiplos-justos/` e verificada por sha256 em
-`manifest_vendor.json`. Regra do desenho v4: **índice, nunca paráfrase** — resumir a metodologia
-aqui cria uma segunda fonte que envelhece mal. Leia o arquivo do vendor.
+v9.24, copiada byte a byte. Ela vive em `vendor/multiplos-justos/` na raiz do repositório, **fora
+de `skills/`**: o pacote declara `name: multiplos-justos` no próprio frontmatter do `SKILL.md` e,
+se ficasse sob `skills/`, estaria sujeito a ser descoberto como skill, colidindo com a skill
+standalone do usuário. A cópia é verificada por sha256 em `manifest_vendor.json`. Regra do desenho
+v4: **índice, nunca paráfrase** — resumir a metodologia aqui cria uma segunda fonte que envelhece
+mal. Leia o arquivo do vendor.
 
 ## Mapa do pacote — o que ler, e quando
 
@@ -25,8 +28,8 @@ aqui cria uma segunda fonte que envelhece mal. Leia o arquivo do vendor.
 ## Como rodar
 
 ```bash
-python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/justos.py selftest
-python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/testes.py
+python vendor/multiplos-justos/scripts/justos.py selftest
+python vendor/multiplos-justos/scripts/testes.py
 ```
 
 O catálogo de comandos do motor está no `SKILL.md` do vendor — não é reproduzido aqui. Nenhuma
@@ -48,8 +51,10 @@ inteiro, regenerar o manifest, rodar a suíte.
 
 A skill de usuário `multiplos-justos` permanece intocada fora deste repositório e continua
 acionável só por `/multiplos-justos`. Aqui ela é biblioteca, não skill acionável: o gatilho de
-análise é do `er-analise`. O `SKILL.md` do vendor declara `name: multiplos-justos` e por isso vive
-fora do caminho de descoberta de skills — teste em
-`tests/test_vendor_multiplos_justos.py::test_skill_md_do_vendor_fora_do_caminho_de_descoberta`.
+análise é do `er-analise`. O `SKILL.md` do vendor declara `name: multiplos-justos`; por isso o
+pacote inteiro vive fora de `skills/`, onde nenhuma profundidade de varredura o alcança —
+invariante travada em
+`tests/test_vendor_multiplos_justos.py::test_pacote_vendorizado_vive_fora_de_skills` e em
+`tests/test_vendor_multiplos_justos.py::test_nenhum_skill_md_aninhado_sob_skills`.
 
 Referência de desenho: `docs/desenho-arquitetura-v4.md`, Seções 3.2, 4 e 18.
