@@ -93,3 +93,37 @@ def test_suite_completa_do_vendor_passa():
     r = _rodar(str(VENDOR / "scripts" / "testes.py"))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "TODOS OS TESTES PASSARAM" in r.stdout, r.stdout[-2000:]
+
+
+DOCS_DO_VENDOR = ("SKILL.md", "references/aplicacao.md", "references/derivacao.md",
+                  "references/paper-multiplos-justos-v3.md")
+PROSCRITOS = ("g = RiR", "EV/EBITDA = EV/NOPAT", "FCFF = NOPAT", "P/VP = P/L")
+
+
+def test_indice_aponta_para_todo_arquivo_do_vendor():
+    idx = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert idx.startswith("---"), "SKILL.md sem frontmatter"
+    assert "name: er-multiplos-justos" in idx
+    for rel in ARQUIVOS:
+        assert rel in idx, f"o indice nao aponta para {rel}"
+    assert "manifest_vendor.json" in idx
+
+
+def test_indice_nao_reproduz_metodologia():
+    idx = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    for expr in PROSCRITOS:
+        assert expr not in idx, f"formula da metodologia reproduzida no indice: {expr}"
+    for rel in DOCS_DO_VENDOR:
+        for linha in (VENDOR / rel).read_text(encoding="utf-8").splitlines():
+            trecho = linha.strip()
+            if len(trecho) >= 60:
+                assert trecho not in idx, f"copia literal de {rel}: {trecho[:60]}..."
+
+
+def test_skill_md_do_vendor_fora_do_caminho_de_descoberta():
+    descobriveis = {p.resolve() for p in (RAIZ / "skills").glob("*/SKILL.md")}
+    assert (VENDOR / "SKILL.md").resolve() not in descobriveis, (
+        "o SKILL.md do vendor declara `name: multiplos-justos` e colidiria com a skill "
+        "standalone do usuario se fosse descoberto"
+    )
+    assert "name: multiplos-justos" in (VENDOR / "SKILL.md").read_text(encoding="utf-8")
