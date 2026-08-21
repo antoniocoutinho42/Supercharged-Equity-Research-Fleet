@@ -65,12 +65,18 @@ _FLAGS_BOOLEANAS: frozenset = frozenset({"mid_year"})
 
 
 class MotorFalhou(Exception):
-    """Levantada quando o motor congelado sai com código != 0, ou quando a
-    stdout dele não é JSON válido.
+    """Levantada quando o motor congelado sai com código != 0, quando a
+    stdout dele não é JSON válido, ou quando o processo estoura o timeout.
 
-    A mensagem carrega o argv chamado, a stdout e a stderr do processo — o
-    motor já explica por que recusou (por exemplo, `--tv` ausente); este
-    wrapper não reformula o motivo, só propaga o que o motor disse.
+    Três modos, uma exceção só — é por isso que este wrapper existe: quem
+    chama captura só `MotorFalhou` e cobre os três de uma vez, sem precisar
+    conhecer `subprocess.TimeoutExpired` nem `json.JSONDecodeError`. Nos
+    dois primeiros modos a mensagem carrega o argv chamado, a stdout e a
+    stderr do processo — o motor já explica por que recusou (por exemplo,
+    `--tv` ausente); este wrapper não reformula o motivo, só propaga o que
+    o motor disse. No modo de timeout a mensagem carrega o argv, o valor do
+    timeout estourado e o que o processo tiver produzido em stdout/stderr
+    até ser morto; a exceção original vem encadeada via `from`.
     """
 
 
@@ -110,7 +116,7 @@ def argv_para(rota: str, premissas: dict, escala: dict | None) -> list[str]:
     return argv
 
 
-def executar(argv: list[str]) -> dict:
+def executar(argv: list[str], timeout: float = 120) -> dict:
     """Roda o motor congelado com `argv` e devolve o JSON parseado da stdout.
 
     Disciplina de chamada, sem exceção:
@@ -123,15 +129,30 @@ def executar(argv: list[str]) -> dict:
       escreve `__pycache__` dentro de `vendor/multiplos-justos` a cada
       chamada, e um `.pyc` ali quebra o freeze verificado por sha256. Mesma
       disciplina de `tests/test_vendor_multiplos_justos.py`.
-    - `timeout=120` — o motor é determinístico e local; não deve travar.
+    - `timeout` (parâmetro nomeado, default 120) — o motor é determinístico
+      e local; não deve travar. O default cobre a chamada real; o parâmetro
+      existe nomeado para que os testes possam forçar o caminho de timeout
+      com um valor minúsculo, sem esperar 120s de verdade. Se o processo
+      estourar o timeout mesmo assim, isso também vira `MotorFalhou` (ver
+      abaixo) em vez de escapar como `subprocess.TimeoutExpired` cru —
+      mesma disciplina dos outros dois modos de falha.
     """
     script = RAIZ_VENDOR / "scripts" / "justos.py"
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUTF8": "1"}
 
-    resultado = subprocess.run(
-        [sys.executable, str(script), *argv],
-        capture_output=True, text=True, encoding="utf-8", timeout=120, env=env,
-    )
+    try:
+        resultado = subprocess.run(
+            [sys.executable, str(script), *argv],
+            capture_output=True, text=True, encoding="utf-8",
+            timeout=timeout, env=env,
+        )
+    except subprocess.TimeoutExpired as erro:
+        raise MotorFalhou(
+            f"motor congelado não respondeu em {timeout}s (timeout) para "
+            f"argv {argv!r}.\n"
+            f"--- stdout parcial ---\n{erro.stdout or ''}\n"
+            f"--- stderr parcial ---\n{erro.stderr or ''}"
+        ) from erro
 
     if resultado.returncode != 0:
         raise MotorFalhou(
