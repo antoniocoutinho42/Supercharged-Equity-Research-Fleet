@@ -15,7 +15,7 @@ mal. Leia o arquivo do vendor.
 
 ## Mapa do pacote — o que ler, e quando
 
-| Arquivo | O que é | Quando ler |
+| Arquivo (caminho a partir da raiz do repositório) | O que é | Quando ler |
 |---|---|---|
 | `vendor/multiplos-justos/SKILL.md` | Núcleo: identidade central, os cinco gates, convenções do motor, catálogo de comandos, estrutura da entrega, diagnósticos obrigatórios | Sempre, antes de qualquer valuation |
 | `vendor/multiplos-justos/references/aplicacao.md` | Playbook de empresa real: pesquisa, regras travadas de derivação de premissas, convenção terminal, grade de cenários e reversa, degrau e capacidade, financeiras, memória de cálculo, multi-segmento, jurisprudência | **Na íntegra**, antes de valuation de companhia real. O próprio pacote exige |
