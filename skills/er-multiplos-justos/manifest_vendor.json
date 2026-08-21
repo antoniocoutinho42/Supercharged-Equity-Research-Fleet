@@ -1,0 +1,23 @@
+{
+  "metodologia": "multiplos-justos",
+  "versao": "v9.24",
+  "copiado_em": "2026-08-21",
+  "raiz_do_pacote": "vendor/multiplos-justos",
+  "origem": "pacote v9.24 da skill de usuario `multiplos-justos`, fornecido pelo dono (arquivo `multiplos-justos-v9 24.zip`). O caminho da skill instalada e EFEMERO e nao e registrado: a identidade da copia e dada por versao + os sha256 abaixo.",
+  "read_only": "Copia congelada. Alterar qualquer arquivo quebra tests/test_vendor_multiplos_justos.py E a propria suite do vendor (o lint semantico de scripts/testes.py le os docs). Evolucao da metodologia e decisao humana explicita: substituir o pacote inteiro e regenerar este manifest.",
+  "regenerar": "ver docs/superpowers/plans/2026-08-21-v4-item2-vendor-multiplos-justos.md, Task 1 Step 5",
+  "suite": {
+    "selftest": "python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/justos.py selftest",
+    "completa": "python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/testes.py",
+    "observado_em_2026-08-21": "selftest OK (0,2s); suite completa: TODOS OS TESTES PASSARAM (10,4s, exit 0) — portatil, sem rede e sem planilha externa"
+  },
+  "arquivos": {
+    "CHANGELOG.md": "70381f56235639394a8bc9d8ce16a44eb18ddae6603516496b56a91eef467b13",
+    "SKILL.md": "f1a9e15e7b1ae8d709c38fec2e199c50a84670be011133eb1afa46ff56a56871",
+    "references/aplicacao.md": "fc29e40a08b2f0f85d983a90d1b5ed84faae5444bb069321fc1c7c0db130810d",
+    "references/derivacao.md": "fcb406f01e9a67a05fd33542565e65bed35fd28125c0ae5f5ddc9fc386d5a5bb",
+    "references/paper-multiplos-justos-v3.md": "15104b5790250dc33354017e35356a1f5ec07287a7c1a677f4e5d59be38927be",
+    "scripts/justos.py": "919c38eafc3bc327a0fbd79eded70163eb43abe368a22040d4f7c2f25bd49867",
+    "scripts/testes.py": "d2a57192f2fad5a7162ab4d48cd07364b257c793c0bf3b9bd2b38456e81475db"
+  }
+}
