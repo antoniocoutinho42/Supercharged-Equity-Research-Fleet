@@ -21,6 +21,14 @@ jobs:
       - name: Instalar dependências
         run: pip install pytest pyyaml
 
+      - name: Suíte da metodologia (vendor multiplos-justos v9.24)
+        env:
+          PYTHONUTF8: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/justos.py selftest
+          python skills/er-multiplos-justos/vendor/multiplos-justos/scripts/testes.py
+
       - name: pytest
         run: python -m pytest tests/ -q
 

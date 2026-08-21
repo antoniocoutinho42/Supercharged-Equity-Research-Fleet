@@ -6,6 +6,9 @@ metodologia localmente quebra a suíte sem que ninguém precise lembrar da regra
 """
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -59,3 +62,34 @@ def test_disco_nao_tem_arquivo_fora_do_manifest():
 
 def test_manifest_cobre_exatamente_os_arquivos_esperados():
     assert set(_manifest()["arquivos"]) == set(ARQUIVOS)
+
+
+def _ambiente() -> dict:
+    """Ambiente dos subprocessos do vendor.
+
+    PYTHONDONTWRITEBYTECODE evita que rodar a suite crie __pycache__ dentro da
+    arvore congelada — o vendor nao e mutado nem pelos proprios testes dele.
+    PYTHONUTF8 protege a leitura do pipe em locale cp1252 (Windows PT-BR).
+    """
+    return {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUTF8": "1"}
+
+
+def _rodar(*argv: str) -> subprocess.CompletedProcess:
+    """Executa o vendor no MESMO interpretador que roda a suite, com utf-8 fixo."""
+    return subprocess.run(
+        [sys.executable, *argv],
+        capture_output=True, text=True, encoding="utf-8",
+        env=_ambiente(), timeout=300,
+    )
+
+
+def test_selftest_do_motor_reproduz_as_ancoras():
+    r = _rodar(str(VENDOR / "scripts" / "justos.py"), "selftest")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "SELFTEST OK" in r.stdout, r.stdout[-2000:]
+
+
+def test_suite_completa_do_vendor_passa():
+    r = _rodar(str(VENDOR / "scripts" / "testes.py"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "TODOS OS TESTES PASSARAM" in r.stdout, r.stdout[-2000:]
