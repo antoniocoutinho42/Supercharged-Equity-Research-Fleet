@@ -29,6 +29,19 @@ Por cenário, a rota do caso decide o fluxo:
 `caso.py` já exige e valida esse campo; sem repassá-lo, toda saída carregava
 o aviso falso do motor de moeda/regime não declarados, causado pelo wrapper.
 
+Fatia B, Task 4: a lógica de escala acima — decidir o caminho por
+rota/métrica, chamar o motor, recusar `null` — está isolada em
+`precificar_firm`/`precificar_equity`, que tomam um vetor de premissas
+qualquer (não só o vetor central de um cenário declarado). `avaliar()`
+continua o único lugar que lê `EV`/`Equity`/`algebra`; `sensibilidades.py`
+reusa as mesmas duas funções, célula a célula, para preço por ação e o
+múltiplo de referência — nunca uma segunda cópia desta lógica. As duas
+aceitam `moeda=None` por default (o mesmo default de `motor.rodar`):
+`avaliar()` sempre passa `caso["moeda"]` explicitamente, como acima;
+`sensibilidades.py` deliberadamente NÃO passa — toda célula de toda grade
+roda sem `--moeda` (ver docstring de `sensibilidades.py` para o motivo,
+ligado ao teste de reconstrução de diagnóstico por índice).
+
 Todo valor que este módulo lê ou copia da saída do motor (`EV`, `Equity`,
 `Preco_acao`, o múltiplo do ramo NOPAT, os múltiplos copiados para a saída)
 passa por `_exigir_valor`: o serializador do motor converte float não-finito
@@ -103,16 +116,39 @@ def _exigir_valor(saida_motor: dict, campo: str) -> float:
     return valor
 
 
-def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
-                   nd_efetivo: float, acoes: float, moeda: str) -> tuple[dict, dict, str]:
-    """Roda o motor para um cenário da rota firm; devolve (saída, valor, álgebra).
+def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
+                     nd_efetivo: float, acoes: float,
+                     moeda: str | None = None) -> tuple[dict, dict, str, float]:
+    """Roda o motor para um vetor de premissas da rota firm; devolve
+    (saída, valor, álgebra, múltiplo de referência).
+
+    Extraída do antigo `_cenario_firm` (Fatia B, Task 4) para ser
+    reutilizável: mesma escolha de escala (EBITDA direto do motor vs.
+    álgebra do ramo NOPAT) e mesma recusa de `null` via `_exigir_valor`,
+    agora sobre um vetor de premissas qualquer — não só o vetor central de
+    um cenário declarado em `caso["cenarios"]`. `avaliar()` continua o
+    único lugar que lê `EV`/`Equity`/`algebra`; `sensibilidades.py` usa
+    esta mesma função célula a célula, para `valor["preco_acao"]` e
+    `multiplo`. Duplicar esta lógica numa segunda função seria abrir
+    espaço para as duas divergirem — exatamente o que a metodologia
+    proíbe (todo número vem do motor, pela mesma conta).
 
     `tipo_metrica` já chegou validado por `caso.py` como 'EBITDA' ou 'NOPAT'
     (as únicas métricas que `METRICAS_POR_ROTA["firm"]` aceita) — este ponto
     confia nisso e não trata um terceiro caso.
-    """
-    premissas = cenario["premissas"]
 
+    `multiplo` é o múltiplo de referência da métrica-base, já validado por
+    `_exigir_valor`: `EV/EBITDA_curr` quando `tipo_metrica == "EBITDA"`,
+    `EV/NOPAT_curr` quando `"NOPAT"`. No ramo EBITDA é uma leitura
+    adicional (o motor sempre devolve os múltiplos, mesmo com escala
+    aplicada); no ramo NOPAT é o mesmo valor que a álgebra abaixo já
+    usava, agora também devolvido ao chamador.
+
+    `moeda` tem default `None` — o mesmo de `motor.rodar` — porque quem
+    chama decide se passa `--moeda`: `avaliar()` sempre passa
+    `caso["moeda"]` (ver docstring do módulo); `sensibilidades.py`
+    deliberadamente não passa (ver docstring de lá).
+    """
     if tipo_metrica == "EBITDA":
         escala = {"ebitda": valor_metrica, "nd": nd_efetivo, "acoes": acoes}
         saida = rodar("firm", premissas, escala, moeda)
@@ -121,6 +157,7 @@ def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
             "Equity": _exigir_valor(saida, "Equity"),
             "preco_acao": _exigir_valor(saida, "Preco_acao"),
         }
+        multiplo = _exigir_valor(saida, "EV/EBITDA_curr")
         algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
         saida = rodar("firm", premissas, None, moeda)
@@ -134,25 +171,28 @@ def _cenario_firm(cenario: dict, tipo_metrica: str, valor_metrica: float,
             "preco_acao = Equity / acoes_diluidas (ponte aplicada aqui, fora do motor)"
         )
 
-    return saida, valor, algebra
+    return saida, valor, algebra, multiplo
 
 
-def _cenario_equity(cenario: dict, valor_metrica: float, acoes: float,
-                     moeda: str) -> tuple[dict, dict, str]:
-    """Roda o motor para um cenário da rota equity; devolve (saída, valor, álgebra).
+def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
+                       moeda: str | None = None) -> tuple[dict, dict, str, float]:
+    """Roda o motor para um vetor de premissas da rota equity; devolve
+    (saída, valor, álgebra, múltiplo de referência).
 
-    Sem ponte: a rota equity chega em Equity diretamente (P/L x LL) — não há
-    dívida líquida a subtrair.
+    Extraída do antigo `_cenario_equity` (Fatia B, Task 4) — mesmo motivo
+    de `precificar_firm`, ver aquele docstring. Sem ponte: a rota equity
+    chega em Equity diretamente (P/L x LL) — não há dívida líquida a
+    subtrair. `multiplo` é `PL_curr`, já validado por `_exigir_valor`.
     """
-    premissas = cenario["premissas"]
     escala = {"ni": valor_metrica, "acoes": acoes}
     saida = rodar("equity", premissas, escala, moeda)
     valor = {
         "Equity": _exigir_valor(saida, "Equity"),
         "preco_acao": _exigir_valor(saida, "Preco_acao"),
     }
+    multiplo = _exigir_valor(saida, "PL_curr")
     algebra = "Equity = PL_curr x LL (motor); rota equity nao usa ponte"
-    return saida, valor, algebra
+    return saida, valor, algebra, multiplo
 
 
 def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
@@ -225,12 +265,14 @@ def avaliar(caso: dict) -> dict:
         resultado["ponte"] = ponte
         nd_efetivo = ponte["nd_efetivo"]
         for nome, cenario in caso["cenarios"].items():
-            saida, valor, algebra = _cenario_firm(
-                cenario, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda)
+            saida, valor, algebra, _multiplo = precificar_firm(
+                cenario["premissas"], metrica["tipo"], metrica["valor"],
+                nd_efetivo, acoes, moeda)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
     else:  # equity
         for nome, cenario in caso["cenarios"].items():
-            saida, valor, algebra = _cenario_equity(cenario, metrica["valor"], acoes, moeda)
+            saida, valor, algebra, _multiplo = precificar_equity(
+                cenario["premissas"], metrica["valor"], acoes, moeda)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
 
     resultado["cenarios"] = cenarios
