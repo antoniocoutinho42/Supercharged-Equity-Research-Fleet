@@ -72,6 +72,61 @@ def _numero_valido(valor: Any) -> bool:
 
 
 # --------------------------------------------------------------------------
+# Guarda estrutural de tipo em fronteira de pertencimento/iteração.
+#
+# Terceira vez que a mesma classe de defeito aparece neste módulo: um valor
+# de tipo errado alcançando um `x not in <frozenset>`/`x not in <dict>`
+# (não-hasheável: lista, dict) ou um `for item in valor` (não-lista: número,
+# bool, e até `x or []` deixando passar um valor truthy não-lista) escapava
+# como TypeError/AttributeError cru, não CasoInvalido — porque cada call
+# site tinha de LEMBRAR de checar tipo antes, e nem todos lembravam. As duas
+# funções abaixo fecham essa fronteira uma vez só, de forma estrutural: todo
+# `in`/`not in` contra um vocabulário de nomes passa por `_exigir_texto`
+# antes, e todo `for` sobre uma lista declarada pelo caso passa por
+# `_exigir_lista` antes — inclusive nos pontos que já tinham guarda
+# equivalente escrita à mão, para que exista uma única forma de fazer isso
+# no arquivo inteiro, não duas.
+# --------------------------------------------------------------------------
+
+def _exigir_texto(valor: Any, campo: str) -> None:
+    """Garante que `valor` é `str` antes de uma checagem de pertencimento a
+    vocabulário (`x not in <frozenset>` ou `x not in <dict>` de nomes).
+
+    Um valor não-hasheável (lista, dict) alcançando essa checagem levanta
+    `TypeError` cru, antes de qualquer chance de nomear o campo; um valor
+    hasheável mas do tipo errado (número, bool, `None`) produzia só uma
+    recusa genérica de "fora do vocabulário", perdendo o motivo real (tipo
+    errado, não nome desconhecido). Levanta `CasoInvalido` nomeando `campo`
+    quando `valor` não é `str`. Não confere se o texto pertence ao
+    vocabulário — isso continua responsabilidade de quem chama, depois
+    desta guarda.
+    """
+    if not isinstance(valor, str):
+        raise CasoInvalido(
+            f"'{campo}' não é texto: {valor!r}. Precisa ser um nome "
+            "(string) para ser confrontado com o vocabulário aceito."
+        )
+
+
+def _exigir_lista(valor: Any, campo: str) -> list:
+    """Garante que `valor` é `list` antes de um `for item in valor`.
+
+    Um valor não-lista chegando a esse `for` ou explode em `TypeError` cru
+    (número, bool) ou, pior, itera em silêncio sobre algo que não é a
+    coleção pretendida (string vira sequência de caracteres, dict vira
+    sequência de chaves) — nenhuma das duas é a lista de itens que o
+    restante do código presume, e a segunda nem levanta erro nenhum na
+    hora, só produz um resultado sem sentido mais adiante. Levanta
+    `CasoInvalido` nomeando `campo` quando `valor` não é `list`; devolve
+    `valor` (já confirmado `list`) quando é, para uso direto no `for` de
+    quem chama.
+    """
+    if not isinstance(valor, list):
+        raise CasoInvalido(f"'{campo}' não é uma lista: {valor!r}.")
+    return valor
+
+
+# --------------------------------------------------------------------------
 # Vocabulário de premissas por rota.
 #
 # PREMISSAS_* é o vocabulário COMPLETO que o motor aceita para a rota (o que
@@ -248,6 +303,18 @@ def validar(caso: Caso) -> None:
     caso raiz não sendo objeto (`None`, número, lista); as demais guardas de
     container (metrica_base, ponte, cada cenário, triângulo) vivem nas
     funções correspondentes, mais perto de onde o tipo importa.
+
+    Revisão final #3: terceira vez que a mesma classe de defeito aparece —
+    sete formas novas (eixos com lista dentro, grades_1d/grades_2d
+    não-lista, premissa/premissa_x/premissa_y/cenario com tipo errado)
+    ainda escapavam como TypeError cru, porque as guardas de tipo do FIX
+    anterior cobriam containers (dict/list em si) mas não os valores
+    ESCALARES testados em `x not in <vocabulário>` nem os `for` sobre
+    `grades_1d`/`grades_2d`. Em vez de outra rodada de patches pontuais,
+    `_exigir_texto` e `_exigir_lista` (acima) fecham essas duas fronteiras
+    de forma estrutural, aplicadas em TODO ponto do módulo que faz esse
+    tipo de checagem — inclusive nos que já funcionavam por guarda
+    equivalente escrita à mão.
     """
     if not isinstance(caso, dict):
         raise CasoInvalido(
@@ -307,6 +374,7 @@ def _validar_campos_de_topo(caso: Caso) -> None:
 
 
 def _validar_rota(rota: Any) -> None:
+    _exigir_texto(rota, "rota")
     if rota not in METRICAS_POR_ROTA:
         raise CasoInvalido(
             f"rota desconhecida: '{rota}'. Rotas suportadas nesta fatia: "
@@ -327,6 +395,7 @@ def _validar_metrica(caso: Caso, rota: str) -> None:
     tipo = metrica_base.get("tipo")
     aceitas = METRICAS_POR_ROTA[rota]
 
+    _exigir_texto(tipo, "metrica_base.tipo")
     if tipo in aceitas:
         valor = metrica_base.get("valor")
         if not _numero_valido(valor):
@@ -566,7 +635,22 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
 
     _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
 
-    premissas = cenario.get("premissas") or {}
+    premissas = cenario.get("premissas")
+    if premissas is None:
+        premissas = {}
+    elif not isinstance(premissas, dict):
+        # Revisão final #3: 'premissas' truthy mas não-dict (int, bool,
+        # string não vazia) sobrevivia ao antigo `... or {}` — falsy só
+        # cobre None/0/""/[]/{}, não 5 nem True — e o `for chave in
+        # premissas` logo abaixo levantava TypeError cru (número, bool) ou
+        # iterava caractere a caractere em silêncio (string). Mesmo padrão
+        # já usado para metrica_base/ponte/mercado/reversa/sensibilidades/
+        # cenário individual: presença de tipo, não valor por default.
+        raise CasoInvalido(
+            f"{prefixo}: 'premissas' não é um objeto: {premissas!r}. "
+            "Declare cada premissa (g, roic, wacc, tv...) como campo do "
+            "objeto."
+        )
 
     chaves_nao_textuais = [chave for chave in premissas if not isinstance(chave, str)]
     if chaves_nao_textuais:
@@ -603,6 +687,7 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
 
     permitidas = _PREMISSAS_POR_ROTA[rota]
     for campo in sorted(premissas):
+        _exigir_texto(campo, f"{prefixo}: premissas")
         if campo not in permitidas:
             raise CasoInvalido(
                 f"{prefixo}: premissa '{campo}' desconhecida para a rota "
@@ -707,6 +792,24 @@ def _validar_mercado(caso: Caso, reversa_presente: bool) -> None:
             )
 
 
+def _validar_cenario_alvo(prefixo: str, cenario_nome: Any, cenarios: dict) -> None:
+    """Valida que `cenario_nome` aponta para um cenário já declarado.
+
+    FIX 3: compartilhada por `_validar_reversa` (`reversa.cenario`) e
+    `_validar_sensibilidades` (`sensibilidades.cenario`) — os dois blocos
+    checam a mesma coisa (o cenário-alvo tem de estar em `cenarios`),
+    diferindo só no prefixo da mensagem. `cenarios` já chega validado como
+    `dict` por `validar` antes de qualquer um dos dois chamar esta função.
+    """
+    _exigir_texto(cenario_nome, prefixo)
+    if cenario_nome not in cenarios:
+        raise CasoInvalido(
+            f"'{prefixo}' aponta para cenário inexistente: "
+            f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
+            "'cenarios'."
+        )
+
+
 def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
     """Valida o bloco opcional 'reversa': eixos, eixo obrigatório e cenário-alvo.
 
@@ -733,7 +836,11 @@ def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
             "implícito)."
         )
 
-    desconhecidos = [eixo for eixo in eixos if eixo not in EIXOS_DE_REVERSA]
+    desconhecidos = []
+    for eixo in eixos:
+        _exigir_texto(eixo, "reversa.eixos")
+        if eixo not in EIXOS_DE_REVERSA:
+            desconhecidos.append(eixo)
     if desconhecidos:
         raise CasoInvalido(
             f"'reversa.eixos' contém eixo desconhecido: {desconhecidos!r}. "
@@ -751,12 +858,7 @@ def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
         )
 
     cenario_nome = reversa.get("cenario")
-    if cenario_nome not in cenarios:
-        raise CasoInvalido(
-            f"'reversa.cenario' aponta para cenário inexistente: "
-            f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
-            "'cenarios'."
-        )
+    _validar_cenario_alvo("reversa.cenario", cenario_nome, cenarios)
 
 
 def _validar_pontos(prefixo: str, pontos: Any) -> None:
@@ -779,6 +881,15 @@ def _validar_pontos(prefixo: str, pontos: Any) -> None:
 
 
 def _validar_grade_1d(grade: Any, rota: str, permitidas: frozenset) -> None:
+    """Valida uma grade 1D: tipo do container, premissa e o resto.
+
+    FIX 2: `permitidas` já chega SEM as premissas não-numéricas (ver
+    `_validar_sensibilidades`) — uma grade varia PONTOS NUMÉRICOS ao longo
+    de um eixo, e 'tv'/'politica_tv'/'mid_year' não são número. Por isso a
+    rejeição abaixo distingue dois casos: premissa reconhecida pela rota
+    mas não-numérica (mensagem dedicada, nomeando a premissa) de premissa
+    realmente fora do vocabulário da rota (mensagem genérica, como antes).
+    """
     if not isinstance(grade, dict):
         raise CasoInvalido(
             f"grade 1D de sensibilidade não é um objeto: {grade!r}. Cada "
@@ -786,7 +897,14 @@ def _validar_grade_1d(grade: Any, rota: str, permitidas: frozenset) -> None:
         )
 
     premissa = grade.get("premissa")
+    _exigir_texto(premissa, "grade 1D: premissa")
     if premissa not in permitidas:
+        if premissa in _PREMISSAS_NAO_NUMERICAS:
+            raise CasoInvalido(
+                f"grade 1D com premissa '{premissa}': grade de "
+                "sensibilidade varia apenas premissa numérica ao longo de "
+                f"pontos — '{premissa}' não é numérica."
+            )
         raise CasoInvalido(
             f"grade 1D com premissa '{premissa}' fora do vocabulário da "
             f"rota '{rota}': premissas aceitas: "
@@ -799,6 +917,12 @@ def _validar_grade_1d(grade: Any, rota: str, permitidas: frozenset) -> None:
 
 
 def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
+    """Valida uma grade 2D: tipo do container, as duas premissas e o resto.
+
+    Mesma disciplina de `_validar_grade_1d` (FIX 2): `permitidas` já chega
+    sem as premissas não-numéricas, e a rejeição distingue premissa
+    não-numérica de premissa fora do vocabulário da rota.
+    """
     if not isinstance(grade, dict):
         raise CasoInvalido(
             f"grade 2D de sensibilidade não é um objeto: {grade!r}. Cada "
@@ -809,7 +933,14 @@ def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
     premissa_x = grade.get("premissa_x")
     premissa_y = grade.get("premissa_y")
     for eixo, premissa in (("x", premissa_x), ("y", premissa_y)):
+        _exigir_texto(premissa, f"grade 2D: premissa_{eixo}")
         if premissa not in permitidas:
+            if premissa in _PREMISSAS_NAO_NUMERICAS:
+                raise CasoInvalido(
+                    f"grade 2D com premissa_{eixo} '{premissa}': grade de "
+                    "sensibilidade varia apenas premissa numérica ao "
+                    f"longo de pontos — '{premissa}' não é numérica."
+                )
             raise CasoInvalido(
                 f"grade 2D com premissa_{eixo} '{premissa}' fora do "
                 f"vocabulário da rota '{rota}': premissas aceitas: "
@@ -834,6 +965,11 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
     """Valida o bloco opcional 'sensibilidades': cenário-alvo e cada grade.
 
     Independente de 'mercado'/'reversa' — os blocos não se exigem entre si.
+    FIX 2: `permitidas` aqui já exclui as premissas não-numéricas — uma
+    grade varia pontos numéricos ao longo de um eixo, e 'tv'/'politica_tv'/
+    'mid_year' não são número; deixar passar produzia caso.json válido
+    para uma grade que o motor não sabe rodar, e a recusa só aparecia
+    depois, num subprocesso do motor.
     """
     sensibilidades = caso.get("sensibilidades")
     if sensibilidades is None:
@@ -846,20 +982,23 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
         )
 
     cenario_nome = sensibilidades.get("cenario")
-    if cenario_nome not in cenarios:
-        raise CasoInvalido(
-            f"'sensibilidades.cenario' aponta para cenário inexistente: "
-            f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
-            "'cenarios'."
-        )
+    _validar_cenario_alvo("sensibilidades.cenario", cenario_nome, cenarios)
 
-    permitidas = _PREMISSAS_POR_ROTA[rota]
+    permitidas = _PREMISSAS_POR_ROTA[rota] - _PREMISSAS_NAO_NUMERICAS
 
-    for grade in sensibilidades.get("grades_1d") or []:
-        _validar_grade_1d(grade, rota, permitidas)
+    grades_1d = sensibilidades.get("grades_1d")
+    if grades_1d is not None:
+        # FIX 1: `... or []` só substitui valor FALSY — um `grades_1d`
+        # truthy mas não-lista (número, bool) sobrevivia ao `or` e caía
+        # direto no `for`, cru. `_exigir_lista` fecha isso nomeando o
+        # campo antes de qualquer iteração.
+        for grade in _exigir_lista(grades_1d, "sensibilidades.grades_1d"):
+            _validar_grade_1d(grade, rota, permitidas)
 
-    for grade in sensibilidades.get("grades_2d") or []:
-        _validar_grade_2d(grade, rota, permitidas)
+    grades_2d = sensibilidades.get("grades_2d")
+    if grades_2d is not None:
+        for grade in _exigir_lista(grades_2d, "sensibilidades.grades_2d"):
+            _validar_grade_2d(grade, rota, permitidas)
 
 
 def carregar(caminho: Path) -> Caso:

@@ -755,3 +755,100 @@ def test_sensibilidades_sem_reversa_e_permitido():
     del c["reversa"]
     del c["mercado"]
     validar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final #3 (terceira vez que a mesma classe de defeito aparece):
+# valor de tipo errado alcançando um `x not in <frozenset/dict>`
+# (não-hasheável: lista, dict) ou um `for ... in ...` (não-lista —
+# `grades_1d`/`grades_2d` truthy mas não-lista, porque `x or []` só
+# substitui valor falsy) escapava como TypeError/AttributeError cru, não
+# CasoInvalido. As sete formas abaixo foram achadas por sondagem manual
+# (quatro pelo controlador, três pelo revisor) e cobrem as duas
+# causas-raiz de uma vez: `_exigir_texto`/`_exigir_lista`, chamadas em
+# toda fronteira de pertencimento/iteração do módulo — não só nestes sete
+# pontos.
+# --------------------------------------------------------------------------
+
+def test_reversa_eixos_com_lista_dentro_recusa():
+    c = _reversa()
+    c["reversa"]["eixos"] = ["custo_capital", ["x"]]
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_sensibilidades_grades_1d_nao_lista_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"] = 5
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_grade_2d_premissa_x_dict_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_2d"][0]["premissa_x"] = {"a": 1}
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_reversa_cenario_lista_recusa():
+    c = _reversa()
+    c["reversa"]["cenario"] = ["base"]
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_grade_1d_premissa_lista_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["premissa"] = ["wacc"]
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_sensibilidades_cenario_lista_recusa():
+    c = _reversa()
+    c["sensibilidades"]["cenario"] = ["base"]
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+@pytest.mark.parametrize("valor", [5, True])
+def test_sensibilidades_grades_2d_nao_lista_recusa(valor):
+    """`x or []` só substitui valor falsy — 5 e True são truthy e
+    não-lista, e caíam direto no `for`, sem guarda."""
+    c = _reversa()
+    c["sensibilidades"]["grades_2d"] = valor
+    with pytest.raises(CasoInvalido):
+        validar(c)
+
+
+def test_sensibilidades_aponta_cenario_inexistente_recusa():
+    """FIX 3: mesma checagem de existência de 'reversa.cenario', extraída
+    para um helper compartilhado — cobertura simétrica do segundo
+    chamador, que não tinha teste dedicado antes desta revisão."""
+    c = _reversa()
+    c["sensibilidades"]["cenario"] = "otimista"
+    with pytest.raises(CasoInvalido, match="otimista"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
+# FIX 2 (revisão final #3): grade de sensibilidade varia só premissa
+# numérica. 'tv'/'politica_tv'/'mid_year' são premissa válida do CENÁRIO,
+# mas sem sentido como eixo de grade — variar 'pontos' numéricos sobre uma
+# convenção terminal textual não descreve nada. Sem esta recusa, o caso
+# passava no portão e só quebrava depois, num subprocesso do motor.
+# --------------------------------------------------------------------------
+
+def test_grade_1d_com_premissa_nao_numerica_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["premissa"] = "tv"
+    with pytest.raises(CasoInvalido, match="numérica"):
+        validar(c)
+
+
+def test_grade_2d_com_premissa_x_nao_numerica_recusa():
+    c = _reversa()
+    c["sensibilidades"]["grades_2d"][0]["premissa_x"] = "tv"
+    with pytest.raises(CasoInvalido, match="numérica"):
+        validar(c)
