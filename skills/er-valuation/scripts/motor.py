@@ -86,7 +86,7 @@ def _flag(chave: str) -> str:
 
 
 def argv_para(rota: str, premissas: dict, escala: dict | None,
-              moeda: str | None = None) -> list[str]:
+              moeda: str | None = None, subcomando: str | None = None) -> list[str]:
     """Monta `[subcomando, *flags]` para `rota` — sem executar nada.
 
     Não inclui o interpretador nem o caminho do script: só o subcomando
@@ -108,8 +108,18 @@ def argv_para(rota: str, premissas: dict, escala: dict | None,
     é parâmetro à parte, nunca uma chave dentro de `premissas`): `None`
     (default) não produz flag nenhuma; uma string produz `--moeda <valor>`,
     aceita pelas duas rotas (`ev` e `pe`) do motor congelado.
+
+    `subcomando` (Fatia B, Task 2): `None` (default) preserva o
+    comportamento de sempre — o subcomando sai de `SUBCOMANDO[rota]` (`ev`
+    para firm, `pe` para equity), como antes desta fatia existir; os testes
+    da fatia A dependem dessa assinatura continuar funcionando exatamente
+    assim. Uma string (por exemplo `"rev"`) substitui essa derivação — a
+    reversa por eixo usa a mesma `rota` (firm/equity, para escolher o
+    vocabulário de premissas certo) mas precisa do subcomando `rev`, que
+    não é função só da rota. Aditivo: o caminho antigo nunca muda de
+    comportamento, só ganha um caminho novo ao lado.
     """
-    argv = [SUBCOMANDO[rota]]
+    argv = [subcomando or SUBCOMANDO[rota]]
 
     for chave, valor in premissas.items():
         if chave in _FLAGS_BOOLEANAS:
@@ -188,6 +198,11 @@ def executar(argv: list[str], timeout: float = 120) -> dict:
 
 
 def rodar(rota: str, premissas: dict, escala: dict | None = None,
-          moeda: str | None = None) -> dict:
-    """Compõe `argv_para` e `executar`: monta o argv da rota e roda o motor."""
-    return executar(argv_para(rota, premissas, escala, moeda))
+          moeda: str | None = None, subcomando: str | None = None) -> dict:
+    """Compõe `argv_para` e `executar`: monta o argv da rota e roda o motor.
+
+    `subcomando` só repassa para `argv_para` (ver o docstring de lá) —
+    `None` preserva a derivação antiga (`SUBCOMANDO[rota]`); uma string
+    (`"rev"`) escolhe o subcomando explicitamente.
+    """
+    return executar(argv_para(rota, premissas, escala, moeda, subcomando))
