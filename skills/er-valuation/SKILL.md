@@ -19,6 +19,12 @@ normaliza saída.
   entrega ao motor, guardando cada parcela com seu sinal para o waterfall.
 - **Normalização da saída** — junta múltiplos, valor, diagnósticos e a
   coerência do vetor num `resultados.json` determinístico.
+- **Reversa por eixo** — dado o preço observado, resolve no motor o menu de
+  reconciliação (custo de capital implícito, obrigatório, e os demais eixos
+  declarados), com o beta implícito confrontado contra a banda de mercado
+  quando ela é declarada.
+- **Grades de sensibilidade** — constrói, célula a célula no motor, as
+  grades 1D e 2D de preço por ação que o caso declarar.
 
 ## O que NUNCA faz
 
@@ -43,6 +49,8 @@ normaliza saída.
 | `scripts/caso.py` | Carrega e valida o caso; recusa omissão de escolha sem default |
 | `scripts/motor.py` | Monta o argv por rota e executa o motor congelado |
 | `scripts/ponte.py` | Soma as linhas da ponte num líquido, com sinal por parcela |
+| `scripts/reversa.py` | Resolve o menu de reconciliação por eixo e o beta implícito |
+| `scripts/sensibilidades.py` | Constrói as grades 1D/2D célula a célula no motor |
 | `scripts/avaliar.py` | Orquestra cenários × rota e escreve o `resultados.json` |
 
 ## Como rodar
@@ -78,9 +86,8 @@ Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`
 aceita `LL`. São as que o motor emite diretamente — demais métricas são
 transformação de apresentação e entram depois, com a álgebra exibida.
 
-Ainda não implementados aqui: reversa e sensibilidades; soma das partes por
-segmento e por safra de capital; composição multifásica. Cada um entra em sua
-própria fatia.
+Ainda não implementados aqui: soma das partes por segmento e por safra de
+capital; composição multifásica. Cada um entra em sua própria fatia.
 
 ## Metodologia
 

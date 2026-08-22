@@ -28,3 +28,29 @@ def test_skill_nao_e_a_v2_ressuscitada():
     texto = (SKILL / "SKILL.md").read_text(encoding="utf-8")
     for morto in ("cap_check", "engine v3.3.0", "K3", "16 canonical inputs", "justified"):
         assert morto.lower() not in texto.lower(), f"residuo da v2/v3: {morto}"
+
+
+def test_skill_nao_declara_reversa_e_sensibilidades_como_futuro():
+    """Fatia B implementou os dois: a secao de pendencias nao pode mais cita-los.
+
+    A versao anterior do SKILL.md listava 'reversa e sensibilidades' dentro
+    de 'Ainda não implementados aqui'. Essa fatia implementou os dois — a
+    frase tem de sumir dali (movida para o corpo), sem que o paragrafo de
+    pendencias remanescente (soma das partes, multifasico) desapareca junto.
+    """
+    texto = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    marcador = "ainda não implementados"
+    baixo = texto.lower()
+    assert marcador in baixo, "secao de pendencias sumiu do SKILL.md"
+    inicio = baixo.index(marcador)
+    fim = texto.index("\n\n", inicio)
+    trecho_pendencias = texto[inicio:fim]
+    assert "reversa" not in trecho_pendencias.lower()
+    assert "sensibilidades" not in trecho_pendencias.lower()
+    # a secao de pendencias em si continua existindo, com o que sobrou dela.
+    assert "multifásic" in trecho_pendencias.lower() or "multifasic" in trecho_pendencias.lower()
+
+    # movidos para o corpo (fora da secao de pendencias) e a tabela ganhou
+    # os dois modulos novos.
+    assert "reversa.py" in texto
+    assert "sensibilidades.py" in texto

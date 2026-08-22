@@ -42,6 +42,21 @@ explicitamente — a mesma disciplina nos dois lugares, para que nenhuma
 saída (cenário principal ou célula de grade) carregue o alarme falso
 "MOEDA/REGIME NÃO DECLARADOS" (ver docstring de `sensibilidades.py`).
 
+Fatia B, Task 5: os blocos `reversa` (menu de reconciliação por eixo,
+`reversa.reverter`) e `sensibilidades` (grades 1D/2D célula a célula,
+`sensibilidades.calcular`) entram no resultado só quando o caso os declara
+— `"reversa" in caso`/`"sensibilidades" in caso`, checado depois que
+`cenarios` já está montado. Nenhuma conta de valuation nova: os dois
+módulos já fazem toda a aritmética que a metodologia autoriza (o alvo de
+múltiplo de mercado, o beta implícito); `avaliar()` só decide QUANDO
+chamá-los e com que `nd_efetivo`. Na rota firm, é o mesmo `nd_efetivo` que
+`precificar_firm` já usa (`ponte["nd_efetivo"]`); na rota equity não há
+ponte de dívida — `nd_efetivo` é `0.0`, e é assim que `reversa.
+alvo_de_mercado` sabe usar `base="pl"` em vez de somar dívida a um EV que,
+do lado equity, nunca existe. Um caso sem os dois blocos (toda fixture da
+fatia A) não sofre nenhuma mudança de shape: os dois `if` abaixo são
+no-op, e o resultado sai byte a byte igual ao que saía antes desta fatia.
+
 Todo valor que este módulo lê ou copia da saída do motor (`EV`, `Equity`,
 `Preco_acao`, o múltiplo do ramo NOPAT, os múltiplos copiados para a saída)
 passa por `_exigir_valor`: o serializador do motor converte float não-finito
@@ -62,6 +77,17 @@ from pathlib import Path
 from caso import CasoInvalido, carregar
 from motor import MotorFalhou, rodar
 from ponte import compor
+from reversa import reverter
+
+# `sensibilidades.calcular` NÃO entra aqui em cima: `sensibilidades.py` faz
+# `from avaliar import precificar_equity, precificar_firm` no topo dela — um
+# `from sensibilidades import calcular` neste ponto do arquivo criaria um
+# ciclo (avaliar -> sensibilidades -> avaliar) resolvido ANTES de
+# `precificar_firm`/`precificar_equity` existirem no namespace deste módulo,
+# e o import quebraria com "cannot import name ... from partially
+# initialized module". `reversa.py` não tem esse problema (não importa
+# `avaliar`), por isso `reverter` é import de topo normal. O import de
+# `calcular` é feito dentro de `avaliar()`, na hora de usar — ver ali.
 
 # Subconjunto do que o motor devolve que vira o campo "multiplos" de cada
 # cenário — não é passthrough do dict inteiro do motor (que carrega chaves de
@@ -289,12 +315,37 @@ def avaliar(caso: dict) -> dict:
             cenarios[nome] = _monta_cenario(
                 cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
     else:  # equity
+        # Rota equity chega em Equity direto (P/L x LL): não há ponte de
+        # dívida (`caso.py` já recusa um caso equity que declare `ponte`),
+        # então `nd_efetivo` é `0.0` aqui — mesma leitura que
+        # `reversa.alvo_de_mercado` usa para decidir a base do alvo
+        # ("pl", sem somar dívida a um EV que este lado nunca calcula).
+        nd_efetivo = 0.0
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_equity(
                 cenario["premissas"], metrica["valor"], acoes, moeda)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
 
     resultado["cenarios"] = cenarios
+
+    # Fatia B, Task 5: os dois blocos são aditivos — só aparecem quando o
+    # caso os declara. Um caso sem 'reversa'/'sensibilidades' (toda fixture
+    # da fatia A) não passa por nenhum dos dois `if` abaixo, e o shape do
+    # resultado não muda nem um byte em relação ao que saía antes desta
+    # fatia. `nome_cenario` vem do próprio bloco (`reversa.cenario`/
+    # `sensibilidades.cenario`) — já confirmado por `caso.validar` como um
+    # cenário existente em `caso["cenarios"]` — nunca do cenário "base" por
+    # convenção implícita.
+    if "reversa" in caso:
+        resultado["reversa"] = reverter(caso, caso["reversa"]["cenario"], nd_efetivo)
+
+    if "sensibilidades" in caso:
+        # Import local — ver o comentário junto dos imports de topo sobre o
+        # ciclo avaliar -> sensibilidades -> avaliar.
+        from sensibilidades import calcular
+        resultado["sensibilidades"] = calcular(
+            caso, caso["sensibilidades"]["cenario"], nd_efetivo)
+
     return resultado
 
 

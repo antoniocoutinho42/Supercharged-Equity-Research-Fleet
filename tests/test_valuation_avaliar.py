@@ -170,6 +170,54 @@ def test_metrica_base_sem_periodo_nao_inclui_a_chave_na_saida():
     assert r["metrica_base"]["fonte"] == "fixture sintética"
 
 
+# --------------------------------------------------------------------------
+# Fatia B, Task 5: os blocos 'reversa' e 'sensibilidades' entram no
+# resultados.json só quando o caso os declara. O caso da fatia A
+# (`caso_minimo_firm.json`, sem os dois blocos) não pode ganhar nenhuma
+# chave nova — é a propriedade que mais importa, porque tudo a jusante (o
+# builder de relatório, num item futuro) é escrito contra as duas formas.
+# --------------------------------------------------------------------------
+
+def test_resultado_sem_blocos_novos_nao_ganha_chaves():
+    """Caso da fatia A continua produzindo exatamente o que produzia."""
+    r = avaliar(carregar(FIXTURES / "caso_minimo_firm.json"))
+    assert "reversa" not in r and "sensibilidades" not in r
+
+
+def test_resultado_com_reversa_traz_o_bloco():
+    r = avaliar(carregar(FIXTURES / "caso_reversa_firm.json"))
+    assert r["reversa"]["eixos"]["custo_capital"]["beta_implicito"]["valor"]
+    assert r["reversa"]["alvo"]["valor"] == pytest.approx(6.0)
+
+
+def test_resultado_com_sensibilidades_traz_o_bloco():
+    r = avaliar(carregar(FIXTURES / "caso_reversa_firm.json"))
+    assert r["sensibilidades"]["grades_1d"]
+    assert r["sensibilidades"]["grades_2d"]
+
+
+def test_saida_com_reversa_continua_deterministica(tmp_path):
+    import filecmp
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    escrever(avaliar(carregar(FIXTURES / "caso_reversa_firm.json")), a)
+    escrever(avaliar(carregar(FIXTURES / "caso_reversa_firm.json")), b)
+    assert filecmp.cmp(a, b, shallow=False)
+
+
+def test_valores_consumidos_nao_sao_null_mas_o_repasse_do_motor_e_integro():
+    """A recusa de null vale para o que o wrapper CONSOME.
+
+    O payload de diagnostico do motor chega integro, e pode legitimamente
+    conter null (o proprio motor serializa nao-finito como null nos campos
+    que ele mesmo declara nao aplicaveis). Uniformizar isso seria ajustar
+    output do motor — proibido.
+    """
+    r = avaliar(carregar(FIXTURES / "caso_reversa_firm.json"))
+    v = r["cenarios"]["base"]["valor"]
+    assert all(v[k] is not None for k in v)
+    assert all(x is not None for x in r["cenarios"]["base"]["multiplos"].values())
+
+
 def test_escala_por_nopat_reconcilia_com_a_escala_por_ebitda():
     """Mesma economia, duas rotas de escala: EV, Equity e preco_acao tem de bater.
 
