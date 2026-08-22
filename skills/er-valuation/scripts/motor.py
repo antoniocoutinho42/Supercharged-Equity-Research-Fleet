@@ -85,6 +85,88 @@ def _flag(chave: str) -> str:
     return _FLAGS_COM_HIFEN.get(chave, f"--{chave}")
 
 
+def _exigir_valor(saida_motor: dict, campo: str) -> float:
+    """Devolve `saida_motor[campo]`, recusando com `MotorFalhou` se for `None`.
+
+    Único ponto de normalização: o serializador do motor congelado converte
+    todo float não-finito (NaN, Infinity) em `null` — e o processo ainda
+    assim sai com código 0, porque a recusa nunca chega a acontecer no
+    motor; ele só devolve um número que não dá para representar em JSON.
+    Sem esta guarda, esse `null` ou vira `TypeError` cru na primeira conta a
+    jusante (o múltiplo do ramo NOPAT entra direto numa multiplicação) ou é
+    copiado, em silêncio, para dentro de `resultados.json` (quando o campo
+    só é passthrough, como os múltiplos que `avaliar._monta_cenario` copia,
+    ou o `multiplo` do teto do crescimento gratuito em `reversa.py`).
+
+    Toda leitura de EV/Equity/Preco_acao/múltiplo vinda do motor passa por
+    aqui — nunca por uma checagem própria em cada consumidor — para que um
+    builder de relatório futuro, que só lê o `resultados.json` já escrito,
+    herde a garantia de que esses campos nunca são `null` em vez de ter de
+    repetir a checagem.
+
+    Movida para `motor.py` (FIX 1, revisão final): antes vivia em
+    `avaliar.py`, mas `reversa.py` não pode importar `avaliar.py` no topo
+    do arquivo (ciclo documentado: `avaliar.py` importa `reversa.reverter`
+    no topo; um `from avaliar import _exigir_valor` em `reversa.py`
+    fecharia o ciclo pelo lado errado). `motor.py` não importa nem
+    `avaliar.py` nem `reversa.py` nem `sensibilidades.py` — é o único lugar
+    que os três alcançam sem ciclo, por isso a guarda mora aqui, ao lado de
+    `MotorFalhou`, e os três módulos a importam daqui. Foi exatamente a
+    cópia sem este import — a leitura de `teto_do_crescimento_gratuito` em
+    `reversa.py`, que lia `saida[campo_multiplo]` raw — que vazou `null`
+    para `resultados.json`; ver FIX 2 (mesma revisão) sobre a duplicação da
+    tradução rota/métrica → campo que acompanhava esse mesmo ponto.
+
+    Nunca substitui um valor: o `None` é recusado, nunca trocado por um
+    default — refusing é o comportamento certo aqui também, e a mensagem
+    ecoa os `diagnosticos` do próprio motor, porque é ele quem explica o
+    porquê (gp sem âncora, ROIC_TV ausente sob 'gordon' etc.), não este
+    wrapper.
+    """
+    valor = saida_motor.get(campo)
+    if valor is None:
+        diagnosticos = saida_motor.get("diagnosticos") or []
+        detalhe = "\n".join(f"- {d}" for d in diagnosticos) or "(nenhum)"
+        raise MotorFalhou(
+            f"motor devolveu 'null' para '{campo}': o serializador do "
+            "motor converte todo float não-finito (NaN ou Infinity) em "
+            "`null` e o processo sai com código 0 mesmo assim — este "
+            "wrapper recusa em vez de propagar um null silencioso para "
+            "resultados.json ou quebrar com TypeError cru na conta "
+            f"seguinte.\ndiagnósticos do motor:\n{detalhe}"
+        )
+    return valor
+
+
+# Rota (+ tipo de métrica-base, na rota firm) -> campo do motor que carrega o
+# múltiplo de REFERÊNCIA da métrica-base. FIX 2 (revisão final): esta
+# tradução existia em três cópias que podiam divergir silenciosamente —
+# `avaliar.precificar_firm` (EBITDA vs. NOPAT), `avaliar.precificar_equity`
+# (sempre PL_curr) e `reversa.teto_do_crescimento_gratuito` (a mesma
+# dicotomia de `precificar_firm`, reescrita à mão) — e foi a terceira cópia
+# que divergiu: a única sem a recusa de `null` de `_exigir_valor` (FIX 1,
+# mesma revisão, mesma causa-raiz). Extraída aqui — o único módulo que
+# `avaliar.py`, `reversa.py` e `sensibilidades.py` alcançam sem ciclo de
+# import — para que as três leituras usem o mesmo mapeamento em vez de cada
+# uma reafirmar a própria cópia.
+def _campo_do_multiplo(rota: str, tipo_metrica: str | None) -> str:
+    """Campo do motor com o múltiplo de referência da métrica-base.
+
+    Rota firm: `EV/EBITDA_curr` quando `tipo_metrica == "EBITDA"`,
+    `EV/NOPAT_curr` para qualquer outro valor — mesma dicotomia binária que
+    `precificar_firm` já fazia (`caso.py` só aceita "EBITDA" ou "NOPAT"
+    nesta rota; um terceiro valor não é alcançável por um caso validado).
+
+    Rota equity: sempre `PL_curr`, então `tipo_metrica` não entra na
+    escolha (a única métrica que `caso.py` aceita aqui é "LL") — o
+    parâmetro aceita `None` por isso, para que o chamador não precise
+    inventar um `tipo_metrica` só para preencher a assinatura.
+    """
+    if rota == "firm":
+        return "EV/EBITDA_curr" if tipo_metrica == "EBITDA" else "EV/NOPAT_curr"
+    return "PL_curr"
+
+
 def argv_para(rota: str, premissas: dict, escala: dict | None,
               moeda: str | None = None, subcomando: str | None = None) -> list[str]:
     """Monta `[subcomando, *flags]` para `rota` — sem executar nada.

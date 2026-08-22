@@ -1,4 +1,3 @@
-import json
 import sys
 from pathlib import Path
 
@@ -40,10 +39,16 @@ def test_beta_implicito_sai_do_capm_com_algebra():
 
 
 def test_beta_implicito_diz_a_posicao_contra_a_banda():
+    """FIX 8 (revisão final): a versão anterior só checava que a posição era
+    UM dos três valores possíveis e que a chave 'distancia' existia --
+    passava verde mesmo se a posição ou a distância certas trocassem de
+    lugar. Valores reais pinados contra a fixture: beta -0.2315 contra a
+    banda [0.85, 1.35] dá posição 'abaixo' e distância 1.0815."""
     r = reverter(_caso(), "base", 500.0)
     b = r["eixos"]["custo_capital"]["beta_implicito"]
-    assert b["posicao_na_banda"] in ("dentro", "abaixo", "acima")
-    assert "distancia" in b
+    assert b["valor"] == pytest.approx(-0.2315, abs=1e-3)
+    assert b["posicao_na_banda"] == "abaixo"
+    assert b["distancia"] == pytest.approx(1.0815, abs=1e-3)
 
 
 def test_beta_implicito_so_existe_no_eixo_de_custo_de_capital():
@@ -91,11 +96,19 @@ def test_eixo_cap_passa_com_shape_proprio():
 
 
 def test_cap_inalcancavel_chega_como_string_sem_quebrar():
-    """CAP_implicito_anos vira STRING quando o alvo esta fora de 1-60 anos."""
+    """CAP_implicito_anos vira STRING quando o alvo esta fora de 1-60 anos.
+
+    FIX 8 (revisão final): a versão anterior aceitava (float, int, str) --
+    tautológico, já que o motor só devolve um desses três tipos para este
+    campo, e o nome do teste promete string especificamente. Verificado
+    contra o vendor: preco=70.0 produz a string
+    '>60 — alvo incompatível com estas premissas sob esta convenção
+    (máx em n=60: 12.14)'.
+    """
     c = _caso()
     c["preco"]["valor"] = 70.0
     cap = reverter(c, "base", 500.0)["eixos"]["cap"]
-    assert isinstance(cap["CAP_implicito_anos"], (float, int, str))
+    assert isinstance(cap["CAP_implicito_anos"], str)
 
 
 def test_teto_roda_quando_eixo_primario_nao_fecha():
@@ -145,3 +158,23 @@ def test_teto_e_maior_que_o_multiplo_do_caso_base():
     from motor import rodar
     base = rodar("firm", c["cenarios"]["base"]["premissas"], None)
     assert r["teto_do_crescimento_gratuito"]["multiplo"] > base["EV/EBITDA_curr"]
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 1 (Crítico): o teto força tv="gordon" com gp=g -- um
+# cenário com g == wacc zera o denominador de Gordon, o motor serializa o
+# múltiplo resultante como `null` e ainda sai com código 0. A leitura de
+# `teto_do_crescimento_gratuito` lia esse campo raw (`saida[campo_multiplo]`),
+# sem passar pela mesma recusa (`_exigir_valor`) que toda outra leitura do
+# motor neste módulo já usa -- o `null` chegava intacto até
+# `resultados.json`. Reproduzido de ponta a ponta pelo controlador com
+# preco=400, g=10.0 (wacc da fixture também é 10.0).
+# --------------------------------------------------------------------------
+
+def test_teto_recusa_null_quando_g_igual_wacc_zera_gordon():
+    from motor import MotorFalhou
+    c = _caso()
+    c["preco"]["valor"] = 400.0
+    c["cenarios"]["base"]["premissas"]["g"] = 10.0  # wacc da fixture também é 10.0
+    with pytest.raises(MotorFalhou, match="EV/EBITDA_curr"):
+        reverter(c, "base", 500.0)

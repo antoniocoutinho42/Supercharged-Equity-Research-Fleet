@@ -40,7 +40,7 @@
        "triangulo": {"inputs": ["g", "roic"], "output": "rir"}}
     ],
     "grades_2d": [
-      {"premissa_x": "roic", "pontos_x": [10.0, 12.0, 14.0],
+      {"premissa_x": "roic", "pontos_x": [10.0, 12.0, 14.0, 16.0],
        "premissa_y": "g", "pontos_y": [3.0, 5.0, 7.0],
        "triangulo": {"inputs": ["g", "roic"], "output": "rir"}}
     ]

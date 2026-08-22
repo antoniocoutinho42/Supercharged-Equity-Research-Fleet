@@ -852,3 +852,63 @@ def test_grade_2d_com_premissa_x_nao_numerica_recusa():
     c["sensibilidades"]["grades_2d"][0]["premissa_x"] = "tv"
     with pytest.raises(CasoInvalido, match="numérica"):
         validar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 3 (Importante): `erp` é o denominador da inversão do
+# CAPM em beta implícito (`beta = (custo_implícito - rf) / erp`, em
+# `reversa._beta_implicito`) — `erp: 0` passava por `validar` sem recusa
+# (só `_numero_valido`/`_finito` eram checados) e só quebrava depois, num
+# `ZeroDivisionError` cru dentro de `reverter`, sem passar pelo CLI. O
+# módulo já recusa `acoes_diluidas <= 0` pela mesma razão (denominador) —
+# `erp` merece a mesma disciplina.
+# --------------------------------------------------------------------------
+
+def test_erp_zero_recusa_antes_de_dividir():
+    c = _reversa()
+    c["mercado"]["erp"] = 0.0
+    with pytest.raises(CasoInvalido, match="erp"):
+        validar(c)
+
+
+def test_erp_negativo_recusa():
+    c = _reversa()
+    c["mercado"]["erp"] = -5.5
+    with pytest.raises(CasoInvalido, match="erp"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final, FIX 4 (Importante): `rf` e `erp` são declarados em PONTOS
+# PERCENTUAIS (12.0 = 12%) — a mesma convenção de `raizes_*_%` que o motor
+# devolve. Essa convenção só vivia num docstring; um caso declarando
+# `rf: 0.12` (fração, não ponto percentual) validava normalmente e
+# produzia um beta implícito errado por ~100x, sem aviso nenhum de
+# ninguém. Nenhuma taxa livre de risco nem prêmio de risco de mercado
+# abaixo de um ponto percentual ocorre na prática — o intervalo aberto
+# 0 < x < 1 é seguro para recusar sem estreitar o que é um valor
+# legítimo.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("campo", ["rf", "erp"])
+def test_rf_ou_erp_como_fracao_recusa(campo):
+    c = _reversa()
+    c["mercado"][campo] = 0.12
+    with pytest.raises(CasoInvalido, match=campo):
+        validar(c)
+
+
+def test_rf_igual_a_um_ponto_percentual_e_aceito():
+    """A faixa recusada e o intervalo ABERTO (0, 1); 1.0 nao e fracao
+    obviamente digitada e continua sendo um valor legitimo."""
+    c = _reversa()
+    c["mercado"]["rf"] = 1.0
+    validar(c)  # nao levanta
+
+
+def test_rf_negativo_nao_e_tratado_como_fracao():
+    """So o intervalo (0, 1) e recusado; taxa livre de risco negativa (em
+    pontos percentuais) nao e o defeito que o FIX 4 mira."""
+    c = _reversa()
+    c["mercado"]["rf"] = -0.5
+    validar(c)  # nao levanta

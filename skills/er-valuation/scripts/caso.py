@@ -248,6 +248,16 @@ EIXO_OBRIGATORIO: str = "custo_capital"
 # (beta = (custo_implícito − rf) ÷ erp). Os dois só passam a ser exigidos
 # quando o caso declara 'reversa' — fora disso, 'mercado' é só um bloco
 # opcional.
+#
+# Unidade (FIX 4, revisão final): 'rf' e 'erp' são declarados em PONTOS
+# PERCENTUAIS — 12.0 significa 12%, nunca 0.12 — a mesma convenção de
+# 'raizes_*_%' que o motor devolve. Essa convenção só vivia num docstring;
+# um caso declarando 'rf: 0.12' (fração, não ponto percentual) validava
+# normalmente e produzia um beta implícito errado por ~100x, sem aviso
+# nenhum. Nenhuma taxa livre de risco nem prêmio de risco de mercado abaixo
+# de um ponto percentual ocorre na prática, então o intervalo ABERTO
+# 0 < x < 1 é reconhecido como fração digitada por engano — recusado por
+# `_validar_mercado`, sem alargar a faixa além disso.
 CAMPOS_DE_MERCADO_OBRIGATORIOS: tuple = ("rf", "erp")
 
 # --------------------------------------------------------------------------
@@ -739,6 +749,13 @@ def _validar_mercado(caso: Caso, reversa_presente: bool) -> None:
     dict quando presente, e 'beta_observado' (se presente) precisa ser uma
     banda válida. Com 'reversa' presente, 'rf' e 'erp' passam a ser
     obrigatórios — sem eles não há como inverter o CAPM em beta implícito.
+
+    'rf' e 'erp' são declarados em pontos percentuais (12.0 = 12%): um
+    valor no intervalo aberto (0, 1) é recusado por ser quase certamente
+    uma fração digitada por engano (FIX 4, revisão final). 'erp' também é
+    recusado quando <= 0 (FIX 3): é o denominador da inversão do CAPM em
+    beta implícito (beta = (custo_implícito − rf) / erp) — a mesma razão
+    pela qual `_validar_acoes_diluidas` já recusa um denominador <= 0.
     """
     mercado = caso.get("mercado")
 
@@ -773,6 +790,40 @@ def _validar_mercado(caso: Caso, reversa_presente: bool) -> None:
                     f"campo 'mercado.{campo}' não é um número finito: "
                     f"{valor!r}. NaN e Infinity não são valor válido de "
                     "mercado — envenenam o beta implícito em silêncio."
+                )
+            # FIX 4 (revisão final): 'rf' e 'erp' são pontos percentuais
+            # (12.0 = 12%) — um valor no intervalo ABERTO (0, 1) é quase
+            # certamente uma fração digitada por engano (0.12 em vez de
+            # 12.0). Nenhuma taxa livre de risco nem prêmio de risco de
+            # mercado abaixo de um ponto percentual ocorre na prática, então
+            # a faixa é segura para recusar sem estreitar valor legítimo
+            # algum (0 e 1 continuam aceitos; só o intervalo aberto recusa).
+            if 0 < valor < 1:
+                raise CasoInvalido(
+                    f"'mercado.{campo}' parece fração, não ponto "
+                    f"percentual: {valor!r}. Taxas de mercado neste caso "
+                    "são declaradas em pontos percentuais (12.0 significa "
+                    "12%) — um valor entre 0 e 1 é quase certamente uma "
+                    "fração (por exemplo 0.12 em vez de 12.0) e produziria "
+                    "um beta implícito errado por ~100x sem nenhum aviso. "
+                    "Uma taxa livre de risco ou prêmio de risco de mercado "
+                    "abaixo de um ponto percentual não ocorre na prática."
+                )
+            # FIX 3 (revisão final): 'erp' é o denominador da inversão do
+            # CAPM em beta implícito (beta = (custo_implícito - rf) / erp,
+            # em reversa._beta_implicito) — <= 0 faz essa conta explodir em
+            # ZeroDivisionError (erp == 0) ou inverter o sinal do beta
+            # (erp < 0) sem aviso nenhum. Mesma disciplina de
+            # `_validar_acoes_diluidas`, que já recusa outro denominador
+            # (acoes_diluidas) pela mesma razão.
+            if campo == "erp" and valor <= 0:
+                raise CasoInvalido(
+                    f"'mercado.erp' inválido: {valor!r}. O prêmio de risco "
+                    "de mercado é o denominador da inversão do CAPM em "
+                    "beta implícito (beta = (custo_implícito - rf) / erp) "
+                    "— precisa ser estritamente positivo, ou a conta "
+                    "explode em ZeroDivisionError (erp == 0) ou inverte o "
+                    "sinal do beta em silêncio (erp < 0)."
                 )
 
     beta_observado = mercado.get("beta_observado")

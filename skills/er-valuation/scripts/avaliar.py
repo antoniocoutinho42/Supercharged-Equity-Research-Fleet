@@ -75,7 +75,7 @@ import sys
 from pathlib import Path
 
 from caso import CasoInvalido, carregar
-from motor import MotorFalhou, rodar
+from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
 from reversa import reverter
 
@@ -101,45 +101,15 @@ _MULTIPLOS_POR_ROTA: dict[str, tuple[str, ...]] = {
 }
 
 
-def _exigir_valor(saida_motor: dict, campo: str) -> float:
-    """Devolve `saida_motor[campo]`, recusando com `MotorFalhou` se for `None`.
-
-    Único ponto de normalização (FIX 1, revisão final): o serializador do
-    motor congelado converte todo float não-finito (NaN, Infinity) em
-    `null` — e o processo ainda assim sai com código 0, porque a recusa
-    nunca chega a acontecer no motor; ele só devolve um número que não dá
-    para representar em JSON. Sem esta guarda, esse `null` ou vira
-    `TypeError` cru na primeira conta a jusante (o múltiplo do ramo NOPAT
-    entra direto numa multiplicação) ou é copiado, em silêncio, para dentro
-    de `resultados.json` (quando o campo só é passthrough, como os
-    múltiplos que `_monta_cenario` copia) — os dois sintomas achados na
-    revisão, um crash e um dado envenenado.
-
-    Toda leitura de EV/Equity/Preco_acao/múltiplo vinda do motor passa por
-    aqui — nunca por uma checagem própria em cada consumidor — para que um
-    builder de relatório futuro, que só lê o `resultados.json` já escrito
-    por este módulo, herde a garantia de que esses campos nunca são `null`
-    em vez de ter de repetir a checagem.
-
-    Nunca substitui um valor: o `None` é recusado, nunca trocado por um
-    default — refusing é o comportamento certo aqui também, e a mensagem
-    ecoa os `diagnosticos` do próprio motor, porque é ele quem explica o
-    porquê (gp sem âncora, ROIC_TV ausente sob 'gordon' etc.), não este
-    wrapper.
-    """
-    valor = saida_motor.get(campo)
-    if valor is None:
-        diagnosticos = saida_motor.get("diagnosticos") or []
-        detalhe = "\n".join(f"- {d}" for d in diagnosticos) or "(nenhum)"
-        raise MotorFalhou(
-            f"motor devolveu 'null' para '{campo}': o serializador do "
-            "motor converte todo float não-finito (NaN ou Infinity) em "
-            "`null` e o processo sai com código 0 mesmo assim — este "
-            "wrapper recusa em vez de propagar um null silencioso para "
-            "resultados.json ou quebrar com TypeError cru na conta "
-            f"seguinte.\ndiagnósticos do motor:\n{detalhe}"
-        )
-    return valor
+# `_exigir_valor` e `_campo_do_multiplo` moraram aqui até a revisão final;
+# viveram agora em `motor.py`, ao lado de `MotorFalhou` (FIX 1 e FIX 2): é o
+# único módulo que `avaliar.py`, `reversa.py` e `sensibilidades.py`
+# alcançam sem ciclo de import, então os três leem a mesma guarda e a mesma
+# tradução rota/métrica → campo em vez de cada um manter cópia própria — a
+# cópia dentro de `reversa.teto_do_crescimento_gratuito` era exatamente a
+# que tinha divergido, perdendo a recusa de `null`. Este módulo continua
+# importando os dois nomes (linha de import no topo do arquivo), só não os
+# define mais.
 
 
 def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
@@ -164,17 +134,21 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
     confia nisso e não trata um terceiro caso.
 
     `multiplo` é o múltiplo de referência da métrica-base, já validado por
-    `_exigir_valor`: `EV/EBITDA_curr` quando `tipo_metrica == "EBITDA"`,
-    `EV/NOPAT_curr` quando `"NOPAT"`. No ramo EBITDA é uma leitura
-    adicional (o motor sempre devolve os múltiplos, mesmo com escala
-    aplicada); no ramo NOPAT é o mesmo valor que a álgebra abaixo já
-    usava, agora também devolvido ao chamador.
+    `_exigir_valor` sobre o campo que `_campo_do_multiplo("firm",
+    tipo_metrica)` resolve (FIX 2, revisão final: `EV/EBITDA_curr` quando
+    `tipo_metrica == "EBITDA"`, `EV/NOPAT_curr` caso contrário — a mesma
+    tradução que `precificar_equity` e `reversa.teto_do_crescimento_gratuito`
+    também leem de `motor.py`, em vez de cada um repetir a própria cópia).
+    No ramo EBITDA é uma leitura adicional (o motor sempre devolve os
+    múltiplos, mesmo com escala aplicada); no ramo NOPAT é o mesmo valor
+    que a álgebra abaixo já usava, agora também devolvido ao chamador.
 
     `moeda` tem default `None` — o mesmo de `motor.rodar` — porque quem
     chama decide se passa `--moeda`: `avaliar()` e `sensibilidades.py`
     sempre passam `caso["moeda"]` (ver docstring do módulo e de
     `sensibilidades.py`).
     """
+    campo_multiplo = _campo_do_multiplo("firm", tipo_metrica)
     if tipo_metrica == "EBITDA":
         escala = {"ebitda": valor_metrica, "nd": nd_efetivo, "acoes": acoes}
         saida = rodar("firm", premissas, escala, moeda)
@@ -183,11 +157,11 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
             "Equity": _exigir_valor(saida, "Equity"),
             "preco_acao": _exigir_valor(saida, "Preco_acao"),
         }
-        multiplo = _exigir_valor(saida, "EV/EBITDA_curr")
+        multiplo = _exigir_valor(saida, campo_multiplo)
         algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
         saida = rodar("firm", premissas, None, moeda)
-        multiplo = _exigir_valor(saida, "EV/NOPAT_curr")
+        multiplo = _exigir_valor(saida, campo_multiplo)
         ev = multiplo * valor_metrica
         equity = ev - nd_efetivo
         preco_acao = equity / acoes
@@ -208,15 +182,18 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
     Extraída do antigo `_cenario_equity` (Fatia B, Task 4) — mesmo motivo
     de `precificar_firm`, ver aquele docstring. Sem ponte: a rota equity
     chega em Equity diretamente (P/L x LL) — não há dívida líquida a
-    subtrair. `multiplo` é `PL_curr`, já validado por `_exigir_valor`.
+    subtrair. `multiplo` é `PL_curr`, resolvido por
+    `_campo_do_multiplo("equity", None)` (FIX 2) e já validado por
+    `_exigir_valor`.
     """
+    campo_multiplo = _campo_do_multiplo("equity", None)
     escala = {"ni": valor_metrica, "acoes": acoes}
     saida = rodar("equity", premissas, escala, moeda)
     valor = {
         "Equity": _exigir_valor(saida, "Equity"),
         "preco_acao": _exigir_valor(saida, "Preco_acao"),
     }
-    multiplo = _exigir_valor(saida, "PL_curr")
+    multiplo = _exigir_valor(saida, campo_multiplo)
     algebra = "Equity = PL_curr x LL (motor); rota equity nao usa ponte"
     return saida, valor, algebra, multiplo
 

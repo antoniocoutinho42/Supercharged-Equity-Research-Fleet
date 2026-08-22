@@ -77,6 +77,15 @@ Cada cenário declara `ancora` (o observável de que ele vem), `triangulo`
 âncora é cenário inventado; cenário sem a configuração do triângulo esconde
 a taxa de reinvestimento que ele implica.
 
+Bloco opcional `mercado` (obrigatório, com `rf` e `erp`, quando o caso
+declara `reversa`): `rf` e `erp` são declarados em **pontos percentuais**
+(`12.0` significa 12%, nunca `0.12`) — a mesma convenção de `raizes_*_%`
+que o motor devolve. Um valor no intervalo aberto `0 < x < 1` é recusado:
+nenhuma taxa livre de risco nem prêmio de risco de mercado abaixo de um
+ponto percentual ocorre na prática, então esse intervalo só pode ser uma
+fração digitada por engano, não uma taxa válida. `erp` também é recusado
+quando `<= 0` — é o denominador da inversão do CAPM em beta implícito.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 

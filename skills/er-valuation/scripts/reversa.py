@@ -41,7 +41,7 @@ quando o gatilho dispara).
 from typing import Any
 
 from caso import EIXOS_DE_REVERSA
-from motor import rodar
+from motor import _campo_do_multiplo, _exigir_valor, rodar
 
 Caso = dict[str, Any]
 
@@ -259,11 +259,25 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     `subcomando=None` em `rodar` — NUNCA `rev`: aqui não há alvo nem
     variável a resolver, é a avaliação do caso-limite em si). `multiplo` é
     o múltiplo "corrente" que o motor devolve para essas premissas —
-    `EV/EBITDA_curr`/`EV/NOPAT_curr` (rota firm, conforme
-    `metrica_base.tipo`) ou `PL_curr` (rota equity) — comparável direto ao
-    que a mesma chamada devolveria para o vetor do caso-base sem as três
-    sobreposições. `diagnosticos` é o que o motor emitiu para esta mesma
-    chamada, íntegro — mesma disciplina de `reverter`, nada filtrado.
+    campo resolvido por `_campo_do_multiplo` (FIX 2, revisão final:
+    `EV/EBITDA_curr`/`EV/NOPAT_curr` na rota firm, conforme
+    `metrica_base.tipo`, ou `PL_curr` na rota equity — a mesma tradução que
+    `avaliar.precificar_firm`/`precificar_equity` usam, lida de `motor.py`
+    em vez de reescrita aqui) — comparável direto ao que a mesma chamada
+    devolveria para o vetor do caso-base sem as três sobreposições.
+    `diagnosticos` é o que o motor emitiu para esta mesma chamada, íntegro
+    — mesma disciplina de `reverter`, nada filtrado.
+
+    FIX 1 (Crítico, revisão final): `multiplo` passa por `_exigir_valor` —
+    antes lia `saida[campo_multiplo]` raw, a única leitura do módulo que
+    não recusava um `null`. `tv="gordon"` com `gp=g` (a sobreposição logo
+    acima) zera o denominador de Gordon exatamente quando `g == wacc`; o
+    motor serializa o múltiplo resultante como `null` e sai com código 0
+    mesmo assim — e o teto só roda automaticamente quando um eixo primário
+    já falhou em fechar (`reverter`), o que torna `g >= wacc` um cenário
+    plausível, não exótico. `diagnosticos` ganha a mesma guarda de chave
+    ausente que `_exigir_valor` usa ao montar a própria mensagem de erro
+    (`.get(...) or []`), em vez do índice raw `saida["diagnosticos"]`.
     """
     rota = caso["rota"]
     moeda = caso["moeda"]
@@ -279,14 +293,7 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     vetor = {**cenario["premissas"], **premissas_alteradas}
 
     saida = rodar(rota, vetor, None, moeda)
-
-    if rota == "firm":
-        campo_multiplo = (
-            "EV/EBITDA_curr" if caso["metrica_base"]["tipo"] == "EBITDA"
-            else "EV/NOPAT_curr"
-        )
-    else:
-        campo_multiplo = "PL_curr"
+    campo_multiplo = _campo_do_multiplo(rota, caso["metrica_base"]["tipo"])
 
     leitura = (
         "Teto do crescimento gratuito: caso-limite RiR_TV -> 0 (rentabilidade "
@@ -301,10 +308,10 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     )
 
     return {
-        "multiplo": saida[campo_multiplo],
+        "multiplo": _exigir_valor(saida, campo_multiplo),
         "premissas_alteradas": premissas_alteradas,
         "leitura": leitura,
-        "diagnosticos": saida["diagnosticos"],
+        "diagnosticos": saida.get("diagnosticos") or [],
     }
 
 
