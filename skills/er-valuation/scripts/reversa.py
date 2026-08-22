@@ -25,6 +25,17 @@ quando alcançável e string quando não, sem `raizes_*`, sem
 `identificacao_por_raiz`, sem `sem_solucao`/`sugestao`) que os outros três
 eixos não têm; este módulo repassa cada eixo exatamente como o motor
 devolveu, sem normalizar para um formato comum.
+
+Quando `rentabilidade` ou `crescimento` (os dois eixos PRIMÁRIOS da
+metodologia) voltam sem raiz, `reverter` roda automaticamente um segundo
+tipo de chamada ao motor — não mais `rev` (busca de raiz), mas o subcomando
+de avaliação direta (`ev`/`pe`, o mesmo que a fatia A usa) sobre o vetor do
+cenário com três premissas sobrepostas: `tv="gordon"`, `roic_tv`/`roe_tv`
+levado a uma constante declarada (`RENTABILIDADE_TERMINAL_INFINITA`) e `gp`
+igualado ao `g` do cenário — o caso-limite RiR_TV → 0, forma fechada do
+teto do crescimento gratuito (`teto_do_crescimento_gratuito`; chave
+`teto_do_crescimento_gratuito` no resultado de `reverter`, presente só
+quando o gatilho dispara).
 """
 
 from typing import Any
@@ -68,6 +79,26 @@ EIXO_DO_CUSTO_DE_CAPITAL = "custo_capital"
 # plano (`docs/superpowers/plans/2026-08-21-v4-item3b-reversa-sensibilidades.md`,
 # decisão D2).
 _ALVO_BASE = "corrente"
+
+# "Rentabilidade terminal muito alta" não é um infinito matemático — é a
+# aproximação numérica do limite RiR_TV = gp/RONIC → 0 (decisão D4 do plano
+# `docs/superpowers/plans/2026-08-21-v4-item3b-reversa-sensibilidades.md`):
+# rentabilidade terminal alta o bastante faz o reinvestimento perpétuo
+# tender a zero sem resolver o limite em forma fechada. O valor é arbitrário
+# por natureza — qualquer número "grande o bastante" serve — e é exatamente
+# por isso que `test_teto_e_insensivel_a_escolha_do_infinito` existe: trava
+# que o `multiplo` devolvido não muda entre 1e5, 1e6 e 1e7. Uma constante
+# mágica sem esse teste de estabilidade seria número inventado, não
+# aproximação.
+RENTABILIDADE_TERMINAL_INFINITA: float = 1e6
+
+# Os dois eixos PRIMÁRIOS da metodologia (decisão D4): os únicos cujo
+# `raizes_*` vazio aciona o teto do crescimento gratuito. `custo_capital`
+# tem observável de mercado direto (o beta implícito) e não depende do teto
+# para ser interpretado; `cap` tem shape próprio (`CAP_implicito_anos`, sem
+# `raizes_*` nem `sugestao`) e não entra nesta checagem — consultá-lo aqui
+# seria olhar uma chave que ele nunca tem.
+EIXOS_PRIMARIOS: frozenset = frozenset({"rentabilidade", "crescimento"})
 
 
 def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
@@ -196,6 +227,87 @@ def _beta_implicito(saida_eixo: dict, variavel: str, mercado: dict) -> dict:
     return resultado
 
 
+def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
+    """Caso-limite RiR_TV → 0: com reinvestimento zero, o FCFF/FCFE vira o
+    NOPAT/lucro inteiro e o valor colapsa num Gordon puro — o TETO do que
+    qualquer história de crescimento pode valer, porque nenhuma hipótese de
+    crescimento PAGO chega lá (pagar reinvestimento só subtrai fluxo de
+    caixa). Decisão D4 do plano; é a mesma leitura que o motor já cita no
+    campo `sugestao` de um eixo primário sem raiz — esta função executa a
+    sugestão, não inventa a ideia.
+
+    `reverter` chama esta função automaticamente quando `rentabilidade` ou
+    `crescimento` (`EIXOS_PRIMARIOS`) volta sem raiz, mas ela também é
+    chamável direto — por isso tem a mesma assinatura de `reverter`
+    (`caso, nome_cenario, nd_efetivo`). `nd_efetivo` não entra em conta
+    aqui: o teto é um MÚLTIPLO (`EV/EBITDA_curr`/`EV/NOPAT_curr`/`PL_curr`),
+    não um preço, e não há ponte de dívida nesta saída — o parâmetro só
+    mantém a chamada simétrica à de `alvo_de_mercado` e `reverter`.
+
+    Copia o vetor central de premissas do cenário-alvo e sobrepõe só três
+    valores — nunca inventa as outras: `tv` forçado para `"gordon"` (a
+    única convenção terminal com forma fechada para RiR_TV → 0);
+    `roic_tv`/`roe_tv` (conforme a rota) igualado a
+    `RENTABILIDADE_TERMINAL_INFINITA`; `gp` igualado ao `g` do cenário — sem
+    essa igualdade o teto teria uma taxa terminal desconectada do `g` que a
+    reversa está tentando explicar. As três sobreposições voltam em
+    `premissas_alteradas`; o resto do vetor já está visível em
+    `caso["cenarios"][nome_cenario]["premissas"]` — reexibi-lo aqui seria
+    duplicar, não auditar.
+
+    Roda o motor no subcomando de avaliação direta (`ev`/`pe`, via
+    `subcomando=None` em `rodar` — NUNCA `rev`: aqui não há alvo nem
+    variável a resolver, é a avaliação do caso-limite em si). `multiplo` é
+    o múltiplo "corrente" que o motor devolve para essas premissas —
+    `EV/EBITDA_curr`/`EV/NOPAT_curr` (rota firm, conforme
+    `metrica_base.tipo`) ou `PL_curr` (rota equity) — comparável direto ao
+    que a mesma chamada devolveria para o vetor do caso-base sem as três
+    sobreposições. `diagnosticos` é o que o motor emitiu para esta mesma
+    chamada, íntegro — mesma disciplina de `reverter`, nada filtrado.
+    """
+    rota = caso["rota"]
+    moeda = caso["moeda"]
+    cenario = caso["cenarios"][nome_cenario]
+    g = cenario["premissas"]["g"]
+
+    variavel_tv = RESOLVER_POR_EIXO["rentabilidade"][rota] + "_tv"
+    premissas_alteradas = {
+        "tv": "gordon",
+        variavel_tv: RENTABILIDADE_TERMINAL_INFINITA,
+        "gp": g,
+    }
+    vetor = {**cenario["premissas"], **premissas_alteradas}
+
+    saida = rodar(rota, vetor, None, moeda)
+
+    if rota == "firm":
+        campo_multiplo = (
+            "EV/EBITDA_curr" if caso["metrica_base"]["tipo"] == "EBITDA"
+            else "EV/NOPAT_curr"
+        )
+    else:
+        campo_multiplo = "PL_curr"
+
+    leitura = (
+        "Teto do crescimento gratuito: caso-limite RiR_TV -> 0 (rentabilidade "
+        "terminal levada a um número muito grande, gp = g do cenário) — com "
+        "reinvestimento zero, todo o lucro operacional vira caixa livre e o "
+        "valor colapsa num Gordon puro. Nenhuma hipótese de crescimento PAGO "
+        "chega aqui, porque pagar reinvestimento só subtrai fluxo de caixa — "
+        "é o teto do que qualquer história de crescimento pode valer. A "
+        "distância entre este múltiplo e o múltiplo do caso-base é o preço "
+        "que o mercado está pagando pela hipótese de que o crescimento não "
+        "consome capital."
+    )
+
+    return {
+        "multiplo": saida[campo_multiplo],
+        "premissas_alteradas": premissas_alteradas,
+        "leitura": leitura,
+        "diagnosticos": saida["diagnosticos"],
+    }
+
+
 def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     """Roda a reversa em todo eixo declarado em `caso["reversa"]["eixos"]`.
 
@@ -211,9 +323,14 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     `CAP_implicito_anos` (float ou string), nunca `raizes_*` — este módulo
     não força um formato comum entre eixos.
 
-    No eixo de custo de capital, acrescenta a chave `beta_implicito` — a
-    única adição deste módulo a um dict que, fora isso, é passthrough puro
-    do motor.
+    No eixo de custo de capital, acrescenta a chave `beta_implicito` — uma
+    das duas adições deste módulo a um resultado que, fora isso, é
+    passthrough puro do motor. A outra é de topo, não por eixo: quando
+    `rentabilidade` ou `crescimento` volta sem raiz (`EIXOS_PRIMARIOS`), o
+    resultado ganha a chave `teto_do_crescimento_gratuito` — o caso-limite
+    RiR_TV → 0 que o próprio motor já sugere rodar no campo `sugestao`
+    daquele eixo (ver `teto_do_crescimento_gratuito`). Fechando todos os
+    eixos primários com raiz, a chave nem aparece.
 
     Assume que `caso` já passou por `caso.validar` (responsabilidade de
     quem carregou o caso — `caso.carregar` —, nunca repetida aqui):
@@ -245,4 +362,16 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
 
         eixos[nome_eixo] = saida
 
-    return {"alvo": alvo, "eixos": eixos}
+    resultado: dict = {"alvo": alvo, "eixos": eixos}
+
+    algum_primario_sem_raiz = any(
+        "sugestao" in eixos[nome_eixo]
+        for nome_eixo in EIXOS_PRIMARIOS
+        if nome_eixo in eixos
+    )
+    if algum_primario_sem_raiz:
+        resultado["teto_do_crescimento_gratuito"] = teto_do_crescimento_gratuito(
+            caso, nome_cenario, nd_efetivo
+        )
+
+    return resultado

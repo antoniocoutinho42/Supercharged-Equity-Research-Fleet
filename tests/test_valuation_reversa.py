@@ -96,3 +96,52 @@ def test_cap_inalcancavel_chega_como_string_sem_quebrar():
     c["preco"]["valor"] = 70.0
     cap = reverter(c, "base", 500.0)["eixos"]["cap"]
     assert isinstance(cap["CAP_implicito_anos"], (float, int, str))
+
+
+def test_teto_roda_quando_eixo_primario_nao_fecha():
+    c = _caso()
+    c["preco"]["valor"] = 900.0
+    r = reverter(c, "base", 500.0)
+    teto = r["teto_do_crescimento_gratuito"]
+    assert teto["multiplo"] > 0
+    assert "RiR" in teto["leitura"] or "reinvestimento" in teto["leitura"]
+
+
+def test_teto_nao_roda_quando_todos_os_eixos_fecham():
+    r = reverter(_caso(), "base", 500.0)
+    assert "teto_do_crescimento_gratuito" not in r
+
+
+def test_teto_e_insensivel_a_escolha_do_infinito():
+    """A constante e uma aproximacao numerica; se o resultado depender dela, e invencao."""
+    import reversa as mod
+    c = _caso()
+    c["preco"]["valor"] = 900.0
+    valores = []
+    original = mod.RENTABILIDADE_TERMINAL_INFINITA
+    try:
+        for grande in (1e5, 1e6, 1e7):
+            mod.RENTABILIDADE_TERMINAL_INFINITA = grande
+            valores.append(mod.teto_do_crescimento_gratuito(c, "base", 500.0)["multiplo"])
+    finally:
+        mod.RENTABILIDADE_TERMINAL_INFINITA = original
+    # medido contra o vendor: 1e5 -> 10.6467, 1e6 -> 10.647, 1e7 -> 10.647
+    assert max(valores) - min(valores) < 0.01, valores
+
+
+def test_teto_declara_as_premissas_que_alterou():
+    c = _caso()
+    c["preco"]["valor"] = 900.0
+    teto = reverter(c, "base", 500.0)["teto_do_crescimento_gratuito"]
+    assert teto["premissas_alteradas"]["tv"] == "gordon"
+    assert teto["premissas_alteradas"]["gp"] == c["cenarios"]["base"]["premissas"]["g"]
+
+
+def test_teto_e_maior_que_o_multiplo_do_caso_base():
+    """Nenhuma historia de crescimento PAGO chega ao teto do crescimento gratuito."""
+    c = _caso()
+    c["preco"]["valor"] = 900.0
+    r = reverter(c, "base", 500.0)
+    from motor import rodar
+    base = rodar("firm", c["cenarios"]["base"]["premissas"], None)
+    assert r["teto_do_crescimento_gratuito"]["multiplo"] > base["EV/EBITDA_curr"]
