@@ -36,11 +36,11 @@ qualquer (não só o vetor central de um cenário declarado). `avaliar()`
 continua o único lugar que lê `EV`/`Equity`/`algebra`; `sensibilidades.py`
 reusa as mesmas duas funções, célula a célula, para preço por ação e o
 múltiplo de referência — nunca uma segunda cópia desta lógica. As duas
-aceitam `moeda=None` por default (o mesmo default de `motor.rodar`):
-`avaliar()` sempre passa `caso["moeda"]` explicitamente, como acima;
-`sensibilidades.py` deliberadamente NÃO passa — toda célula de toda grade
-roda sem `--moeda` (ver docstring de `sensibilidades.py` para o motivo,
-ligado ao teste de reconstrução de diagnóstico por índice).
+aceitam `moeda=None` por default (o mesmo default de `motor.rodar`), mas
+`avaliar()` e `sensibilidades.py` sempre passam `caso["moeda"]`
+explicitamente — a mesma disciplina nos dois lugares, para que nenhuma
+saída (cenário principal ou célula de grade) carregue o alarme falso
+"MOEDA/REGIME NÃO DECLARADOS" (ver docstring de `sensibilidades.py`).
 
 Todo valor que este módulo lê ou copia da saída do motor (`EV`, `Equity`,
 `Preco_acao`, o múltiplo do ramo NOPAT, os múltiplos copiados para a saída)
@@ -145,9 +145,9 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
     usava, agora também devolvido ao chamador.
 
     `moeda` tem default `None` — o mesmo de `motor.rodar` — porque quem
-    chama decide se passa `--moeda`: `avaliar()` sempre passa
-    `caso["moeda"]` (ver docstring do módulo); `sensibilidades.py`
-    deliberadamente não passa (ver docstring de lá).
+    chama decide se passa `--moeda`: `avaliar()` e `sensibilidades.py`
+    sempre passam `caso["moeda"]` (ver docstring do módulo e de
+    `sensibilidades.py`).
     """
     if tipo_metrica == "EBITDA":
         escala = {"ebitda": valor_metrica, "nd": nd_efetivo, "acoes": acoes}
@@ -196,17 +196,35 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
 
 
 def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
-                    algebra: str, preco_valor: float) -> dict:
+                    algebra: str, preco_valor: float,
+                    tipo_metrica: str | None = None) -> dict:
     """Compõe o registro de um cenário no shape de `resultados.json`.
 
     `upside` é a única outra conta feita fora do motor: `preco_acao / preco.valor
     − 1`, comparação simples contra o preço declarado no caso — não é
     valuation, é a leitura de quanto o preço de mercado diverge do valor que
     saiu do motor (mais a álgebra de escala, quando aplicável).
+
+    `tipo_metrica` só importa na rota firm com métrica EBITDA: nesse ramo,
+    `precificar_firm` já leu `saida_motor["EV/EBITDA_curr"]` por
+    `_exigir_valor` (é o `multiplo` que devolve ao chamador) antes deste
+    ponto — reconferir aqui checaria duas vezes o mesmo campo do mesmo
+    dict, sempre com o mesmo resultado. Nos outros casos (rota equity, ou
+    ramo NOPAT desta própria rota firm) `EV/EBITDA_curr` nunca foi checado
+    antes, então a guarda de `_exigir_valor` continua valendo — a garantia
+    de que nenhum múltiplo nulo entra em `resultados.json` não afrouxa em
+    nenhum desses casos, só para de repetir uma checagem cujo resultado já
+    era certo.
     """
     chaves_multiplo = _MULTIPLOS_POR_ROTA[rota]
-    multiplos = {chave: _exigir_valor(saida_motor, chave)
-                 for chave in chaves_multiplo if chave in saida_motor}
+    multiplos: dict[str, float] = {}
+    for chave in chaves_multiplo:
+        if chave not in saida_motor:
+            continue
+        if chave == "EV/EBITDA_curr" and tipo_metrica == "EBITDA":
+            multiplos[chave] = saida_motor[chave]  # já validado por precificar_firm
+        else:
+            multiplos[chave] = _exigir_valor(saida_motor, chave)
     upside = valor["preco_acao"] / preco_valor - 1
 
     return {
@@ -268,7 +286,8 @@ def avaliar(caso: dict) -> dict:
             saida, valor, algebra, _multiplo = precificar_firm(
                 cenario["premissas"], metrica["tipo"], metrica["valor"],
                 nd_efetivo, acoes, moeda)
-            cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
+            cenarios[nome] = _monta_cenario(
+                cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
     else:  # equity
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_equity(

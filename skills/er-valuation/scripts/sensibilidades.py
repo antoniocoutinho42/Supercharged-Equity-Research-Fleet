@@ -35,16 +35,24 @@ nesses diagnósticos: comentada, nunca silenciada.
 
 Sobre `--moeda`: `precificar_firm`/`precificar_equity` aceitam `moeda`
 como parâmetro opcional (default `None`, o mesmo de `motor.rodar`); este
-módulo DELIBERADAMENTE não a passa — toda célula roda sem `--moeda`, e por
-isso toda célula carrega o aviso genérico do motor "MOEDA/REGIME NÃO
-DECLARADOS" nos diagnósticos. Isso é ruído conhecido, não filtrado (a
-mesma disciplina de D6: o que o motor emite viaja com a célula). O motivo
-de não passar moeda é o contrato do teste
+módulo passa `caso["moeda"]` em toda célula, de toda grade — mesma
+disciplina de `avaliar()` (ver docstring de `avaliar.py`). A omissão era
+uma regressão: sem `--moeda`, cada célula carregava o aviso genérico do
+motor "MOEDA/REGIME NÃO DECLARADOS" nos diagnósticos — uma grade 7x7
+acumulava 49 alarmes falsos, um por célula, num produto cujo objetivo é a
+trilha auditável. Passar moeda não muda nenhum número: troca só o aviso
+por uma confirmação de âncora macro — a mesma troca que, para o cenário
+principal, `test_valuation_avaliar.py` prova em
+`test_moeda_do_caso_e_repassada_ao_motor_sem_mudar_numeros`. A mesma
+garantia, agora sobre a grade, é o teste de regressão deste módulo:
+`test_regressao_sem_alarme_falso_de_moeda_nas_celulas`.
+
+Isso também corrige o contrato do teste
 `test_diagnosticos_deduplicados_reconstroem_a_execucao_direta`: ele
 reconstrói os diagnósticos de uma célula pelos índices e compara, com
-igualdade exata de lista, contra uma chamada direta de `motor.rodar` sem
-`--moeda` — as duas só batem se célula e chamada direta concordarem em não
-declarar moeda.
+igualdade exata de lista, contra uma chamada direta de `motor.rodar` — a
+comparação só bate se essa chamada direta passar a mesma `moeda` que a
+célula usa.
 
 Assume, em toda função deste módulo, que `caso` já passou por
 `caso.validar` — mesma disciplina de `reversa.py`: a presença e a forma de
@@ -73,19 +81,21 @@ def _precificar_celula(caso: Caso, nd_efetivo: float, premissas: dict) -> tuple[
     `algebra`: a grade não precisa e não expõe esses campos, só o preço
     por ação e o múltiplo de referência da métrica-base.
 
-    Deliberadamente NÃO passa `moeda` — a chamada usa o default `None` das
-    duas funções de `avaliar.py` (ver docstring do módulo).
+    Passa `caso["moeda"]` às duas funções de `avaliar.py` — mesma
+    disciplina de `avaliar()` (ver docstring do módulo): sem isso, toda
+    célula carregaria o alarme falso "MOEDA/REGIME NÃO DECLARADOS".
     """
     rota = caso["rota"]
     acoes = caso["acoes_diluidas"]
     metrica = caso["metrica_base"]
+    moeda = caso["moeda"]
 
     if rota == "firm":
         saida, valor, _algebra, multiplo = precificar_firm(
-            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes)
+            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda)
     else:  # equity
         saida, valor, _algebra, multiplo = precificar_equity(
-            premissas, metrica["valor"], acoes)
+            premissas, metrica["valor"], acoes, moeda)
 
     return saida, valor["preco_acao"], multiplo
 

@@ -43,16 +43,39 @@ def test_grade_declara_triangulo_e_metrica_de_referencia():
 
 
 def test_diagnosticos_deduplicados_reconstroem_a_execucao_direta():
-    """Os indices tem de devolver exatamente o que o motor emitiu naquela celula."""
+    """Os indices tem de devolver exatamente o que o motor emitiu naquela celula.
+
+    A celula passa `caso["moeda"]` ao motor (ver sensibilidades.py); a
+    chamada direta usada aqui para comparacao precisa da mesma moeda, senao
+    as duas listas de diagnostico nunca batem (uma carregaria o alarme de
+    moeda nao declarada, a outra nao) — o teste deixaria de provar
+    reconstrucao por indice e passaria a provar duas execucoes divergentes.
+    """
     c = _caso()
     spec = c["sensibilidades"]["grades_1d"][0]
     g = grade_1d(c, "base", spec, 500.0)
     ponto = g["pontos"][0]
     premissas = dict(c["cenarios"]["base"]["premissas"])
     premissas[spec["premissa"]] = ponto["x"]
-    direto = rodar("firm", premissas, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0})
+    direto = rodar("firm", premissas, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0},
+                    moeda=c["moeda"])
     reconstruido = [g["diagnosticos_unicos"][i] for i in ponto["diag"]]
     assert reconstruido == direto["diagnosticos"]
+
+
+def test_regressao_sem_alarme_falso_de_moeda_nas_celulas():
+    """Fix da regressao: celula de grade tem de repassar `caso["moeda"]` ao
+    motor, exatamente como o cenario principal (`avaliar()`) ja faz — sem
+    isso toda celula, 1D e 2D, carregava o alarme falso "MOEDA/REGIME NAO
+    DECLARADOS" (mesma causa-raiz do FIX 4 coberto para o cenario principal
+    em test_valuation_avaliar.py e test_valuation_motor.py, agora tambem
+    provado para a grade)."""
+    c = _caso()
+    r = calcular(c, "base", 500.0)
+    for grade in r["grades_1d"]:
+        assert not any("MOEDA/REGIME" in d for d in grade["diagnosticos_unicos"])
+    for grade in r["grades_2d"]:
+        assert not any("MOEDA/REGIME" in d for d in grade["diagnosticos_unicos"])
 
 
 def test_grade_2d_tem_a_forma_declarada():
