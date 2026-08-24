@@ -1022,18 +1022,25 @@ def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
 # nada avisava o analista disso até a rodada já estar em andamento.
 #
 # CUSTO_POR_CELULA_SEGUNDOS: medido nesta máquina, contra o vendor
-# congelado, em 2026-08-24 — 17 células (a fixture
-# tests/fixtures/caso_reversa_firm.json: grades_1d com 5 pontos +
-# grades_2d 4x3) em 1,58s ⟹ ~0,093 s/célula. Não é uma constante de
-# performance do motor em geral — é a referência usada para ESTIMAR o
-# tempo de uma rodada na mensagem de recusa abaixo; o custo real varia
-# com a máquina e a carga do sistema no momento (o motor abre um
-# subprocesso Python por célula), então o número que aparece na mensagem
-# é sempre "estimado", nunca prometido.
+# congelado, em 2026-08-24, sobre a fixture
+# tests/fixtures/caso_reversa_firm.json (17 células: grades_1d com 5
+# pontos + grades_2d 4x3). Duas medições independentes discordaram: uma
+# deu 0,091–0,109 s/célula (mediana 0,093 em 5 rodadas seguidas, máquina
+# ociosa) e outra 0,127–0,168 s/célula (4 rodadas, sob carga). O motor
+# abre um subprocesso Python por célula, então o custo real depende da
+# carga do sistema no momento — não existe "o" número.
+#
+# Adotamos 0,15, o extremo CONSERVADOR da faixa observada, por uma razão
+# assimétrica: esta constante só alimenta a estimativa de tempo na
+# mensagem de recusa, e uma estimativa que SUBESTIMA a espera é pior que
+# uma que a superestima — o analista que ouve "3 minutos" e espera 6
+# perde a confiança na mensagem. O número que aparece é sempre
+# "estimado", nunca prometido; a contagem de células, que é o que de
+# fato decide a recusa, é exata e não depende disto.
 #
 # TETO_PADRAO_DE_CELULAS: 2.000 células somadas (grades_1d + grades_2d,
-# cada grade 2D contando len(pontos_x) x len(pontos_y)) ⟹ 2.000 x 0,093s
-# ~ 186s (~3 min) ao custo medido acima. É um número ESCOLHIDO, não
+# cada grade 2D contando len(pontos_x) x len(pontos_y)) ⟹ 2.000 x 0,15s
+# ~ 300s (~5 min) ao custo adotado acima. É um número ESCOLHIDO, não
 # medido: grande o bastante para cobrir uma sensibilidade generosa (por
 # exemplo duas grades 2D de 30x30 = 1.800 células) sem exigir nada extra
 # do analista no caso comum, pequeno o bastante para que uma declaração
@@ -1044,7 +1051,7 @@ def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
 # existe: o analista que precisa de mais (ou quer um teto mais apertado
 # que o padrão) declara o número explicitamente, e a decisão fica
 # registrada no caso — não escondida numa constante que ele nunca vê.
-CUSTO_POR_CELULA_SEGUNDOS: float = 0.093  # medido em 2026-08-24, ver acima
+CUSTO_POR_CELULA_SEGUNDOS: float = 0.15  # extremo conservador da faixa medida, ver acima
 
 TETO_PADRAO_DE_CELULAS: int = 2000
 
