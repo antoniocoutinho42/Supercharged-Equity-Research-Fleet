@@ -26,6 +26,16 @@ quando alcançável e string quando não, sem `raizes_*`, sem
 eixos não têm; este módulo repassa cada eixo exatamente como o motor
 devolveu, sem normalizar para um formato comum.
 
+Endurecimento (task 3B, RISCO 1+3): cada eixo ganha, além disso, a chave
+`resolucao` (`_resolucao`) — `{"resolveu": bool, "motivo": str}` — um
+marcador DESTE wrapper que anda AO LADO do payload do motor, nunca no
+lugar dele. Não é uniformização do shape (o parágrafo acima continua
+valendo — `cap` continua sem `raizes_*`, o eixo `%` sem raiz continua sem
+`CAP_implicito_anos`): é só um ponto único onde o consumidor seguinte (o
+relatório) pergunta "este eixo resolveu?" sem ter que aprender os quatro
+shapes para responder essa pergunta sozinho. Nenhuma chave do motor é
+removida, renomeada ou reformatada por causa dela.
+
 Quando `rentabilidade` ou `crescimento` (os dois eixos PRIMÁRIOS da
 metodologia) voltam sem raiz, `reverter` roda automaticamente um segundo
 tipo de chamada ao motor — não mais `rev` (busca de raiz), mas o subcomando
@@ -227,6 +237,64 @@ def _beta_implicito(saida_eixo: dict, variavel: str, mercado: dict) -> dict:
     return resultado
 
 
+def _resolucao(nome_eixo: str, variavel: str, saida: dict) -> dict:
+    """Marcador do WRAPPER — `{"resolveu": bool, "motivo": str}` —, sempre
+    acrescentado AO LADO do que o motor devolveu para o eixo, nunca no
+    lugar de nenhuma chave dele (endurecimento, task 3B, RISCO 1+3).
+
+    O motor devolve legitimamente quatro shapes diferentes para um eixo de
+    reversa (ver docstring do módulo): raiz não vazia (resolvido), raiz
+    vazia (não resolvido), `CAP_implicito_anos` alcançável — float — ou
+    fora da faixa 1-60 — string — (resolvido / não resolvido) e `cap` com
+    spread não positivo — nem raiz nem `CAP_implicito_anos`, só `erro` e
+    `alvo_normalizado` (não resolvido). Uniformizar ESSES quatro shapes
+    destruiria a honestidade do motor; este marcador não uniformiza nada
+    — só resume, num ponto só, a pergunta "este eixo produziu valor
+    utilizável?", para que o consumidor seguinte (o relatório) não precise
+    conhecer os quatro shapes para responder essa pergunta.
+
+    `motivo` é frase curta DESTE wrapper, nunca cópia do texto do motor —
+    o texto do motor (`sem_solucao`, `erro`) já está ao lado, íntegro;
+    repeti-lo aqui seria a mesma informação duas vezes, uma delas fora do
+    controle do motor.
+
+    Eixo 'cap' tem shape próprio (sem `raizes_*`): resolve via
+    `CAP_implicito_anos` — presente e não-string quando alcançável, string
+    quando fora da faixa de anos — ou fica indefinido quando o motor
+    devolve `erro` no lugar dos dois (spread <= 0). Os outros três eixos
+    resolvem via `raizes_<variavel>_%`: a checagem é de LISTA VAZIA/NÃO
+    VAZIA, nunca do valor da raiz — uma raiz em 0.0 é `[0.0]`, lista
+    não-vazia, portanto resolvida (mesma checagem `not raizes` que
+    `_beta_implicito` já usa, para a mesma lista).
+    """
+    if nome_eixo == "cap":
+        if "erro" in saida:
+            return {
+                "resolveu": False,
+                "motivo": "CAP implícito indefinido: spread do eixo não é positivo.",
+            }
+        if isinstance(saida.get("CAP_implicito_anos"), str):
+            return {
+                "resolveu": False,
+                "motivo": "CAP implícito fora da faixa de anos (1-60).",
+            }
+        return {
+            "resolveu": True,
+            "motivo": "CAP implícito dentro da faixa de anos (1-60).",
+        }
+
+    raizes = saida.get(f"raizes_{variavel}_%")
+    if raizes:
+        return {
+            "resolveu": True,
+            "motivo": f"raiz encontrada na faixa de busca de '{variavel}'.",
+        }
+    return {
+        "resolveu": False,
+        "motivo": f"sem raiz na faixa de busca de '{variavel}'.",
+    }
+
+
 def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     """Caso-limite RiR_TV → 0: com reinvestimento zero, o FCFF/FCFE vira o
     NOPAT/lucro inteiro e o valor colapsa num Gordon puro — o TETO do que
@@ -330,14 +398,20 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     `CAP_implicito_anos` (float ou string), nunca `raizes_*` — este módulo
     não força um formato comum entre eixos.
 
-    No eixo de custo de capital, acrescenta a chave `beta_implicito` — uma
-    das duas adições deste módulo a um resultado que, fora isso, é
-    passthrough puro do motor. A outra é de topo, não por eixo: quando
-    `rentabilidade` ou `crescimento` volta sem raiz (`EIXOS_PRIMARIOS`), o
-    resultado ganha a chave `teto_do_crescimento_gratuito` — o caso-limite
-    RiR_TV → 0 que o próprio motor já sugere rodar no campo `sugestao`
-    daquele eixo (ver `teto_do_crescimento_gratuito`). Fechando todos os
-    eixos primários com raiz, a chave nem aparece.
+    Em TODO eixo, acrescenta a chave `resolucao` —
+    `{"resolveu": bool, "motivo": str}` (endurecimento, task 3B, RISCO
+    1+3) — ao lado do que o motor devolveu, nunca no lugar de nada: o
+    ponto uniforme onde perguntar "este eixo produziu valor utilizável?"
+    sem ter que conhecer os quatro shapes possíveis (ver `_resolucao`).
+    No eixo de custo de capital, acrescenta também `beta_implicito` — as
+    duas são passthrough puro do motor mais essas adições nomeadas, nunca
+    uma reformatação do que o motor pôs. A terceira adição é de topo, não
+    por eixo: quando `rentabilidade` ou `crescimento` volta sem raiz
+    (`EIXOS_PRIMARIOS`), o resultado ganha a chave
+    `teto_do_crescimento_gratuito` — o caso-limite RiR_TV → 0 que o
+    próprio motor já sugere rodar no campo `sugestao` daquele eixo (ver
+    `teto_do_crescimento_gratuito`). Fechando todos os eixos primários com
+    raiz, a chave nem aparece.
 
     Assume que `caso` já passou por `caso.validar` (responsabilidade de
     quem carregou o caso — `caso.carregar` —, nunca repetida aqui):
@@ -366,6 +440,8 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
 
         if nome_eixo == EIXO_DO_CUSTO_DE_CAPITAL:
             saida["beta_implicito"] = _beta_implicito(saida, variavel, mercado)
+
+        saida["resolucao"] = _resolucao(nome_eixo, variavel, saida)
 
         eixos[nome_eixo] = saida
 

@@ -178,3 +178,208 @@ def test_teto_recusa_null_quando_g_igual_wacc_zera_gordon():
     c["cenarios"]["base"]["premissas"]["g"] = 10.0  # wacc da fixture também é 10.0
     with pytest.raises(MotorFalhou, match="EV/EBITDA_curr"):
         reverter(c, "base", 500.0)
+
+
+# --------------------------------------------------------------------------
+# Endurecimento (task 3B), RISCO 1+3: marcador uniforme "resolucao", ao
+# lado do payload do motor — nunca no lugar dele. Os quatro shapes que o
+# motor legitimamente devolve para um eixo de reversa (docstring do
+# módulo, tabela do brief): (1) eixo '%' com raiz — raizes_<var>_% não
+# vazia + identificacao_por_raiz; (2) eixo '%' sem raiz — raizes_<var>_%
+# vazia + sem_solucao, com 'sugestao' só nos eixos PRIMÁRIOS; (3) 'cap'
+# com CAP_implicito_anos — float quando alcançável, string quando fora da
+# faixa 1-60; (4) 'cap' com spread <= 0 — nem CAP_implicito_anos nem
+# raizes_*, só {"erro", "alvo_normalizado"}. Gatilhos verificados contra o
+# vendor (probe manual antes do TDD, mesmos números do brief): preco=5.0
+# zera raizes_wacc_% (alvo 1,0x < mínimo atingível 1,76); roic=8/wacc=12/
+# tv=book zera o spread do eixo cap (-4.0 p.p.).
+# --------------------------------------------------------------------------
+
+def test_resolucao_eixo_percentual_com_raiz_resolve():
+    r = reverter(_caso(), "base", 500.0)
+    for nome_eixo in ("custo_capital", "crescimento", "rentabilidade"):
+        resolucao = r["eixos"][nome_eixo]["resolucao"]
+        assert resolucao["resolveu"] is True
+        assert isinstance(resolucao["motivo"], str) and resolucao["motivo"]
+
+
+def test_resolucao_raiz_em_zero_ainda_conta_como_resolvida():
+    """raizes_g_% == [0.0] na fixture-base: uma raiz EM ZERO é lista
+    NÃO-VAZIA — 'resolveu' tem de olhar vazio/não-vazio, nunca o valor da
+    raiz (0.0 é falsy; '[0.0]' não é)."""
+    r = reverter(_caso(), "base", 500.0)
+    crescimento = r["eixos"]["crescimento"]
+    assert crescimento["raizes_g_%"] == [0.0]
+    assert crescimento["resolucao"]["resolveu"] is True
+
+
+def test_resolucao_eixo_percentual_sem_raiz_nao_resolve():
+    """Gatilho verificado: preco=5.0 -> alvo 1,0x fica abaixo do mínimo
+    atingível (1,76) — raizes_wacc_% vazia, sem_solucao presente,
+    sugestao AUSENTE (custo_capital não é eixo primário)."""
+    c = _caso()
+    c["preco"]["valor"] = 5.0
+    r = reverter(c, "base", 500.0)
+    eixo = r["eixos"]["custo_capital"]
+    assert eixo["raizes_wacc_%"] == []
+    assert "sugestao" not in eixo
+    resolucao = eixo["resolucao"]
+    assert resolucao["resolveu"] is False
+    assert isinstance(resolucao["motivo"], str) and resolucao["motivo"]
+
+
+def test_resolucao_eixo_primario_sem_raiz_tambem_nao_resolve():
+    """Mesmo padrão do eixo não-primário (custo_capital): raizes vazia ->
+    resolveu=False, independente de 'sugestao' estar presente (só eixos
+    primários têm sugestao) — 'resolucao' não pode depender da presença
+    de 'sugestao', senão custo_capital (que nunca tem sugestao) sairia
+    classificado errado."""
+    c = _caso()
+    c["preco"]["valor"] = 900.0
+    r = reverter(c, "base", 500.0)
+    rent = r["eixos"]["rentabilidade"]
+    assert "sugestao" in rent  # eixo primário: sugestao presente
+    assert rent["resolucao"]["resolveu"] is False
+
+
+def test_beta_implicito_com_zero_raizes_sai_com_valor_none():
+    """O ramo valor=None de _beta_implicito existe no código desde a fatia
+    B mas a suíte nunca o produziu — fixa o shape por teste (brief da
+    task 3B)."""
+    c = _caso()
+    c["preco"]["valor"] = 5.0
+    r = reverter(c, "base", 500.0)
+    b = r["eixos"]["custo_capital"]["beta_implicito"]
+    assert b["valor"] is None
+    assert b["posicao_na_banda"] == "sem raiz"
+    assert b["distancia"] is None
+    assert "algebra" in b and isinstance(b["algebra"], str) and b["algebra"]
+    assert "raiz_usada" not in b
+    assert "nota_multiplas_raizes" not in b
+
+
+def test_resolucao_cap_alcancavel_resolve():
+    r = reverter(_caso(), "base", 500.0)
+    cap = r["eixos"]["cap"]
+    assert isinstance(cap["CAP_implicito_anos"], float)
+    assert cap["resolucao"]["resolveu"] is True
+
+
+def test_resolucao_cap_fora_da_faixa_nao_resolve():
+    c = _caso()
+    c["preco"]["valor"] = 70.0
+    r = reverter(c, "base", 500.0)
+    cap = r["eixos"]["cap"]
+    assert isinstance(cap["CAP_implicito_anos"], str)
+    assert cap["resolucao"]["resolveu"] is False
+
+
+def test_resolucao_cap_spread_nao_positivo_atravessa_sem_quebrar():
+    """Gatilho verificado: roic=8, wacc=12, tv=book -> spread -4.0 p.p.
+    <= 0. O eixo cap volta só com 'erro' e 'alvo_normalizado' — nem
+    CAP_implicito_anos nem raizes_* — e reverter() tem de atravessar sem
+    KeyError nem TypeError."""
+    c = _caso()
+    c["cenarios"]["base"]["premissas"]["roic"] = 8.0
+    c["cenarios"]["base"]["premissas"]["wacc"] = 12.0
+    c["cenarios"]["base"]["premissas"]["tv"] = "book"
+    r = reverter(c, "base", 500.0)
+    cap = r["eixos"]["cap"]
+    assert "erro" in cap and "spread" in cap["erro"]
+    assert cap["alvo_normalizado"] == pytest.approx(10.0)
+    assert "CAP_implicito_anos" not in cap
+    assert not any(k.startswith("raizes") for k in cap)
+    assert cap["resolucao"]["resolveu"] is False
+
+
+def test_resolucao_motivos_distinguem_os_casos_de_nao_resolvido():
+    """Os três motivos de 'resolveu=False' têm de ser frases distintas —
+    sem raiz, CAP fora da faixa e CAP indefinido por spread são defeitos
+    diferentes e o relatório precisa poder diferenciá-los."""
+    c_sem_raiz = _caso()
+    c_sem_raiz["preco"]["valor"] = 5.0
+    motivo_sem_raiz = reverter(c_sem_raiz, "base", 500.0)["eixos"]["custo_capital"]["resolucao"]["motivo"]
+
+    c_fora_da_faixa = _caso()
+    c_fora_da_faixa["preco"]["valor"] = 70.0
+    motivo_fora_da_faixa = reverter(c_fora_da_faixa, "base", 500.0)["eixos"]["cap"]["resolucao"]["motivo"]
+
+    c_spread = _caso()
+    c_spread["cenarios"]["base"]["premissas"]["roic"] = 8.0
+    c_spread["cenarios"]["base"]["premissas"]["wacc"] = 12.0
+    c_spread["cenarios"]["base"]["premissas"]["tv"] = "book"
+    motivo_spread = reverter(c_spread, "base", 500.0)["eixos"]["cap"]["resolucao"]["motivo"]
+
+    motivos = {motivo_sem_raiz, motivo_fora_da_faixa, motivo_spread}
+    assert len(motivos) == 3, motivos
+
+
+def test_resolucao_motivo_nao_e_copia_do_texto_do_motor():
+    """'motivo' é frase curta DO WRAPPER — o texto do motor (sem_solucao/
+    erro) já está lá ao lado, íntegro; 'motivo' não pode ser uma cópia
+    dele."""
+    c = _caso()
+    c["preco"]["valor"] = 5.0
+    eixo = reverter(c, "base", 500.0)["eixos"]["custo_capital"]
+    assert eixo["resolucao"]["motivo"] != eixo["sem_solucao"]
+    assert len(eixo["resolucao"]["motivo"]) < len(eixo["sem_solucao"])
+
+
+def _saida_direta_do_eixo(caso: dict, nome_eixo: str, nd_efetivo: float,
+                           nome_cenario: str = "base") -> dict:
+    """Reconstrói a chamada direta ao motor para um eixo — a mesma
+    montagem de vetor que reverter() faz internamente — para comparar,
+    chave a chave, contra o que reverter() devolveu: prova que nenhuma
+    chave do motor foi removida ou alterada pela adição de 'resolucao'
+    (e, no eixo de custo de capital, 'beta_implicito')."""
+    from motor import rodar as rodar_motor
+    from reversa import RESOLVER_POR_EIXO, _ALVO_BASE
+
+    rota = caso["rota"]
+    moeda = caso["moeda"]
+    cenario = caso["cenarios"][nome_cenario]
+    variavel = RESOLVER_POR_EIXO[nome_eixo][rota]
+    alvo = alvo_de_mercado(caso, nome_cenario, nd_efetivo)
+
+    vetor = {k: v for k, v in cenario["premissas"].items() if k != variavel}
+    vetor["alvo"] = alvo["valor"]
+    vetor["resolver"] = variavel
+    vetor["base"] = alvo["base"]
+    vetor["alvo-base"] = _ALVO_BASE
+
+    return rodar_motor(rota, vetor, None, moeda, subcomando="rev")
+
+
+@pytest.mark.parametrize("cenario_de_teste", [
+    "base",
+    "custo_capital_sem_raiz",
+    "cap_fora_da_faixa",
+    "cap_spread_nao_positivo",
+])
+def test_payload_do_motor_permanece_integro_com_resolucao_ao_lado(cenario_de_teste):
+    """Nenhuma chave que o motor devolveu é removida nem alterada em
+    nenhum dos quatro shapes — 'resolucao' (e 'beta_implicito', só em
+    custo_capital) são as ÚNICAS chaves que reverter() acrescenta em cima
+    do que uma chamada direta ao motor (mesmo vetor, subcomando 'rev')
+    devolveria. Esta é a checagem central do RISCO 1+3: o marcador anda
+    AO LADO do payload, nunca no lugar dele."""
+    c = _caso()
+    if cenario_de_teste == "custo_capital_sem_raiz":
+        c["preco"]["valor"] = 5.0
+    elif cenario_de_teste == "cap_fora_da_faixa":
+        c["preco"]["valor"] = 70.0
+    elif cenario_de_teste == "cap_spread_nao_positivo":
+        c["cenarios"]["base"]["premissas"]["roic"] = 8.0
+        c["cenarios"]["base"]["premissas"]["wacc"] = 12.0
+        c["cenarios"]["base"]["premissas"]["tv"] = "book"
+
+    r = reverter(c, "base", 500.0)
+
+    for nome_eixo in ("custo_capital", "crescimento", "rentabilidade", "cap"):
+        direto = _saida_direta_do_eixo(c, nome_eixo, 500.0)
+        eixo = r["eixos"][nome_eixo]
+        extras = {"resolucao"} | ({"beta_implicito"} if nome_eixo == "custo_capital" else set())
+        assert "resolucao" in eixo, nome_eixo  # a adicao em si tem de estar la
+        assert set(eixo) - extras == set(direto), nome_eixo
+        for chave, valor in direto.items():
+            assert eixo[chave] == valor, f"{nome_eixo}.{chave}"

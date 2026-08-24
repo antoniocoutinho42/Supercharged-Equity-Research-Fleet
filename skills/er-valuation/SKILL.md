@@ -22,9 +22,19 @@ normaliza saída.
 - **Reversa por eixo** — dado o preço observado, resolve no motor o menu de
   reconciliação (custo de capital implícito, obrigatório, e os demais eixos
   declarados), com o beta implícito confrontado contra a banda de mercado
-  quando ela é declarada.
+  quando ela é declarada. Cada eixo devolve o shape que o motor deu — nunca
+  uniformizado — mais uma chave `resolucao` (`{"resolveu": bool, "motivo":
+  str}`) do wrapper, ao lado do payload do motor: o ponto único onde
+  perguntar "este eixo resolveu?" sem ter que conhecer os quatro shapes
+  possíveis (raiz, raiz vazia, CAP alcançável/fora da faixa, CAP
+  indefinido por spread não positivo).
 - **Grades de sensibilidade** — constrói, célula a célula no motor, as
-  grades 1D e 2D de preço por ação que o caso declarar.
+  grades 1D e 2D de preço por ação que o caso declarar. Cada célula é um
+  subprocesso do motor — a soma de células declaradas (`grades_1d` +
+  `grades_2d`, cada grade 2D contando `len(pontos_x) x len(pontos_y)`) tem
+  um teto padrão (2.000) recusado no gate, antes de qualquer chamada ao
+  motor; `sensibilidades.limite_de_celulas` levanta ou reduz esse teto
+  deliberadamente (ver "Contrato do caso").
 
 ## O que NUNCA faz
 
@@ -85,6 +95,20 @@ nenhuma taxa livre de risco nem prêmio de risco de mercado abaixo de um
 ponto percentual ocorre na prática, então esse intervalo só pode ser uma
 fração digitada por engano, não uma taxa válida. `erp` também é recusado
 quando `<= 0` — é o denominador da inversão do CAPM em beta implícito.
+
+Bloco opcional `sensibilidades`: `cenario` (nome de um cenário declarado),
+`grades_1d` e `grades_2d`. Cada célula de grade é um subprocesso do motor
+congelado (não uma conta em memória), e a soma de células declaradas —
+`grades_1d` + `grades_2d`, cada grade 2D contando `len(pontos_x) x
+len(pontos_y)`, nunca a soma das duas dimensões — tem um teto **padrão de
+2.000 células** (~3 min ao custo medido nesta máquina em 2026-08-24,
+0,093 s/célula), recusado no gate — dentro de `caso.validar`, antes de
+`avaliar` chamar o motor para qualquer coisa — nomeando quantas células
+foram declaradas e o tempo estimado. Campo opcional
+`sensibilidades.limite_de_celulas` (número finito e positivo): levanta o
+teto padrão deliberadamente quando a rodada precisa de mais células, ou
+reduz — um limite abaixo do padrão também é uma escolha válida do
+analista, mais restritiva que o padrão de fábrica.
 
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.

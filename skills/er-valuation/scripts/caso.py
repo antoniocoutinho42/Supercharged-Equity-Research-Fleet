@@ -1012,8 +1012,96 @@ def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
     _validar_triangulo(prefixo, grade.get("triangulo"), rota)
 
 
+# --------------------------------------------------------------------------
+# Endurecimento (task 3B), RISCO 2: teto de células declaradas em
+# 'sensibilidades'.
+#
+# Cada célula de grade é uma chamada de SUBPROCESSO ao motor congelado
+# (sensibilidades.py, `_precificar_celula`) — não uma conta em memória.
+# Uma grade declarada 20x20 são 400 dessas chamadas, e antes desta fatia
+# nada avisava o analista disso até a rodada já estar em andamento.
+#
+# CUSTO_POR_CELULA_SEGUNDOS: medido nesta máquina, contra o vendor
+# congelado, em 2026-08-24 — 17 células (a fixture
+# tests/fixtures/caso_reversa_firm.json: grades_1d com 5 pontos +
+# grades_2d 4x3) em 1,58s ⟹ ~0,093 s/célula. Não é uma constante de
+# performance do motor em geral — é a referência usada para ESTIMAR o
+# tempo de uma rodada na mensagem de recusa abaixo; o custo real varia
+# com a máquina e a carga do sistema no momento (o motor abre um
+# subprocesso Python por célula), então o número que aparece na mensagem
+# é sempre "estimado", nunca prometido.
+#
+# TETO_PADRAO_DE_CELULAS: 2.000 células somadas (grades_1d + grades_2d,
+# cada grade 2D contando len(pontos_x) x len(pontos_y)) ⟹ 2.000 x 0,093s
+# ~ 186s (~3 min) ao custo medido acima. É um número ESCOLHIDO, não
+# medido: grande o bastante para cobrir uma sensibilidade generosa (por
+# exemplo duas grades 2D de 30x30 = 1.800 células) sem exigir nada extra
+# do analista no caso comum, pequeno o bastante para que uma declaração
+# desproporcional (por exemplo 400x400 = 160.000 células, horas de
+# subprocessos) seja recusada no gate — antes de qualquer chamada ao
+# motor — em vez de descoberta no meio de uma rodada já paga. Por isso
+# 'sensibilidades.limite_de_celulas' (ver `_validar_teto_de_celulas`)
+# existe: o analista que precisa de mais (ou quer um teto mais apertado
+# que o padrão) declara o número explicitamente, e a decisão fica
+# registrada no caso — não escondida numa constante que ele nunca vê.
+CUSTO_POR_CELULA_SEGUNDOS: float = 0.093  # medido em 2026-08-24, ver acima
+
+TETO_PADRAO_DE_CELULAS: int = 2000
+
+
+def _validar_teto_de_celulas(sensibilidades: dict, total_celulas: int) -> None:
+    """Recusa quando `total_celulas` (grades_1d + grades_2d já somadas,
+    cada grade 2D contando `len(pontos_x) x len(pontos_y)`) passa do teto
+    — o padrão (`TETO_PADRAO_DE_CELULAS`) ou o que
+    `sensibilidades.limite_de_celulas` declarar.
+
+    Chamada de dentro de `_validar_sensibilidades`, portanto dentro de
+    `validar` — que roda inteiro em `carregar`, ANTES de `avaliar` chamar
+    o motor para qualquer coisa (cenário, eixo de reversa ou célula de
+    grade). É este o "gate" da task 3B: uma declaração acima do teto é
+    recusada aqui, nunca descoberta célula a célula no meio de uma rodada
+    de subprocessos já em andamento.
+
+    `limite_de_celulas` é opcional; ausente, o teto é o padrão. Quando
+    presente, TEM de ser um número finito e positivo — não precisa ser
+    maior que o padrão: um limite mais restritivo também é uma decisão
+    legítima do analista (quer gastar menos tempo que o padrão permitiria).
+    """
+    limite = sensibilidades.get("limite_de_celulas")
+    if limite is None:
+        teto = TETO_PADRAO_DE_CELULAS
+    else:
+        if not _numero_valido(limite) or not _finito(limite) or limite <= 0:
+            raise CasoInvalido(
+                f"'sensibilidades.limite_de_celulas' inválido: {limite!r}. "
+                "Quando declarado, tem de ser um número finito e positivo "
+                "— é o teto de células (grades_1d + grades_2d somadas, "
+                "cada grade 2D contando len(pontos_x) x len(pontos_y)) que "
+                "o analista está levantando (ou reduzindo) deliberadamente "
+                f"em relação ao padrão ({TETO_PADRAO_DE_CELULAS})."
+            )
+        teto = limite
+
+    if total_celulas > teto:
+        tempo_estimado_s = total_celulas * CUSTO_POR_CELULA_SEGUNDOS
+        raise CasoInvalido(
+            f"'sensibilidades': {total_celulas} células declaradas (soma "
+            "de grades_1d + grades_2d, cada grade 2D contando "
+            f"len(pontos_x) x len(pontos_y)) excede o teto de {teto} — "
+            f"tempo estimado ao custo medido "
+            f"({CUSTO_POR_CELULA_SEGUNDOS}s/célula, 2026-08-24): "
+            f"~{tempo_estimado_s:.0f}s (~{tempo_estimado_s / 60:.1f} min). "
+            "Cada célula é uma chamada de subprocesso ao motor congelado "
+            "— uma grade grande não é uma conta mais lenta, é centenas ou "
+            "milhares de processos. Declare "
+            "'sensibilidades.limite_de_celulas' para levantar o teto "
+            "deliberadamente, ou reduza os pontos declarados."
+        )
+
+
 def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
-    """Valida o bloco opcional 'sensibilidades': cenário-alvo e cada grade.
+    """Valida o bloco opcional 'sensibilidades': cenário-alvo, cada grade e
+    o teto de células somadas (RISCO 2 do endurecimento, task 3B).
 
     Independente de 'mercado'/'reversa' — os blocos não se exigem entre si.
     FIX 2: `permitidas` aqui já exclui as premissas não-numéricas — uma
@@ -1037,6 +1125,8 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
 
     permitidas = _PREMISSAS_POR_ROTA[rota] - _PREMISSAS_NAO_NUMERICAS
 
+    total_celulas = 0
+
     grades_1d = sensibilidades.get("grades_1d")
     if grades_1d is not None:
         # FIX 1: `... or []` só substitui valor FALSY — um `grades_1d`
@@ -1045,11 +1135,23 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
         # campo antes de qualquer iteração.
         for grade in _exigir_lista(grades_1d, "sensibilidades.grades_1d"):
             _validar_grade_1d(grade, rota, permitidas)
+            # `_validar_grade_1d` já confirmou `grade["pontos"]` como lista
+            # de números finitos (via `_validar_pontos`) — `len()` aqui é
+            # seguro, nunca alcançado por um formato malformado.
+            total_celulas += len(grade["pontos"])
 
     grades_2d = sensibilidades.get("grades_2d")
     if grades_2d is not None:
         for grade in _exigir_lista(grades_2d, "sensibilidades.grades_2d"):
             _validar_grade_2d(grade, rota, permitidas)
+            # Mesma disciplina: `_validar_grade_2d` já confirmou os dois
+            # eixos de pontos. Uma grade 2D conta o PRODUTO das duas
+            # dimensões — é essa a contagem de células que o motor de
+            # fato roda (`sensibilidades.grade_2d`: uma chamada por
+            # combinação de x e y), não a soma delas.
+            total_celulas += len(grade["pontos_x"]) * len(grade["pontos_y"])
+
+    _validar_teto_de_celulas(sensibilidades, total_celulas)
 
 
 def carregar(caminho: Path) -> Caso:

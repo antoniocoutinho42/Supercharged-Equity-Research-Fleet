@@ -912,3 +912,78 @@ def test_rf_negativo_nao_e_tratado_como_fracao():
     c = _reversa()
     c["mercado"]["rf"] = -0.5
     validar(c)  # nao levanta
+
+
+# --------------------------------------------------------------------------
+# Endurecimento (task 3B), RISCO 2: teto de células declaradas em
+# 'sensibilidades' — grades_1d + grades_2d somadas, cada grade 2D contando
+# len(pontos_x) x len(pontos_y). Recusa no GATE (dentro de validar(), que
+# roda inteiro em carregar() antes de avaliar() chamar o motor para
+# qualquer coisa — cenário, eixo de reversa ou célula de grade) — uma
+# grade 20x20 são 400 chamadas de subprocesso sem aviso nenhum antes desta
+# fatia. 'limite_de_celulas' é o campo opcional pelo qual o analista
+# levanta (ou reduz) o teto padrão deliberadamente.
+# --------------------------------------------------------------------------
+
+def test_grade_dentro_do_teto_padrao_passa():
+    c = _reversa()
+    # fixture tem 5 (1D) + 4x3 (2D) = 17 células -- bem abaixo do teto padrão
+    validar(c)  # nao levanta
+
+
+def test_soma_acima_do_teto_padrao_recusa_nomeando_a_contagem():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["pontos"] = [float(i) for i in range(2001)]
+    c["sensibilidades"]["grades_2d"] = []
+    with pytest.raises(CasoInvalido, match="2001") as excinfo:
+        validar(c)
+    assert "tempo estimado" in str(excinfo.value)
+
+
+def test_limite_de_celulas_maior_permite_acima_do_teto_padrao():
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["pontos"] = [float(i) for i in range(2001)]
+    c["sensibilidades"]["grades_2d"] = []
+    c["sensibilidades"]["limite_de_celulas"] = 3000
+    validar(c)  # nao levanta -- teto levantado deliberadamente
+
+
+def test_limite_de_celulas_menor_recusa_antes_do_teto_padrao():
+    """Um limite declarado ABAIXO do padrao tambem vale -- o analista pode
+    querer ser mais restritivo do que o teto de fabrica."""
+    c = _reversa()
+    # fixture tem 17 celulas -- bem abaixo do teto padrao (2000), mas acima
+    # de um limite mais restritivo declarado deliberadamente
+    c["sensibilidades"]["limite_de_celulas"] = 10
+    with pytest.raises(CasoInvalido, match="17"):
+        validar(c)
+
+
+def test_contagem_soma_grades_1d_e_2d_juntas():
+    """Uma grade 2D conta len(pontos_x) x len(pontos_y), nao len(x) + len(y)."""
+    c = _reversa()
+    c["sensibilidades"]["grades_1d"][0]["pontos"] = [1.0, 2.0, 3.0]  # 3
+    c["sensibilidades"]["grades_2d"][0]["pontos_x"] = [1.0, 2.0, 3.0, 4.0]  # 4
+    c["sensibilidades"]["grades_2d"][0]["pontos_y"] = [1.0, 2.0]  # 2 -> 4x2=8
+    # total = 3 + 8 = 11: exatamente no teto declarado passa...
+    c["sensibilidades"]["limite_de_celulas"] = 11
+    validar(c)  # nao levanta -- "passa do teto" e estritamente ACIMA
+    # ...um a menos que o total ja recusa.
+    c["sensibilidades"]["limite_de_celulas"] = 10
+    with pytest.raises(CasoInvalido, match="11"):
+        validar(c)
+
+
+def test_limite_de_celulas_nao_numerico_recusa():
+    c = _reversa()
+    c["sensibilidades"]["limite_de_celulas"] = "muitas"
+    with pytest.raises(CasoInvalido, match="limite_de_celulas"):
+        validar(c)
+
+
+@pytest.mark.parametrize("valor", [0, -5])
+def test_limite_de_celulas_nao_positivo_recusa(valor):
+    c = _reversa()
+    c["sensibilidades"]["limite_de_celulas"] = valor
+    with pytest.raises(CasoInvalido, match="limite_de_celulas"):
+        validar(c)
