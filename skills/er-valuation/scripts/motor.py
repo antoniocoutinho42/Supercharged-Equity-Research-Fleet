@@ -41,13 +41,17 @@ from pathlib import Path
 RAIZ_VENDOR = Path(__file__).resolve().parents[3] / "vendor" / "multiplos-justos"
 
 # Rota declarada no caso -> subcomando do motor congelado.
-SUBCOMANDO: dict[str, str] = {"firm": "ev", "equity": "pe"}
+SUBCOMANDO: dict[str, str] = {"firm": "ev", "equity": "pe", "rampa": "rampa"}
 
-# Apenas estas seis chaves de premissa têm flag com hífen no motor; a chave do
+# Apenas estas oito chaves de premissa têm flag com hífen no motor; a chave do
 # caso usa underscore (para ser identificador Python válido em caso.json),
 # a flag do motor usa hífen. Qualquer chave fora desta tabela vira `--chave`
 # direto — é a regra genérica que dispensa este módulo de conhecer o
 # vocabulário completo de premissas (isso é papel de `caso.py`).
+# 'da_parque' e 't_rampa' (Fatia C, Task 1) são exclusivas da rota rampa; o
+# teste de invariante cross-module `test_todo_vocabulario_de_caso_tem_flag_
+# com_hifen_coberta` (test_valuation_motor.py) cobra as duas caso alguém as
+# esqueça aqui — é para isso que ele foi escrito.
 _FLAGS_COM_HIFEN: dict[str, str] = {
     "roic_tv": "--roic-tv",
     "roe_tv": "--roe-tv",
@@ -55,6 +59,8 @@ _FLAGS_COM_HIFEN: dict[str, str] = {
     "roe_book": "--roe-book",
     "politica_tv": "--politica-tv",
     "mid_year": "--mid-year",
+    "da_parque": "--da-parque",
+    "t_rampa": "--t-rampa",
 }
 
 # 'mid_year' é a única premissa booleana do motor (store_true): a flag entra

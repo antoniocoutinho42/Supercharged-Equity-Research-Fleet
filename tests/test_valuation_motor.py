@@ -12,6 +12,7 @@ sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 # usados nos testes — são conceitos diferentes, daí o alias para não colidir.
 from caso import PREMISSAS_EQUITY as VOCABULARIO_EQUITY  # noqa: E402
 from caso import PREMISSAS_FIRM as VOCABULARIO_FIRM  # noqa: E402
+from caso import PREMISSAS_RAMPA as VOCABULARIO_RAMPA  # noqa: E402
 from motor import (  # noqa: E402
     MotorFalhou,
     RAIZ_VENDOR,
@@ -195,19 +196,64 @@ def test_todo_vocabulario_de_caso_tem_flag_com_hifen_coberta():
     isso não é alcançável só porque o vocabulário de `caso.py` é um
     subconjunto do que a tabela cobre — nada além deste teste garante isso.
     `motor.py` não importa `caso.py` (e continua sem importar); só este
-    teste faz a ponte, de fora, para fechar o contrato."""
-    for chave in sorted(VOCABULARIO_FIRM | VOCABULARIO_EQUITY):
+    teste faz a ponte, de fora, para fechar o contrato.
+
+    Fatia C, Task 1: `VOCABULARIO_RAMPA` entrou na união — é exatamente
+    este teste que "cobra" `da_parque`/`t_rampa` (as duas chaves com
+    underscore exclusivas da rota rampa) terem entrado em
+    `_FLAGS_COM_HIFEN` junto com a rota; sem esta linha, a invariante
+    continuaria vigiando só firm/equity, e um `_FLAGS_COM_HIFEN`
+    incompleto para rampa só apareceria — se apareceria — num teste de
+    rota específico, não nesta guarda genérica."""
+    for chave in sorted(VOCABULARIO_FIRM | VOCABULARIO_EQUITY | VOCABULARIO_RAMPA):
         coberta = (
             chave in _FLAGS_COM_HIFEN
             or chave in _FLAGS_BOOLEANAS
             or "_" not in chave
         )
         assert coberta, (
-            f"premissa '{chave}' (vocabulário de caso.PREMISSAS_FIRM ou "
-            "caso.PREMISSAS_EQUITY) tem underscore mas não está em "
-            "motor._FLAGS_COM_HIFEN nem em motor._FLAGS_BOOLEANAS: o "
-            f"fallback genérico de motor.py emitiria '--{chave}' verbatim "
-            "(underscore, não hífen), e o motor congelado recusa flag "
-            "assim. Corrija adicionando a chave à tabela _FLAGS_COM_HIFEN "
-            "em motor.py."
+            f"premissa '{chave}' (vocabulário de caso.PREMISSAS_FIRM, "
+            "caso.PREMISSAS_EQUITY ou caso.PREMISSAS_RAMPA) tem underscore "
+            "mas não está em motor._FLAGS_COM_HIFEN nem em "
+            "motor._FLAGS_BOOLEANAS: o fallback genérico de motor.py "
+            f"emitiria '--{chave}' verbatim (underscore, não hífen), e o "
+            "motor congelado recusa flag assim. Corrija adicionando a "
+            "chave à tabela _FLAGS_COM_HIFEN em motor.py."
         )
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 1: rota rampa — subcomando `rampa` próprio, tradução de
+# chave hifenizada (da_parque, t_rampa) e a âncora travada no selftest do
+# vendor (planilha ELMT ago/26).
+# --------------------------------------------------------------------------
+
+PREMISSAS_RAMPA = {"receita0": 265.0, "ebitda0": 26.8, "da_parque": 6.8, "wk": 19.1,
+                   "kappa": 17.9364, "util": 65.0, "t_rampa": 5, "g2": 8.0,
+                   "wacc": 11.9, "tax": 35.0, "n": 10, "tv": "convergencia"}
+
+
+def test_argv_rampa_usa_o_subcomando_rampa_e_traduz_as_chaves():
+    argv = argv_para("rampa", PREMISSAS_RAMPA, None)
+    assert argv[0] == "rampa"
+    assert "--da-parque" in argv and "--t-rampa" in argv
+    assert "--receita0" in argv and "--ebitda0" in argv
+    assert "--roic" not in argv and "--roe" not in argv
+
+
+def test_rodar_rampa_reproduz_a_ancora_do_motor():
+    """Ancora da planilha ELMT, travada no selftest do vendor."""
+    out = rodar("rampa", PREMISSAS_RAMPA, {"nd": -104.6, "acoes": 30.46})
+    assert out["EV"] == pytest.approx(170.9304, abs=1e-3)
+    assert out["vp_fase1"] == pytest.approx(45.2592, abs=1e-3)
+    assert out["valor_fase2_no_ano_T"] == pytest.approx(220.4887, abs=1e-3)
+    assert out["EV/EBITDA0"] == pytest.approx(6.378, abs=1e-3)
+    assert out["Preco_acao"] == pytest.approx(9.05, abs=0.01)
+
+
+def test_checks_internos_e_travas_chegam_intactos():
+    out = rodar("rampa", PREMISSAS_RAMPA, None)
+    assert out["checks_internos"]["P4_receita_T_menos_capacidade"] == pytest.approx(0.0)
+    assert abs(out["checks_internos"]["P1_fluxo_a_fluxo_max_abs"]) < 1e-10
+    assert any("DELIMITADOR" in t for t in out["travas"])
+    assert "VARIA" in out["rir_fase1_%"]["nota"]

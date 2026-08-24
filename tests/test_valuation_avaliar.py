@@ -357,3 +357,23 @@ def test_cli_recusa_motor_falhou_sem_traceback(tmp_path):
     assert r.returncode == 1
     assert "Traceback" not in saida
     assert "nao_existe" in saida
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 1: rota rampa — EV/Equity/Preco_acao vêm prontos do motor
+# (composição bifásica), múltiplo-manchete é EV/EBITDA0, e checks_internos/
+# travas chegam ao resultado intactos (produto, não ruído).
+# --------------------------------------------------------------------------
+
+def test_rota_rampa_produz_valor_e_multiplo_sobre_ebitda0():
+    r = avaliar(carregar(FIXTURES / "caso_rampa.json"))
+    v = r["cenarios"]["base"]["valor"]
+    assert v["EV"] == pytest.approx(170.9304, abs=1e-2)
+    assert v["preco_acao"] == pytest.approx(9.05, abs=0.01)
+    assert r["cenarios"]["base"]["multiplos"]["EV/EBITDA0"] == pytest.approx(6.378, abs=1e-3)
+
+
+def test_rampa_leva_checks_e_travas_ao_resultado():
+    r = avaliar(carregar(FIXTURES / "caso_rampa.json"))["cenarios"]["base"]
+    assert r["checks_internos"]["P4_receita_T_menos_capacidade"] == pytest.approx(0.0)
+    assert len(r["travas"]) == 3

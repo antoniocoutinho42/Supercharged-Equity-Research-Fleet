@@ -24,6 +24,16 @@ Por cenário, a rota do caso decide o fluxo:
 - rota equity: o motor recebe `--ni/--acoes` e devolve `Equity`/`Preco_acao`
   prontos — não há ponte de dívida nesta rota (`caso.py` já recusa um caso
   equity que declare `ponte`).
+- rota rampa (Fatia C, Task 1): o motor recebe `--nd/--acoes` e faz a
+  composição bifásica inteira internamente (fase 1 rampa de utilização +
+  fase 2 expansão, costuradas no ano `--t-rampa`) — `EV`, `Equity` e
+  `Preco_acao` saem prontos do motor, usados aqui verbatim, como no ramo
+  EBITDA da rota firm. A saída do subcomando `rampa` não tem o mesmo shape
+  de `ev`/`pe` (não carrega `diagnosticos`/`coerencia_vetor`/
+  `convencao_temporal`, e o cenário não declara `triangulo` — a rota não
+  usa o triângulo g = RiR x retorno); por isso `precificar_rampa` e a
+  composição do cenário rampa não reaproveitam `_monta_cenario`, que
+  presume esse shape.
 
 `caso["moeda"]` é sempre repassado ao motor como `--moeda` (nas duas rotas) —
 `caso.py` já exige e valida esse campo; sem repassá-lo, toda saída carregava
@@ -198,6 +208,42 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
     return saida, valor, algebra, multiplo
 
 
+def precificar_rampa(premissas: dict, nd_efetivo: float, acoes: float,
+                      moeda: str | None = None) -> tuple[dict, dict, str, float]:
+    """Roda o motor para um vetor de premissas da rota rampa; devolve
+    (saída, valor, álgebra, múltiplo de referência).
+
+    Irmã de `precificar_firm`/`precificar_equity` (Fatia C, Task 1), mesma
+    forma de assinatura e mesma recusa de `null` via `_exigir_valor` — mas
+    sem ramo de escala por fora do motor: `ebitda0` já é premissa
+    OBRIGATÓRIA do vetor da rota (`PREMISSAS_OBRIGATORIAS_RAMPA`), não uma
+    escala aplicada depois, como no ramo NOPAT da rota firm. O subcomando
+    `rampa` do motor recebe `--nd`/`--acoes` e faz a composição bifásica
+    inteira internamente (fase 1 rampa + fase 2 expansão, costuradas no
+    ano `--t-rampa`) — `EV`, `Equity` e `Preco_acao` saem prontos, do mesmo
+    jeito que o ramo EBITDA da rota firm já usa o motor para fazer a ponte
+    inteira.
+
+    `multiplo` é `EV/EBITDA0` — o headline desta rota é o múltiplo sobre o
+    EBITDA do ANO 0, não uma métrica normalizada (é por isso que
+    `METRICAS_POR_ROTA['rampa'] == {'EBITDA0'}`, ao contrário de
+    `EV/EBITDA_curr`/`PL_curr` das outras duas rotas).
+    """
+    escala = {"nd": nd_efetivo, "acoes": acoes}
+    saida = rodar("rampa", premissas, escala, moeda)
+    valor = {
+        "EV": _exigir_valor(saida, "EV"),
+        "Equity": _exigir_valor(saida, "Equity"),
+        "preco_acao": _exigir_valor(saida, "Preco_acao"),
+    }
+    multiplo = _exigir_valor(saida, "EV/EBITDA0")
+    algebra = (
+        "EV, Equity e Preco_acao vem prontos do motor "
+        "(composicao bifasica fase1+fase2; ponte feita pelo motor)"
+    )
+    return saida, valor, algebra, multiplo
+
+
 def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
                     algebra: str, preco_valor: float,
                     tipo_metrica: str | None = None) -> dict:
@@ -242,6 +288,52 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
         "coerencia_vetor": saida_motor["coerencia_vetor"],
         "convencao_temporal": saida_motor["convencao_temporal"],
     }
+
+
+def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
+                          algebra: str, preco_valor: float) -> dict:
+    """Compõe o registro de um cenário da rota rampa no shape de `resultados.json`.
+
+    Irmã de `_monta_cenario`, mas não a reaproveita: a saída do subcomando
+    `rampa` do motor não tem o mesmo shape de `ev`/`pe` — não carrega
+    `diagnosticos`/`coerencia_vetor`/`convencao_temporal` (só `ev`/`pe`
+    emitem essas chaves), e o cenário não declara `triangulo` (a rota não
+    usa o triângulo g = RiR x retorno: `g2` é premissa direta do vetor, e
+    RiR2/ROIC2 saem do motor como resultado, nunca como escolha de input).
+    Fabricar essas chaves aqui (`[]`, `{}` ou qualquer default) para manter
+    o mesmo shape seria inventar dado que o motor nunca produziu — proibido
+    pela mesma disciplina que rege todo o resto deste módulo.
+
+    Em vez disso, carrega `checks_internos` e `travas` — o motor se
+    autovalidando (fluxo a fluxo, forma fechada vs. explícita, fase 2
+    igual ao seu próprio `ev_nopat`, Receita_T = capacidade) e as travas
+    textuais (incluindo o delimitador) — como PRODUTO, não ruído; e as
+    trajetórias `d_trajetoria_fase1_%`/`rir_fase1_%`, cuja nota registra
+    que a rampa não tem um vetor único de RiR/d (é a razão de a forma
+    fechada alfa/beta existir — não pode ser descartada). `multiplos` é só
+    `EV/EBITDA0`, o headline desta rota (`METRICAS_POR_ROTA['rampa'] ==
+    {'EBITDA0'}`); `capacidade_receita` só existe na saída do motor quando
+    a premissa é `util` (não `g1`), e só entra aqui quando presente — nunca
+    inventada.
+    """
+    multiplo_referencia = _exigir_valor(saida_motor, "EV/EBITDA0")
+    upside = valor["preco_acao"] / preco_valor - 1
+
+    resultado = {
+        "ancora": cenario["ancora"],
+        "premissas": cenario["premissas"],
+        "multiplos": {"EV/EBITDA0": multiplo_referencia},
+        "valor": valor,
+        "algebra_da_escala": algebra,
+        "vs_preco": {"upside": upside},
+        "checks_internos": saida_motor["checks_internos"],
+        "travas": saida_motor["travas"],
+        "d_trajetoria_fase1_%": saida_motor["d_trajetoria_fase1_%"],
+        "rir_fase1_%": saida_motor["rir_fase1_%"],
+    }
+    if "capacidade_receita" in saida_motor:
+        resultado["capacidade_receita"] = saida_motor["capacidade_receita"]
+    return resultado
 
 
 def avaliar(caso: dict) -> dict:
@@ -291,6 +383,19 @@ def avaliar(caso: dict) -> dict:
                 nd_efetivo, acoes, moeda)
             cenarios[nome] = _monta_cenario(
                 cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
+    elif rota == "rampa":
+        # Mesma ponte da rota firm (D1 do plano da Fatia C: "a ponte para
+        # preço é a mesma das outras rotas firm" — nd_efetivo vai em --nd
+        # nas duas). `caso.py` já exige 'ponte' para 'rampa' do mesmo jeito
+        # que exige para 'firm' (ver `_validar_ponte`).
+        ponte = compor(caso["ponte"])
+        resultado["ponte"] = ponte
+        nd_efetivo = ponte["nd_efetivo"]
+        for nome, cenario in caso["cenarios"].items():
+            saida, valor, algebra, _multiplo = precificar_rampa(
+                cenario["premissas"], nd_efetivo, acoes, moeda)
+            cenarios[nome] = _monta_cenario_rampa(
+                cenario, saida, valor, algebra, preco_valor)
     else:  # equity
         # Rota equity chega em Equity direto (P/L x LL): não há ponte de
         # dívida (`caso.py` já recusa um caso equity que declare `ponte`),

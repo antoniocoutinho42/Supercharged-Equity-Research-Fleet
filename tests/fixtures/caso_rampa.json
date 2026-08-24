@@ -1,0 +1,25 @@
+{
+  "companhia": "Rampa Industrial S.A.",
+  "ticker": "RAMP3",
+  "moeda": "BRL-nominal",
+  "data_analise": "2026-08-24",
+  "preco": {"valor": 9.0, "fonte": "fixture sintética", "data": "2026-08-24"},
+  "rota": "rampa",
+  "delimitador": "comissionamento da linha 3 datado no guidance de 4T25",
+  "metrica_base": {"tipo": "EBITDA0", "valor": 26.8, "periodo": "2025A", "fonte": "fixture sintética"},
+  "acoes_diluidas": 30.46,
+  "ponte": {
+    "divida_bruta": 0.0, "caixa_e_equivalentes": 104.6,
+    "outros_ativos": 0.0, "outros_passivos": 0.0, "minoritarios": 0.0
+  },
+  "cenarios": {
+    "base": {
+      "ancora": "utilização divulgada de 65% no 3T25",
+      "premissas": {
+        "receita0": 265.0, "ebitda0": 26.8, "da_parque": 6.8, "wk": 19.1,
+        "kappa": 17.9364, "util": 65.0, "t_rampa": 5, "g2": 8.0,
+        "wacc": 11.9, "tax": 35.0, "n": 10, "tv": "convergencia"
+      }
+    }
+  }
+}

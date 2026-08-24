@@ -987,3 +987,70 @@ def test_limite_de_celulas_nao_positivo_recusa(valor):
     c["sensibilidades"]["limite_de_celulas"] = valor
     with pytest.raises(CasoInvalido, match="limite_de_celulas"):
         validar(c)
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 1: rota rampa — vocabulário próprio, delimitador obrigatório
+# (fronteira de fase observável) e a regra util XOR g1.
+# --------------------------------------------------------------------------
+
+def _rampa() -> dict:
+    return json.loads((FIXTURES / "caso_rampa.json").read_text(encoding="utf-8"))
+
+
+def test_fixture_rampa_e_valida():
+    assert carregar(FIXTURES / "caso_rampa.json")["rota"] == "rampa"
+
+
+def test_rampa_sem_delimitador_recusa():
+    """Fase sem delimitador observavel e grau de liberdade disfarcado de analise."""
+    c = _rampa()
+    del c["delimitador"]
+    with pytest.raises(CasoInvalido, match="delimitador"):
+        validar(c)
+
+
+def test_rampa_com_delimitador_vazio_recusa():
+    c = _rampa()
+    c["delimitador"] = "   "
+    with pytest.raises(CasoInvalido, match="delimitador"):
+        validar(c)
+
+
+def test_delimitador_em_outra_rota_recusa():
+    """So a rota rampa tem fronteira de fase para delimitar."""
+    c = _firm()
+    c["delimitador"] = "qualquer coisa"
+    with pytest.raises(CasoInvalido, match="delimitador"):
+        validar(c)
+
+
+@pytest.mark.parametrize("campo", ["receita0", "ebitda0", "da_parque", "wk",
+                                   "kappa", "g2", "wacc", "tax", "t_rampa", "tv"])
+def test_rampa_sem_premissa_obrigatoria_recusa(campo):
+    c = _rampa()
+    del c["cenarios"]["base"]["premissas"][campo]
+    with pytest.raises(CasoInvalido, match=campo):
+        validar(c)
+
+
+def test_rampa_sem_util_nem_g1_recusa():
+    """util deriva g1; sem um dos dois a rampa nao tem crescimento de fase 1."""
+    c = _rampa()
+    del c["cenarios"]["base"]["premissas"]["util"]
+    with pytest.raises(CasoInvalido, match="util"):
+        validar(c)
+
+
+def test_rampa_com_util_e_g1_juntos_recusa():
+    c = _rampa()
+    c["cenarios"]["base"]["premissas"]["g1"] = 9.0
+    with pytest.raises(CasoInvalido, match="util"):
+        validar(c)
+
+
+def test_rampa_com_metrica_errada_recusa():
+    c = _rampa()
+    c["metrica_base"]["tipo"] = "EBITDA"
+    with pytest.raises(CasoInvalido, match="EBITDA0"):
+        validar(c)

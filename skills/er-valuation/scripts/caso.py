@@ -154,14 +154,37 @@ PREMISSAS_OBRIGATORIAS_EQUITY: frozenset = frozenset({
     "g", "roe", "ke", "n", "tv",
 })
 
+# Rota rampa (Fatia C, Task 1): composição bifásica do motor congelado
+# (subcomando `rampa`) para capacidade PRÉ-CONSTRUÍDA — fase 1 é rampa de
+# utilização (crescimento consome só giro; D&A do parque fixa em moeda),
+# fase 2 é expansão de capacidade nova (bloco padrão). Vocabulário PRÓPRIO,
+# não uma variação de PREMISSAS_FIRM: a rota não usa o triângulo
+# g = RiR x retorno (g2 é premissa direta do vetor; RiR2/ROIC2 saem do
+# motor como RESULTADO, nunca como escolha de input) — por isso 'rampa'
+# não entra em `_TRIANGULO_POR_ROTA` mais abaixo, e `_validar_cenario` só
+# valida triângulo para rotas presentes naquele dict. `util` e `g1` são
+# alternativas — nunca as duas juntas, nunca nenhuma das duas — ver
+# `_validar_util_xor_g1`.
+PREMISSAS_RAMPA: frozenset = frozenset({
+    "receita0", "ebitda0", "da_parque", "wk", "kappa", "g2", "wacc", "tax",
+    "t_rampa", "n", "util", "g1", "tv", "roic_tv", "gp", "roic_book",
+})
+
+PREMISSAS_OBRIGATORIAS_RAMPA: frozenset = frozenset({
+    "receita0", "ebitda0", "da_parque", "wk", "kappa", "g2", "wacc", "tax",
+    "t_rampa", "tv",
+})
+
 _PREMISSAS_POR_ROTA: dict[str, frozenset] = {
     "firm": PREMISSAS_FIRM,
     "equity": PREMISSAS_EQUITY,
+    "rampa": PREMISSAS_RAMPA,
 }
 
 _PREMISSAS_OBRIGATORIAS_POR_ROTA: dict[str, frozenset] = {
     "firm": PREMISSAS_OBRIGATORIAS_FIRM,
     "equity": PREMISSAS_OBRIGATORIAS_EQUITY,
+    "rampa": PREMISSAS_OBRIGATORIAS_RAMPA,
 }
 
 # Premissas cujo valor não é numérico — não passam pela guarda de tipo
@@ -202,6 +225,7 @@ _TRIANGULO_POR_ROTA: dict[str, frozenset] = {
 METRICAS_POR_ROTA: dict[str, frozenset] = {
     "firm": frozenset({"EBITDA", "NOPAT"}),
     "equity": frozenset({"LL"}),
+    "rampa": frozenset({"EBITDA0"}),
 }
 
 # Métricas que existem na metodologia mas são transformação de apresentação
@@ -300,8 +324,9 @@ def validar(caso: Caso) -> None:
     """Valida um caso já carregado; levanta `CasoInvalido` na primeira violação.
 
     Ordem de verificação: o caso em si -> campos de topo -> rota -> métrica x
-    rota -> ponte x rota -> ações diluídas -> preço -> cada cenário (âncora,
-    triângulo, premissas obrigatórias, premissas desconhecidas) -> blocos
+    rota -> ponte x rota -> delimitador x rota -> ações diluídas -> preço ->
+    cada cenário (âncora, triângulo quando a rota tiver um, premissas
+    obrigatórias, premissas desconhecidas) -> blocos
     opcionais 'mercado', 'reversa' e 'sensibilidades', só quando presentes.
     Não modifica `caso`; não preenche nada — só confirma ou recusa.
 
@@ -340,6 +365,7 @@ def validar(caso: Caso) -> None:
     _validar_rota(rota)
     _validar_metrica(caso, rota)
     _validar_ponte(caso, rota)
+    _validar_delimitador(caso, rota)
     _validar_acoes_diluidas(caso)
     _validar_preco(caso)
 
@@ -456,11 +482,17 @@ def _validar_metrica(caso: Caso, rota: str) -> None:
 
 def _validar_ponte(caso: Caso, rota: str) -> None:
     tem_ponte = "ponte" in caso
+    # A rota rampa atravessa a MESMA ponte da rota firm — "a ponte para
+    # preço é a mesma das outras rotas firm: o nd_efetivo de ponte.py vai
+    # em --nd" (plano da Fatia C). Por isso as duas rotas compartilham a
+    # exigência de presença e a validação de completude abaixo; só
+    # 'equity' chega em Equity direto e não tem ponte de dívida nenhuma.
+    rotas_com_ponte = ("firm", "rampa")
 
-    if rota == "firm" and not tem_ponte:
+    if rota in rotas_com_ponte and not tem_ponte:
         raise CasoInvalido(
-            "campo 'ponte' ausente na rota firm: a rota firm chega em EV e "
-            "precisa da ponte (dívida, caixa, outros ativos/passivos, "
+            f"campo 'ponte' ausente na rota {rota}: a rota {rota} chega em "
+            "EV e precisa da ponte (dívida, caixa, outros ativos/passivos, "
             "minoritários) para chegar em Equity por ação. Declare 'ponte' "
             f"com {', '.join(CAMPOS_DA_PONTE)}."
         )
@@ -474,7 +506,7 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
             "seria silenciar um dado que não se aplica; remova o campo."
         )
 
-    if rota == "firm":
+    if rota in rotas_com_ponte:
         # Presença do bloco já está confirmada acima; falta confirmar que
         # está COMPLETO. Somar (ordem e sinal do waterfall) é
         # responsabilidade de `ponte.py` — aqui só se valida presença e
@@ -506,6 +538,49 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
                     f"{valor!r}. NaN e Infinity não são valor válido de "
                     "linha da ponte — envenenam a soma em silêncio."
                 )
+
+
+def _validar_delimitador(caso: Caso, rota: str) -> None:
+    """Valida o campo de topo condicional-à-rota 'delimitador'.
+
+    Só a rota 'rampa' tem fronteira de fase para delimitar: a composição
+    bifásica do motor soma fase 1 (rampa de utilização) com fase 2
+    (expansão), costuradas no ano T (`--t-rampa`) — e o próprio motor
+    declara esse T "delimitador OBSERVAVEL obrigatorio" no help do CLI, mas
+    não pode checar que o analista de fato ancorou o número num evento real
+    (comissionamento datado, plena capacidade, termo de contrato, marco de
+    guidance). Uma fase sem esse delimitador é um grau de liberdade
+    disfarçado de análise — um modelo multifásico sem essa trava
+    racionaliza qualquer preço. Por isso a rota 'rampa' EXIGE 'delimitador'
+    como string não-vazia (não só presente — em branco não conta, é a
+    mesma disciplina de 'preco.fonte'/'metrica_base.fonte').
+
+    Fora da rota 'rampa' não existe fronteira de fase nenhuma para
+    delimitar — 'firm' e 'equity' rodam um único regime, do início ao fim.
+    Um 'delimitador' declarado ali seria um dado sem função nenhuma no
+    motor; a mera PRESENÇA do campo (não só um valor ruim) já é recusada,
+    para não silenciar um dado que não se aplica — mesma disciplina de
+    'ponte' presente na rota equity.
+    """
+    tem_delimitador = "delimitador" in caso
+
+    if rota == "rampa":
+        valor = caso.get("delimitador")
+        if not tem_delimitador or not isinstance(valor, str) or not valor.strip():
+            raise CasoInvalido(
+                f"campo 'delimitador' ausente ou vazio na rota rampa: "
+                f"{valor!r}. A rota exige um evento OBSERVÁVEL que baliza "
+                "o fim da fase 1 (comissionamento datado, plena "
+                "capacidade, termo de contrato, marco de guidance) — uma "
+                "fase sem esse delimitador é um grau de liberdade "
+                "disfarçado de análise, não uma fronteira real."
+            )
+    elif tem_delimitador:
+        raise CasoInvalido(
+            f"campo 'delimitador' presente na rota '{rota}': só a rota "
+            "rampa tem fronteira de fase para delimitar — não há fase 1 "
+            f"nem fase 2 para balizar em '{rota}'. Remova o campo."
+        )
 
 
 def _validar_acoes_diluidas(caso: Caso) -> None:
@@ -643,7 +718,15 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
             "cenário inventado."
         )
 
-    _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
+    # O triângulo g = RiR x retorno só existe para rotas presentes em
+    # `_TRIANGULO_POR_ROTA` (firm, equity). A rota rampa não usa esse
+    # mecanismo: g2 é premissa direta do vetor, e RiR2/ROIC2 saem do motor
+    # como resultado — nunca como escolha de input a validar aqui. Chamar
+    # `_validar_triangulo` incondicionalmente levantaria `KeyError` cru em
+    # `_TRIANGULO_POR_ROTA[rota]` para 'rampa' (e para qualquer rota futura
+    # sem triângulo) — a guarda de membership evita isso.
+    if rota in _TRIANGULO_POR_ROTA:
+        _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
 
     premissas = cenario.get("premissas")
     if premissas is None:
@@ -729,6 +812,45 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
                 f"{valor!r}. NaN e Infinity não são valor válido de "
                 "premissa — envenenam toda conta a jusante em silêncio."
             )
+
+    if rota == "rampa":
+        _validar_util_xor_g1(prefixo, premissas)
+
+
+def _validar_util_xor_g1(prefixo: str, premissas: dict) -> None:
+    """Valida que a rota rampa declara exatamente uma entre 'util' e 'g1'.
+
+    As duas são alternativas, nunca as duas juntas: 'util' (utilização
+    atual do parque, em 0-100%) deriva 'g1' internamente
+    (g1 = (1/util)^(1/T) - 1) e força Receita_T = capacidade por
+    construção; 'g1' declarado direto é a mesma taxa sem essa derivação —
+    negativo roda o bloco de colheita (liberação de giro, FCFF > NOPAT).
+    Sem nenhuma das duas a fase 1 não tem crescimento de volume nenhum;
+    com as duas, qual delas o motor deveria obedecer fica ambíguo — o
+    motor congelado só aceita uma (`--util` OU `--g1`).
+
+    Chamada só para `rota == "rampa"`, depois que o loop de premissas
+    permitidas/numéricas já confirmou que 'util' e 'g1', quando presentes,
+    têm tipo numérico válido — esta função só decide QUANTAS das duas
+    foram declaradas, não revalida tipo.
+    """
+    tem_util = premissas.get("util") is not None
+    tem_g1 = premissas.get("g1") is not None
+    if tem_util == tem_g1:
+        if tem_util:
+            raise CasoInvalido(
+                f"{prefixo}: premissas 'util' e 'g1' declaradas juntas — "
+                "são alternativas, nunca as duas: 'util' deriva 'g1' "
+                "internamente e força Receita_T = capacidade por "
+                "construção. Declare apenas uma das duas."
+            )
+        raise CasoInvalido(
+            f"{prefixo}: nem 'util' nem 'g1' declarados — a fase 1 da "
+            "rampa precisa de um crescimento de volume, derivado da "
+            "utilização do parque ('util', em 0-100%) ou declarado direto "
+            "('g1'; negativo é o bloco de colheita). Declare exatamente "
+            "uma das duas."
+        )
 
 
 # --------------------------------------------------------------------------
