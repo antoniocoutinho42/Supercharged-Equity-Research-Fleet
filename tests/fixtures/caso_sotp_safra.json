@@ -24,6 +24,7 @@
   },
   "sotp": {
     "tipo": "safra",
+    "cenario": "base",
     "partes": [
       {
         "nome": "Base instalada",

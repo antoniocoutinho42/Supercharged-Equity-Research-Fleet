@@ -24,6 +24,7 @@
   },
   "sotp": {
     "tipo": "segmento",
+    "cenario": "base",
     "partes": [
       {
         "nome": "Claim A",

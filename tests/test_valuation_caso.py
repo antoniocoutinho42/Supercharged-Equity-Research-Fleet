@@ -101,6 +101,48 @@ def test_ponte_na_rota_equity_recusa():
         validar(c)
 
 
+# --------------------------------------------------------------------------
+# Fatia C, Task 4: concern da revisão da Task 3 -- "rota equity do caso +
+# sotp.materialidade viraria MotorFalhou em vez de recusa nomeada". SOTP
+# soma EV (D3); a rota equity não produz EV e já proíbe 'ponte' (teste
+# acima) -- sem esta recusa nomeada no gate, a combinação alcançava
+# sotp.compor_partes e quebrava fundo, em KeyError sobre caso["ponte"], não
+# numa mensagem para o analista.
+# --------------------------------------------------------------------------
+
+def test_sotp_na_rota_equity_recusa():
+    """Braço financeiro (holdco pura, banco, seguradora) numa SOTP é
+    limitação declarada desta fatia, não erro do usuário -- mas a
+    combinação em si é recusada, nomeando a razão."""
+    c = _equity()
+    c["sotp"] = {
+        "tipo": "segmento",
+        "cenario": "base",
+        "partes": [
+            {
+                "nome": "A", "rota": "firm",
+                "metrica_base": {"tipo": "EBITDA", "valor": 100.0, "fonte": "x"},
+                "ancora": "x",
+                "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+                "premissas": {"g": 5.0, "roic": 12.0, "wacc": 10.0, "n": 10,
+                              "da": 10.0, "tax": 25.0, "tv": "convergencia"},
+            },
+            {
+                "nome": "B", "rota": "firm",
+                "metrica_base": {"tipo": "EBITDA", "valor": 50.0, "fonte": "x"},
+                "ancora": "x",
+                "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+                "premissas": {"g": 5.0, "roic": 12.0, "wacc": 10.0, "n": 10,
+                              "da": 10.0, "tax": 25.0, "tv": "convergencia"},
+            },
+        ],
+        "topo": {"custos_corporativos_vp": 0.0, "participacoes_nao_consolidadas": 0.0,
+                 "desconto_de_holding_pct": None, "razao_do_desconto": None},
+    }
+    with pytest.raises(CasoInvalido, match="equity"):
+        validar(c)
+
+
 def test_ponte_ausente_na_rota_firm_recusa():
     c = _firm()
     del c["ponte"]

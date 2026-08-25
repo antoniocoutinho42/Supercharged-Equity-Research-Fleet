@@ -394,7 +394,7 @@ def validar(caso: Caso) -> None:
     _validar_mercado(caso, reversa_presente)
     _validar_reversa(caso, cenarios, rota)
     _validar_sensibilidades(caso, cenarios, rota)
-    _validar_sotp(caso)
+    _validar_sotp(caso, cenarios)
 
 
 def _validar_campos_de_topo(caso: Caso) -> None:
@@ -1341,6 +1341,30 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
 #   - o bloco opcional 'sotp.materialidade.blended' (`_validar_materialidade`,
 #     abaixo de `_validar_sotp`), com o mesmo vocabulário de um cenário,
 #     na rota do CASO inteiro.
+#
+# Fatia C, Task 4 acrescenta duas checagens mais, fechando dois achados da
+# revisão da Task 3 — as duas ANTES de `tipo`/`partes`/`topo`, porque são
+# propriedades da COMBINAÇÃO caso+sotp, não do que `sotp` declara por
+# dentro:
+#   - a rota do caso não pode ser 'equity' quando `sotp` está presente —
+#     SOTP soma EV (D3), e a rota equity não produz EV nem admite `ponte`
+#     (`_validar_ponte` já proíbe o bloco nessa rota). Sem esta recusa
+#     nomeada, a combinação alcançava `sotp.compor_partes` e quebrava
+#     fundo, em `KeyError` sobre `caso["ponte"]` — um erro de
+#     implementação, nunca uma mensagem para o analista. O braço
+#     financeiro (holdco pura, banco, seguradora) numa SOTP é limitação
+#     DECLARADA desta fatia — não veste a roupa de bug nem a de erro do
+#     usuário.
+#   - `sotp.cenario`, campo novo do contrato: mesma semântica e mesma
+#     função de validação (`_validar_cenario_alvo`) que `reversa.cenario`/
+#     `sensibilidades.cenario` já usam — aponta um cenário declarado em
+#     `caso["cenarios"]`. `compor_partes` já recusava (desde a Task 2/3)
+#     um `nome_cenario` inexistente passado por quem chama, mas até esta
+#     task não havia como declará-lo no próprio `caso.json`; a conta de
+#     `compor_partes` não muda com o nome (cada parte de SOTP carrega um
+#     vetor de premissas fixo, não por cenário) — a exigência existe só
+#     para que um nome ausente ou inexistente falhe alto no gate, antes de
+#     `avaliar()` chamar o motor para qualquer coisa.
 # --------------------------------------------------------------------------
 
 _TIPOS_DE_SOTP: frozenset = frozenset({"segmento", "safra"})
@@ -1479,22 +1503,43 @@ def _validar_topo_sotp(topo: Any) -> None:
             )
 
 
-def _validar_sotp(caso: Caso) -> None:
-    """Valida o bloco opcional 'sotp': tipo, partes (>= 2, nomes distintos,
-    cada uma válida para a rota dela) e topo.
+def _validar_sotp(caso: Caso, cenarios: dict) -> None:
+    """Valida o bloco opcional 'sotp': rota do caso, cenário-alvo, tipo,
+    partes (>= 2, nomes distintos, cada uma válida para a rota dela) e topo.
 
     `caso.get("sotp")` ausente ou `None` é um caso perfeitamente válido sem
     SOTP nenhum — exatamente tão válido quanto antes desta fatia existir.
+
+    Fatia C, Task 4 acrescenta as duas primeiras checagens abaixo (rota e
+    cenário), as duas antes de examinar o que `sotp` declara por dentro —
+    ver o comentário acima de `_TIPOS_DE_SOTP` para a razão de cada uma.
     """
     sotp = caso.get("sotp")
     if sotp is None:
         return
 
+    rota_do_caso = caso["rota"]
+    if rota_do_caso == "equity":
+        raise CasoInvalido(
+            "bloco 'sotp' presente na rota equity: SOTP soma o EV de cada "
+            "parte (D3), e a rota equity não tem leitura de EV — chega em "
+            "Equity direto (P/L x LL), sem ponte de dívida para cruzar uma "
+            "única vez no topo (a própria rota equity já proíbe declarar "
+            "'ponte'). O braço financeiro (holdco pura, banco, seguradora) "
+            "numa composição SOTP é limitação declarada desta fatia, não "
+            "um erro do usuário: hoje não há EV para somar dele. Remova o "
+            "bloco 'sotp', ou avalie o braço financeiro por fora desta "
+            "composição."
+        )
+
     if not isinstance(sotp, dict):
         raise CasoInvalido(
             f"campo 'sotp' não é um objeto: {sotp!r}. Declare 'tipo', "
-            "'partes' e 'topo'."
+            "'cenario', 'partes' e 'topo'."
         )
+
+    cenario_nome = sotp.get("cenario")
+    _validar_cenario_alvo("sotp.cenario", cenario_nome, cenarios)
 
     tipo = sotp.get("tipo")
     if tipo not in _TIPOS_DE_SOTP:

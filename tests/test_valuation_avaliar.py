@@ -429,3 +429,32 @@ def test_rampa_carrega_rir_e_decomposicao_de_valor_da_fase_2():
     assert r["roic2_%"] == pytest.approx(16.007, abs=1e-3)
     assert r["vp_fase1"] == pytest.approx(45.2592, abs=1e-3)
     assert r["valor_fase2_no_ano_T"] == pytest.approx(220.4887, abs=1e-3)
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 4: bloco 'sotp' no resultado -- mesma disciplina aditiva de
+# 'reversa'/'sensibilidades' (Fatia B, Task 5): só aparece quando o caso
+# declara 'sotp', via sotp.compor_partes(caso, caso["sotp"]["cenario"]), sem
+# filtrar nem reformatar o que compor_partes devolve. Um caso sem 'sotp'
+# (toda fixture das fatias A/B, e a própria fixture de rampa da fatia C)
+# não pode ganhar a chave nova -- byte a byte igual ao que produzia antes.
+# --------------------------------------------------------------------------
+
+def test_resultado_sem_sotp_nao_ganha_o_bloco():
+    r = avaliar(carregar(FIXTURES / "caso_minimo_firm.json"))
+    assert "sotp" not in r
+
+
+def test_resultado_com_sotp_traz_partes_e_ponte_unica():
+    r = avaliar(carregar(FIXTURES / "caso_sotp_segmento.json"))
+    assert len(r["sotp"]["partes"]) == 2
+    assert r["sotp"]["preco_acao"] > 0
+    assert r["sotp"]["materialidade"]["sinal"] in ("+", "-", "0")
+
+
+def test_sotp_e_deterministico(tmp_path):
+    import filecmp
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    escrever(avaliar(carregar(FIXTURES / "caso_sotp_segmento.json")), a)
+    escrever(avaliar(carregar(FIXTURES / "caso_sotp_segmento.json")), b)
+    assert filecmp.cmp(a, b, shallow=False)

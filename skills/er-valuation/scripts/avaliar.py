@@ -72,6 +72,26 @@ do lado equity, nunca existe. Um caso sem os dois blocos (toda fixture da
 fatia A) não sofre nenhuma mudança de shape: os dois `if` abaixo são
 no-op, e o resultado sai byte a byte igual ao que saía antes desta fatia.
 
+Fatia C, Task 4: o bloco `sotp` entra no resultado com a MESMA disciplina
+aditiva dos dois blocos acima — `"sotp" in caso`, checado depois deles —
+via `sotp.compor_partes(caso, caso["sotp"]["cenario"])`, sem filtrar nem
+reformatar o que `compor_partes` devolve (`partes`, `ev_das_partes`,
+`materialidade`, `topo`, `ev_total`, `equity`, `preco_acao`,
+`ponte_unica`). Diferente de `reverter`/`calcular`, não recebe
+`nd_efetivo`: `compor_partes` cruza a própria ponte do caso internamente,
+uma única vez, no topo (D3). Duas guardas de `caso.py` fecham os achados
+da revisão da Task 3 antes que este módulo precise se preocupar com eles:
+um caso com `sotp` declarado na rota equity é recusado no gate (SOTP soma
+EV; a rota equity não produz EV nem admite `ponte`) — sem essa recusa
+nomeada, a combinação alcançaria `compor_partes` e quebraria fundo, em
+`KeyError` sobre `caso["ponte"]`, nunca uma mensagem para o analista; e
+`sotp.cenario` (contrato novo desta task, mesma semântica de
+`reversa.cenario`/`sensibilidades.cenario`) já chega validado como um
+nome que existe em `caso["cenarios"]`. Um caso sem `sotp` (toda fixture
+das fatias A e B, e a própria fixture de rampa desta fatia) não sofre
+nenhuma mudança de shape: o `if` abaixo é no-op, e o resultado sai byte a
+byte igual ao que saía antes.
+
 Todo valor que este módulo lê ou copia da saída do motor (`EV`, `Equity`,
 `Preco_acao`, o múltiplo do ramo NOPAT, os múltiplos copiados para a saída)
 passa por `_exigir_valor`: o serializador do motor converte float não-finito
@@ -504,6 +524,28 @@ def avaliar(caso: dict) -> dict:
         from sensibilidades import calcular
         resultado["sensibilidades"] = calcular(
             caso, caso["sensibilidades"]["cenario"], nd_efetivo)
+
+    # Fatia C, Task 4: mesma disciplina aditiva dos dois blocos acima — só
+    # aparece quando o caso declara 'sotp'. Import local pelo MESMO motivo
+    # do import local de 'sensibilidades' logo acima: `sotp.py` já faz
+    # `from avaliar import precificar_firm, precificar_rampa` no topo dele
+    # — um `from sotp import compor_partes` no TOPO deste arquivo fecharia
+    # o mesmo tipo de ciclo (avaliar -> sotp -> avaliar), como o próprio
+    # `sotp.py` já documentava antes desta task. `compor_partes` cruza a
+    # PRÓPRIA ponte do caso (`caso["ponte"]`) internamente — ao contrário
+    # de `reverter`/`calcular` acima, não recebe `nd_efetivo` como
+    # parâmetro, por isso não é passado aqui. `caso.py` já garante, no
+    # gate, que um caso com 'sotp' não é rota equity (SOTP soma EV; a rota
+    # equity não produz EV) — logo `caso["ponte"]` sempre existe quando
+    # 'sotp' existe (`_validar_ponte` exige o bloco nas duas rotas que
+    # sobram, firm e rampa) — e que `caso["sotp"]["cenario"]` aponta para
+    # um cenário de fato declarado em `caso["cenarios"]`. Nenhuma chave do
+    # que `compor_partes` devolve é filtrada, renomeada ou reformatada
+    # aqui — mesma disciplina de `resultado["reversa"]`/
+    # `resultado["sensibilidades"]` acima.
+    if "sotp" in caso:
+        from sotp import compor_partes
+        resultado["sotp"] = compor_partes(caso, caso["sotp"]["cenario"])
 
     return resultado
 

@@ -35,6 +35,14 @@ normaliza saída.
   um teto padrão (2.000) recusado no gate, antes de qualquer chamada ao
   motor; `sensibilidades.limite_de_celulas` levanta ou reduz esse teto
   deliberadamente (ver "Contrato do caso").
+- **SOTP (soma das partes)** — soma o EV de cada parte (segmento
+  economicamente distinto, ou base instalada x capital novo numa safra),
+  aplica os ajustes de topo e cruza a ponte do caso uma única vez — nunca
+  por parte. Só nas rotas que produzem EV (`firm`, `rampa`); a rota
+  `equity` não admite o bloco.
+- **Rota rampa** — composição bifásica (rampa de utilização seguida de
+  expansão), costurada num ano-delimitador que o caso declara; `EV`,
+  `Equity` e preço por ação saem prontos do motor, como na rota `firm`.
 
 ## O que NUNCA faz
 
@@ -61,6 +69,7 @@ normaliza saída.
 | `scripts/ponte.py` | Soma as linhas da ponte num líquido, com sinal por parcela |
 | `scripts/reversa.py` | Resolve o menu de reconciliação por eixo e o beta implícito |
 | `scripts/sensibilidades.py` | Constrói as grades 1D/2D célula a célula no motor |
+| `scripts/sotp.py` | Soma o EV das partes de uma SOTP e cruza a ponte única no topo |
 | `scripts/avaliar.py` | Orquestra cenários × rota e escreve o `resultados.json` |
 
 ## Como rodar
@@ -119,8 +128,10 @@ Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`
 aceita `LL`. São as que o motor emite diretamente — demais métricas são
 transformação de apresentação e entram depois, com a álgebra exibida.
 
-Ainda não implementados aqui: soma das partes por segmento e por safra de
-capital; composição multifásica. Cada um entra em sua própria fatia.
+Ainda não implementados aqui: métricas de apresentação (`EBIT`, `EPS`,
+`EBITDA/ação`, `NOPAT/ação`) — transformação sobre a métrica-base (divisão
+por ações, álgebra entre múltiplos); entram numa fatia futura, com a
+álgebra exibida.
 
 ## Metodologia
 

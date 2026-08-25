@@ -129,6 +129,33 @@ def test_compor_partes_recusa_nome_de_cenario_inexistente():
 
 
 # --------------------------------------------------------------------------
+# Fatia C, Task 4: 'sotp.cenario' -- campo novo do contrato, mesma
+# semântica e mesma função de validação (_validar_cenario_alvo) que
+# 'reversa.cenario'/'sensibilidades.cenario' já usam. avaliar() passa este
+# nome para compor_partes, que já recusava (desde a Task 2/3, teste acima)
+# um nome inexistente -- mas antes desta task não havia como declará-lo no
+# caso; a fixture do segmento (e as da safra/homogêneo) ganharam o campo
+# junto com esta task.
+# --------------------------------------------------------------------------
+
+def test_sotp_sem_cenario_recusa():
+    c = _sotp()
+    del c["sotp"]["cenario"]
+    with pytest.raises(CasoInvalido, match="cenario"):
+        validar(c)
+
+
+def test_sotp_com_cenario_inexistente_recusa_no_gate():
+    """Mesma guarda de compor_partes (teste acima), agora também no
+    portão de caso.validar -- um caso.json malformado assim nunca chega a
+    avaliar()/compor_partes."""
+    c = _sotp()
+    c["sotp"]["cenario"] = "nao_existe"
+    with pytest.raises(CasoInvalido, match="inexistente"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
 # Fatia C, Task 3: materialidade -- quando o caso declara
 # sotp.materialidade.blended, o vetor consolidado roda pela mesma rota do
 # caso e a saída reporta EV_segmentado - EV_blended, com sinal. A direção

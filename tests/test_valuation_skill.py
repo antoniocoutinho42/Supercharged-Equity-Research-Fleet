@@ -47,10 +47,41 @@ def test_skill_nao_declara_reversa_e_sensibilidades_como_futuro():
     trecho_pendencias = texto[inicio:fim]
     assert "reversa" not in trecho_pendencias.lower()
     assert "sensibilidades" not in trecho_pendencias.lower()
-    # a secao de pendencias em si continua existindo, com o que sobrou dela.
-    assert "multifásic" in trecho_pendencias.lower() or "multifasic" in trecho_pendencias.lower()
+    # Fatia C, Task 4: SOTP e a rota rampa -- o que sobrava de pendência na
+    # época desta asserção ("multifásic[a]", travado aqui até então) -- por
+    # sua vez saem de 'ainda não implementados' NESSA fatia; quem passa a
+    # travar essa remoção específica é
+    # test_skill_nao_declara_sotp_e_multifasico_como_futuro, abaixo. Este
+    # teste continua só responsável por reversa/sensibilidades.
 
     # movidos para o corpo (fora da secao de pendencias) e a tabela ganhou
     # os dois modulos novos.
     assert "reversa.py" in texto
     assert "sensibilidades.py" in texto
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 4: SOTP (soma das partes) e a rota rampa (composição
+# multifásica) implementados -- a seção de pendências não pode mais
+# citá-los como fatia futura, e a rota rampa tem de aparecer no corpo.
+# --------------------------------------------------------------------------
+
+def test_skill_nao_declara_sotp_e_multifasico_como_futuro():
+    texto = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    marcador = "ainda não implementados"
+    baixo = texto.lower()
+    assert marcador in baixo, "secao de pendencias sumiu do SKILL.md"
+    inicio = baixo.index(marcador)
+    fim = texto.index("\n\n", inicio)
+    trecho_pendencias = texto[inicio:fim].lower()
+    assert "sotp" not in trecho_pendencias
+    assert "multifásic" not in trecho_pendencias and "multifasic" not in trecho_pendencias
+    assert "soma das partes" not in trecho_pendencias
+
+    # movidos para o corpo, e sotp.py entrou na tabela de módulos.
+    assert "sotp.py" in texto
+
+
+def test_skill_menciona_a_rota_rampa():
+    texto = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    assert "rampa" in texto.lower()
