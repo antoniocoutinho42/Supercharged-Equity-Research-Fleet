@@ -30,15 +30,15 @@ jobs:
           python vendor/multiplos-justos/scripts/testes.py --phase model
           python vendor/multiplos-justos/scripts/testes.py --phase cli
 
-      - name: pytest
-        run: python -m pytest tests/ -q
-
       - name: Paridade Python↔JS do espelho
         env:
           PYTHONUTF8: "1"
         run: |
           node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_paridade.json > /dev/null
           python -m pytest tests/test_paridade_js.py -q
+
+      - name: pytest
+        run: python -m pytest tests/ -q
 
       - name: Estrutura do plugin
         run: |
