@@ -1,4 +1,4 @@
-"""Congelamento e integridade do vendor `multiplos-justos` v9.24.
+"""Congelamento e integridade do vendor `multiplos-justos` v9.31.
 
 O vendor é read-only por desenho: além do manifest de sha256 verificado aqui, o
 próprio `scripts/testes.py` do pacote faz lint semântico dos docs — editar a
@@ -36,7 +36,7 @@ def _manifest() -> dict:
 
 def test_manifest_declara_a_versao_e_a_raiz():
     man = _manifest()
-    assert man["versao"] == "v9.24"
+    assert man["versao"] == "v9.31"
     assert man["raiz_do_pacote"] == "vendor/multiplos-justos"
 
 
@@ -56,7 +56,7 @@ def test_sha_do_motor_pinado_no_proprio_teste():
     Mesmo idioma de tests/test_motor_k3.py, que fixa o sha da formula no teste.
     """
     assert _manifest()["arquivos"]["scripts/justos.py"] == (
-        "919c38eafc3bc327a0fbd79eded70163eb43abe368a22040d4f7c2f25bd49867"
+        "580fb066cb1a548d9d8bb04c15de476f83b6068bf0286170efd96415c446d129"
     )
 
 
@@ -109,9 +109,46 @@ def test_selftest_do_motor_reproduz_as_ancoras():
 
 
 def test_suite_completa_do_vendor_passa():
+    """[v9.31] A suíte completa vira duas invocações frescas, uma por fase.
+
+    `--phase model` roda 'advanced' seguido de 'core' no mesmo processo e termina
+    em 'FASE CORE PASSOU.'; `--phase cli` abre os 20+ subprocessos de integração e
+    termina em 'FASE CLI PASSOU.'. A antiga invocação única e a string
+    'TODOS OS TESTES PASSARAM' não existem mais (ver os dois testes abaixo).
+    """
+    r_model = _rodar(str(VENDOR / "scripts" / "testes.py"), "--phase", "model")
+    assert r_model.returncode == 0, r_model.stdout + r_model.stderr
+    assert "FASE CORE PASSOU." in r_model.stdout, r_model.stdout[-2000:]
+
+    r_cli = _rodar(str(VENDOR / "scripts" / "testes.py"), "--phase", "cli")
+    assert r_cli.returncode == 0, r_cli.stdout + r_cli.stderr
+    assert "FASE CLI PASSOU." in r_cli.stdout, r_cli.stdout[-2000:]
+
+
+def test_suite_sem_phase_recusa_com_instrucao():
+    """[v9.31] Invocação única (contrato antigo) não roda mais nada por padrão.
+
+    Deliberado: a fase CLI abre 20+ subprocessos reais e misturar as duas fases
+    numa invocação só arrisca falso negativo por quota de subprocessos do
+    ambiente. Sem `--phase`, o script recusa e imprime as duas invocações
+    corretas em vez de silenciosamente rodar (ou pior, rodar só parte).
+    """
     r = _rodar(str(VENDOR / "scripts" / "testes.py"))
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "TODOS OS TESTES PASSARAM" in r.stdout, r.stdout[-2000:]
+    saida = r.stdout + r.stderr
+    assert r.returncode == 2, saida
+    assert "--phase model" in saida and "--phase cli" in saida, saida
+
+
+def test_tv_ausente_sai_com_json_de_parada_do_gate_1():
+    """[v9.31] Ausência de --tv é produto, não acidente: JSON de parada citando o
+    Gate 1 (rc=2), não mais usage cru do argparse. O rc continua não-zero, então
+    `motor.MotorFalhou` do wrapper continua sendo levantado sem nenhuma mudança
+    lá — este teste só fixa o contrato novo do vendor.
+    """
+    r = _rodar(str(VENDOR / "scripts" / "justos.py"), "ev")
+    assert r.returncode == 2, r.stdout + r.stderr
+    parada = json.loads(r.stdout)
+    assert "Gate 1" in parada["erro"], r.stdout
 
 
 DOCS_DO_VENDOR = tuple(a for a in ARQUIVOS if a.endswith(".md") and a != "CHANGELOG.md")

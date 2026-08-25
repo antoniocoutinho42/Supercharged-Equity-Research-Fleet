@@ -1,5 +1,359 @@
 # CHANGELOG — Múltiplos Justos
 
+## v9.30 → v9.31 (24/ago/2026) — "fechamento semântico / cross-layer"
+
+Origem: diligência independente da v9.30. Escopo **estritamente semântico e cross-layer**: nenhuma
+fórmula central de valuation foi alterada e nenhuma nova feature/metodologia foi criada. Entraram apenas
+correções de linguagem, metadados, interface e documentação necessárias para que o pacote descreva
+exatamente a matemática já executada.
+
+**1. Bifásico qualificado corretamente.** A solução continua algébrica e fechada, mas passa a ser
+descrita como **condicionada à convenção de rebase** `NI2_1 = NI1_next·(ROE2/ROE1)·razão`. O fator
+`ROE2/ROE1` é hipótese de degrau de nível do primeiro lucro, não identidade derivada do ROE marginal;
+logo `ROE2*` não é rotulado como identificação estrutural pura do marginal. Nenhuma conta mudou.
+
+**2. `E_pre` sincronizado.** `derivacao.md §8b` deixa de carregar a fórmula antiga de book congelado e
+usa a mesma variável de estado acumulada por clean surplus já usada pelo motor, §8e, ponte e testes.
+
+**3. Input aceito-mas-ignorado eliminado.** `--rent-book` passa a ser rejeitado com
+`iso --transicao ponte`: no bifásico, a média da fase 1 é `--pt-roe1-book` e `ROE2_book` separado não
+é implementado. Antes o argumento silenciava o warning sem alterar o cálculo.
+
+**4. Metadado `alpha` corrigido.** Em `tv=book`, o JSON reporta `alpha=1`, exatamente o coeficiente
+usado por clean surplus também no equity; fora da `book`, permanece a política FCFE existente.
+
+**5. Anchors e teoria sincronizados.** O anchor P/L canônico passa a 5,617295x em derivação e paper;
+a ressalva de horizonte finito passa a dizer corretamente que DDM/DCF↔RI exige terminais consistentes,
+em vez de afirmar impossibilidade geral de equivalência finita. Comentário residual sobre planilha
+"entregue com o release" é removido.
+
+**6. Testes cross-layer endurecidos.** A suíte agora trava: fórmula antiga de `E_pre` ausente, rebase
+qualificado como hipótese, anchor P/L sincronizado, metadado `alpha_book=1`, rejeição de `--rent-book`
+na ponte e linguagem correta sobre horizonte finito.
+
+**Fora do escopo:** não foi criado `ROE2_book`; não foi alterada a convenção de rebase; não foi
+redesenhada a ponte; não houve mudança em enterprise, equity monofásico, Fisher, APV, solver ou rampa.
+
+## v9.29 → v9.30 (24/ago/2026) — "correções inegociáveis do equity"
+
+Origem: diligência adversarial da v9.29. Escopo deliberadamente conservador: **somente bugs objetivos,
+violações de identidade e inconsistências internas** foram corrigidos. Nenhuma nova escolha metodológica
+foi introduzida; o núcleo enterprise e os hardenings da v9.28 não foram reabertos.
+
+**1. Dupla contagem de caixa removida da `book` equity.** A v9.29 acumulava corretamente `E_n`, mas
+valorizava `PV(FCFE)+PV(E_n)` com `FCFE = Div + Δcaixa`. Como o caixa retido já está dentro de `E_n`,
+`PV(Δcaixa)` era contado duas vezes. A v9.30 torna a identidade canônica da `book`:
+`Div_t = LL_t − ΔE_t = LL_t(1−g/ROE_marg)` e `P = PV(Div)+PV(E_n)`. Consequência obrigatória:
+Caixa/E é neutro nessa convenção (sem rendimento de caixa separado) e `DDM = residual income = motor`.
+O caso 5%/20%/book 10%/Ke 8%/n10 passa a **12,8374x** com qualquer Caixa/E; o 13,2670x da v9.29
+fica explicitamente supersedido por dupla contagem.
+
+**2. Equity bifásico passa a carregar patrimônio como state variable.** `_pe2_book` não reestima mais
+`E_pre = NI/ROE_book` no corte. O patrimônio da fase 1 é acumulado por clean surplus, a fase 2 carrega
+separadamente o estado de lucro e o estado de patrimônio, e o TV soma retenções da fase 2 em vez de
+recalcular book por um retorno congelado. Teste estrutural novo: dividir artificialmente uma trajetória
+idêntica em 1+9, 3+7, 5+5 ou 9+1 anos reproduz o monofásico a erro de máquina, inclusive com
+`ROE_book ≠ ROE_marginal`.
+
+**3. Ponte e inversão bifásica sincronizadas ao mesmo E_pre.** `ponte_releveraging` usa o patrimônio
+acumulado quando ancorada por `--roe1-book`; `_pe2_book` e `iso --transicao ponte` usam a mesma
+variável de estado. A inversão continua fechada porque apenas `f2` depende de ROE2. `--pt-equity`
+é agora bloqueado dentro de `iso --transicao ponte`: o input é monetário enquanto `--alvo` é múltiplo
+por NI0 e, sem uma base NI0 explícita, misturar as escalas era objetivamente inconsistente. O comando
+`ponte` standalone continua aceitando `--equity`.
+
+**4. Cross-layer corrigido.** `SKILL.md`, `aplicacao.md`, `derivacao.md`, paper, diagnósticos e testes
+passam a distinguir o módulo FCFE (`gordon`/`convergencia`) da `book` por clean surplus. Saem os trechos
+que ainda diziam que equity/`roe-book` estava congelado ou pendente. A fórmula `iso` da `book` equity
+usa `α_book=1`, igual ao enterprise, porque Caixa/E não entra no DDM+book.
+
+**5. Novos invariantes de release.** 1.000 property tests exigem `DDM = residual income = motor`;
+neutralidade `ROE_marg = ROE_book = Ke` é testada com Caixa/E 0%, 20% e 50%; bifásico→monofásico,
+E_pre único e inversão bifásica com book separado entram na suíte. Os anchors antigos de equity/book
+que dependiam da dupla contagem deixam de ser referências de verdade.
+
+**6. Proveniência.** A menção da v9.29 a `planilha-equity-book-v9_29.xlsx` como artefato "entregue
+junto" era factualmente incorreta para o ZIP canônico de sete arquivos. A derivação permanece descrita
+em `derivacao.md` e reproduzida por testes independentes; nenhum arquivo inexistente é prometido.
+
+**Fora do escopo por haver escolha metodológica:** não foi criado `ROE2_book` separado; não foi
+redesenhada a semântica monetária do `--equity` standalone; não foi alterado o tratamento de excess
+cash/rendimento de caixa fora da correção estrita de dupla contagem da `book`.
+
+## v9.28 → v9.29 (24/ago/2026) — "o espelho do equity"
+
+> **Nota de auditoria v9.30:** esta seção preserva o registro histórico da v9.29, mas as afirmações de sincronização integral e neutralidade dos anchors com caixa foram posteriormente falseadas. Os itens 1–5 abaixo estão supersedidos, quando conflitantes, pelas correções v9.30 acima.
+
+Origem: port da derivação do lado equity (linha paralela iniciada sobre a v9.26 e aposentada como
+artefato — a numeração "v9.27" daquela linha colide com a v9.27 cross-layer e não deve circular)
+sobre a base v9.28. Derivação originalmente apoiada em planilha de desenvolvimento (`planilha-equity-book-v9_29.xlsx`, não integrante do ZIP canônico; a suíte embute a simulação equivalente em `rec_v929_equity_book`). Regra de release da
+v9.27 cumprida: motor, derivação, paper, aplicação e testes sincronizados NESTA versão.
+
+**1. TV da `book` no `pe`/`degrau` com `--roe-book` por clean surplus (justos.py, pe).** Resolve a
+pendência declarada na v9.27 item 4. A interação temida com o módulo de política de caixa se
+resolve NA derivação: sob C = caixa·E (proporção constante) e a identidade vF8
+(FCFE = Div + Δcaixa), a retenção líquida sofre o gross-up da política e o caixa CANCELA —
+ΔE_t = (LL_t − FCFE_t)/(1 − caixa) = (g/ROE_marg)·LL_t, INVARIANTE a caixa/E. Logo
+E_n = (1+g)·(1/ROE_médio_inicial − 1/ROE_marg) + (1+g)^{n+1}/ROE_marg — a mesma forma do firm,
+por cancelamento PROVADO, não por analogia (a proibição da v9.27 de "copiar por analogia" foi
+respeitada: a planilha prova linha a linha clean surplus = 0, lucro retido rendendo exatamente o
+marginal, FCFE − Div − ΔC = 0, fechada = acumulação, motor = simulação a 1e-10). Guarda
+E_n ≤ 0 ⟹ NaN. Colapsos que preservam TODOS os anchors: médio = marginal ⟹ legado EXATO com
+QUALQUER caixa (âncoras vF8 do pe — 8,33x/9,04x — e selftest intactos); `--roe-book` omitido ⟹
+legado; g = 0 ⟹ E_n = 1/médio; caixa = 0 ⟹ espelho algébrico do firm (P/L corrente 12,8374 =
+EV/NOPAT do caso da auditoria). Caso-espelho com caixa 20%: P/L corrente 13,2670; o congelado
+superava em +11,5%.
+
+**2. Camadas sincronizadas.** `iso`: inversão UNIFICADA nos dois lados na mesma forma fechada
+(α = 1−caixa no pe, 1 no ev) — a forma equity provisória da v9.27 morre. `diag_eq`: PENDÊNCIA sai;
+entra o ECO da deriva do médio (espelho do firm) e os textos de CONDICIONADA/sub-alerta/
+neutralidade atualizados para a âncora inicial. `rev`: leitura_book do lado equity atualizada.
+`derivacao.md` §8c-bis, paper (espelho equity após a proposição do IC acumulado), `aplicacao.md`
+§3 e schema da memória técnica (`equity_book_congelado_pendente` → `equity_E_acumulado`) — tudo na
+mesma versão.
+
+**3. ERRATA da v9.27 estendida ao equity — e a topologia da base corrente DEPENDE do caixa.** Com
+caixa = 0 a álgebra do P/L é idêntica à do firm e o contraexemplo canônico transpõe (marginal 10%,
+Ke 12%, book 10%, n 15: máximo interior, duas raízes). Com caixa > 0 o termo de payout
+caixa·(g/ROE) CRESCE com g e pode empurrar o máximo para a fronteira — no mesmo caso com caixa
+20%, a base corrente fica monotônica e a raiz é única. Consequência para a reversa: a taxonomia
+multi-raiz vale nos dois lados e a unicidade nunca é presumida — nem afirmada — sem varrer a
+grade; o caixa é agora variável de topologia, não só de fluxo. Contraprovas permanentes nos dois
+regimes em `rec_v929_equity_book`.
+
+**4. Cross-layer estendido.** `rec_v927_consistencia_cross_layer` ganha as assinaturas do equity
+acumulado (motor, derivação e paper) e proíbe os literais do estado pendente
+(`equity_book_congelado_pendente`, "explicitamente pendente e o motor avisa") — a regressão ao
+congelado quebra a suíte em qualquer camada.
+
+**5. Validação.** `selftest` OK sem alteração de anchors; fases `model` e `cli` verdes em
+invocações frescas.
+
+
+## v9.27 → v9.28 (24/ago/2026) — "hardening adversarial"
+
+Origem: diligência completa da v9.27 após o fechamento cross-layer. O núcleo enterprise foi
+revalidado por reconstrução independente e **não foi reaberto**. A v9.28 incorpora correções de
+domínio, edge cases e proposições auxiliares que podiam ser internamente consistentes e ainda
+estarem erradas.
+
+**1. Fisher corrigido.** A Skill passa a distinguir (A) rota real exata, (B) rota nominal exata
+com inflação em TODO o horizonte explícito e terminal, e (C) inflação apenas no terminal, agora
+rotulada como aproximação terminal-only. A e B são as únicas rotas equivalentes por Fisher.
+Enquanto o motor não nominalizar integralmente cada componente do fluxo, a rota real exata é a
+central para price-taker normalizado a preços de hoje.
+
+**2. Caixa remunerado entra no Gate ROIC↔ROE.** Nova flag opcional `--cash-yield` (bruto). Com
+`Cash/E = D/E − ND/E`, a reconciliação usa `+Kcash(1−t)Cash/E` no ROE e o termo simétrico negativo
+no WACC operacional. Caixa positivo sem yield informado gera aviso. Rota preferida: operação
+separada de excess cash.
+
+**3. CAP longo qualificado.** A convergência n→∞ requer g<W. Com book=marginal o fechamento do gap
+é monotônico; com book inicial separado, a convergência continua no limite sob g<W, mas o caminho
+pode primeiro abrir e depois fechar. A suíte ganha contraprovas permanentes para g≥W e para
+não-monotonicidade com book separado.
+
+**4. Domínio de inputs.** g/gp/gtv ≤ −100%, custos de capital ≤ −100% e n<1 viram hard errors no
+CLI. Tax fora de 0–100% e d fora de 0–100% continuam admissíveis como regimes extraordinários, mas
+aparecem em `avisos_dominio` e exigem reconciliação explícita. O núcleo também rejeita g≤−100% com
+NaN quando chamado como biblioteca.
+
+**5. Solver deduplica raízes.** Uma raiz exatamente sobre um ponto da grade não pode mais aparecer
+duas vezes por pertencer aos dois intervalos adjacentes. A taxonomia econômica uma/múltiplas raízes
+fica protegida contra duplicação numérica.
+
+**6. Rampa endurecida.** A fase 2 usa `ROIC₂=(1+g₂)m_NOPAT/(wk+κ)`, definida em g₂=0; o antigo
+`g₂/RiR₂` gerava 0/0. O VP fechado trata WACC=0 pelo limite da anuidade. `--anos` fracionário deixa
+de ser arredondado: a última tranche é proporcional, eliminando saltos artificiais.
+
+**7. APV: C7 explícita e aliases semânticos removidos.** O output mostra FCFF_n, FCFF_{n+1}
+usado no TV, g de transição, gtv e o efeito de iniciar gtv já em n+1. `hp` e `me` deixam de ser
+aliases de `ku`: Miles–Ezzell e Harris–Pringle exigem políticas próprias. O paper corrige
+Miles–Ezzell: primeiro shield a Kd, posteriores a Ku.
+
+**8. Limpeza e referências.** Mid-year passa a ser descrito como convenção midpoint; o gate
+agregado de drivers decide com valores não arredondados; o paper passa a contar 15 proposições e
+adiciona Mauboussin & Callahan (18/06/2026) sobre PVGO.
+
+**9. Regra de release v9.28.** Todo achado acima tem teste dedicado. A validação de release continua
+em duas invocações frescas: `--phase model` e `--phase cli`.
+
+## v9.26 → v9.27 (24/ago/2026) — "fechamento cross-layer"
+
+Origem: auditoria integral de regressão v9.24 × v9.26, seguida de validação matemática independente.
+Objetivo: fazer a v9.27 **dominar** a v9.24 sem reverter a correção central da v9.26 — preservar o
+framework, sincronizar todas as camadas e transformar os achados da auditoria em testes permanentes.
+
+**1. Matemática `book` enterprise preservada e formalizada em todas as camadas.** O núcleo correto da
+v9.26 permanece: `ROIC_book` é a âncora média **inicial/forward** do estoque,
+`IC_0 = NOPAT_1/ROIC_book`, e o capital novo do período explícito entra ao ROIC marginal. Portanto:
+`IC_n = (1+g)(1/ROIC_book − 1/ROIC_marginal) + (1+g)^(n+1)/ROIC_marginal` e
+`TV_desc = IC_n/(1+W)^n`. `derivacao.md`, paper, `SKILL.md`, `aplicacao.md`, diagnósticos e testes
+agora usam a mesma semântica. ROIC trailing só pode alimentar `ROIC_book` depois de alinhamento ao
+NOPAT_1. O retorno médio no ano n é output (`NOPAT_{n+1}/IC_n`), não parâmetro terminal congelado.
+
+**2. ERRATA da v9.26 — monotonicidade forward NÃO elimina múltiplas raízes na base corrente.** A frase
+do changelog anterior segundo a qual a topologia bi-radicular em g “não existe mais” estava errada.
+Com book separado, o gradiente do múltiplo **forward** em g segue o spread marginal − W, mas
+`M_corrente=(1+g)M_forward` pode ter máximo interior. Contraprova permanente no motor/testes:
+ROIC marginal 10%, W 12%, book 10%, n=15, alvo corrente 8,65x ⟹ duas raízes,
+g≈0,7552% e g≈4,4109%, ambas reconstruindo o alvo. A taxonomia de reversa (sem raiz / uma raiz /
+múltiplas / tangência) permanece válida.
+
+**3. Teoria sincronizada, inclusive exemplos e consequências.** `references/derivacao.md` e
+`references/paper-multiplos-justos-v3.md` deixam de ensinar o terminal congelado da v9.24. O paper
+passa a distinguir três gradientes: marginal com book inicial fixo (valor sobe), book inicial com
+marginal fixo (valor cai) e caso conflacionado (a antiga monotonicidade negativa pode reaparecer).
+Anchors reconciliados: auditoria 5%/20%/10%/8%/n10 = 12,8374x corrente = 12,2261x forward; exemplo
+25% marginal / 10% book / W 8% / g 4% / n10 = 12,608x separado acumulado contra 9,718x conflado
+(−22,9% no conflado). O valor 13,996x fica registrado apenas como contrafactual do book congelado.
+
+**4. Firm × equity separados explicitamente.** A correção de acumulação é somente enterprise.
+`pe --roe-book` continua provisoriamente com patrimônio terminal congelado porque a evolução de E
+precisa ser derivada junto com clean surplus e política de caixa. `diag_eq`, `iso`, `rev`, `SKILL`
+e aplicação agora dizem isso sem transportar a semântica firm para equity. Esta dívida técnica fica
+marcada; nenhuma fórmula foi copiada por analogia.
+
+**5. Reversa e diagnósticos corrigidos.** `iso` mantém a inversão fechada firm com IC acumulado e a
+forma equity provisória separada. Mensagens que diziam genericamente que o TV “não acompanha o
+marginal” foram bifurcadas. A `book` sem book separado continua sinalizando conflação; com
+`ROIC_book`, raízes abaixo do WACC são condicionadas à tese de saída pelo capital investido, sem
+falsa convergência implícita. O relatório deve distinguir base forward de base corrente ao discutir
+unicidade.
+
+**6. Gate 1: ausência de `--tv` ≠ valor inválido.** `ParserGate1` só converte em parada pedagógica do
+Gate 1 o erro de argumento **ausente**. `--tv xyz` volta a receber o erro correto de `argparse`
+(`invalid choice`) em vez de ser diagnosticado como “convenção não declarada”. Teste CLI dedicado.
+
+**7. Suíte endurecida e regressão da própria v9.26 corrigida.** `ev_ebitda` foi importado; o teste
+`rec_v926_book_acumulado()` agora é realmente chamado na fase `model`; round-trip inclui a contraprova
+bi-radicular corrente; foi criado `rec_v927_consistencia_cross_layer()` para impedir que motor,
+derivação, paper e aplicação voltem a divergir na matemática crítica. A suíte também trava a
+semântica da base monetária e os novos campos da memória técnica.
+
+**8. Base monetária reclassificada: invariante obrigatório, não 11ª escolha econômica.** A v9.25
+chamou nominal×real de “11ª escolha”. A v9.27 preserva a regra substantiva — g, gp, rentabilidade e
+custo de capital sempre na mesma base — mas corrige a taxonomia: conversões nominal↔real coerentes
+não deveriam criar valor; portanto a base monetária é uma **convenção/invariante de consistência**
+reportada à parte. As dez bifurcações metodológicas da entrega permanecem dez.
+
+**9. Memória técnica expandida para reproduzir o caminho, não só os escalares finais.** O schema em
+`aplicacao.md` passa a registrar decomposição do crescimento (volume, inflação, repasse, preço real e
+RiR por componente), proveniência/ajustes de `d`, check de clean surplus, regime monetário e bloco
+`book` com qualidade, base temporal, retorno médio inicial, capital inicial implícito, marginal,
+retorno médio no ano n e indicação explícita da implementação firm acumulada × equity pendente.
+
+**10. Regra de release.** Mudança de uma proposição matemática central exige sincronização entre
+motor, derivação, paper, aplicação e testes na mesma versão. Histórico permanece neste changelog;
+marcadores antigos no corpo só são mantidos quando têm função operacional/proveniência real.
+
+## v9.25 → v9.26 (24/ago/2026) — "o capital novo chega ao terminal"
+
+Origem: auditoria externa de motor e arquitetura (ago/2026) + validação numérica independente
+com contraprova de fechamento. Fase de MOTOR (primeira desde a v9.24) + emagrecimento do corpo.
+
+**1. TV da `book` com `--roic-book` por IC ACUMULADO (justos.py, ev_nopat — o único bug
+matemático do ciclo).** O TV usava o ROIC médio CONGELADO no valor inicial: IC_n = NOPAT_{n+1}
+/média. Incoerente com os fluxos descontados — o capital novo entra ao MARGINAL (RiR = g/ROIC) e
+a média deriva na direção dele. Caso da auditoria (g 5%, marginal 20%, média 10%, W 8%, n 10):
+congelado dava EV/NOPAT₁ 13,68; o coerente é 12,23 (**+11,9% de erro, silencioso** — a flag
+criada para corrigir a conflação de >30% entregava ~10% sem aviso). Correção em forma fechada:
+IC_n = (1+g)·(1/média − 1/marginal) + (1+g)^{n+1}/marginal. Três colapsos preservam tudo que era
+válido: média = marginal ⟹ fórmula antiga EXATA (selftest intacto, nenhum anchor de planilha
+alterado); `--roic-book` omitido ⟹ legado (conflação sinalizada como antes); g = 0 ⟹ IC = 1/média
+(neutralidades da tabela preservadas). Guarda nova: IC_n ≤ 0 ⟹ NaN. Consequências de
+comportamento: o TV passa a ACOMPANHAR o marginal (capital-light sai com menos patrimônio;
+capital despejado a marginal baixo reaparece na saída pelo patrimônio — coerente com a tese da
+convenção); dM/dg sob book separado volta a seguir o sinal do spread marginal − W; a topologia
+bi-radicular em g do antigo §6.7 era ARTEFATO do congelamento e não existe mais. Diagnóstico
+ganha ECO da deriva (média inicial → média no ano n). Inversão fechada do `iso` (lado ev)
+atualizada — continua linear em 1/rent, só os coeficientes mudam. Suíte: anchor B-01 10,30x →
+12,10x; exemplos do Gate 1 2,96x/12,14x → 10,16x/12,59x; teste novo com o caso da auditoria
+(12,8374 por NOPAT₀), contraprova por acumulação explícita ano a ano e os três colapsos.
+
+**2. PENDÊNCIA — lado equity (`pe`/`degrau`, `--roe-book`).** Mesmo defeito estrutural; a
+acumulação do patrimônio sob clean surplus interage com o módulo de política de caixa (C1,
+planilha vF8) e NÃO entra no motor sem derivação em planilha. Interino: `diag_eq` avisa a
+pendência com a direção do erro quando `--roe-book` ≠ marginal e g > 0.
+
+**3. `--tv` ausente vira instrução de parada do Gate 1 (justos.py, ParserGate1).** O usage cru
+do argparse convidava o agente a "resolver" adivinhando uma convenção — o oposto do Gate 1.
+Agora: JSON em stdout com erro, instrução de PARAR e perguntar, e o menu das três convenções;
+rc = 2 preservado; demais erros de argparse inalterados. Teste de CLI próprio.
+
+**4. Emagrecimento do corpo (49,4 KB → 40,8 KB, −17%) sem perda de regra.** (a) Histórico de versões
+migrou INTEGRALMENTE para este CHANGELOG — o corpo cita só a versão corrente (regra de
+manutenção nova na seção Referências, anti-regressão). (b) Seção de entrega: o corpo mantém o
+ESQUELETO completo do relatório (estrutura fixa de 8 itens, quadro, quatro premissas fixas,
+critérios de aceitação, travas); a prosa integral — regra de substituição, pedagogia do quadro,
+dez bifurcações por extenso, primeira aparição, formato — migrou verbatim para `aplicacao.md`
+§5b, de leitura obrigatória antes de relatório completo. (c) Sufixos de versão removidos dos
+títulos de seção (mantido "endurecida na v9.24 — SEM exceção", que distingue comportamento).
+Gates preservados na íntegra por decisão de projeto: disparam em todos os fluxos, inclusive no
+screening que não obriga a leitura de `aplicacao.md` — a prosa deles é a razão econômica de cada
+verificação, não decoração.
+
+
+## v9.24 → v9.25 (21/ago/2026) — "a moeda do dado decide"
+
+Origem: auditoria externa por literatura (Lundholm & O'Keefe 2000; Bradley & Jarrell; Cornell;
+Chan, Karceski & Lakonishok) + quatro rodadas de revisão comentada do dono da skill. Fase
+documental; motor intocado.
+
+**1. Decomposição do g por componente (aplicacao.md, bloco "RiR por componente").** Fecho do
+espelho da v9.22: o custo do crescimento já era vetor; agora o crescimento também. Gatilho geral:
+qualquer projeção nominal (o g já contém reajustes — §2); não restrito a price-maker (correção da
+terceira rodada de revisão). g_preço = inflação × repasse + preço real; repasse 0/1 são as
+âncoras congelado × acompanhando do §7. Blend só na perna DERIVADA do triângulo — RiR observado
+em moeda corrente já nasce blendado; re-blendar é dupla contagem. Fronteiras: price-taker
+normalizado a nível sem componente de preço (rota Fisher v9.14); rampa com preço "declarado à
+parte" (texto vigente da compressão 2) seguindo a regra — giro sim, fixo não. Triângulo usa g
+TOTAL com RiR blendado, ilustrado pela identidade v9.22 do próprio bloco (custo pleno e custo
+só-de-giro ÷ NOPAT). Quarta rodada: rota B da v9.14 identificada como caso-limite da regra com
+giro ≈ 0 (exato para royalty/streaming; direção declarada em price-taker com giro material) —
+responde por que price-taker normalizado fica fora do gatilho sem negar que commodity acompanha
+inflação no terminal. Vocabulário: ciclo de caixa (financeiro), desambiguado do ciclo de
+capital/commodity.
+
+**2. Guarda de moeda do d (aplicacao.md, cadeia do d, item v).** A moeda do dado de origem
+decide: d de fluxo em moeda corrente é proibido de ajustar (dupla contagem contra a taxa
+nominal); o ajuste a custo de reposição só existe no gatilho duplo — proxy contábil pura E
+inflação × idade materiais (âncora: ~15% acumulado, fator ≳ 1,15 — padronização entre sessões,
+precedente do "> ~20%" v9.20). Rebaixada de regra-com-mecânica para guarda, na segunda rodada de
+revisão: incidência residual, caso pesado raro, e o risco de misfire (ajustar d já econômico)
+subestimaria valor — o erro simétrico ao que a regra corrige. A trava 4 da rampa recebe só a nota
+de degeneração: parque recém-construído ⟹ fator ≈ 1; o ajuste tipicamente não se aplica na rampa.
+
+**3. Base monetária vira 11ª escolha nomeada (SKILL.md, Gate 0 — agora seis verificações).**
+Escolha central nominal, base ecoada na entrega; verificação de mesma base manual e declarada até
+existir trava de motor.
+
+**4. Clean surplus (SKILL.md, Gate 0).** Condicional a projeções fornecidas pelo usuário; declara
+"fluxo não explicado", nunca corrige. Fecha a terceira inconsistência de Lundholm & O'Keefe — as
+outras duas o framework já bloqueava por construção (reconstrução do fluxo T+1 nas convenções de
+TV; recursão período a período no APV).
+
+**5. Parede motor→relatório (SKILL.md).** O conteúdo de um aviso material atravessa; a redação,
+nunca. Memória técnica pode carregar saída do motor verbatim; relatório, não.
+
+**Pendências de motor (exigem planilha antes de código):** trava de metadado da base monetária;
+conversão Fisher exata com o ajuste do escudo fiscal nominal; fator de reposição como parâmetro
+opcional com eco; clean surplus executável.
+
+**Roadmap declarado (avaliado e adiado):** confronto de premissas com base rates de coortes
+(custo de execução por rodada > benefício; a visão externa permanece do analista); diagnóstico de
+convexidade da grade (até derivação em planilha com limiar fixado — sem âncora, a resposta
+despadroniza entre rodadas).
+
+**Não alterado:** motor (`justos.py`), suíte (`testes.py`), âncoras, convenções de TV, escolhas
+nomeadas 1ª–10ª, regras vigentes de preço (price-taker→nível §2; volume≠preço §8f; gp no
+terminal), parede v9.16, sem-herança v9.24.
+
+**Vigilância declarada (não é regra):** observação do dono de que rodadas recentes tendem a
+subestimar o valor central. Hipótese a investigar em sessão própria: empilhamento de defaults
+conservadores em rodada central ("o produto dos extremos conservadores É o bear"). Nenhuma regra
+foi calibrada por resultado agregado — cada edição se justifica pela verdade do input.
+
 ## v9.23 → v9.24 (20/ago/2026) — "sem atalho, e o motor fechou"
 
 Origem: decisão de princípio do dono da skill + fechamento das pendências de código com a

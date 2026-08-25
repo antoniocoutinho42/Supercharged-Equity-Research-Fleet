@@ -1,7 +1,7 @@
 # Equity Research Fleet v4.0.0 — Desenho da Arquitetura
 
 Data: 2026-08-21 · Origem: `/grill-me` de redesenho (23 decisões + 2 emendas, registradas na Seção 15)
-Base factual: plugin `equity-research-fleet` v3.0.0 e skill `multiplos-justos` v9.24, lidos na íntegra.
+Base factual: plugin `equity-research-fleet` v3.0.0 e skill `multiplos-justos` v9.31, lidos na íntegra.
 Uso: **fonte de verdade** deste trabalho. Conflito entre este documento e qualquer outro resolve-se por
 este documento.
 
@@ -15,7 +15,7 @@ as poucas perguntas que determinam a tese, pesquisa livremente a melhor evidênc
 entende quanto a companhia pode crescer, se o moat sustenta esse crescimento e qual o retorno do
 capital incremental — e converte tudo num valuation rigoroso, auditável e interativo.
 
-A metodologia de valuation passa a ser a skill **`multiplos-justos` v9.24**, tratada como fonte
+A metodologia de valuation passa a ser a skill **`multiplos-justos` v9.31**, tratada como fonte
 canônica congelada. O motor K3 / Justified P/E é removido integralmente.
 
 ## 1. Princípios da v4
@@ -58,7 +58,7 @@ canônica congelada. O motor K3 / Justified P/E é removido integralmente.
 **Entra:**
 
 - Vendor congelado em `vendor/multiplos-justos/`, na raiz do repositório (cópia read-only da skill
-  v9.24), com a skill `er-multiplos-justos` guardando índice e manifest de hashes. **O pacote fica
+  v9.31), com a skill `er-multiplos-justos` guardando índice e manifest de hashes. **O pacote fica
   fora de `skills/` por necessidade**: ele traz o próprio `SKILL.md` declarando
   `name: multiplos-justos`, e sob `skills/` um loader que varra recursivamente registraria uma
   segunda skill com esse nome, colidindo com a skill standalone do usuário. Invariante travada por
@@ -86,7 +86,7 @@ marketplace-first com fallback de ZIP.
 ### 3.1 Camadas
 
 ```
-vendor congelado (multiplos-justos v9.24, read-only, hash + suíte)
+vendor congelado (multiplos-justos v9.31, read-only, hash + suíte)
    └─> er-valuation      (wrapper: contrato do caso, rotas, cenários, ponte, reversa, sensibilidades)
          └─> er-analise  (processo, julgamento, autonomia)
                └─> er-relatorio (builder de 3 abas + QC de 3 níveis)
@@ -508,7 +508,7 @@ Nenhum motor de valuation novo é construído sem metodologia canônica e suíte
 Cada item termina verificável. O legado só sai no fim.
 
 1. **Este documento** aprovado no repositório.
-2. **Vendor congelado**: copiar a skill v9.24, gerar manifest de hashes, ligar `selftest` + `testes.py`
+2. **Vendor congelado**: copiar a skill v9.31, gerar manifest de hashes, ligar `selftest` + `testes.py`
    ao CI, escrever `er-multiplos-justos` como índice sem paráfrase.
 3. **`er-valuation`**: contrato do caso, rotas, cenários, ponte para preço, SOTP, reversa,
    sensibilidades — com testes.

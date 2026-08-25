@@ -134,6 +134,14 @@ def _exigir_lista(valor: Any, campo: str) -> list:
 # subconjunto que TEM de estar presente em todo cenário daquela rota — o
 # resto é opcional (por exemplo `gp`, que só importa quando a convenção
 # terminal é `gordon`).
+#
+# Fora deste vocabulário, por decisão: `ev`/`pe` também aceitam uma família de
+# inputs OPCIONAIS do gate de coerência do vetor — `--rir-observado`,
+# `--ebitda-ic` e, desde v9.31, `--cash-yield` — que só confrontam/divergem um
+# resultado já calculado, nunca mudam o valuation em si. Nenhum dos três entra
+# em PREMISSAS_FIRM/PREMISSAS_EQUITY nem vira flag por `motor.py`. `--cash-
+# yield` recebe o MESMO tratamento dos dois irmãos mais antigos: decisão de
+# não expor, não omissão.
 # --------------------------------------------------------------------------
 
 PREMISSAS_FIRM: frozenset = frozenset({

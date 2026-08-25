@@ -6,7 +6,7 @@ description: USE QUANDO precisar da metodologia canônica de valuation do fleet 
 # er-multiplos-justos — índice do vendor congelado
 
 Este arquivo **não contém metodologia**. A metodologia canônica é a skill `multiplos-justos`
-v9.24, copiada byte a byte. Ela vive em `vendor/multiplos-justos/` na raiz do repositório, **fora
+v9.31, copiada byte a byte. Ela vive em `vendor/multiplos-justos/` na raiz do repositório, **fora
 de `skills/`**: o pacote declara `name: multiplos-justos` no próprio frontmatter do `SKILL.md` e,
 se ficasse sob `skills/`, estaria sujeito a ser descoberto como skill, colidindo com a skill
 standalone do usuário. A cópia é verificada por sha256 em `manifest_vendor.json`. Regra do desenho
@@ -29,12 +29,14 @@ mal. Leia o arquivo do vendor.
 
 ```bash
 python vendor/multiplos-justos/scripts/justos.py selftest
-python vendor/multiplos-justos/scripts/testes.py
+python vendor/multiplos-justos/scripts/testes.py --phase model
+python vendor/multiplos-justos/scripts/testes.py --phase cli
 ```
 
-O catálogo de comandos do motor está no `SKILL.md` do vendor — não é reproduzido aqui. Nenhuma
-conta de valuation é feita fora do motor: sem prosa, sem planilha, sem Python novo, sem JS novo
-(regra inviolável 1 do desenho v4).
+Duas invocações frescas, nessa ordem — sem `--phase`, o script recusa e devolve as duas linhas
+corretas. O catálogo de comandos do motor está no `SKILL.md` do vendor — não é reproduzido aqui.
+Nenhuma conta de valuation é feita fora do motor: sem prosa, sem planilha, sem Python novo, sem JS
+novo (regra inviolável 1 do desenho v4).
 
 ## Integridade da cópia
 

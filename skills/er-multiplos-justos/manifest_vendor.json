@@ -1,25 +1,26 @@
 {
   "metodologia": "multiplos-justos",
-  "versao": "v9.24",
-  "copiado_em": "2026-08-21",
+  "versao": "v9.31",
+  "copiado_em": "2026-08-25",
   "raiz_do_pacote": "vendor/multiplos-justos",
   "raiz_do_pacote_relativa_a": "raiz do repositorio (nao ao diretorio desta skill)",
-  "origem": "pacote v9.24 da skill de usuario `multiplos-justos`, fornecido pelo dono (arquivo `multiplos-justos-v9 24.zip`). O caminho da skill instalada e EFEMERO e nao e registrado: a identidade da copia e dada por versao + os sha256 abaixo.",
+  "origem": "pacote v9.31 da skill de usuario `multiplos-justos`, fornecido pelo dono (arquivo `multiplos-justos-v9_31.zip`), substituindo a copia congelada da v9.24. O caminho da skill instalada e EFEMERO e nao e registrado: a identidade da copia e dada por versao + os sha256 abaixo.",
   "read_only": "Copia congelada. Alterar scripts/justos.py ou os numeros ancorados nos docs quebra tests/test_vendor_multiplos_justos.py E a propria suite do vendor (scripts/testes.py reconfere motor e ancoras a cada execucao); o texto livre da metodologia nao passa por essa reconferencia e fica coberto so pelo sha256 abaixo. Evolucao da metodologia e decisao humana explicita: substituir o pacote inteiro e regenerar este manifest.",
-  "regenerar": "ver docs/superpowers/plans/2026-08-21-v4-item2-vendor-multiplos-justos.md, Task 1 Step 5. A raiz do pacote passou a ser vendor/ na raiz do repositorio, fora de skills/ (Task 2b).",
+  "regenerar": "ver docs/superpowers/plans/2026-08-21-v4-item2-vendor-multiplos-justos.md, Task 1 Step 5, para a receita original (raiz do pacote e vendor/ na raiz do repositorio desde a Task 2b, fora de skills/). Atualizacoes de versao seguem a mesma receita: apagar os 7 arquivos antigos, extrair o pacote novo no lugar, gerar os hashes do disco e regravar este manifest.",
   "por_que_fora_de_skills": "O pacote declara `name: multiplos-justos` no frontmatter do proprio SKILL.md. Sob skills/, um loader que varra recursivamente registraria uma segunda skill com esse nome, colidindo com a skill standalone do usuario. Fora de skills/, nenhuma profundidade de varredura o alcanca. Invariante travada em tests/test_vendor_multiplos_justos.py.",
   "suite": {
     "selftest": "python vendor/multiplos-justos/scripts/justos.py selftest",
-    "completa": "python vendor/multiplos-justos/scripts/testes.py",
-    "observado_em_2026-08-21": "selftest OK (0,2s); suite completa: TODOS OS TESTES PASSARAM (10,4s, exit 0) — portatil, sem rede e sem planilha externa"
+    "fase_model": "python vendor/multiplos-justos/scripts/testes.py --phase model",
+    "fase_cli": "python vendor/multiplos-justos/scripts/testes.py --phase cli",
+    "observado_em_2026-08-25": "selftest OK (SELFTEST OK - anchors enterprise/APV/ponte/rampa preservados); fase model (advanced+core) ~11s, termina em 'FASE CORE PASSOU.'; fase cli ~5s, termina em 'FASE CLI PASSOU.' - invocacao unica sem --phase agora recusa (rc=2) e imprime as duas invocacoes corretas; deliberado, pois a fase cli abre 20+ subprocessos reais e uma invocacao so arrisca falso negativo por quota de subprocessos do ambiente. Portatil, sem rede e sem planilha externa."
   },
   "arquivos": {
-    "CHANGELOG.md": "70381f56235639394a8bc9d8ce16a44eb18ddae6603516496b56a91eef467b13",
-    "SKILL.md": "f1a9e15e7b1ae8d709c38fec2e199c50a84670be011133eb1afa46ff56a56871",
-    "references/aplicacao.md": "fc29e40a08b2f0f85d983a90d1b5ed84faae5444bb069321fc1c7c0db130810d",
-    "references/derivacao.md": "fcb406f01e9a67a05fd33542565e65bed35fd28125c0ae5f5ddc9fc386d5a5bb",
-    "references/paper-multiplos-justos-v3.md": "15104b5790250dc33354017e35356a1f5ec07287a7c1a677f4e5d59be38927be",
-    "scripts/justos.py": "919c38eafc3bc327a0fbd79eded70163eb43abe368a22040d4f7c2f25bd49867",
-    "scripts/testes.py": "d2a57192f2fad5a7162ab4d48cd07364b257c793c0bf3b9bd2b38456e81475db"
+    "CHANGELOG.md": "d60db4bb3f0969ba4448b11710c0595c3525c6f50613e48d08fb5de5fe650950",
+    "SKILL.md": "b7c6f4ac064e0f92b0ffa382da3102d624f90c1f6c982d922ba77942a922af95",
+    "references/aplicacao.md": "f35a7cb3c0a57dd1bc0df6ccdd121beca8164ec6915956aaf9c9b4bed28e19a5",
+    "references/derivacao.md": "e7607ef14dfae0328047a18426ef41834a4399ff188273e0eba9d7d957ad7bbb",
+    "references/paper-multiplos-justos-v3.md": "f57935ec9cd14096519ac21f2de5e0397b9efa44854a74d0398cf5b72297be9f",
+    "scripts/justos.py": "580fb066cb1a548d9d8bb04c15de476f83b6068bf0286170efd96415c446d129",
+    "scripts/testes.py": "58020c6845f9e2c0eedabb5ebe7b2f763a2c54dcfde592feb65e7d59bbe93ede"
   }
 }

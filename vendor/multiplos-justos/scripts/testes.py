@@ -5,10 +5,13 @@ Múltiplos Justos — suíte de validação INDEPENDENTE (além dos anchors do s
 Reprodução de anchor ≠ validação: aqui vão property-based tests (identidades que devem
 valer em qualquer combinação válida), reconciliação por fluxos construídos explicitamente
 (DCF ↔ renda residual; FCFE@Ke_t ↔ APV), e boundary tests (limites e regiões degeneradas).
-Uso: python scripts/testes.py   (sai com código 0 se tudo passar; use o mesmo interpretador
-em que o motor roda — a suíte se auto-invoca por sys.executable)
+Uso de release: rode em DUAS invocações frescas:
+  python scripts/testes.py --phase model
+  python scripts/testes.py --phase cli
+Cada comando sai com código 0 se sua fase passar. A separação evita que ambientes com quota de
+subprocessos produzam falso negativo depois de dezenas de execuções reais do CLI.
 """
-import sys, itertools
+import sys, itertools, os
 
 # [v9.9] A suíte imprime ≡ ↑ ↓ e acentos. Em locale não-UTF-8 (cp1252, Windows PT-BR) isso
 # estoura em UnicodeEncodeError assim que a saída é redirecionada — falha de codec, não de
@@ -16,7 +19,7 @@ import sys, itertools
 for _fluxo in (sys.stdout, sys.stderr):
     if hasattr(_fluxo, 'reconfigure'):
         _fluxo.reconfigure(encoding='utf-8')
-from justos import (ev_nopat, pe, apv_recursao, solve, solve_full, identificacao,
+from justos import (ev_nopat, ev_ebitda, pe, apv_recursao, solve, solve_full, identificacao,
                     tv_canon, normaliza_ebitda, fator_h, rentab_pos_degrau,
                     elasticidade_exposicao, elasticidade_operacional, registro_drivers)
 
@@ -119,17 +122,20 @@ def prop_gradiente_g():
     print('  sinal do gradiente em g (forward) = sinal do spread, sob convergencia')
 
 def prop_pe_caixa():
-    """[propriedade do módulo de política] caixa/E=0 ⟹ neutralidade ROE=Ke no P/L fwd;
-    caixa/E>0 quebra a neutralidade (P/L fwd sobe com g) — e a decomposição operacional
-    (gde=nde=0) recupera a neutralidade exata."""
+    """[v9.30] Na `book`, clean surplus implica Div + E_n: caixa/E é neutro e ROE=Ke,
+    com book=Ke, devolve P/L forward = 1/Ke para qualquer caixa. Nas convenções sem book
+    terminal, o módulo FCFE proporcional continua podendo carregar efeito-caixa."""
     for ke in (0.10, 0.15, 0.22):
         for g in (0.0, 0.03, 0.06):
-            m0 = pe(g, ke, ke, 10, 0.0, 0.0, tv='book') / (1 + g)
-            check('neutralidade equity caixa=0', abs(m0 - 1 / ke) < 1e-9, f'(ke={ke} g={g})')
-        mc0 = pe(0.0, ke, ke, 10, 0.20, 0.0, tv='book')
-        mc6 = pe(0.06, ke, ke, 10, 0.20, 0.0, tv='book') / 1.06
-        check('caixa quebra neutralidade', mc6 > mc0 + 1e-9, f'(ke={ke})')
-    print('  neutralidade equity: exata com caixa/E=0; quebrada com caixa (módulo de política)')
+            for cx in (0.0, 0.10, 0.20, 0.50):
+                m = pe(g, ke, ke, 10, cx, 0.0, tv='book') / (1 + g)
+                check('neutralidade equity book independe de caixa', abs(m - 1 / ke) < 1e-9,
+                      f'(ke={ke} g={g} caixa={cx})')
+        # `convergencia` preserva o módulo FCFE legado e, com caixa, não precisa ser neutra.
+        c0 = pe(0.06, ke, ke, 10, 0.0, 0.0, tv='convergencia') / 1.06
+        c2 = pe(0.06, ke, ke, 10, 0.20, 0.0, tv='convergencia') / 1.06
+        check('módulo não-book ainda distingue caixa', c2 > c0 + 1e-9, f'(ke={ke})')
+    print('  neutralidade equity: book = Div + E_n e é invariante a caixa; não-book mantém módulo FCFE')
 
 # ---------- 2. RECONCILIATION TESTS ----------
 def rec_dcf_eva():
@@ -397,13 +403,44 @@ def bnd_aliases():
     print('  aliases legados: ic≡book, spread≡gordon, número a número')
 
 def bnd_conflacao():
-    """[v8] --roic-book altera SÓ o terminal; sem ele, book == comportamento legado."""
+    """[v8, atualizado v9.26] --roic-book altera SÓ o terminal; sem ele, book == legado.
+    Sob o IC acumulado (v9.26) o médio só entra pela âncora inicial: a diferença de TV entre
+    com_book e legado é exatamente (1+g)·(1/rb − 1/roic)/(1+w)^n."""
     legado = ev_nopat(0.05, 0.25, 0.07, 10, tv='book')
     com_book = ev_nopat(0.05, 0.25, 0.07, 10, tv='book', roic_book=0.10)
-    dif_tv = (1.05 ** 11 / (0.10 * 1.07 ** 10)) - (1.05 ** 11 / (0.25 * 1.07 ** 10))
+    dif_tv = 1.05 * (1 / 0.10 - 1 / 0.25) / 1.07 ** 10
     check('roic_book move só o TV', abs((com_book - legado) - dif_tv) < 1e-12)
     check('sem roic_book = legado', ev_nopat(0.05, 0.25, 0.07, 10, tv='book', roic_book=None) == legado)
     print('  conflação marginal×médio: --roic-book move exatamente o TV, nada mais')
+
+def rec_v926_book_acumulado():
+    """[v9.26] Caso da auditoria ago/26: g 5%, marginal 20%, médio inicial 10%, W 8%, n 10.
+    O TV congelado dava EV/NOPAT_1 = 13,68 (+11,9%); o IC acumulado dá 12,2261. Contraprova
+    por acumulação explícita ano a ano + os três colapsos (médio=marginal; g=0; sem roic_book)."""
+    g, r, rb, w, n = 0.05, 0.20, 0.10, 0.08, 10
+    m = ev_nopat(g, r, w, n, tv='book', roic_book=rb)
+    check('v9.26: caso da auditoria — EV/NOPAT_0 = 12,8374', abs(m - 12.8374) < 5e-4, f'({m})')
+    check('v9.26: caso da auditoria — EV/NOPAT_1 = 12,2261', abs(m / (1 + g) - 12.2261) < 5e-4)
+    # contraprova: fluxos + IC acumulado, sem a forma fechada
+    nop = [(1 + g) ** t for t in range(0, n + 2)]
+    ic = nop[1] / rb
+    for t in range(1, n + 1):
+        ic += (g / r) * nop[t]
+    m_exp = sum(nop[t] * (1 - g / r) / (1 + w) ** t for t in range(1, n + 1)) + ic / (1 + w) ** n
+    check('v9.26: forma fechada = acumulação explícita (1e-12)', abs(m - m_exp) < 1e-12)
+    check('v9.26: ROIC médio deriva 10% → 12,39% no ano n', abs(nop[n + 1] / ic - 0.1239) < 5e-4)
+    # colapsos
+    check('v9.26: colapso médio=marginal (fórmula antiga exata)',
+          abs(ev_nopat(g, r, w, n, tv='book', roic_book=r)
+              - (sum(nop[t] * (1 - g / r) / (1 + w) ** t for t in range(1, n + 1))
+                 + nop[n + 1] / (r * (1 + w) ** n))) < 1e-12)
+    check('v9.26: colapso g=0 (IC_n = 1/book — média não deriva sem capital novo)',
+          abs(ev_nopat(0.0, r, w, n, tv='book', roic_book=rb)
+              - (sum(1 / (1 + w) ** t for t in range(1, n + 1)) + 1 / (rb * (1 + w) ** n))) < 1e-12)
+    check('v9.26: ev_ebitda propaga a correção',
+          abs(ev_ebitda(g, r, w, n, 0.15, 0.15, tv='book', roic_book=rb) - m * 0.85 * 0.85) < 1e-12)
+    print('  v9.26: TV da book por IC acumulado — caso da auditoria, contraprova e colapsos')
+
 
 # ---------- 5. CLI INTEGRATION (v8.4) ----------
 # A matemática validada acima não garante o PIPELINE: o bug da v8.3 (NameError em diag_eq no
@@ -412,18 +449,19 @@ def bnd_conflacao():
 # via subprocess, exige returncode 0, JSON parseável (NaN/Inf viram null — jprint) e a presença
 # dos diagnósticos esperados no output.
 def rec_v98():
-    """[v9.8] Fechamento Fases 1-2: (I-01) os DOIS branches do rev --resolver cap ecoam o
-    cabeçalho completo de condicionamento (premissa_regime + premissas_fixadas + guardas/moeda
-    quando aplicáveis); (C-02) regime APV renomeado hp (Harris-Pringle), alias legado 'me'
-    aceito número a número com aviso — padrão ic->book / spread->gordon."""
+    """[v9.28] Mantém os checks de condicionamento da reversa e trava o APV canônico.
+    Desde v9.28 hp/me NÃO são aliases: pedir uma convenção não implementada deve falhar
+    explicitamente em vez de devolver silenciosamente o regime ku."""
     import subprocess, json, os
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'justos.py')
     def run_json(args):
         r = subprocess.run([sys.executable, script] + args, capture_output=True, text=True,
                            encoding='utf-8')
-        check('v9.8 CLI rc=0', r.returncode == 0, f'({args[0]} {args[2] if len(args)>2 else ""}: {r.stderr[-160:]})')
+        check('v9.28 CLI rc=0', r.returncode == 0, f'({args[0]}: {r.stderr[-160:]})')
         return json.loads(r.stdout)
-    # (I-01) branch CRESCENTE (convergencia, spread positivo) — o caso que escapou de 3 rodadas
+    def run_fail(args):
+        return subprocess.run([sys.executable, script] + args, capture_output=True, text=True,
+                              encoding='utf-8')
     cab = ('premissa_regime', 'premissas_fixadas', 'faixa_de_busca')
     d1 = run_json(['rev', '--alvo', '10', '--resolver', 'cap', '--base', 'nopat',
                    '--g', '5', '--roic', '15', '--wacc', '7', '--tv', 'convergencia',
@@ -433,36 +471,22 @@ def rec_v98():
     check('cap crescente: moeda ecoada', d1.get('convencao_moeda') == 'brl-nominal')
     check('cap crescente: variável cap não ecoada como fixada',
           'CAP_n_anos' not in d1.get('premissas_fixadas', {}).get('informadas', {}))
-    # branch DECRESCENTE (gordon com spread negativo) — regressão do que já funcionava
     d2 = run_json(['rev', '--alvo', '10', '--resolver', 'cap', '--base', 'nopat',
                    '--g', '3', '--roic', '4', '--wacc', '7', '--tv', 'gordon',
                    '--roic-tv', '4', '--gp', '2'])
-    check('cap decrescente: cabeçalho completo', all(k in d2 for k in cab),
-          f'(faltam: {[k for k in cab if k not in d2]})')
-    # (C-02 + APV-01/v9.10) ku é o canônico; hp e me são aliases avisados; mm intacto
+    check('cap decrescente: cabeçalho completo', all(k in d2 for k in cab))
     base = ['apv', '--fcff1', '10', '--g', '3', '--n', '5', '--ku', '12', '--kd', '8',
             '--tax', '30', '--d0', '40']
     dku = run_json(base + ['--conv', 'ku'])
-    dhp = run_json(base + ['--conv', 'hp'])
-    dme = run_json(base + ['--conv', 'me'])
     dmm = run_json(base + ['--conv', 'mm'])
-    check('APV-01: ku nomeia o mecanismo (shields a Ku sobre dívida exógena)',
-          'Ku' in dku.get('convencao', '') and 'EXÓGENA' in dku.get('convencao', ''))
-    check('APV-01: ku canônico não avisa alias', 'aviso_alias' not in dku)
-    # o rótulo PODE citar Harris-Pringle como convenção de RISCO dos shields; o que não pode é
-    # alegar a política de dívida que o motor não implementa
-    check('APV-01: ku NÃO alega rebalanceamento contínuo',
-          'rebalanceamento contínuo' not in dku.get('convencao', '')
-          and 'REBALANCEADA' not in dku.get('regime_divida', ''))
-    for al, d in (('hp', dhp), ('me', dme)):
-        check(f'APV-01: alias {al} == ku número a número',
-              d['V0'] == dku['V0'] and d['E0'] == dku['E0'] and d['Ke_t_%'] == dku['Ke_t_%'])
-        check(f'APV-01: alias {al} avisa', 'aviso_alias' in d)
-        check(f'APV-01: regime_divida do {al} declara o alias', 'alias' in d.get('regime_divida', ''))
-    check('APV-01: aviso do hp explica que D/V não é constante',
-          'CONSTANTE' in dhp.get('aviso_alias', '') or 'constante' in dhp.get('aviso_alias', ''))
-    check('C-02: mm intacto', 'MM' in dmm.get('convencao', '') and 'aviso_alias' not in dmm)
-    print('  v9.8/v9.10: cap com condicionamento completo; APV canônico ku com aliases hp/me')
+    check('APV: ku nomeia mecanismo sem alegar HP completo',
+          'Ku' in dku.get('convencao', '') and 'EXÓGENA' in dku.get('convencao', '')
+          and 'não é mantido constante' in dku.get('convencao', '').lower())
+    check('APV: mm intacto', 'MM' in dmm.get('convencao', ''))
+    for al in ('hp', 'me'):
+        rr = run_fail(base + ['--conv', al])
+        check(f'APV: {al} rejeitado pelo parser', rr.returncode != 0 and 'invalid choice' in rr.stderr)
+    print('  v9.28: reversa condicionada + APV mm/ku canônicos; hp/me rejeitados')
 
 
 def rec_lint_portabilidade(alvo=None):
@@ -523,9 +547,10 @@ def rec_lint_semantico():
          'D-01: "vantagem morre por completo" (leia: ancoragem no IC mensurado, condicionada)'),
         (r'significado\s+padr[ãa]o\s+de\s+["\'“]a\s+vantagem',
          'D-01: convergencia como "significado padrão" da exaustão total'),
-        # B-01 (rodada 5): a trava da 'book' é do caso CONFLACIONADO. Com o book informado
-        # separadamente o TV não se move com o marginal, a perversidade não existe e a raiz é
-        # CONDICIONADA (tese de saída pelo capital investido), nunca proibida ou vazia.
+        # B-01 (rodada 5, atualizado v9.26): a trava da 'book' é do caso CONFLACIONADO. Com o
+        # book informado separadamente a perversidade não existe (o TV acompanha o marginal pelo
+        # IC acumulado — v9.26) e a raiz é CONDICIONADA (tese de saída pelo capital investido),
+        # nunca proibida ou vazia.
         (r'book[^.\n]{0,60}?\b(proibida|descartada)\b',
          'B-01: trava da book declarada sem condicionar ao caso conflacionado'),
         (r'regi[ãa]o\s+proibida',
@@ -749,23 +774,36 @@ def rec_roundtrip():
         check(f'roundtrip iso/{tv}: toda raiz da grade reconcilia o alvo',
               len(ok) == len(com_raiz), f'({len(ok)}/{len(com_raiz)} com check zero)')
         casos += len(com_raiz)
-    # caso BI-RADICULAR explícito (§6.7). Sob 'book' com spread negativo o múltiplo é NÃO
-    # monotônico em g: há um máximo INTERIOR, e todo alvo abaixo dele tem DUAS raízes. É aqui que
-    # realimentar "o g implícito" no singular é erro de tipo lógico, não de cálculo — e é aqui que
-    # a propriedade de ida-e-volta tem de valer para as DUAS, não para a que o solver achar antes.
-    roic_b, w_b, n_b, rb_b = 0.08, 0.07, 15, 0.10
-    fb = lambda gg: ev_nopat(gg, roic_b, w_b, n_b, tv='book', roic_book=rb_b)
-    grade = [i / 2000 for i in range(0, int(roic_b * 0.999 * 2000))]
-    alvo2 = max(fb(g) for g in grade) * 0.995
-    r2 = solve(lambda gg: fb(gg) - alvo2, -0.30, min(0.60, roic_b * 0.999))
-    check('roundtrip §6.7: alvo abaixo do máximo interior devolve DUAS raízes em g',
-          len(r2) == 2, f'({[round(x, 6) for x in r2]})')
-    for r in r2:
-        check('roundtrip §6.7: cada raiz do caso bi-radicular reconcilia o alvo',
-              abs(fb(r) - alvo2) < 1e-6, f'(g={r:.6f} M={fb(r):.9f} alvo={alvo2:.9f})')
-    casos += len(r2); raizes_multiplas += 1
-    print(f'  v9.11: ida-e-volta output→input — {casos} reversões reinjetadas, duas bases, três '
-          f'convenções, dois lados, e o caso bi-radicular do §6.7 com as duas raízes verificadas')
+    # [v9.27] Topologia em g sob 'book' separado: o gradiente do múltiplo FORWARD segue o
+    # spread marginal − W; isso NÃO implica monotonicidade da base CORRENTE, pois M0=(1+g)·M1.
+    # Portanto a reversa em g pode continuar bi-radicular na base corrente mesmo com IC acumulado.
+    w_b, n_b, rb_b = 0.07, 15, 0.10
+    for roic_b, sobe in ((0.08, True), (0.05, False)):
+        ff = lambda gg: ev_nopat(gg, roic_b, w_b, n_b, tv='book', roic_book=rb_b) / (1 + gg)
+        grade = [i / 2000 for i in range(0, int(roic_b * 0.999 * 2000))]
+        vals = [ff(g) for g in grade]
+        mono = all((b > a) == sobe for a, b in zip(vals, vals[1:]))
+        check(f'roundtrip §6.7/v9.27: book separado FORWARD, dM/dg segue o spread '
+              f'(marginal {roic_b:.0%} {">" if sobe else "<"} W)', mono)
+
+    # Contraprova corrente: marginal 10% < W 12%, book inicial 10%, n=15, alvo 8,65x.
+    # A curva corrente tem máximo interior e DUAS raízes — a patologia não desaparece com IC acumulado.
+    r_b, w_c, rb_c, n_c, alvo_c = 0.10, 0.12, 0.10, 15, 8.65
+    fc = lambda gg: ev_nopat(gg, r_b, w_c, n_c, tv='book', roic_book=rb_c)
+    roots_c = solve(lambda gg: fc(gg) - alvo_c, -0.30, r_b * 0.999)
+    check('roundtrip §6.7/v9.27: base corrente preserva caso bi-radicular',
+          len(roots_c) == 2, f'({[round(x, 9) for x in roots_c]})')
+    anchors = (0.007552381209283143, 0.04410925822752708)
+    check('roundtrip §6.7/v9.27: duas raízes corrente nos anchors',
+          len(roots_c) == 2 and all(abs(a-b) < 2e-8 for a,b in zip(roots_c, anchors)),
+          f'({roots_c})')
+    for rr in roots_c:
+        check('roundtrip §6.7/v9.27: cada raiz corrente reconcilia 8,65x',
+              abs(fc(rr) - alvo_c) < 1e-9, f'(g={rr:.9f}, M={fc(rr):.9f})')
+    casos += len(roots_c); raizes_multiplas += 1
+    print(f'  v9.27: ida-e-volta output→input — {casos} reversões reinjetadas; gradiente forward '
+          f'preservado e contraprova bi-radicular corrente com duas raízes verificada')
+
 
 
 def rec_rev_sugestao():
@@ -820,9 +858,10 @@ def rec_regime_driver():
     conv = run_json(base + ['--tv', 'convergencia'])
     check('regime driver: convergencia sobre base normalizada AVISA o congelamento nominal',
           'aviso_regime_driver' in conv, f'(chaves: {sorted(conv)[:9]})')
-    check('regime driver: aviso aponta as duas rotas (Ke real OU preço gratuito no terminal)',
+    check('regime driver: aviso distingue rota real exata de terminal-only aproximada',
           'real' in conv.get('aviso_regime_driver', '').lower()
-          and 'gordon' in conv.get('aviso_regime_driver', '').lower())
+          and 'gordon' in conv.get('aviso_regime_driver', '').lower()
+          and 'aproxima' in conv.get('aviso_regime_driver', '').lower())
     gz = run_json(base + ['--tv', 'gordon', '--roic-tv', '20', '--gp', '0'])
     check('regime driver: gordon com gp=0 também congela — avisa',
           'aviso_regime_driver' in gz)
@@ -1036,10 +1075,10 @@ def rec_doc_anchors():
          lambda: ev_nopat(0.0, 0.03, 0.07, 10, tv='book'), 23.97, 0.005),
         ('SKILL: idem, ROIC 50%', 'SKILL.md', '8,04x', 'EV/NOPAT corrente',
          lambda: ev_nopat(0.0, 0.50, 0.07, 10, tv='book'), 8.04, 0.005),
-        ('SKILL: caixa quebra ROE=Ke (g=0)', 'SKILL.md', '8,33x', 'P/L forward',
+        ('SKILL: book ROE=Ke neutro com caixa (g=0)', 'SKILL.md', 'Caixa/E é neutro', 'P/L forward',
          lambda: pe(0.0, 0.12, 0.12, 10, 0.20, 0.0, tv='book'), 8.33, 0.005),
-        ('SKILL: idem, g=6%', 'SKILL.md', '9,04x', 'P/L forward',
-         lambda: pe(0.06, 0.12, 0.12, 10, 0.20, 0.0, tv='book') / 1.06, 9.04, 0.005),
+        ('SKILL: idem, g=6%', 'SKILL.md', 'independentemente de caixa/E', 'P/L forward',
+         lambda: pe(0.06, 0.12, 0.12, 10, 0.20, 0.0, tv='book') / 1.06, 8.3333333333, 0.005),
         ('SKILL: gap entre convenções (book)', 'SKILL.md', '9,86x', 'EV/NOPAT corrente',
          lambda: ev_nopat(0.05, 0.50, 0.07, 10, tv='book'), 9.86, 0.005),
         ('SKILL: gap entre convenções (convergencia)', 'SKILL.md', '20,55x', 'EV/NOPAT corrente',
@@ -1053,10 +1092,10 @@ def rec_doc_anchors():
         ('paper §6.3: idem, ROIC 15%', 'references/paper-multiplos-justos-v3.md',
          '10,89x', 'EV/NOPAT forward',
          lambda: ev_nopat(0.03, 0.15, 0.07, 10, tv='book') / 1.03, 10.89, 0.005),
-        ('SKILL: book separado, marginal 2% (v9.10)', 'SKILL.md', '2,96x', 'EV/NOPAT corrente',
-         lambda: ev_nopat(0.03, 0.02, 0.07, 10, tv='book', roic_book=0.10), 2.96, 0.005),
-        ('SKILL: book separado, marginal 8% (v9.10)', 'SKILL.md', '12,14x', 'EV/NOPAT corrente',
-         lambda: ev_nopat(0.03, 0.08, 0.07, 10, tv='book', roic_book=0.10), 12.14, 0.005),
+        ('SKILL: book separado, marginal 2% (v9.26)', 'SKILL.md', '10,16x', 'EV/NOPAT corrente',
+         lambda: ev_nopat(0.03, 0.02, 0.07, 10, tv='book', roic_book=0.10), 10.16, 0.005),
+        ('SKILL: book separado, marginal 8% (v9.26)', 'SKILL.md', '12,59x', 'EV/NOPAT corrente',
+         lambda: ev_nopat(0.03, 0.08, 0.07, 10, tv='book', roic_book=0.10), 12.59, 0.005),
         ('paper §6.12: caso A segmentado', 'references/paper-multiplos-justos-v3.md',
          '1.393,4', 'valor absoluto',
          lambda: segmentos(20, 0.40, 0.06, 80, 0.08, 0.02)[0], 1393.4, 0.1),
@@ -1133,13 +1172,14 @@ def rec_doc_anchors():
 
 
 def rec_b01():
-    """[v9.10 / rodada 5, B-01] A trava da 'book' com marginal < custo é do caso CONFLACIONADO,
-    não da convenção. Com o retorno médio informado à parte, o TV fica ancorado NELE: o múltiplo é
-    monotonicamente CRESCENTE no marginal (a perversidade não existe), o TV não se move, e a raiz
-    é CONDICIONADA a tese de saída pelo capital investido — nunca proibida nem economicamente
-    vazia. Sub-diagnóstico próprio quando o próprio book fica abaixo do custo: aí a perversidade
-    MIGRA para o papel médio, porque TV = NOPAT/book excede NOPAT/W pelo fator W/book (cruzamento
-    exato em book = W)."""
+    """[v9.10 / rodada 5, B-01 — atualizado v9.26] A trava da 'book' com marginal < custo é do
+    caso CONFLACIONADO, não da convenção. Com o retorno médio informado à parte, o múltiplo é
+    monotonicamente CRESCENTE no marginal (a perversidade não existe) e a raiz é CONDICIONADA a
+    tese de saída pelo capital investido — nunca proibida nem economicamente vazia. [v9.26] O TV
+    ACOMPANHA o marginal pelo termo de acumulação (o capital novo entra ao marginal e o médio
+    deriva) — a contraprova por acumulação explícita ano a ano fecha com a forma fechada do motor.
+    Sub-diagnóstico próprio quando o próprio book fica abaixo do custo: a âncora inicial
+    (IC_0 = NOPAT/book) excede NOPAT/W pelo fator W/book (cruzamento exato em book = W)."""
     from justos import iso_curva, diag_firm, diag_eq
     g, w, n, rb = 0.03, 0.07, 10, 0.10
     rents = (0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08)
@@ -1147,14 +1187,24 @@ def rec_b01():
     ms = [ev_nopat(g, r, w, n, tv='book', roic_book=rb) for r in rents]
     check('B-01: múltiplo CRESCE com o marginal quando o book é separado',
           all(b > a for a, b in zip(ms, ms[1:])), f'({[round(m, 4) for m in ms]})')
-    check('B-01: anchor da contraprova (marginal 5%, book 10%, W 7%, n 10 ⟹ 10,30x)',
-          abs(ms[3] - 10.3) < 5e-4, f'({ms[3]})')
-    # (2) o TV NÃO se move com o marginal — recomputado por diferença contra o explícito
+    check('B-01: anchor da contraprova (marginal 5%, book 10%, W 7%, n 10 ⟹ 12,10x — v9.26)',
+          abs(ms[3] - 12.1007) < 5e-4, f'({ms[3]})')
+    # (2) [v9.26] o TV ACOMPANHA o marginal pelo IC acumulado — contraprova por acumulação
+    # explícita ano a ano (IC_0 = NOPAT_1/book; IC_t = IC_{t-1} + (g/marginal)·NOPAT_t):
     def tv_implicito(r):
         expl = sum((1 - g / r) * (1 + g) ** t / (1 + w) ** t for t in range(1, n + 1))
         return ev_nopat(g, r, w, n, tv='book', roic_book=rb) - expl
-    tvs = {round(tv_implicito(r), 9) for r in rents}
-    check('B-01: TV imóvel sob variação do marginal (ancorado no book)', len(tvs) == 1, f'({tvs})')
+    def ic_acumulado(r):
+        nop = [(1 + g) ** t for t in range(0, n + 1)]
+        ic = (1 + g) / rb
+        for t in range(1, n + 1):
+            ic += (g / r) * nop[t]
+        return ic
+    check('B-01/v9.26: TV = IC acumulado (capital novo ao marginal), fluxo a fluxo',
+          all(abs(tv_implicito(r) - ic_acumulado(r) / (1 + w) ** n) < 1e-10 for r in rents))
+    check('B-01/v9.26: o TV MOVE com o marginal — capital-light sai com menos patrimônio',
+          tv_implicito(0.08) < tv_implicito(0.02),
+          f'({tv_implicito(0.08):.4f} vs {tv_implicito(0.02):.4f})')
     # (3) no caso CONFLACIONADO a perversidade É real — a trava continua valendo lá
     mc = [ev_nopat(g, r, w, n, tv='book') for r in rents]
     check('B-01: no caso conflacionado o múltiplo CAI com o marginal (perversidade real)',
@@ -1218,17 +1268,16 @@ def rec_apv01():
     check('APV-01: convenção declara dívida exógena E nega a constância de D/V',
           'EXÓGENA' in a['convencao'] and 'não é mantido constante' in a['convencao'].lower()
           and 'rebalanceamento contínuo' not in a['convencao'], f"({a['convencao']})")
-    # aliases: número a número, com aviso
+    # hp/me deixam de ser aliases: função direta também deve rejeitar semântica falsa.
     for al in ('hp', 'me'):
         b = apv_recursao(22.184, 0.11, 10, 0.20, 0.142714285714286, 0.30, 35.0,
                          fcff_tv=50.5317555785773, gtv=0.0, conv=al)
-        check(f'APV-01: alias {al} idêntico a ku', b['V0'] == a['V0'] and b['E0'] == a['E0'])
-        check(f'APV-01: alias {al} avisa', 'aviso_alias' in b)
+        check(f'APV-01: {al} rejeitado explicitamente', 'erro' in b and 'não implementada' in b['erro'])
     # o check de Fernández não pode mais anunciar 'ME'
     check('APV-01: check de Fernández rotulado pelo regime real',
           'ME' not in str(a['check_Ke_dinamico_igual_formula_Fernandez']),
           f"({a['check_Ke_dinamico_igual_formula_Fernandez']})")
-    print('  v9.10/APV-01: canônico ku, D/V ecoado e travado como NÃO constante, aliases avisados')
+    print('  v9.28/APV-01: canônico ku, D/V não constante e aliases semânticos removidos')
 
 
 def rec_p02():
@@ -1283,6 +1332,28 @@ def cli_integration():
             check(f'CLI {nome}: contém "{esp[:44]}"', esp in blob)
         return d
 
+    # [v9.26] --tv ausente: JSON de parada do Gate 1 (nunca usage cru do argparse) e rc=2 —
+    # a mensagem instrui o agente a PERGUNTAR a convenção, não a adivinhar.
+    rc, out, err = run(['ev', '--g', '5', '--roic', '15', '--wacc', '9', '--da', '30',
+                        '--tax', '34'])
+    check('CLI --tv ausente: returncode 2', rc == 2, f'(rc={rc})')
+    try:
+        d_tv = json.loads(out)
+        check('CLI --tv ausente: JSON com erro do Gate 1',
+              'Gate 1' in d_tv.get('erro', '') and 'instrucao' in d_tv and 'opcoes' in d_tv,
+              f'({out[:120]})')
+        check('CLI --tv ausente: instrução manda PARAR e perguntar',
+              'PARE' in d_tv.get('instrucao', ''))
+    except Exception as e:
+        check('CLI --tv ausente: JSON parseável em stdout', False, f'({e}; out={out[:120]})')
+
+    # [v9.27] --tv PRESENTE porém inválido não é ausência de Gate 1: argparse deve dizer invalid choice.
+    rc, out, err = run(['ev', '--g', '5', '--roic', '15', '--wacc', '9', '--da', '30',
+                        '--tax', '34', '--tv', 'xyz'])
+    check('CLI --tv inválido: returncode 2', rc == 2, f'(rc={rc})')
+    check('CLI --tv inválido: mantém diagnóstico invalid choice do argparse',
+          'invalid choice' in err and 'Gate 1' not in out, f'(stdout={out[:80]} stderr={err[-120:]})')
+
     # ev × três convenções (gordon com C7 ecoado)
     run_json('ev book', ['ev', '--g', '5', '--roic', '25', '--roic-book', '10', '--wacc', '7',
                          '--n', '10', '--da', '15', '--tax', '15', '--tv', 'book'])
@@ -1316,6 +1387,14 @@ def cli_integration():
                                   '--g', '6', '--ke', '12', '--gde', '20', '--nde', '0', '--n', '10',
                                   '--tv', 'gordon', '--roe-tv', '15', '--gp', '3'],
              esperados=('identificacao_por_raiz',))
+    # v9.30: iso bifásico trabalha em múltiplos por NI0; equity monetário sem NI0 é escala incompatível.
+    rc, out, err = run(['iso', 'pe', '--alvo', '12', '--ke', '12', '--n', '10', '--tv', 'book',
+                        '--transicao', 'ponte', '--pt-n1', '3', '--pt-ke1', '12', '--pt-gde1', '0',
+                        '--pt-nde1', '0', '--pt-kd', '8', '--pt-tax', '30', '--pt-g1', '5',
+                        '--pt-roe1', '20', '--pt-equity', '100'])
+    check('CLI iso ponte: --pt-equity monetário é bloqueado',
+          rc != 0 and 'misturar as escalas é inconsistente' in err,
+          f'(rc={rc}, stderr={err[-180:]})')
     # NaN -> null: gp >= wacc gera NaN no motor; o JSON tem que continuar válido
     d = run_json('ev NaN vira null', ['ev', '--g', '5', '--roic', '8', '--wacc', '7', '--n', '10',
                                       '--da', '15', '--tax', '15', '--tv', 'gordon',
@@ -1415,11 +1494,11 @@ def cli_integration():
     print('  CLI: 20+ execuções reais por subprocess — JSON válido, diagnósticos presentes, '
           'caso-crash da v8.3 coberto, degrau com trava de conflação')
 
+
 def rec_ponte():
-    """v9 — ponte de releveraging: (1) colapso com estrutura igual; (2) antissimetria do
-    fluxo ao inverter a troca; (3) CONTRAPROVA: num bifásico book, o valor por soma explícita
-    de FCFE (com o evento de estrutura simulado ano a ano) é igual a
-    anuidade_fase1 + rebase·bloco_fase2 + PONTE — a ponte é exatamente o termo que falta."""
+    """v9.30 — ponte de releveraging: (1) colapso com estrutura igual; (2) antissimetria;
+    (3) CONTRAPROVA num bifásico `book` por dividendos + E terminal + evento de estrutura;
+    (4) corte artificial de uma empresa idêntica não altera o valor."""
     from justos import ponte_releveraging
     import random
     # (1) colapso
@@ -1444,22 +1523,21 @@ def rec_ponte():
         nde1, nde2 = min(nde1, gde1), min(nde2, gde2)
         n1, n2 = random.randint(2, 6), random.randint(4, 10)
         kd, tax = random.uniform(0.06, 0.14), 0.30
-        a1, a2 = 1 - (gde1 - nde1), 1 - (gde2 - nde2)
         razao = (1 + nde1) / (1 + nde2)
-        # soma explícita: fase 1 + evento de estrutura + fase 2 + TV book (equity contábil)
-        pv = sum((1 + g1) ** t * (1 - a1 * g1 / r1) / (1 + ke) ** t for t in range(1, n1 + 1))
+        # soma explícita `book`: dividendos + evento de estrutura + dividendos + E terminal.
+        pv = sum((1 + g1) ** t * (1 - g1 / r1) / (1 + ke) ** t for t in range(1, n1 + 1))
         e_pre = (1 + g1) ** (n1 + 1) / r1
         pv += e_pre * (gde2 * razao - gde1) * (1 + kd * (1 - tax)) / (1 + ke) ** (n1 + 1)
         base2 = (1 + g1) ** (n1 + 1) * (r2 / r1) * razao
-        pv += sum(base2 * (1 + g2) ** (s - 1) * (1 - a2 * g2 / r2) / (1 + ke) ** (n1 + s)
+        pv += sum(base2 * (1 + g2) ** (s - 1) * (1 - g2 / r2) / (1 + ke) ** (n1 + s)
                   for s in range(1, n2 + 1))
         e_fim = e_pre * razao * (1 + g2) ** n2
         pv += e_fim / (1 + ke) ** (n1 + n2)
         # composição: anuidade f1 + ponte (motor) + bloco f2 + TV — sem o evento explícito
-        pv_f1 = sum((1 + g1) ** t * (1 - a1 * g1 / r1) / (1 + ke) ** t for t in range(1, n1 + 1))
+        pv_f1 = sum((1 + g1) ** t * (1 - g1 / r1) / (1 + ke) ** t for t in range(1, n1 + 1))
         pt = ponte_releveraging(n1=n1, ke1=ke, ke2=ke, gde1=gde1, nde1=nde1, gde2=gde2, nde2=nde2,
                                 kd=kd, tax=tax, g1=g1, roe1=r1)['PV_ponte']
-        pv_f2 = sum(base2 * (1 + g2) ** (s - 1) * (1 - a2 * g2 / r2) / (1 + ke) ** (n1 + s)
+        pv_f2 = sum(base2 * (1 + g2) ** (s - 1) * (1 - g2 / r2) / (1 + ke) ** (n1 + s)
                     for s in range(1, n2 + 1)) + e_fim / (1 + ke) ** (n1 + n2)
         check(f'ponte: contraprova por soma explícita (sorteio {i + 1})',
               abs((pv_f1 + pt + pv_f2) - pv) < 1e-10,
@@ -1467,9 +1545,8 @@ def rec_ponte():
     # (4) degenerado: bifásico com estrutura igual == pe() monofásico da skill
     from justos import pe as pe_skill
     g, roe, ke, gde, nde, n = 0.11, 0.4483, 0.22, 0.5385, 0.4615, 10
-    a = 1 - (gde - nde)
     for n1 in (2, 5, 8):
-        pv = sum((1 + g) ** t * (1 - a * g / roe) / (1 + ke) ** t for t in range(1, n + 1))
+        pv = sum((1 + g) ** t * (1 - g / roe) / (1 + ke) ** t for t in range(1, n + 1))
         pv += (1 + g) ** (n + 1) / roe / (1 + ke) ** n
         check(f'ponte: bifásico degenerado (corte em n1={n1}) == pe --tv book',
               abs(pv - pe_skill(g, roe, ke, n, gde, nde, tv='book')) < 1e-9)
@@ -1506,16 +1583,16 @@ def rec_iso():
                   f'g={p["g_%"]}% rent={r:.4%} M={m:.6f} alvo={alvo:.6f}')
             casos += 1
     check('iso: amostra de autovalidação não-trivial', casos >= 20, f'{casos} pares')
-    # (2) anchors vF8.1 (reconciliação com a aba Logic da planilha)
-    a1 = iso_curva('pe', 5.733730022636558, 0.22, 10, [0.11], tv='book',
+    # (2) anchors: enterprise vF8.1 + equity book corrigido por clean surplus na v9.30
+    a1 = iso_curva('pe', 5.617294815452462, 0.22, 10, [0.11], tv='book',
                    gde=0.538461538461538, nde=0.461538461538462)['curva'][0]
     a2 = iso_curva('ev', 6.429566333754988, 0.187331578947369, 10, [0.11], tv='book')['curva'][0]
-    check('iso: anchor P/L vF8.1 (ROE* = ROE da Logic)',
+    check('iso: anchor P/L book v9.30 (ROE* preservado)',
           abs(a1['rent_implicita_pct'] - 44.8269230769231) < 1e-7)
     check('iso: anchor EV vF8.1 (ROIC* = ROIC da Logic)',
           abs(a2['rent_implicita_pct'] - 34.3515789473684) < 1e-7)
     # (3) diagnósticos: book abaixo do custo e neutralidade sinalizados
-    d = iso_curva('pe', 5.7337, 0.22, 10, [0.0], tv='book',
+    d = iso_curva('pe', 5.6173, 0.22, 10, [0.0], tv='book',
                   gde=0.538461538461538, nde=0.461538461538462)['curva'][0]
     check('iso: trava book (marginal < custo, SEM book informado) dispara no ramo baixo',
           'conflação' in d['diagnostico'])
@@ -1544,13 +1621,16 @@ def rec_correcoes():
     # (B1) sem rent_book: aviso de conflação presente
     out = iso_curva('pe', 6.0, 0.18, 10, [0.08], tv='book', gde=0.3, nde=0.2)
     check('B1: aviso de conflação sem rent-book', any('conflação' in a for a in out.get('avisos', [])))
-    # (R2) ponte: roe1_book ≡ caminho equity com E0 = NI(1+g)/roe1_book
+    # (R2 v9.30) ponte: as duas rotas coincidem quando ancoram o MESMO E_pre. Com book separado,
+    # E0 não cresce simplesmente a g: E_pre incorpora a retenção ao ROE marginal.
     g1, rb1 = 0.07, 0.19
     pa = ponte_releveraging(n1=4, ke1=0.18, ke2=0.15, gde1=1.0, nde1=0.7, gde2=0.4, nde2=0.3,
                             kd=0.12, tax=0.34, g1=g1, roe1=0.31, roe1_book=rb1)
+    e0_equiv = pa['E_pre_transicao'] / (1 + g1) ** 4
     pb = ponte_releveraging(n1=4, ke1=0.18, ke2=0.15, gde1=1.0, nde1=0.7, gde2=0.4, nde2=0.3,
-                            kd=0.12, tax=0.34, g1=g1, equity=(1 + g1) / rb1)
-    check('R2: ponte roe1-book ≡ base-equity', abs(pa['PV_ponte'] - pb['PV_ponte']) < 1e-12)
+                            kd=0.12, tax=0.34, g1=g1, equity=e0_equiv)
+    check('R2: ponte roe1-book ≡ base-equity quando E_pre é o mesmo',
+          abs(pa['PV_ponte'] - pb['PV_ponte']) < 1e-12)
     pc_ = ponte_releveraging(n1=4, ke1=0.18, ke2=0.15, gde1=1.0, nde1=0.7, gde2=0.4, nde2=0.3,
                              kd=0.12, tax=0.34, g1=g1, roe1=0.31)
     check('R2: aviso de conflação sem roe1-book', any('conflação' in d for d in pc_['diagnosticos']))
@@ -1578,12 +1658,19 @@ def rec_correcoes():
                         '--n', '10', '--tv', 'book'], capture_output=True, text=True,
                        encoding='utf-8')
     check('v9.2: iso sem --transicao falha (argparse required)', r.returncode != 0)
+    r = subprocess.run([sys.executable, _J, 'iso', 'pe', '--alvo', '10', '--ke', '16',
+                        '--n', '12', '--tv', 'book', '--transicao', 'ponte', '--rent-book', '10',
+                        '--pt-n1', '5', '--pt-ke1', '22', '--pt-gde1', '80', '--pt-nde1', '60',
+                        '--pt-kd', '11', '--pt-tax', '30', '--pt-g1', '12', '--pt-roe1', '10.85'],
+                       capture_output=True, text=True, encoding='utf-8')
+    check('v9.31: --rent-book é rejeitado na ponte em vez de ser ignorado',
+          r.returncode != 0 and '--rent-book' in (r.stderr + r.stdout) and 'rejeitado' in (r.stderr + r.stdout))
     out = iso_curva('pe', 10.0, 0.16, 12, [0.15], tv='book', gde=0.3, nde=0.2,
                     transicao='ponte',
                     ponte_params=dict(n1=5, ke1=0.22, gde1=0.8, nde1=0.6, kd=0.11,
                                       tax=0.30, g1=0.12, roe1=0.10846315789473689))
     ct = out['composicao_transicao']
-    check('v9.3: composição roda em modo inversão EXATA', 'EXATA' in ct['composicao'])
+    check('v9.31: composição explicita inversão fechada condicional', 'FECHADA E CONDICIONAL' in ct['composicao'] and 'não é identificação estrutural pura' in ct['composicao'])
     # (R3/R4) diagnósticos novos no pe
     r = subprocess.run([sys.executable, _J, 'pe', '--g', '5', '--roe', '20', '--ke', '15',
                         '--n', '10', '--gde', '30', '--nde', '20', '--tv', 'gordon',
@@ -1598,59 +1685,78 @@ def rec_correcoes():
 
 
 def rec_inversao_bifasica():
-    """v9.3 — regra nova da suíte aplicada: todo comando testado contra CASO VERDADEIRO EXTERNO.
-    A verdade aqui é uma soma explícita de FCFE ano a ano (fase 1 + evento de estrutura +
-    fase 2 + TV book), independente da fórmula fechada. Sorteia-se a empresa bifásica com
-    ROE2 conhecido, calcula-se o alvo pela soma explícita, e a inversão deve recuperá-lo."""
+    """[v9.30] Inversão bifásica contra reconstrução DDM/clean-surplus independente.
+
+    O teste carrega DOIS estados entre fases: patrimônio acumulado e nível de lucro. Inclui
+    ROE_book separado na fase 1 para impedir regressão ao book congelado.
+    """
     from justos import iso_curva
     import random
     random.seed(93)
 
-    def verdade_explicita(g1, r1, ke1, n1, gde1, nde1, g2, r2, ke2, n2, gde2, nde2, kd, tax):
-        a1, a2 = 1 - (gde1 - nde1), 1 - (gde2 - nde2)
+    def verdade_explicita(g1, r1, rb1, ke1, n1, gde1, nde1,
+                          g2, r2, ke2, n2, gde2, nde2, kd, tax):
         razao = (1 + nde1) / (1 + nde2)
-        pv = sum((1 + g1) ** t * (1 - a1 * g1 / r1) / (1 + ke1) ** t for t in range(1, n1 + 1))
-        e_pre = (1 + g1) ** (n1 + 1) / r1
-        pv += e_pre * (gde2 * razao - gde1) * (1 + kd * (1 - tax)) / ((1 + ke1) ** n1 * (1 + ke2))
-        base = (1 + g1) ** (n1 + 1) * (r2 / r1) * razao
-        for s in range(1, n2 + 1):
-            pv += base * (1 + g2) ** (s - 1) * (1 - a2 * g2 / r2) / ((1 + ke1) ** n1 * (1 + ke2) ** s)
-        e_fim = (1 + g1) ** (n1 + 1) / r1 * razao * (1 + g2) ** n2
-        pv += e_fim / ((1 + ke1) ** n1 * (1 + ke2) ** n2)
+        E = (1 + g1) / rb1
+        pv = 0.0
+        # fase 1: dividendos + clean surplus
+        for t in range(1, n1 + 1):
+            ni_t = (1 + g1) ** t
+            dE = (g1 / r1) * ni_t
+            div = ni_t - dE
+            pv += div / (1 + ke1) ** t
+            E += dE
+        e_pre = E
+        # evento de estrutura no ano n1+1
+        pv += (e_pre * (gde2 * razao - gde1) * (1 + kd * (1 - tax))
+               / ((1 + ke1) ** n1 * (1 + ke2)))
+        # semântica histórica do rebase: NI2_1 = NI1_{n1+1}·(ROE2/ROE1)·razao
+        ni2_1 = (1 + g1) ** (n1 + 1) * (r2 / r1) * razao
+        E2 = e_pre * razao
+        for t in range(1, n2 + 1):
+            ni_t = ni2_1 * (1 + g2) ** (t - 1)
+            dE = (g2 / r2) * ni_t
+            div = ni_t - dE
+            pv += div / ((1 + ke1) ** n1 * (1 + ke2) ** t)
+            E2 += dE
+        pv += E2 / ((1 + ke1) ** n1 * (1 + ke2) ** n2)
         return pv
 
-    # anchor: caso verdadeiro vF19 (ROE2 = 43.45%) — o caso que quebrou a v9.2
-    alvo = verdade_explicita(0.12, 0.1085, 0.22, 5, 0.8, 0.6, 0.15, 0.4345, 0.16, 12, 0.3, 0.2,
-                             0.11, 0.30)
+    # anchor histórico com book=marginal: continua recuperando ROE2.
+    alvo = verdade_explicita(0.12, 0.1085, 0.1085, 0.22, 5, 0.8, 0.6,
+                             0.15, 0.4345, 0.16, 12, 0.3, 0.2, 0.11, 0.30)
     out = iso_curva('pe', alvo, 0.16, 12, [0.15], tv='book', gde=0.3, nde=0.2,
                     transicao='ponte',
                     ponte_params=dict(n1=5, ke1=0.22, gde1=0.8, nde1=0.6, kd=0.11,
                                       tax=0.30, g1=0.12, roe1=0.1085))
-    p = out['curva'][0]
-    check('B2: caso que quebrou a v9.2 agora recupera ROE2 = 43.45% exato',
-          abs(p['rent_implicita_pct'] / 100 - 0.4345) < 1e-9 and p['check_multiplo'] == 0.0,
-          f"devolvido: {p.get('rent_implicita_pct')}")
-    # 8 sorteios de empresas bifásicas aleatórias
-    for i in range(8):
+    p0 = out['curva'][0]
+    check('B2/v9.30: anchor recupera ROE2 = 43.45% exato',
+          abs(p0['rent_implicita_pct'] / 100 - 0.4345) < 1e-9 and p0['check_multiplo'] == 0.0,
+          f"devolvido: {p0.get('rent_implicita_pct')}")
+
+    # empresas sorteadas, metade com book inicial separado.
+    for i in range(16):
         ke1 = random.uniform(0.12, 0.26); ke2 = random.uniform(0.10, 0.22)
         g1 = random.uniform(0.0, 0.15); g2 = random.uniform(0.02, min(0.16, ke2 * 0.9))
         r1 = random.uniform(0.08, 0.40); r2 = random.uniform(max(ke2, 0.12), 0.55)
+        rb1 = r1 if i < 8 else random.uniform(0.07, 0.35)
         gde1, nde1 = random.uniform(0.2, 1.2), random.uniform(0.0, 0.9); nde1 = min(nde1, gde1)
         gde2, nde2 = random.uniform(0.1, 0.8), random.uniform(0.0, 0.6); nde2 = min(nde2, gde2)
         n1, n2 = random.randint(2, 7), random.randint(4, 14)
         kd, tax = random.uniform(0.06, 0.14), 0.30
-        alvo = verdade_explicita(g1, r1, ke1, n1, gde1, nde1, g2, r2, ke2, n2, gde2, nde2, kd, tax)
+        alvo = verdade_explicita(g1, r1, rb1, ke1, n1, gde1, nde1,
+                                 g2, r2, ke2, n2, gde2, nde2, kd, tax)
         out = iso_curva('pe', alvo, ke2, n2, [g2], tv='book', gde=gde2, nde=nde2,
                         transicao='ponte',
                         ponte_params=dict(n1=n1, ke1=ke1, gde1=gde1, nde1=nde1, kd=kd,
-                                          tax=tax, g1=g1, roe1=r1))
+                                          tax=tax, g1=g1, roe1=r1, roe1_book=rb1))
         p = out['curva'][0]
-        check(f'B2: inversão recupera ROE2 sorteado (empresa {i + 1})',
+        check(f'B2/v9.30: inversão recupera ROE2 sorteado ({i + 1})',
               p.get('rent_implicita_pct') is not None
               and abs(p['rent_implicita_pct'] / 100 - r2) < 1e-7
               and p['check_multiplo'] == 0.0,
-              f'r2={r2:.4%} devolvido={p.get("rent_implicita_pct")}')
-    print('  v9.3: inversão bifásica — caso-vF19 + 8 empresas sorteadas vs soma explícita de FCFE')
+              f'r2={r2:.4%} rb1={rb1:.4%} devolvido={p.get("rent_implicita_pct")}')
+    print('  v9.30: inversão bifásica — DDM/clean-surplus explícito, inclusive book inicial separado')
 
 
 def rec_guardas_damodaran():
@@ -1795,46 +1901,343 @@ def rec_v915():
           'leitura' not in r3 and r3['fator_k_implicito'] == 2.5456)
     print('  v9.15: retenção não-informativa (D-1) e confronto temporal do nivel (D-2)')
 
-if __name__ == '__main__':
-    print('PROPERTY TESTS')
-    prop_neutralidade(); prop_neutralidade_marginal_book(); prop_convergencia_gp(); prop_monotonia_roic()
-    rec_v97()
-    rec_v98()
-    rec_lint_semantico(); rec_lint_portabilidade()
-    prop_gradiente_g(); prop_pe_caixa()
-    print('RECONCILIATION TESTS')
-    rec_dcf_eva(); rec_fluxos_explicitos(); rec_apv()
-    print('C1 — POLÍTICA DE CAIXA NO TERMINAL')
-    rec_fcfe_tv(); rec_fcfe_canonico_tv(); prop_politica_tv()
-    print('C3 / D2 / D4 — CONVENÇÃO TEMPORAL, BASE DO ALVO, ELASTICIDADE COM SINAL')
-    prop_mid_year(); prop_alvo_base(); prop_elasticidade_sinal()
-    print('BOUNDARY TESTS')
-    bnd_limites(); bnd_solver(); bnd_aliases(); bnd_conflacao()
-    print('GUARDAS DAMODARAN (v9.4)')
-    rec_guardas_damodaran()
-    print('INVERSÃO BIFÁSICA (v9.3)')
-    rec_inversao_bifasica()
-    print('CORREÇÕES DA AUDITORIA (v9.2)')
-    rec_correcoes()
-    print('ISO-VALOR (v9.1)')
-    rec_iso()
-    print('PONTE DE RELEVERAGING (v9)')
-    rec_ponte()
-    print('RODADA 5 — B-01 / APV-01 / P-02 (v9.10)')
-    rec_b01(); rec_apv01(); rec_p02()
-    print('DOC ANCHORS / IDA-E-VOLTA / COERÊNCIA DO VETOR (v9.11)')
-    rec_doc_anchors(); rec_roundtrip(); rec_coerencia()
-    rec_nivel_escala(); rec_guarda_raiz_gp(); rec_gate_agregado(); rec_rev_sugestao()
-    rec_iso_sugestao(); rec_regime_driver()
-    print('v9.15 — BASE COERENTE / CONFRONTO TEMPORAL')
-    rec_v915()
-    print('v9.24 — RAMPA BIFÁSICA / CONSERVAÇÃO / UNIT ECONOMICS')
-    rec_rampa_v924()
-    print('CLI INTEGRATION (v8.4)')
-    cli_integration()
+def rec_v928_hardening():
+    """[v9.28] Regressões adversariais derivadas da diligência da v9.27."""
+    import subprocess, json, os
+    from justos import (coerencia_vetor, rampa_bifasica, desconto_transicao,
+                        avaliar_dominios_cli, registro_drivers)
+
+    # 1) Fisher: rota real e nominal integrais devem ser idênticas; terminal-only não é a identidade.
+    kn, pi, n = 0.10, 0.03, 10
+    kr = (1 + kn) / (1 + pi) - 1
+    vp_real = sum(1 / (1 + kr) ** t for t in range(1, n + 1))
+    vp_nom = sum((1 + pi) ** t / (1 + kn) ** t for t in range(1, n + 1))
+    check('v9.28 Fisher: real exato = nominal exato', abs(vp_real - vp_nom) < 1e-12,
+          f'({vp_real} vs {vp_nom})')
+    # Contraprova da antiga rota terminal-only: fluxo real perpétuo unitário, 10 anos explícitos.
+    v_exato = 1 / kr
+    v_terminal_only = (sum(1 / (1 + kn) ** t for t in range(1, n + 1))
+                       + ((1 + pi) / (kn - pi)) / ((1 + kn) ** n))
+    check('v9.28 Fisher: terminal-only NÃO é Fisher equivalente',
+          abs(v_terminal_only / v_exato - 1) > 0.15,
+          f'({v_terminal_only:.6f} vs {v_exato:.6f})')
+
+    # 2) Caixa remunerado: o exemplo da diligência fecha a 16,95% somente com Kcash.
+    args = dict(roic=0.15, roe=0.1695, gde=0.50, nde=0.30, kd=0.10, tax=0.25)
+    dc, _ = coerencia_vetor(**args, cash_yield=0.08)
+    check('v9.28 caixa: identidade fecha com cash-yield',
+          not any('INCOERÊNCIA' in x for x in dc), f'({dc})')
+    d0, _ = coerencia_vetor(**args)
+    check('v9.28 caixa: sem cash-yield há aviso específico',
+          any('CAIXA REMUNERADO' in x for x in d0))
+    check('v9.28 caixa: sem cash-yield o gap de 1,20 p.p. é detectado',
+          any('INCOERÊNCIA' in x for x in d0))
+
+    # 3) CAP longo: g>=W não fecha; com book separado e g<W o caminho pode não ser monotônico.
+    def gap(N, g, r, w, rb=None):
+        return abs(ev_nopat(g, r, w, N, tv='convergencia') -
+                   ev_nopat(g, r, w, N, tv='book', roic_book=rb))
+    check('v9.28 CAP: g>=W pode ampliar gap com n',
+          gap(100, 0.15, 0.25, 0.10) > gap(10, 0.15, 0.25, 0.10))
+    seq = [gap(N, 0.0631, 0.2846, 0.0721, 0.1714) for N in (1,5,10,20,50,100)]
+    check('v9.28 CAP: book separado pode abrir antes de fechar',
+          seq[2] > seq[0] and seq[-1] < seq[2], f'({seq})')
+
+    # 4) Domínio: hard vs abnormal.
+    er, av = avaliar_dominios_cli({'g': -150, 'wacc': 10, 'n': 10, 'tax': 150, 'da': 120})
+    check('v9.28 domínio: g<=-100 hard error', any('--g' in x for x in er))
+    check('v9.28 domínio: tax/d anômalos são warnings', len(av) == 2)
+    check('v9.28 núcleo: g<-100 retorna NaN', ev_nopat(-1.5, 0.2, 0.1, 10, tv='book') != ev_nopat(-1.5, 0.2, 0.1, 10, tv='book'))
+
+    # 5) Solver: raiz sobre grid não duplica.
+    rr = solve(lambda x: x*x - 0.25, -1.0, 1.0, steps=4)
+    check('v9.28 solver: grid roots deduplicadas', len(rr) == 2 and abs(rr[0]+0.5)<1e-8 and abs(rr[1]-0.5)<1e-8, f'({rr})')
+
+    # 6) Rampa: g2=0 é válido; WACC=0 não divide por zero.
+    rz = rampa_bifasica(265, 26.8, 6.8, 0.191, 0.119, 0.35, 10, 5, 0.0, 0.179364,
+                        util=0.65, tv='convergencia')
+    check('v9.28 rampa: g2=0 definido', rz['EV'] == rz['EV'] and rz['roic2_%'] is not None, f'({rz})')
+    rw0 = rampa_bifasica(265, 26.8, 6.8, 0.191, 0.0, 0.35, 10, 5, 0.08, 0.179364,
+                         util=0.65, tv='book')
+    check('v9.28 rampa: WACC=0 sem divisão por zero', rw0['EV'] == rw0['EV'])
+
+    # 7) Deployment fracionário: continuidade em torno de 1,5 ano e fórmula da tranche parcial.
+    f149 = desconto_transicao(0.10, 1.499, 'rampa')
+    f151 = desconto_transicao(0.10, 1.501, 'rampa')
+    f15 = desconto_transicao(0.10, 1.5, 'rampa')
+    esperado = ((1/1.1) + 0.5/(1.1**1.5)) / 1.5
+    check('v9.28 deployment: T=1.5 usa tranche proporcional', abs(f15-esperado)<1e-12)
+    check('v9.28 deployment: sem salto artificial em 1.5', abs(f149-f151) < 0.002, f'({f149},{f151})')
+
+    # 8) APV C7 explícita e quantificada.
+    ap = apv_recursao(22.184, 0.11, 10, 0.20, 0.142714285714286, 0.30, 35.0, gtv=0.0, conv='mm')
+    for campo in ('FCFF_n','FCFF_n1_usado_no_TV','g_transicao_%','gtv_%','efeito_C7_alternativa_gtv_em_n1_%'):
+        check(f'v9.28 APV C7: {campo} ecoado', campo in ap)
+    check('v9.28 APV C7: alternativa é não-neutra quando g!=gtv', abs(ap['efeito_C7_alternativa_gtv_em_n1_%']) > 0.1)
+
+    # 9) Gate de drivers decide com valor bruto, não display arredondado.
+    gt = registro_drivers([{'nome':'x','base':100.0,'spot':110.004,'elast':1.0}], limiar=0.10)
+    gf = registro_drivers([{'nome':'x','base':100.0,'spot':109.996,'elast':1.0}], limiar=0.10)
+    check('v9.28 drivers: 10.004% dispara mesmo exibindo 10.00%', gt['GATE'])
+    check('v9.28 drivers: 9.996% não dispara mesmo exibindo 10.00%', not gf['GATE'])
+
+    # 10) CLI: hard error não pode sair como sucesso; warnings anômalos devem atravessar o JSON.
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'justos.py')
+    bad = subprocess.run([sys.executable, script, 'ev', '--g','-150','--roic','20','--wacc','10','--da','10','--tax','30','--tv','book'],
+                         capture_output=True, text=True, encoding='utf-8')
+    check('v9.28 CLI: hard domain sai !=0', bad.returncode != 0 and 'domínio matemático inválido' in bad.stdout)
+    warn = subprocess.run([sys.executable, script, 'ev', '--g','5','--roic','20','--wacc','10','--da','120','--tax','150','--tv','book'],
+                          capture_output=True, text=True, encoding='utf-8')
+    jd = json.loads(warn.stdout)
+    check('v9.28 CLI: abnormal regime permanece executável', warn.returncode == 0)
+    check('v9.28 CLI: abnormal warnings ecoados', len(jd.get('avisos_dominio',[])) == 2)
+    cash = subprocess.run([sys.executable, script, 'pe', '--g','5','--roe','16.95','--ke','12',
+                           '--gde','50','--nde','30','--roic','15','--kd','10','--tax','25',
+                           '--cash-yield','8','--tv','convergencia'],
+                          capture_output=True, text=True, encoding='utf-8')
+    jc = json.loads(cash.stdout)
+    check('v9.28 CLI: --cash-yield atravessa o parser', cash.returncode == 0)
+    check('v9.28 CLI: cash-yield fecha o Gate ROE sem falsa incoerência',
+          not any('INCOERÊNCIA ROE' in x for x in jc.get('diagnosticos', [])),
+          f"({jc.get('diagnosticos',[])})")
+
+    print('  v9.28: Fisher, caixa, CAP, domínio, solver, rampa, deployment, APV-C7 e arredondamento travados')
+
+
+def rec_v929_equity_book():
+    """[v9.30] Fecha o equity `book` por identidades INDEPENDENTES: DDM = residual income = motor,
+    cash-invariance, neutralidade ROE=Ke e colapso bifásico→monofásico. Mantém o nome histórico da
+    função para não quebrar o runner, mas os invariantes são os corretivos da v9.30.
+    """
+    from justos import pe, iso_curva, _pe2_book, _equity_book_end, ponte_releveraging
+    import random
+
+    # Anchor da auditoria: caixa não altera book; o valor correto é o mesmo do espelho firm.
+    g, r, rb, ke, n = 0.05, 0.20, 0.10, 0.08, 10
+    anchor = pe(g, r, ke, n, 0.20, 0.0, tv='book', roe_book=rb)
+    check('v9.30: anchor equity book sem dupla contagem = 12,8374',
+          abs(anchor - 12.837404750556278) < 1e-12, f'({anchor})')
+    for cx in (0.0, 0.10, 0.20, 0.50):
+        check(f'v9.30: book invariante a Caixa/E {cx:.0%}',
+              abs(pe(g, r, ke, n, cx, 0.0, tv='book', roe_book=rb) - anchor) < 1e-12)
+
+    # DDM = residual income = motor em 1.000 vetores, inclusive com book separado.
+    random.seed(930)
+    pior = 0.0
+    for i in range(1000):
+        ke_i = random.uniform(0.05, 0.30)
+        r_i = random.uniform(0.06, 0.70)
+        rb_i = random.uniform(0.05, 0.50)
+        g_i = random.uniform(0.0, min(0.20, r_i * 0.90))
+        n_i = random.randint(1, 25)
+        cx = random.uniform(0.0, 0.60)
+        E = (1 + g_i) / rb_i
+        E0 = E
+        ddm = 0.0; ri = E0
+        for t in range(1, n_i + 1):
+            ni_t = (1 + g_i) ** t
+            dE = (g_i / r_i) * ni_t
+            div = ni_t - dE
+            ddm += div / (1 + ke_i) ** t
+            ri += (ni_t - ke_i * E) / (1 + ke_i) ** t
+            E += dE
+        ddm += E / (1 + ke_i) ** n_i
+        m = pe(g_i, r_i, ke_i, n_i, cx, 0.0, tv='book', roe_book=rb_i)
+        err = max(abs(m - ddm), abs(m - ri), abs(E - _equity_book_end(1.0, g_i, r_i, rb_i, n_i)))
+        pior = max(pior, err)
+        check(f'v9.30 DDM=RI=motor #{i}', err < 1e-10,
+              f'err={err:.3e} g={g_i:.2%} r={r_i:.2%} rb={rb_i:.2%} cx={cx:.2%}')
+    print(f'  v9.30 equity book: DDM = residual income = motor em 1.000 vetores (pior {pior:.2e})')
+
+    # Neutralidade: ROE marginal = book = Ke => fwd 1/Ke, qualquer caixa e g admissível.
+    for ke_i in (0.08, 0.12, 0.20):
+        for g_i in (0.0, 0.03, 0.06):
+            for cx in (0.0, 0.20, 0.50):
+                m = pe(g_i, ke_i, ke_i, 10, cx, 0.0, tv='book', roe_book=ke_i) / (1 + g_i)
+                check('v9.30 neutralidade book ROE=Ke independente de caixa', abs(m - 1 / ke_i) < 1e-10)
+
+    # Iso book deve ser invariante a caixa.
+    alvo = pe(0.04, 0.18, 0.11, 12, 0.0, 0.0, tv='book', roe_book=0.10)
+    a0 = iso_curva('pe', alvo, 0.11, 12, [0.04], tv='book', gde=0.0, nde=0.0, rent_book=0.10)
+    a5 = iso_curva('pe', alvo, 0.11, 12, [0.04], tv='book', gde=0.50, nde=0.0, rent_book=0.10)
+    check('v9.30 iso book invariante a caixa',
+          abs(a0['curva'][0]['rent_implicita_pct'] - a5['curva'][0]['rent_implicita_pct']) < 1e-10)
+
+    # Bifásico deve colapsar no monofásico quando os dois regimes são idênticos, mesmo rb != marginal.
+    for cut in (1, 3, 5, 9):
+        m1 = pe(0.05, 0.20, 0.08, 10, 0.20, 0.0, tv='book', roe_book=0.10)
+        m2 = _pe2_book(0.05, 0.20, 0.08, cut, 0.20, 0.0,
+                       0.05, 0.20, 0.08, 10-cut, 0.20, 0.0,
+                       0.10, 0.25, rb1=0.10)['total']
+        check(f'v9.30 bifásico degenera no monofásico cut={cut}', abs(m1 - m2) < 1e-12,
+              f'{m1} vs {m2}')
+
+    # Ponte standalone com roe_book deve usar exatamente o E_pre acumulado.
+    pt = ponte_releveraging(n1=5, ke1=0.14, ke2=0.12, gde1=0.4, nde1=0.2,
+                            gde2=0.3, nde2=0.1, kd=0.08, tax=0.30, g1=0.05,
+                            roe1=0.20, roe1_book=0.10)
+    ep = _equity_book_end(1.0, 0.05, 0.20, 0.10, 5)
+    check('v9.30 ponte usa E_pre acumulado', abs(pt['E_pre_transicao'] - ep) < 1e-12)
+    print('  v9.30: caixa sem dupla contagem; bifásico carrega E; ponte usa o mesmo state variable')
+
+
+def rec_v927_consistencia_cross_layer():
+    """[v9.27] Contrato cross-layer: a matemática firm/book deve existir com a mesma semântica
+    em motor, derivação, paper e aplicação; fórmulas/textos congelados da v9.24 não podem reaparecer.
+    Também trava a memória técnica expandida e a classificação da base monetária como invariante.
+    """
+    import os
+    from justos import iso_curva
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    def txt(rel):
+        with open(os.path.join(root, rel), encoding='utf-8') as f:
+            return f.read()
+    deriv = txt('references/derivacao.md')
+    paper = txt('references/paper-multiplos-justos-v3.md')
+    aplic = txt('references/aplicacao.md')
+    skill = txt('SKILL.md')
+    motor = txt('scripts/justos.py')
+    assinaturas = {
+        'derivacao': ('IC_n = IC_0 +' in deriv and 'ROIC_marginal' in deriv and 'TV_desc = IC_n/' in deriv),
+        'paper': ('IC_n = (1+g)' in paper and 'ROIC_marginal' in paper and 'TV_desc = IC_n/' in paper),
+        'motor': ('ic_n = (1 + g)' in motor and 'roic_book' in motor),
+        'motor_equity [v9.30]': ('e_n = (1 + g)' in motor and 'roe_book' in motor),
+        'derivacao_equity [v9.30]': ('E_n  = (1+g)' in deriv and 'DDM = E_0' in deriv and 'clean surplus' in deriv.lower()),
+        'paper_equity [v9.30]': ('E_n = (1+g)' in paper and 'DDM = residual income = motor' in paper),
+    }
+    for nome, ok in assinaturas.items():
+        check(f'v9.27 cross-layer: {nome} contém IC acumulado', ok)
+    proibidos = [
+        'TV_desc = (1+g)ⁿ⁺¹ / [ROIC_book × (1+W)ⁿ]',
+        'TV = NOPAT/ROIC_médio **não acompanha o marginal**',
+        'a topologia bi-radicular em g do antigo §6.7 era ARTEFATO',
+        'duas rotas equivalentes (Ke real; preço gratuito no terminal)',
+        'hp` e `me` seguem aceitos como aliases legados',
+        'equity_book_congelado_pendente',
+        'explicitamente pendente e o motor avisa',
+        'book continua congelado nesta versão',
+        'permanece, nesta versão, com book congelado',
+        'enquanto o book congelado permanecer',
+    ]
+    for lit in proibidos:
+        check(f'v9.27 cross-layer: literal obsoleto ausente — {lit[:36]}',
+              lit not in deriv and lit not in paper and lit not in skill and lit not in aplic)
+    for campo in ('crescimento:', 'depreciacao:', 'clean_surplus:', 'book:'):
+        check(f'v9.27 memória técnica: campo {campo}', campo in aplic)
+    check('v9.27 base monetária = invariante, não 11ª escolha',
+          'invariante obrigatório' in skill.lower() and '11ª escolha nomeada' not in skill)
+    check('v9.27 paper distingue múltiplo forward e corrente nas raízes',
+          'base corrente' in paper and 'duas raízes' in paper and 'base forward' in paper)
+    check('v9.28 Fisher: terminal-only não é chamado de equivalente',
+          'terminal-only' in paper and 'não deve ser chamada de Fisher equivalente' in paper)
+    check('v9.28 CAP: paper condiciona convergência a g < W',
+          'Se **g < W**' in paper and 'não precisa ser' in paper and 'monotônico' in paper)
+    check('v9.28 cash yield documentado', '--cash-yield' in skill and '--cash-yield' in aplic)
+    check('v9.28 Miles-Ezzell corrigido', 'primeiro** escudo' in paper and 'posteriores' in paper and 'Ku' in paper)
+    check('v9.30 equity book documenta Div + E_n sem dupla contagem',
+          'Div + E_n' in skill and 'DDM = residual income = motor' in paper and 'dupla contagem' in deriv)
+    check('v9.30 bifásico documenta patrimônio como state variable',
+          'state variable' in deriv and 'E2_end' in deriv and 'ROE2*' in deriv)
+    # v9.31 — fechamento semântico/cross-layer
+    check('v9.31 E_pre antigo ausente da derivação corrente',
+          'E_pré = (1+g₁)^{n₁+1}/ROE₁` — o equity lido como lucro forward' not in deriv)
+    check('v9.31 rebase qualificado como hipótese de nível',
+          'hipótese de rebase' in skill.lower() and 'hipótese de nível' in deriv.lower() and
+          'hipótese adicional de **rebase do primeiro lucro**' in paper and
+          'não é identificação estrutural pura' in motor.lower())
+    check('v9.31 anchor P/L canônico sincronizado',
+          'P/L 5,617295x' in deriv and 'P/L 5,617295x' in paper and 'P/L 5,7337x' not in deriv and 'P/L 5,7337x' not in paper)
+    check('v9.31 Penman/horizonte finito qualificado',
+          'terminais transformados de forma consistente' in paper and 'equivalência DCF↔renda residual só é rigorosa em horizonte infinito' not in paper)
+    check('v9.31 comentário não promete planilha no ZIP',
+          'planilha-equity-book, entregue com o release' not in motor)
+    alvo_alpha = pe(0.05, 0.20, 0.12, 10, 0.30, 0.10, tv='book', roe_book=0.10)
+    alpha_out = iso_curva('pe', alvo_alpha, 0.12, 10, [0.05], tv='book', gde=0.30, nde=0.10,
+                          rent_book=0.10, transicao='nenhuma')
+    check('v9.31 alpha metadata = coeficiente efetivo da book', alpha_out['alpha'] == 1.0)
+    try:
+        iso_curva('pe', 10.0, 0.16, 12, [0.10], tv='book', rent_book=0.10,
+                  transicao='ponte', ponte_params={})
+        rejeitou = False
+    except SystemExit as e:
+        rejeitou = '--rent-book' in str(e) and 'ignorado' in str(e)
+    check('v9.31 função rejeita rent-book silencioso na ponte', rejeitou)
+    print('  v9.31: cross-layer fecha rebase condicional, E_pre, anchors, alpha e horizonte finito')
+
+
+def _executa_fase(nome):
+    """[v9.27] Executa uma fase autocontida da suíte.
+
+    A suíte completa é deliberadamente particionada em processos Python frescos. Isso evita que
+    dezenas de subprocessos CLI + testes numéricos/documentais compartilhem estado de longo prazo
+    (locale, pipes e buffers) e transforma `python scripts/testes.py` num ritual reprodutível também
+    em ambientes restritos. Cada fase continua usando o mesmo interpretador (`sys.executable`).
+    """
+    if nome == 'model':
+        # Fase única de modelo/documentação: roda primeiro o bloco mais pesado de inversões e,
+        # no mesmo processo fresco, segue para propriedades/reconciliações. Evita multiplicar
+        # processos-parent em ambientes com quotas agressivas de subprocessos.
+        rc = _executa_fase('advanced')
+        if rc != 0:
+            return rc
+        return _executa_fase('core')
+    if nome == 'cli':
+        print('CLI INTEGRATION')
+        cli_integration()
+    elif nome == 'core':
+        print('PROPERTY TESTS')
+        prop_neutralidade(); prop_neutralidade_marginal_book(); prop_convergencia_gp(); prop_monotonia_roic()
+        rec_v97(); rec_v98()
+        rec_lint_semantico(); rec_lint_portabilidade()
+        prop_gradiente_g(); prop_pe_caixa()
+        print('RECONCILIATION TESTS')
+        rec_dcf_eva(); rec_fluxos_explicitos(); rec_apv()
+        print('C1 — POLÍTICA DE CAIXA NO TERMINAL')
+        rec_fcfe_tv(); rec_fcfe_canonico_tv(); prop_politica_tv()
+        print('C3 / D2 / D4 — CONVENÇÃO TEMPORAL, BASE DO ALVO, ELASTICIDADE COM SINAL')
+        prop_mid_year(); prop_alvo_base(); prop_elasticidade_sinal()
+        print('BOUNDARY TESTS')
+        bnd_limites(); bnd_solver(); bnd_aliases(); bnd_conflacao()
+    elif nome == 'advanced':
+        print('GUARDAS DAMODARAN')
+        rec_guardas_damodaran()
+        print('INVERSÃO BIFÁSICA')
+        rec_inversao_bifasica()
+        print('CORREÇÕES DE AUDITORIA / ISO / PONTE')
+        rec_correcoes(); rec_iso(); rec_ponte()
+        print('B-01 / APV-01 / P-02')
+        rec_b01(); rec_apv01(); rec_p02()
+        print('BOOK ACUMULADO / TOPOLOGIA / HARDENING / CONSISTÊNCIA CROSS-LAYER')
+        rec_v926_book_acumulado(); rec_v928_hardening(); rec_v929_equity_book(); rec_v927_consistencia_cross_layer()
+        print('DOC ANCHORS / IDA-E-VOLTA / COERÊNCIA DO VETOR')
+        rec_doc_anchors(); rec_roundtrip(); rec_coerencia()
+        rec_nivel_escala(); rec_guarda_raiz_gp(); rec_gate_agregado(); rec_rev_sugestao()
+        rec_iso_sugestao(); rec_regime_driver()
+        print('BASE COERENTE / CONFRONTO TEMPORAL')
+        rec_v915()
+        print('RAMPA BIFÁSICA / CONSERVAÇÃO / UNIT ECONOMICS')
+        rec_rampa_v924()
+    else:
+        print(f'Fase desconhecida: {nome}', file=sys.stderr)
+        return 2
+
     if FALHAS:
         print(f'\n{len(FALHAS)} FALHA(S) — NÃO USE O MOTOR:')
-        for f in FALHAS: print(' -', f)
-        sys.exit(1)
-    print('\nTODOS OS TESTES PASSARAM — propriedades, reconciliações e boundaries.')
-    sys.exit(0)
+        for f in FALHAS:
+            print(' -', f)
+        return 1
+    print(f'\nFASE {nome.upper()} PASSOU.')
+    return 0
+
+
+if __name__ == '__main__':
+    if len(sys.argv) == 3 and sys.argv[1] == '--phase':
+        sys.exit(_executa_fase(sys.argv[2]))
+    if len(sys.argv) == 1:
+        print('VALIDAÇÃO DE RELEASE REQUER DUAS INVOCAÇÕES FRESCAS:', file=sys.stderr)
+        print('  python scripts/testes.py --phase model', file=sys.stderr)
+        print('  python scripts/testes.py --phase cli', file=sys.stderr)
+        print('Motivo: a fase CLI abre 20+ subprocessos reais; separar evita falso negativo por quota do ambiente.', file=sys.stderr)
+        sys.exit(2)
+    print('Uso: python scripts/testes.py --phase model|cli|core|advanced', file=sys.stderr)
+    sys.exit(2)

@@ -1,6 +1,6 @@
 # Múltiplos Justos
 
-**v3 · documento de trabalho**
+**v3.7 · documento de trabalho — sincronizado com a v9.28 do motor**
 
 *O múltiplo como output de um DCF comprimido em poucas variáveis: crescimento, retorno marginal, custo de capital, duração da vantagem competitiva e contabilidade.*
 
@@ -8,7 +8,7 @@
 
 ## Resumo
 
-Este documento reúne a fundamentação teórica do framework de múltiplos justos, catorze proposições derivadas dele (as duas últimas adicionadas na v3.1) e os limites de validade de cada uma. A tese central é que o múltiplo não é primitivo: é o resultado comprimido de um DCF, e explicitar a compressão devolve ao múltiplo o poder analítico que a agregação destruiu — inclusive na direção inversa, lendo o múltiplo de tela como um sistema de equações a resolver.
+Este documento reúne a fundamentação teórica do framework de múltiplos justos, quinze proposições derivadas dele — consolidadas ao longo das revisões v3.x — e os limites de validade de cada uma. A tese central é que o múltiplo não é primitivo: é o resultado comprimido de um DCF, e explicitar a compressão devolve ao múltiplo o poder analítico que a agregação destruiu — inclusive na direção inversa, lendo o múltiplo de tela como um sistema de equações a resolver.
 
 **Definição (v3.4).** Neste framework, **múltiplo justo** significa o múltiplo forward implícito em um DCF especificado, condicionado à métrica-base normalizada e ao conjunto declarado de premissas econômicas, financeiras, contábeis, temporais e terminais. Não é um múltiplo universal nem independente do modelo; é um múltiplo *justificado* pelos fundamentos declarados — daí o nome em inglês, *justified multiples*. Todo o restante, inclusive o tagline do "DCF comprimido", lê-se sob esta definição: a compressão é uma especificação particular de DCF (as relações da §7), não uma equivalência sem perda com qualquer DCF — a trajetória que ela impõe a lucros, reinvestimento e retorno marginal é parte da premissa, não conclusão.
 
@@ -38,7 +38,7 @@ Três avisos de leitura, todos consequência da revisão v2 → v3:
    - 3.4 Por que o framework não implementa fade
 4. Fundamentação III: consistência do custo de capital — e em que camada ela vale
 5. O núcleo formal do framework
-6. Resultados derivados (catorze proposições)
+6. Resultados derivados (quinze proposições)
 7. Limites de validade
 8. Protocolo de aplicação e estado das extensões
 9. Conclusão
@@ -149,7 +149,7 @@ Um teste de consistência interna do framework é a reconciliação exata com a 
 
 Essa equivalência não é coincidência: é o *clean surplus* / teorema de Preinreich–Lücke, reconhecido desde Lücke (1955) e formalizado na literatura contábil moderna por Edwards & Bell (1961), Peasnell (1982), Ohlson (1995) e Feltham & Ohlson (1995) — o valor de mercado equivale ao valor contábil mais o valor presente dos lucros anormais futuros, desde que toda variação de patrimônio passe pelo resultado.
 
-Duas advertências, ambas relevantes na prática. Primeira, a equivalência DCF↔renda residual só é rigorosa em horizonte infinito (Penman); em horizontes finitos, os dois métodos alocam valor de forma diferente entre explícito e terminal, e a escolha deixa de ser inócua. Segunda, Ohlson modela a extinção do lucro anormal por um processo autorregressivo — o poder monopolista decai com a competição até o retorno igualar o custo de capital.
+Duas advertências, ambas relevantes na prática. Primeira, em horizonte finito a equivalência DCF/DDM↔renda residual exige **terminais transformados de forma consistente**; simplesmente truncar os métodos ou impor terminais economicamente diferentes desloca valor entre explícito e terminal e pode produzir resultados distintos. Com clean surplus e um terminal book coerente, a equivalência algébrica permanece exata também em horizonte finito. Segunda, Ohlson modela a extinção do lucro anormal por um processo autorregressivo — o poder monopolista decai com a competição até o retorno igualar o custo de capital.
 
 **A v3 acrescenta o que esta equivalência de fato demonstra, e o que ela não demonstra.** A reconciliação exata (verificada a 1e-15 no motor) prova que a convenção terminal de valor-contábil é **internamente consistente**: se o valor terminal é o capital investido, então o valor total é o capital inicial mais a renda residual descontada, sem resíduo. Isso é um teorema. O que a reconciliação **não** prova é que essa convenção corresponda a qualquer afirmação econômica particular sobre competição — em especial, não prova que ela seja a tradução de "a vantagem competitiva se exaure". A v2 tratava a consistência algébrica como se validasse o rótulo econômico. São camadas distintas, e a §3.3 as separa.
 
@@ -206,9 +206,33 @@ O termo cruzado −gλ é de segunda ordem (a 5% e 3% vale −0,15 p.p.) e a apr
 
 A frase "a vantagem competitiva se exaure no ano n" admite mais de uma matemática, e a distinção entre elas é a correção mais importante desta revisão.
 
-**(a) `book` — renda residual truncada.** O NOPAT **inteiro** colapsa de ROIC × IC para W × IC no ano n+1; como os excess returns zeram sobre **todo** o capital, o valor terminal é o capital investido, e crescimento perpétuo é value-neutral.
+**(a) `book` — renda residual truncada com capital reconciliado.** O NOPAT **inteiro** colapsa
+de ROIC × IC para W × IC no ano n+1; os excess returns futuros sobre **todo** o capital zeram e o
+valor terminal é o capital investido no fim do CAP. Com retorno médio inicial (`ROIC_book`)
+separado do retorno marginal, o estoque é acumulado pela mesma trajetória de reinvestimento que
+gera os fluxos explícitos:
 
-> TV_desc = (1+g)ⁿ⁺¹ / [ROIC_book × (1+W)ⁿ]
+> IC₀ = NOPAT₁ / ROIC_book  
+> ΔIC_t = (NOPAT_{t+1} − NOPAT_t) / ROIC_marginal  
+> **IC_n = (1+g)(1/ROIC_book − 1/ROIC_marginal) + (1+g)ⁿ⁺¹/ROIC_marginal**  
+> **TV_desc = IC_n/(1+W)ⁿ**
+
+`ROIC_book` é o retorno **médio inicial/forward** do estoque que ancora IC₀, não um retorno terminal
+congelado. O retorno médio no ano n é um output, `NOPAT_{n+1}/IC_n`, e deriva na direção do
+marginal à medida que o capital novo ganha peso. Se a fonte fornecer ROIC trailing, o numerador
+precisa ser alinhado ao NOPAT₁ antes do uso. Quando médio = marginal, a expressão colapsa exatamente
+para `IC_n = NOPAT_{n+1}/ROIC`; com g=0, colapsa para `IC_n = 1/ROIC_book`.
+
+**Espelho equity (v9.30).** O patrimônio evolui por clean surplus com
+ΔE_t = (g/ROE_marginal)·LL_t e
+
+> E_n = (1+g)(1/ROE_book − 1/ROE_marginal) + (1+g)ⁿ⁺¹/ROE_marginal
+
+— a mesma forma de estoque do enterprise. Porém, no terminal `book`, o fluxo explícito deve ser o
+**dividendo** `Div_t = LL_t − ΔE_t`, não `FCFE = Div + Δcaixa`: o caixa retido já está dentro de E_n
+e somá-lo ao fluxo e novamente ao terminal é dupla contagem. Portanto Caixa/E é neutro na `book`
+quando não há rendimento de caixa separado, e a identidade estrutural passa a ser
+**DDM = residual income = motor**.
 
 **(b) `convergencia` — RONIC = W no capital novo.** Apenas os investimentos **novos** deixam de criar valor; o NOPAT existente é preservado e continua rendendo o que rende.
 
@@ -220,7 +244,7 @@ A frase "a vantagem competitiva se exaure no ano n" admite mais de uma matemáti
 
 **Por que isto importa mais do que parece.** A convenção (b) é o significado corrente de "a vantagem competitiva se exaure" na literatura de referência (McKinsey, Mauboussin): o crescimento terminal vira value-neutral porque o capital novo passa a render o custo de capital, e não porque o negócio existente deixa de ser rentável. A convenção (a) afirma algo bem mais forte — que o valor de saída da empresa é o capital contábil. A v2 usava (a) sob o rótulo de (b).
 
-A diferença é da ordem do dobro do valor. Com ROIC 50%, g 5%, W 7%, n 10: **`book` 9,86x contra `convergencia` 20,55x** em EV/NOPAT corrente. As duas coincidem exatamente em ROIC = WACC, e divergem monotonicamente à medida que o ROIC se afasta do custo de capital — o que significa que a escolha entre elas é irrelevante para empresas medíocres e decisiva para franquias, exatamente onde a análise importa.
+A diferença é da ordem do dobro do valor. No caso conflacionado (book = marginal = 50%), com g 5%, W 7%, n 10: **`book` 9,86x contra `convergencia` 20,55x** em EV/NOPAT corrente. As duas coincidem exatamente em ROIC = WACC, e divergem monotonicamente à medida que o ROIC se afasta do custo de capital — o que significa que a escolha entre elas é irrelevante para empresas medíocres e decisiva para franquias, exatamente onde a análise importa.
 
 **O critério de escolha é a duração econômica do claim, não o rótulo do setor.** A v2 oferecia uma tabela por classe de negócio (royalty ⟹ spread; commodity ⟹ ic). É um atalho que funciona no caso fácil e falha no caso interessante: um contrato de streaming com termo de 15 anos é horizonte explícito longo, não perpetuidade; uma "marca dominante" em categoria sob disrupção não é claim de longa duração. O que decide é o argumento sobre **por quanto tempo o claim gera retorno acima do custo de capital, e o que sobra quando ele acaba** — e esse argumento tem que ser escrito, não inferido do setor.
 
@@ -230,7 +254,17 @@ Três guias operacionais:
 - **`convergencia`** como default reflexivo quando a tese é "a vantagem acaba" sem afirmação adicional sobre o valor do estoque. É a convenção menos comprometida das três.
 - **`gordon`** quando houver argumento de duração (claim contratual longo, rede, marca) **ou** quando a tese for de destruição persistente declarada (ROIC_TV < W) — regime legítimo que as outras duas não conseguem representar. Nomeie a hipótese pelo que ela é: **spread terminal positivo pressupõe oportunidades de reinvestimento com VPL positivo em perpetuidade** — o modelo precifica essa hipótese, não demonstra sua origem, defesa ou limite de mercado.
 
-**Trava condicional (revista na v3.2).** Quando a rentabilidade marginal fica abaixo do custo de capital, a convenção `book` é **inadmissível no caso conflacionado e condicionada no caso separado**. Conflacionado (um único retorno nos dois papéis): vale a perversidade demonstrada em §6.3 — o TV = NOPAT/ROIC cresce quando o ROIC cai, e a convergência do ROIC *para cima* até o WACC é, para um destruidor de valor, uma hipótese criadora de valor embutida sem declaração. Separado (retorno médio informado à parte): o TV = NOPAT/ROIC_médio **não acompanha o marginal**, a perversidade não existe — o múltiplo cai monotonicamente com o marginal — e a convenção permanece admissível sob **tese declarada** de saída pelo capital investido (turnaround, capex regulatório, reconstrução operacional, liquidação, venda pelo patrimônio). O que a separação marginal×médio (§6.11) corrigiu no valor terminal vale igualmente para a regra de uso. **Sub-condição:** se o próprio retorno médio ficar abaixo do custo de capital, o TV excede NOPAT/WACC pelo fator W/ROIC_médio — cruzamento exato em ROIC_médio = WACC — e a hipótese passa a ser de **recuperação** acima do valor capitalizado de lucros sub-custo, que exige tese própria.
+**Trava condicional (revista na v3.6).** Quando a rentabilidade marginal fica abaixo do custo de
+capital, a convenção `book` é **inadmissível no caso conflacionado e condicionada no caso separado**.
+Conflacionado (a mesma variável ancora o book inicial e remunera o capital novo): um retorno baixo
+infla simultaneamente IC₀ e o capital acumulado; o TV pode crescer quando o retorno cai e embutir
+criação de valor não declarada. Separado: IC₀ fica ancorado no `ROIC_book`, enquanto o capital novo
+segue o marginal; a perversidade desaparece e, para g>0, o valor cresce com a qualidade do capital
+novo. O TV **acompanha** o marginal via IC acumulado — não porque o retorno terminal tenha sido
+perpetuado, mas porque a quantidade de capital necessária para sustentar o crescimento muda. A
+convenção segue admissível apenas sob **tese declarada de saída pelo capital investido**.
+**Sub-condição:** `ROIC_book < W` significa que a própria âncora inicial de capital é grande frente
+ao lucro; essa hipótese de recuperação exige justificativa própria.
 
 ### 3.4 Por que o framework não implementa fade
 
@@ -255,7 +289,7 @@ A posição da v3, portanto: **o eixo de fade é uma boa descrição do fenômen
 
 O framework impõe que Ke e WACC nunca sejam inputs independentes. A razão é teórica e o histórico do debate é instrutivo.
 
-Modigliani & Miller (1958, 1963) estabeleceram o efeito da alavancagem sobre o valor, mas trataram apenas perpetuidades e não enfrentaram o risco do próprio benefício fiscal. Myers (1974) introduziu o APV — valor da firma desalavancada mais o valor presente dos escudos fiscais — descontando os escudos ao custo da dívida, sob o argumento de que o risco dos escudos é o risco da dívida. Miles & Ezzell (1980) mostraram que, sob dívida rebalanceada para manter alavancagem-alvo a valor de mercado, os escudos passam a carregar risco operacional e devem ser descontados a Ku a partir do primeiro período. Harris & Pringle (1985) levaram isso ao limite, descontando tudo a Ku. Fernández sistematizou até 23 teorias concorrentes de valor dos escudos fiscais e demonstrou que descontar escudos de dívida livre de risco à taxa livre de risco produz resultados inconsistentes para empresas em crescimento.
+Modigliani & Miller (1958, 1963) estabeleceram o efeito da alavancagem sobre o valor, mas trataram apenas perpetuidades e não enfrentaram o risco do próprio benefício fiscal. Myers (1974) introduziu o APV — valor da firma desalavancada mais o valor presente dos escudos fiscais — descontando os escudos ao custo da dívida, sob o argumento de que o risco dos escudos é o risco da dívida. Miles & Ezzell (1980) mostraram que, sob dívida rebalanceada periodicamente para manter alavancagem-alvo a valor de mercado, o **primeiro** escudo do período é descontado a Kd e os escudos posteriores carregam risco operacional e são descontados a Ku. Harris & Pringle (1985) levam a convenção de risco a Ku para todos os períodos sob sua política de rebalanceamento. Fernández sistematizou até 23 teorias concorrentes de valor dos escudos fiscais e demonstrou que descontar escudos de dívida livre de risco à taxa livre de risco produz resultados inconsistentes para empresas em crescimento.
 
 A resposta do framework é metodológica, não doutrinária: **ancorar em Ku** (custo do equity desalavancado, exógeno) e tratar Ke e WACC como outputs período a período, via recursão *backward*. A recursão está implementada e reconcilia por construção: o FCFE descontado à trilha Ke_t reproduz o equity inicial, e o FCFF descontado à trilha WACC_t reproduz o valor da firma, ambos a zero de resíduo, com o Ke dinâmico coincidindo com a fórmula de Fernández.
 
@@ -284,7 +318,8 @@ Na prática, o mais importante é a escolha da política de dívida implícita. 
 
 **Valor terminal, três convenções (§3.3):**
 
-> TV_desc = (1+g)ⁿ⁺¹ / [ROIC_book × (1+W)ⁿ]  ............................ `book`
+> IC_n = (1+g)(1/ROIC_book − 1/ROIC_marginal) + (1+g)ⁿ⁺¹/ROIC_marginal
+> TV_desc = IC_n/(1+W)ⁿ  .................................................. `book`
 > TV_desc = (1+g)ⁿ⁺¹ / [W × (1+W)ⁿ]  ..................................... `convergencia`
 > TV_desc = (1+g)ⁿ⁺¹ (1 − gp/ROIC_TV) / [(W − gp)(1+W)ⁿ]  ................ `gordon`
 
@@ -311,7 +346,7 @@ Na prática, o mais importante é a escolha da política de dívida implícita. 
 | Temporal: fim de ano vs meio de ano | fim de ano | × (1+W)^0,5 — +3,4% a 7%, +4,4% a 9% |
 | Base do múltiplo: corrente/TTM vs forward/NTM | corrente | fator (1+g) |
 | Política de caixa no terminal (§2.2) | contínua | 2% a 6% do P/L |
-| Rentabilidade no TV da `book`: média vs marginal (§6.11) | marginal, com alerta | até ~30% do valor |
+| Âncora média da `book`: book inicial separado vs conflação (§6.11) | marginal conflado, com alerta | material; ~23% no caso de §6.11 |
 | Fluxo de transição no `gordon`: ano n+1 cresce a (1+g) ou a (1+gp) | (1+g), fiel à planilha de referência | **TV_share × [(1+gp)/(1+g) − 1]** — dirigido pelo gap g−gp; medições de −0,4% a −3,5% |
 
 Sobre a última linha: a soma explícita termina no ano n e o terminal capitaliza o fluxo do ano
@@ -347,15 +382,29 @@ A identidade vale nas convenções `book` e `convergencia`, que **coincidem exat
 
 **Consequência prática.** O "P/L de commodity" de MM (§2.1) não é aproximação didática: é o valor exato ao qual a empresa converge quando a franquia desaparece **e o nível de NOPAT é sustentável**. Ele fornece um piso analítico — condicionado à sustentabilidade: para NOPAT de vida finita ou em erosão estrutural (mina, patente, concessão, negócio em declínio), o múltiplo justo fica legitimamente *abaixo* de 1/W sem que isso precifique destruição de valor futura. Onde a condição vale, qualquer múltiplo acima de 1/W é, por identidade, precificação de criação de valor futura, e pode ser interrogado como tal. (A identidade de §6.1 em si — ROIC = W ⟹ forward = 1/W — não carrega este qualificador: ela é exata *dentro* das premissas de §7; o qualificador pertence à leitura econômica do 1/W como piso, não à álgebra.)
 
-**Adendo — o lado equity tem uma condição a mais.** ROE = Ke só é linha de neutralidade quando caixa/E = 0. Com caixa líquido, o termo (GD/E − ND/E)(g/ROE) do FCFE libera caixa a cada ponto de crescimento e o P/L forward sobe com g mesmo sem spread algum (Ke 12%, n 10: caixa/E 0% mantém 8,3333 = 1/Ke para todo g; caixa/E 20% vai a 9,04 em g = 6%; caixa/E 50%, a 10,10). Não é artefato — é o valor de não precisar reter o lucro inteiro para financiar o crescimento, já que dívida nova acompanha a expansão do balanço. Consequência analítica: a matriz g × ROE de uma empresa com caixa **não tem coluna plana**, e o gradiente em g mistura spread com liberação de caixa; separe os dois antes de atribuir o movimento do múltiplo à rentabilidade.
+**Adendo — neutralidade equity depende da convenção.** Na `book`, se ROE marginal = ROE book = Ke,
+o P/L forward é exatamente `1/Ke` para qualquer g e qualquer Caixa/E: o valuation é Div + E_n e o
+caixa retido já está no book terminal. Nas convenções FCFE sem book terminal (`gordon`/
+`convergencia`), o termo `(GD/E − ND/E)(g/ROE)` continua representando a política de caixa e pode
+alterar o múltiplo mesmo com ROE = Ke. Não transporte essa propriedade do módulo FCFE para a
+convenção `book`.
 
-**Adendo 3 (v3.3, auditoria matemática) — a condição completa sob `book`.** O enunciado acima pressupõe marginal = médio. Com os papéis separados (P6.11), a neutralidade sob `book` exige **simultaneamente** ROIC marginal = W (zera o efeito-valor do reinvestimento no explícito) e ROIC book = W (o TV = 1/(ROIC_book(1+W)ⁿ) só entrega o complemento da anuidade nesse ponto). Com marginal = W e book = 20% (W 7%, n 10, g 6%), o forward é 5,83x — não 14,29x. A exceção é g = 0 com book = W: o marginal só entra via g/ROIC e a neutralidade vale para qualquer marginal. Sob `convergencia` e `gordon` o book não referencia o TV e marginal = W basta. Verificado por *property test* dedicado aos casos cruzados (marginal = W × book ≠ W e vice-versa).
+**Adendo 3 (v3.6) — a condição completa sob `book`.** Com os papéis separados, a neutralidade
+forward sob `book` exige **simultaneamente** ROIC marginal = W e ROIC book = W. O primeiro zera o
+valor econômico do reinvestimento; o segundo faz a âncora de capital completar exatamente a
+anuidade. Com marginal = W, book = 20%, W 7%, n 10 e g 6%, o forward é **9,57x**, não 14,29x.
+Com marginal = book = W, retorna exatamente 1/W. A exceção pontual é g=0 com book=W: o marginal
+não entra porque não há capital novo. Sob `convergencia`/`gordon`, o book não entra no TV e
+marginal=W basta.
 
-**Adendo 2 (v3) — a linha g = 0 por convenção.** A linha g = 0 é plana em rentabilidade nas convenções `gordon` e `convergencia` (cujos terminais não referenciam o ROIC do explícito) e no limite n → ∞. Na `book` com CAP finito ela **não** é plana: o terminal 1/(ROIC_book(1+W)ⁿ) depende da rentabilidade — 23,97x a ROIC 3% contra 8,04x a ROIC 50% (W 7%, n 10). A neutralidade da matriz perpétua clássica não sobrevive integralmente à implementação com horizonte finito e terminal de valor contábil.
+**Adendo 2 (v3) — a linha g = 0 por convenção.** A linha g = 0 é plana em rentabilidade nas convenções `gordon` e `convergencia` (cujos terminais não referenciam o ROIC do explícito) e no limite n → ∞. Na `book` com CAP finito ela **não** é plana em relação ao BOOK: o terminal 1/(ROIC_book(1+W)ⁿ) depende da âncora média — 23,97x a book 3% contra 8,04x a book 50% (W 7%, n 10). A neutralidade da matriz perpétua clássica não sobrevive integralmente à implementação com horizonte finito e terminal de valor contábil.
 
 ### 6.2 O sinal do gradiente em g é o sinal do spread — mas só na base forward · **[identidade]**
 
-**Proposição.** ∂(múltiplo)/∂g tem o sinal de (ROIC − W) na base forward. Na base corrente, o reajuste (1+g) contamina o resultado e pode inverter o sinal aparente.
+**Proposição.** ∂(múltiplo)/∂g tem o sinal de (ROIC marginal − W) na base forward, mantendo a
+âncora `ROIC_book` fixa quando ela existe. No caso conflacionado, o mesmo resultado vale porque
+book=marginal por construção. Na base corrente, o reajuste (1+g) contamina o resultado e pode
+inverter o sinal aparente.
 
 | ROIC | spread | base | g=0% | g=2% | g=4% | g=6% |
 |---|---|---|---|---|---|---|
@@ -366,29 +415,48 @@ A identidade vale nas convenções `book` e `convergencia`, que **coincidem exat
 
 **Consequência prática — e armadilha.** Na base corrente, uma empresa que destrói valor ao crescer (ROIC 5% contra WACC 7%) exibe múltiplo justo crescente em g. Um analista que monte a matriz g × ROIC na base corrente e leia "o múltiplo sobe com o crescimento, logo crescer é bom" chegará à conclusão oposta à verdadeira. Declarar a base da tabela não é preciosismo de formatação: é condição de validade da leitura econômica.
 
-### 6.3 A monotonicidade em ROIC depende da convenção — e inverte de sinal · **[propriedade condicional]**
+**Corolário para a reversa.** Monotonicidade forward não implica unicidade na base corrente. Como
+`M_corrente=(1+g)·M_forward`, o fator de base pode criar máximo interior e duas raízes. Contraprova
+na `book` com capital acumulado: ROIC marginal 10%, W 12%, book inicial 10%, n=15 e alvo corrente
+8,65x produzem **duas raízes**, g≈0,7552% e g≈4,4109%. Ambas reconstroem 8,65x. A taxonomia de
+§6.7 permanece integralmente válida depois da correção do terminal.
 
-**Proposição (revista na v3).** O sinal de ∂(múltiplo)/∂ROIC é **propriedade da convenção terminal**, não da hipótese de convergência competitiva: negativo sob `book`, positivo sob `convergencia` e sob `gordon`.
+### 6.3 A monotonicidade em rentabilidade exige dizer **qual** retorno se move · **[propriedade condicional]**
 
-g = 5%, EV/NOPAT corrente, W = 7%, n = 10:
+A `book` possui dois retornos economicamente distintos. Confundi-los foi a origem de várias
+proposições contraintuitivas das versões anteriores.
 
-| ROIC | `book` | `convergencia` | `gordon` (ROIC_TV 20%, gp 3%) |
-|---|---|---|---|
-| 5% | 17,389 | 12,421 | 18,476 |
-| 7% | 15,000 | 15,000 | 21,055 |
-| 10% | 13,208 | 16,934 | 22,990 |
-| 20% | 11,118 | 19,191 | 25,246 |
-| 50% | 9,864 | 20,545 | 26,601 |
+- **ROIC marginal**, mantendo `ROIC_book` fixo: para g>0, o múltiplo **sobe** com o marginal. Um
+  retorno maior exige menos capital novo para o mesmo crescimento; os fluxos melhoram e o IC final
+  cai. O benefício nos fluxos domina a menor saída patrimonial.
+- **ROIC book inicial**, mantendo marginal fixo: o múltiplo **cai** com o book. Para o mesmo NOPAT₁,
+  um book maior significa menos capital inicial ancorando a saída.
+- **Caso conflacionado** (`ROIC_book = ROIC_marginal` e ambos movidos juntos): o efeito da âncora
+  pode dominar e o múltiplo cai com a variável única — é a velha tabela da `book`, não uma
+  propriedade do retorno marginal.
+- **`convergencia` e `gordon`**: o múltiplo sobe com o ROIC marginal do explícito, mantidas as
+  premissas terminais.
 
-**Explicação.** Sob `book` o valor terminal é o capital investido: uma empresa de ROIC alto precisa de pouco capital para gerar o mesmo NOPAT e portanto herda um terminal pequeno. A convenção penaliza estruturalmente franquias de alto retorno. Sob `convergencia`, o terminal é NOPAT/W e não referencia o book — o ROIC alto entra só pelo lado bom (menos reinvestimento para o mesmo g), e o múltiplo sobe.
+Exemplo com W=7%, g=3%, n=10 e book inicial fixo em 10%: EV/NOPAT corrente sobe de **10,16x**
+quando o marginal é 2% para **12,59x** quando é 8%. Já no caso conflacionado, a antiga patologia
+permanece: na base **forward**, mover a variável única de ROIC de 2% para 15% reduz o múltiplo de
+**30,20x** para **10,89x**. O mesmo retorno baixo infla simultaneamente o capital inicial e a saída;
+essa tabela não descreve o gradiente marginal com book fixo.
 
-**A correção mais importante desta revisão.** A v2 concluía: *"quem defende múltiplo alto por ROIC alto está, sem saber, assumindo que o moat é perpétuo"*. **Isso é falso.** Sob `convergencia` — que é convergência competitiva no sentido corrente, com o capital novo deixando de criar valor no ano n+1 — o múltiplo justo **sobe** com o ROIC, sem nenhuma hipótese de moat perpétuo. O que a v2 demonstrou, e continua verdadeiro, é mais estreito: *quem defende múltiplo alto por ROIC alto está rejeitando a convenção de valor terminal contábil*. Rejeitar `book` não é afirmar perpetuidade; é afirmar que o negócio existente vale mais que o capital que o financia — o que é uma tese muito mais fácil de defender e muito menos exigente.
+**Consequência econômica.** A convenção `book` não “penaliza ROIC marginal alto” quando os papéis
+são corretamente separados. Ela penaliza uma âncora de capital pequena/grande conforme a relação
+entre lucro e book mensurado. Portanto a crítica correta a `book` é sobre a credibilidade do capital
+como valor de saída, não sobre a impossibilidade de franquias de alto retorno merecerem múltiplos
+maiores.
 
-**Corolário — a região condicionada (revisto na v3.2).** A monotonicidade decrescente da `book` vale em toda a faixa de ROIC, inclusive **abaixo** do custo de capital, onde vira perversidade **no caso conflacionado**: com W 7% e g 3%, o múltiplo forward é 30,20x a ROIC 2% contra 10,89x a ROIC 15%. Dois efeitos se somam — o terminal NOPAT/ROIC explode quando o ROIC cai, e a convergência do ROIC para cima até o WACC é, para um destruidor de valor, hipótese criadora de valor embutida sem declaração. **A perversidade é da conflação, não da convenção.** Com o retorno médio informado à parte, o terminal fica preso nele e a monotonicidade se inverte para o sinal correto: com W 7%, g 3% e ROIC_médio 10%, o múltiplo corrente vai de 2,96x a ROIC marginal 2% até 12,14x a 8% — sobe com a qualidade do investimento novo, como deve. Regra de uso: **sem retorno médio separado, a `book` é inadmissível abaixo do custo — modele o spread negativo persistente em `gordon` com rentabilidade terminal declarada abaixo do custo; com retorno médio separado, a raiz é condicionada a tese declarada de saída pelo capital investido**, e ganha sub-condição própria se o médio também ficar abaixo do custo.
+**Região abaixo do custo.** Sem book separado, `book` é inadmissível para interpretar um destruidor
+de valor: a conflação pode premiar a piora. Com book separado, a raiz é **condicionada**, não vazia;
+o valor acompanha o marginal na direção correta, mas a tese de saída pelo capital investido precisa
+ser defendida e o próprio book abaixo de W exige justificativa adicional de recuperação.
 
 ### 6.4 O teto da convenção `book` · **[propriedade condicional]**
 
-**Proposição.** Dados ROIC, W e n, existe um supremo finito para o múltiplo justo **na convenção `book`**, atingido quando g → ROIC (RiR → 100%). Múltiplos de tela acima desse supremo são inatingíveis nessa convenção **para qualquer g, com ROIC e n fixos**.
+**Proposição.** Dados ROIC marginal, W e n, existe um supremo finito para o múltiplo forward **na convenção `book`** no domínio autofinanciável. A tabela abaixo usa o caso conflacionado legado (book=marginal); com book separado, declare também a âncora inicial. Para spread positivo, o supremo forward ocorre em g → ROIC (RiR → 100%). Múltiplos de tela acima desse supremo são inatingíveis nessa convenção **para qualquer g, com ROIC e n fixos**.
 
 W = 7%, n = 10, sup sobre g ∈ (0, ROIC):
 
@@ -421,7 +489,12 @@ A v2 concluía, do valor 13,91: *"nem alongar o CAP resolve — com CAP de 100 a
 
 ### 6.5 CAP e convenção terminal: eixos relacionados, não idênticos · **[propriedade condicional]**
 
-**Proposição.** Quando n → ∞, todas as três convenções convergem para a fórmula de value driver perpétua, e os gaps entre elas se fecham monotonicamente.
+**Proposição qualificada.** Se **g < W**, o peso presente do terminal associado ao fim do CAP
+desaparece quando n → ∞ e as três convenções convergem para a mesma value-driver perpetuity. No
+caso conflacionado `ROIC_book = ROIC_marginal`, o gap fecha monotonicamente. Com `ROIC_book` inicial
+separado, a convergência no limite continua válida sob g < W, mas o caminho **não precisa ser
+monotônico**: a âncora inicial e o capital novo desaparecem a velocidades diferentes. Se g ≥ W,
+não existe essa garantia de convergência em valor presente; afirmar "CAP infinito resolve" é falso.
 
 ROIC 8,5%, g 5%, W 7%, EV/NOPAT forward:
 
@@ -440,7 +513,7 @@ Gaps contra `book` (ROIC_TV 20%, gp 3% na `gordon`):
 | 40 | +7,2% | +27,1% |
 | 80 | +3,0% | +11,2% |
 
-**Qualificação da v3.** A v2 concluía que "CAP e convenção terminal são a mesma pergunta parametrizada de duas formas" e que fazer sensibilidade nos dois simultaneamente é dupla contagem. Com a taxonomia ternária, isso é forte demais. Os dois gaps acima têm naturezas diferentes: `gordon` − `book` mede **se e quando** o spread morre, e é de fato largamente redutível a CAP; `convergencia` − `book` mede **o que sobra quando ele morre**, e não é redutível a horizonte nenhum — em qualquer n finito as duas descrevem terminais distintos. O que sobrevive da proposição da v2: (a) a sensibilidade conjunta em CAP e em *persistência do spread* é parcialmente redundante; (b) o gap entre convenções mede quanto do valor depende da hipótese terminal e encolhe com CAPs longos, dando um critério para saber quando a escolha importa (CAPs curtos) e quando é quase irrelevante (CAPs muito longos).
+**Qualificação da v3.** A v2 concluía que "CAP e convenção terminal são a mesma pergunta parametrizada de duas formas" e que fazer sensibilidade nos dois simultaneamente é dupla contagem. Com a taxonomia ternária, isso é forte demais. Os dois gaps acima têm naturezas diferentes: `gordon` − `book` mede **se e quando** o spread morre, e é de fato largamente redutível a CAP; `convergencia` − `book` mede **o que sobra quando ele morre**, e não é redutível a horizonte nenhum — em qualquer n finito as duas descrevem terminais distintos. O que sobrevive da proposição da v2: (a) a sensibilidade conjunta em CAP e em *persistência do spread* é parcialmente redundante; (b) sob **g<W**, o gap entre convenções mede quanto do valor depende da hipótese terminal e tende a zero com CAPs longos. Com `book=marginal` esse fechamento é monotônico; com `book` inicial separado pode haver abertura intermediária antes do fechamento. O critério econômico permanece: a escolha terminal tende a importar mais em CAPs curtos e a perder peso em CAPs muito longos, mas o caminho deve ser calculado, não presumido.
 
 ### 6.6 Cíclicas: a dupla alavanca ao preço do driver — e o efeito Molodovsky · **[identidade + regularidade empírica]**
 
@@ -577,15 +650,40 @@ Três qualificações obrigatórias:
 
 **Consequência para a engenharia reversa.** §6.6 já exigia, para cíclicas, reverter o preço do driver implícito. O teorema generaliza: **reverter o degrau implícito, qualquer que seja sua natureza**. Essa é com frequência a variável implícita mais informativa, por uma razão que as outras não têm — o degrau tem **observável de mercado direto**: o spot, o mínimo regulatório, a margem histórica. Ke implícito e g implícito só podem ser julgados contra a intuição do analista; um "Basileia implícita de 14,0%" ou um "cobre implícito de US$ 3,80/lb" pode ser confrontado com um número que existe no mundo. Quando há dois vetores de valor de naturezas distintas, a reversa produz uma **curva iso-valor** — o conjunto de pares que reconciliam o preço —, convertendo "está barato?" na pergunta mais tratável "qual dos dois vetores eu acredito que o mercado não está pagando?".
 
-### 6.11 A conflação marginal × médio reaparece no valor terminal · **[identidade] · (nova na v3)**
+### 6.11 A conflação marginal × médio reaparece no valor terminal — e o capital novo precisa chegar à saída · **[identidade]**
 
-**Proposição.** Na convenção `book`, o valor terminal TV = NOPAT_{n+1}/ROIC usa o ROIC no papel de **retorno médio do estoque de capital** (porque IC_n = NOPAT_{n+1}/ROIC_médio), enquanto o motor de g usa o mesmo símbolo no papel de **retorno marginal** (porque g = RiR × ROIC_marginal). Quando os dois diferem — o caso normal —, usar uma única variável nos dois papéis é erro estrutural, não aproximação.
+**Proposição.** Na `book`, o retorno marginal determina o reinvestimento que cria o crescimento; o
+`ROIC_book` separado determina apenas a **âncora média inicial** `IC₀ = NOPAT₁/ROIC_book`. A partir
+daí o estoque evolui com o capital novo:
 
-Magnitude: ROIC marginal 25%, ROIC médio 10%, W 8%, g 4%, n 10 ⟹ EV/NOPAT de **9,718 com a variável conflada contra 13,996 com os papéis separados — erro de −30,6%**.
+> **IC_n = (1+g)(1/ROIC_book − 1/ROIC_marginal) + (1+g)ⁿ⁺¹/ROIC_marginal**
 
-**Por que isto merece proposição própria.** A v2 afirmava, em §7, que o framework "mitiga" a crítica de Bodmer sobre ROIC ≠ RONIC ao usar soma explícita com terminal separado e ao exigir ROIC marginal derivado. A primeira metade é verdadeira — o horizonte explícito de fato permite rentabilidades diferentes. A segunda metade **produzia o erro que pretendia evitar**: exigir o marginal e depois usá-lo no denominador do terminal é exatamente a conflação de Bodmer, deslocada do explícito para o terminal. O enunciado correto: a crítica é **endereçada no explícito por construção, e no terminal apenas quando o retorno médio é informado separadamente**. As convenções `convergencia` e `gordon` não sofrem do problema — a primeira não referencia rentabilidade alguma no terminal, a segunda referencia uma rentabilidade terminal declarada — declarada **e marginal**: o papel de ROIC_TV é o do retorno incremental terminal (RONIC/ROIIC), nunca o médio do estoque por definição; o blended entra apenas como proxy sob convergência declarada (v3.5, achado C-01 do fechamento das Fases 1–2).
+Logo o TV é `IC_n`, não `NOPAT_{n+1}/ROIC_book` congelado. O retorno médio no fim do CAP é um
+output da composição entre capital antigo e capital novo.
 
-**O caso agravado: a conflação sob um degrau de rentabilidade.** Quando um evento de §6.10 eleva a rentabilidade marginal por um fator h (deployment de capacidade de balanço, por exemplo), a conflação muda de espécie: deixa de errar magnitude e passa a **inverter o sinal do gradiente**. Sob `book` conflada, a rentabilidade pós-degrau (marginal × h) entra no papel de média do estoque, o terminal NOPAT/ROIC **encolhe exatamente na proporção em que o degrau cresce**, e os dois efeitos podem se cancelar ou inverter: no caso medido, a rentabilidade sobe 48% e o múltiplo justo **cai** (7,199 → 7,198) — um evento inequivocamente criador de valor registrando como neutro-negativo. Com o retorno médio do estoque informado separadamente e mantido fixo, a direção corrige (9,12 → 10,06) e a decomposição fecha de forma exata: **o delta inteiro vem do horizonte explícito e o termo de TV fica idêntico** — que é precisamente a regra de §6.10 de que a rentabilidade terminal não acompanha o degrau, agora emergindo da álgebra em vez de ser imposta. A conflação simples custa magnitude (−30,6% acima); a conflação sob degrau custa o **sinal**, e sinal errado não tem ajuste conservador. O motor bloqueia o caminho com alerta explícito quando `book` roda em cenário de degrau sem o retorno médio informado.
+**Magnitude da correção.** ROIC marginal 25%, book inicial 10%, W 8%, g 4%, n 10: o caso
+conflacionado vale **9,718x** EV/NOPAT corrente. Separar os papéis com capital acumulado leva a
+**12,608x**, diferença de **−22,9%** no valor conflacionado. Congelar o book até o terminal
+produziria 13,996x e superestimaria o caso separado. No anchor da auditoria (g 5%, marginal 20%,
+book 10%, W 8%, n 10), o congelado dava 13,68x forward; o acumulado correto, 12,23x.
+
+**Por que a crítica de Bodmer continua relevante.** Exigir retorno marginal no explícito e usar esse
+mesmo retorno para inferir o estoque contábil ainda é conflação. A correção é separar os papéis e
+reconciliar o capital. `convergencia` não referencia rentabilidade no TV; `gordon` usa uma
+rentabilidade **marginal terminal** declarada.
+
+**Degrau de rentabilidade.** Com book separado, um degrau no marginal não deixa o TV idêntico:
+ele altera a quantidade de capital necessária para financiar o crescimento futuro. Isso é efeito de
+estoque, não perpetuação do moat. Exemplo g 4%, W 8%, n 10, book inicial 10%: elevar o marginal
+de 20% para 29,6% (+48%) move o valor de 12,513x para 12,668x; o explícito sobe (6,539→7,069)
+e o TV cai (5,974→5,599) porque a companhia chega ao ano n com menos capital. No caso conflacionado,
+a mesma mudança reduz o valor de 10,104x para 9,478x — sinal errado causado pela âncora média
+movendo junto com o marginal.
+
+**Espelho equity corrigido.** `pe --roe-book` acumula E por clean surplus. O ponto adicional do
+lado equity é evitar dupla contagem: na `book`, o fluxo é dividendo e o terminal é o patrimônio
+acumulado; Caixa/E não cria valor por si só. A equivalência DDM = residual income = motor é o teste
+canônico.
 
 ### 6.12 A agregação de segmentos não preserva valor: o viés do blended não tem sinal universal · **[propriedade condicional / não linearidade do modelo] · (nova na v3, revista na v3.2)**
 
@@ -610,13 +708,35 @@ O mecanismo do caso B é instrutivo: o segmento de retorno alto cresce devagar e
 
 **Proposição.** Dado um evento datado de mudança de estrutura de capital entre dois regimes (GD/E, ND/E), o fluxo ao acionista no ano da transição é E_pré·(GD/E₂·razão − GD/E₁)·(1+Kd(1−t)), com razão = (1+ND/E₁)/(1+ND/E₂), e é identidade CONDICIONAL a três hipóteses declaradas: transição num único ano, dívida a valor de face, Kd = cupom. Sob estrutura igual, o termo é identicamente nulo e o modelo colapsa no monofásico (provado por soma explícita de FCFE na suíte). A ponte precifica o movimento de caixa, não o deslocamento de risco: sob Modigliani-Miller, com Ke reprecificado, o efeito líquido da troca é o tax shield — usar a ponte com Ke fixo entre regimes atribui à dívida valor que é de custo de capital (o motor reporta o Ku implícito por regime e alerta o gap).
 
-**Falseamento.** Um caso real com transição datada em que o FCFE explícito ano a ano, construído das demonstrações, divirja do termo fechado além das três hipóteses declaradas, falsearia a identidade condicional.
+**Composição bifásica — qualificador semântico v9.31.** Quando a ponte é usada dentro de `iso --transicao ponte`, existe uma hipótese adicional de **rebase do primeiro lucro**: `NI2_1 = NI1_next·(ROE2/ROE1)·razão`. O quociente `ROE2/ROE1` não é consequência lógica do conceito de retorno marginal; ele funciona também como um degrau de nível declarado na transição. Portanto a inversão fechada de ROE₂ é exata **condicionada a essa convenção de rebase** e não deve ser interpretada como identificação estrutural pura do ROE marginal da fase 2. Isso é aplicação direta da própria proposição de §6.10: nível e rentabilidade são portas distintas, e um evento composto precisa declarar ambas.
 
-### 6.14 A curva iso-valor herda o problema inverso — e a conflação da P6.11 · **[corolário de 6.7 e 6.11] · (nova na v3.1)**
+**Falseamento.** Um caso real com transição datada em que o FCFE explícito ano a ano, construído das demonstrações, divirja do termo fechado além das três hipóteses declaradas, falsearia a identidade condicional. Na composição bifásica, a hipótese de rebase do lucro deve ser testada separadamente contra a trajetória operacional; divergência nessa hipótese não falseia a álgebra da ponte, mas invalida a leitura de ROE₂* como premissa econômica do caso.
 
-**Proposição.** A curva de pares (g, rentabilidade) que reconciliam um alvo é um problema inverso e herda integralmente as quatro patologias da P6.7 (sem raiz, neutralidade, múltiplas raízes, tangência) PONTO A PONTO da grade. Adicionalmente, sob a convenção `book` a inversão fechada só é bem-posta com os papéis marginal×médio separados (P6.11): com rb declarado, rent* = α·g·S/(S + B/rb − alvo); sem rb, a inversão conflacionada pode devolver raízes sem sentido econômico (verificado: ROE implícito negativo em caso com marginal 44,8% e médio 28%). Identificabilidade: com retenção nula (α·g → 0), a rentabilidade marginal não entra no múltiplo e não é recuperável do alvo.
+### 6.14 A curva iso-valor herda o problema inverso — e a separação marginal × médio · **[corolário de 6.7 e 6.11]**
 
-**Falseamento.** Qualquer par devolvido pela curva que, re-avaliado no motor direto com as mesmas convenções, não reproduza o alvo dentro da tolerância, falsearia a implementação (teste automático na suíte).
+**Proposição.** A curva de pares (g, rentabilidade) herda ponto a ponto as quatro patologias da
+engenharia reversa: sem raiz, neutralidade, múltiplas raízes e tangência. Sob `book`, a forma
+fechada depende de o lado ser enterprise ou equity.
+
+Defina `S=(1+g)(1−((1+g)/(1+K))^n)/(K−g)`, `B=(1+g)^(n+1)/(1+K)^n` e
+`B1=(1+g)/(1+K)^n`. No lado **enterprise**, com `rb=ROIC_book` separado e IC acumulado:
+
+> **rent* = [B − B1 − gS] / [alvo − S − B1/rb]**
+
+No lado **equity**, a v9.30 usa a mesma forma do enterprise na `book`, porque clean surplus implica
+α_book = 1 e o patrimônio é acumulado:
+
+> **rent* = [B − B1 − gS] / [alvo − S − B1/rb]**
+
+Caixa/E não entra nesta inversão. Sem rb, cada lado volta à forma conflacionada por compatibilidade
+e emite alerta. Em todos os casos,
+a inversão só é aceita depois de reinjetar a raiz no motor direto. Identificabilidade continua sendo
+propriedade local: quando o coeficiente de `1/rent` tende a zero, reportar um retorno implícito é
+ruído com aparência de precisão.
+
+A distinção de base é obrigatória também aqui. O gradiente forward em g pode ser monotônico e, ainda
+assim, o múltiplo **corrente** ter duas raízes pelo fator `(1+g)`. O caso 10% marginal / 12% W /
+10% book / n=15 / alvo corrente 8,65x é a contraprova permanente: g≈0,7552% e 4,4109%.
 
 ### 6.15 O regime monetário do g e a consistência de Fisher · **[propriedade condicional] · (nova na v3.2)**
 
@@ -624,11 +744,22 @@ O mecanismo do caso B é instrutivo: o segmento de retorno alto cresce devagar e
 
 **A forma específica no framework.** Sob `convergencia` o valor terminal é NOPAT/W e não cresce; sob `gordon` com gp = 0, idem. Com a base normalizada ao spot nominal, essas convenções afirmam, sem declarar, que o preço do driver fica **congelado em termos nominais em perpetuidade** — isto é, caindo à taxa de inflação em termos reais, para sempre. Não é um default neutro: é um canto extremo do espaço de hipóteses sobre o preço real do driver. (Caso motivador: na terceira execução fria sobre uma royalty de ouro, tornar explícito o regime — driver acompanhando a inflação de 2,3% a.a. — moveu o caso-base em +28%; o custo de capital implícito no preço de mercado, 4,66%, estava colado no juro nominal de 4,62%, e refeita a conta em numerário-ouro a taxa implícita caiu a ~1,3 p.p. acima do juro real — o mercado fazia a conta consistente.)
 
-**Resolução — duas rotas equivalentes por Fisher.** Com (1 + Ke_real) = (1 + Ke_nominal)/(1 + π): **(A)** manter os fluxos em preços de hoje e descontar a Ke real — corrige o horizonte inteiro; **(B)** manter o Ke nominal e conceder ao terminal o crescimento de preço **gratuito** (a mecânica da §6.9 no limite RiR → 0: rentabilidade terminal → ∞ com gp = π) — corrige o terminal, que é onde mora a maior parte do efeito. A escolha entre rotas é indiferente; a escolha entre **âncoras** — driver congelado nominal × driver acompanhando a inflação — é hipótese substantiva sobre o preço real do driver, e vai declarada e entregue em dupla.
+**Resolução — duas rotas exatas por Fisher, mais uma aproximação.** Com
+`(1 + Ke_real) = (1 + Ke_nominal)/(1 + π)`: **(A)** manter os fluxos em preços de hoje e descontar a
+Ke real; **(B)** manter Ke nominal e nominalizar **todo** o horizonte, multiplicando o fluxo real de
+cada período por `(1+π)^t` e tratando o terminal na mesma base. A e B são exatamente equivalentes
+quando aplicadas integralmente. Conceder inflação **somente no terminal** (`gordon`, rentabilidade
+terminal → ∞, gp = π) é uma terceira rota, **C — terminal-only aproximada**. Ela pode ser útil como
+sensibilidade quando o TV domina, mas não deve ser chamada de Fisher equivalente nem de rota central.
+A escolha entre **âncoras** — driver congelado nominal × driver acompanhando a inflação — continua
+sendo hipótese substantiva sobre o preço real do driver e vai declarada e entregue em dupla.
 
 **Três limites.** (i) A proposição vale para o caminho price-taker normalizado. Companhia com poder de preço analisada sem normalização carrega os reajustes DENTRO do g, e a conta nominal-com-nominal está correta — aplicar a correção ali conta a inflação em dobro. (ii) "O driver acompanha a inflação" é regularidade fraca, não lei: o preço real de commodities flutua por décadas; as duas âncoras delimitam o intervalo, nenhuma é a verdade. (iii) Crescimento por inflação não é integralmente gratuito no mundo real — repor capacidade e girar capital custam preços correntes; a âncora "acompanha sem custo" é limite superior. A crítica técnica à value driver formula sob inflação (Bodmer; Kiechle & Lampenius, *The Engineering Economist*, 2013) aponta o mesmo defeito pelo outro lado: aplicada em regime nominal ingênuo, a fórmula cobra reinvestimento g/ROIC sobre um crescimento de preço que não consome capital proporcional.
 
-**Falseamento.** A proposição é falseável pela equivalência: para qualquer vetor, o valor por (A) — fluxos de hoje a Ke real de Fisher — deve coincidir com o valor por (B) — Ke nominal com o crescimento de preço gratuito composto no fluxo — dentro da aproximação declarada (B terminal-only). Divergência além disso falsearia a implementação, não a proposição.
+**Falseamento.** Para qualquer trajetória real e inflação constantes, a rota (A) — fluxos reais a
+Ke real — deve coincidir numericamente com a rota (B) — os mesmos fluxos integralmente nominalizados
+a Ke nominal. Esse é o teste de Fisher. A rota (C) terminal-only **não** participa dessa identidade;
+sua divergência é o próprio erro da aproximação e deve ser mensurada quando material.
 
 ## 7. Limites de validade
 
@@ -676,7 +807,7 @@ O framework de múltiplos justos não é técnica de atalho: é a recusa em acei
 
 Seis conclusões que valem mais que a álgebra que as produz:
 
-1. **O múltiplo justo não é monotônico em ROIC, e o sinal é propriedade da convenção terminal.** Sob valor terminal contábil, o múltiplo cai com o ROIC; sob convergência competitiva padrão ou spread persistente, sobe. A afirmação da v2 de que múltiplo alto por ROIC alto pressupõe moat perpétuo era falsa: pressupõe apenas rejeitar o valor contábil como valor de saída — tese bem menos exigente.
+1. **“ROIC” não é uma variável única na `book`.** Com book separado, elevar o ROIC marginal aumenta o valor; elevar a âncora média inicial reduz o valor; mover os dois juntos reproduz a antiga monotonicidade negativa do caso conflacionado. Sob `convergencia`/`gordon`, o marginal também aumenta o valor. A conclusão útil não é “book penaliza ROIC alto”, e sim: **separe retorno do capital novo de retorno médio do estoque antes de interpretar qualquer gradiente.**
 2. **Um múltiplo de tela incompatível é evidência sobre a convenção ou sobre o nível, não sobre o preço** — e a ordem de investigação é degrau ausente → convenção → demais premissas → preço. Alongar o CAP **pode** matematicamente alcançar múltiplos altos (o teto sobe com n, ao contrário do que a v2 afirmava); o que o descarta é a implausibilidade do par (n, g) implícito, que deve ser reportado e discutido, não a impossibilidade.
 3. **CAP e convenção terminal são eixos relacionados, não idênticos.** A persistência do spread é largamente redutível a horizonte; o que sobra quando o spread morre não é.
 4. **Em muitos negócios a variável dominante é um nível, e o motor só tem taxas.** Preço do driver em price-takers e capacidade ociosa em negócios com restrição de balanço são o mesmo fenômeno: eventos que multiplicam o lucro sem consumir capital novo. Lançá-los em g é o erro mais caro do framework, e ele não tem sinal definido — destrói com spread negativo, desaparece na neutralidade e, com spread positivo, distorce em duas direções ao mesmo tempo. Não há ajuste conservador; há classificação certa ou errada.
@@ -691,8 +822,8 @@ A v2 afirmava que as proposições foram "verificadas numericamente no motor". I
 
 1. **Anchors contra modelo de referência independente.** O motor reproduz uma planilha construída separadamente (DRE, balanço e fluxo simulados período a período, com reconciliação por três rotas de FCFE e checks de fechamento). Confronto em **trajetória**, não só em totais: FCFF e FCFE ano a ano (erro máx. 4,3e-14), EV por três rotas (modelo, fórmula, capital + renda residual: 2e-13), e as seis séries do bloco APV ao longo de 11 períodos (4,6e-7, limitado pela truncagem dos inputs).
 2. **Property tests.** Identidades que devem valer em **qualquer** combinação válida de parâmetros, testadas por amostragem massiva: neutralidade ROIC = W (360 combinações); equivalência `convergencia` ≡ `gordon` com ROIC_TV = W, invariante a gp (144); monotonicidade por convenção; sinal do gradiente em g; inércia das convenções fora de seu escopo.
-3. **Reconciliação por construção independente.** O valor calculado pela fórmula é confrontado com a soma de fluxos construídos explicitamente fora do motor — incluindo a simulação ano a ano do balanço terminal por 4.000 períodos para validar o fator fechado de FCFE terminal (pior erro relativo 7,6e-15) e a identidade contábil de três rotas no terminal.
-4. **Boundary tests.** Limites e regiões degeneradas: g → ROIC, gp → W (deve retornar indefinido, não explodir em silêncio), ROIC → 0, n → ∞ (deve convergir à value driver perpétua), spread negativo declarado, caixa extremo, raízes tangenciais sintéticas, múltiplas raízes.
+3. **Reconciliação por construção independente.** O valor calculado pela fórmula é confrontado com a soma de fluxos construídos explicitamente fora do motor — incluindo a acumulação ano a ano de IC no `book` enterprise (contra a forma fechada, erro numérico de máquina), a simulação do balanço terminal por 4.000 períodos para validar o fator fechado de FCFE terminal (pior erro relativo 7,6e-15) e a identidade contábil de três rotas no terminal.
+4. **Boundary tests.** Limites e regiões degeneradas: g → ROIC, gp → W (deve retornar indefinido, não explodir em silêncio), ROIC → 0, n → ∞ sob g<W (deve convergir à value driver perpétua; com book separado o caminho pode não ser monotônico), spread negativo declarado, caixa extremo, raízes tangenciais sintéticas, múltiplas raízes.
 
 **O que este protocolo não cobre, e nenhum protocolo numérico cobre:** a correspondência entre a fórmula e a afirmação econômica que a acompanha. Esse é o objeto da auditoria conceitual, e foi ela — não os testes — que encontrou os erros corrigidos nesta versão.
 
@@ -703,7 +834,7 @@ A v2 afirmava que as proposições foram "verificadas numericamente no motor". I
 Enunciados que tornariam falsas as proposições centrais, para que o leitor possa testá-las em vez de acreditar nelas:
 
 - **§6.1 (neutralidade)** seria falseada por um par (ROIC = W, g) — com ROIC marginal = ROIC book sob `book` (Adendo 3) — em que o múltiplo forward divergisse de 1/W. Como é identidade algébrica sob as premissas de §7, um contraexemplo indicaria violação de premissa — tipicamente margens ou RiR não constantes —, não erro da proposição.
-- **§6.3 (monotonicidade)** seria falseada por uma convenção terminal, econômica e declarável, sob a qual o sinal de ∂múltiplo/∂ROIC não fosse determinado pela convenção. A proposição é condicional por construção: o que ela proíbe é a afirmação **incondicional** de qualquer dos sinais.
+- **§6.3 (monotonicidade)** seria falseada por um caso com g>0 e `ROIC_book` fixo em que elevar apenas o ROIC marginal reduzisse o valor enterprise `book`, ou por um caso em que elevar apenas o book inicial aumentasse o valor, mantendo as demais premissas. A antiga proposição de sinal único para “ROIC” foi abandonada porque misturava duas variáveis econômicas distintas.
 - **§6.4 (teto)** é falseada por qualquer alvo alcançável na `book` acima do supremo sobre g com ROIC e n fixos — o que não existe. A afirmação **derivada** ("alongar o CAP não resolve") foi de fato falseada nesta revisão, e é o exemplo que o leitor deve ter em mente ao ler as demais.
 - **§6.10 (classificação)** seria falseada por um evento que eleve permanentemente o lucro sem reinvestimento proporcional e cuja representação correta no motor **seja** um incremento em g. Como a identidade g = RiR × ROIC é definicional, tal evento indicaria que o crescimento observado tem outra fonte de capital — o que é a porta 4, não a porta 2.
 - **§3.2 (mortalidade)** e as regularidades empíricas em geral são falseáveis por dados: amostras, períodos ou geografias diferentes podem produzir persistências e hazards diferentes, e nesse caso mudam as âncoras, não a estrutura.
@@ -770,14 +901,15 @@ Nenhuma alcança 27x. Este é o resultado interessante, e é o oposto do que a v
 **Fontes consultadas na pesquisa**
 
 - Mauboussin, M. & Callahan, D. (14/04/2026). "Competitive Advantage Period: The Neglected Value Driver". Counterpoint Global Insights, Morgan Stanley — fade rates por setor, persistência de ROIC, longevidade corporativa, modelos terminais, MICAP.
+- Mauboussin, M. & Callahan, D. (18/06/2026). "Opportunities and Expectations — The Present Value of Growth Opportunities in Valuation". Counterpoint Global Insights, Morgan Stanley — decomposição steady-state × PVGO e conteúdo informacional das expectativas de crescimento.
 - Damodaran, A. "Relative Valuation" e cap. 4 de *Damodaran on Valuation* — determinantes dos múltiplos, companion variables, comparáveis.
 - Fernández, P. IESE — "Levered and Unlevered Beta", "The Correct Value of Tax Shields: An Analysis of 23 Theories", "Equivalence of ten different DCF valuation methods".
 - Bodmer, E. "Biases in McKinsey Value Driver Formula"; "Use of Proofs in Corporate Valuation Analysis".
-- Penman, S. "Valuation Models: An Issue of Accounting Theory" — equivalência DCF↔RI apenas em horizonte infinito.
+- Penman, S. "Valuation Models: An Issue of Accounting Theory" — disciplina de equivalência entre métodos e transformação consistente do terminal em horizontes finitos.
 - Efeito Molodovsky e normalização de lucros (material CFA e resenhas).
 - Método de unidades de produção / exaustão de recursos naturais.
 
-**Verificações numéricas.** Todas as tabelas foram geradas com o motor do framework (soma explícita), auto-validado contra os anchors do modelo de referência (EV/NOPAT 6,4296x · EV/EBITDA 4,2007x · P/L 5,7337x · ponte de normalização 630,6294 · bloco APV: V₀ 193,6592, E₀ 158,6592, Ke₁ 20,5633%, WACC₁ 18,6524%) e pela suíte descrita no Apêndice A. Parâmetros de replicação da tabela de §6.10: Ke 20%, n 10, `gordon` com ROE_TV fixo no ROE original de cada linha, gp 6,5%, caixa/E 0; h 1,485; Δg = h^(1/4) − 1 = 10,4 p.p. sobre g base de 12%; valores em P/VP justo = P/L corrente × ROE.
+**Verificações numéricas.** Todas as tabelas foram geradas com o motor do framework (soma explícita), auto-validado contra os anchors do modelo de referência (EV/NOPAT 6,4296x · EV/EBITDA 4,2007x · P/L 5,617295x · ponte de normalização 630,6294 · bloco APV: V₀ 193,6592, E₀ 158,6592, Ke₁ 20,5633%, WACC₁ 18,6524%) e pela suíte descrita no Apêndice A. Parâmetros de replicação da tabela de §6.10: Ke 20%, n 10, `gordon` com ROE_TV fixo no ROE original de cada linha, gp 6,5%, caixa/E 0; h 1,485; Δg = h^(1/4) − 1 = 10,4 p.p. sobre g base de 12%; valores em P/VP justo = P/L corrente × ROE.
 
 ---
 
@@ -802,9 +934,9 @@ Nenhuma alcança 27x. Este é o resultado interessante, e é o oposto do que a v
 | §6.7 | Quarta região mal-posta (raízes tangenciais); critério operacional de identificação (slope, curvatura, elasticidade, intervalo, classificação forte/moderada/fraca) |
 | §6.8 | Acrescentado o caráter **many-to-one** do mapeamento premissas → múltiplo, nas duas direções |
 | §6.10 | "Exatamente uma de três portas" → **vetor de quatro** (ΔNível, Δg, ΔRentabilidade, ΔFunding), resolvendo a contradição com a própria taxonomia da v2 (aquisição, estrutura de capital) |
-| §6.11 | **Nova**: a conflação marginal × médio reaparece no terminal da `book`; a alegação da v2 sobre Bodmer em §7 era falsa; magnitude −30,6% |
+| §6.11 | **Revisada na v3.6**: a conflação marginal × médio reaparece no terminal da `book`; com book separado o IC é acumulado ao marginal; caso-base da seção: −22,9% de erro conflacionado |
 | §6.12 | **Nova**: a agregação de segmentos não preserva valor; o blended é estimador viesado, com sinal e magnitude a calcular (a v3 atribuía o efeito a convexidade — corrigido na v3.2: a Hessiana é indefinida) |
-| §6.15 | **Nova (v3.2)**: o regime monetário do g e a consistência de Fisher — em price-taker normalizado a nível, o g é volume e os fluxos são reais na moeda do driver; descontá-los a Ke nominal é Modigliani-Cohn; duas rotas equivalentes (Ke real; preço gratuito no terminal) e dupla entrega das duas âncoras |
+| §6.15 | **Revisada na v3.7/v9.28**: regime monetário e Fisher — duas rotas exatas (fluxos reais + taxa real; TODO o horizonte nominalizado + taxa nominal); inflação somente no terminal é aproximação terminal-only, não equivalência de Fisher |
 | §7 | Acrescentados: convenções não neutras, Ke exógeno na camada do múltiplo, mortalidade, qualidade do capital investido (intangível fora do balanço) |
 | §8 | Protocolo alinhado ao fluxo real, com **passo 8 de revalidação da convenção**; estado das três extensões da v2 (1 rejeitada, 2 implementadas); nova extensão de realimentação de Ke_t |
 | §9 | Conclusões 1–4 revistas conforme acima; **conclusão 6 nova**: consistência interna não valida rótulo econômico |
@@ -816,7 +948,7 @@ Nenhuma alcança 27x. Este é o resultado interessante, e é o oposto do que a v
 |---|---|
 | §5 / §7 | **Sexta convenção não neutra**: fluxo do ano de transição no `gordon` — (1+g), fiel à planilha, vs (1+gp) de parte do sell-side; efeito exato TV_share × [(1+gp)/(1+g) − 1], calculado caso a caso pelo motor em vez de reportado como faixa |
 | §6.7 | O **domínio de busca da reversa** declarado como convenção: busca padrão restrita a RiR ≤ 100%; a região além é admissível sob funding declarado (§6.10, corolário 1) e sua abertura é um ato de declaração, com a raiz carimbada |
-| §6.11 | **Caso agravado da conflação**: sob degrau de rentabilidade, a `book` conflada inverte o sinal do gradiente (rentabilidade +48% ⟹ múltiplo cai); com o médio separado, o delta migra inteiro para o explícito e o TV fica idêntico — a regra de §6.10 emergindo da álgebra |
+| §6.11 | **Caso agravado revisado na v3.6**: sob degrau, a `book` conflada pode inverter o sinal; com médio inicial separado, o explícito melhora e o TV muda na direção oposta porque o capital novo acumulado muda — o retorno terminal não é perpetuado, mas o estoque é reconciliado |
 
 
 ## Nota v3.2 — posição do framework ante os dois apertos de Damodaran (custo de capital e âncora macro)
@@ -829,3 +961,13 @@ pocket. O framework toma Ke/WACC como inputs declarados e garante a CONSISTÊNCI
 (apv, Ku, WACC_t), não a origem do número — quem precisa do build-up o faz fora e declara o
 resultado. É uma fronteira de escopo, não uma discordância: a crítica de que o input dominante
 é o menos examinado é aceita, e a resposta do framework é torná-lo o MAIS declarado.
+
+
+## Nota de hardening — v9.28
+
+A v9.28 não altera o núcleo enterprise validado na v9.27. Ela fecha oito classes de risco reveladas
+por diligência adversarial: (i) Fisher exato vs terminal-only; (ii) caixa remunerado no Gate
+ROIC↔ROE; (iii) condição g<W e não-monotonicidade possível do CAP longo; (iv) domínio de inputs;
+(v) deduplicação de raízes; (vi) limite g₂=0 e WACC=0 na rampa; (vii) deployment fracionário;
+(viii) C7 explícita no APV e fim dos aliases hp/me. Miles–Ezzell foi corrigido e a referência PVGO
+de 18/06/2026 foi adicionada.

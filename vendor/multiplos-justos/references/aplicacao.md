@@ -65,15 +65,18 @@ abaixo é obrigatória; desviar dela exige declarar o desvio e o motivo.
 - Moeda: o Ke tem que estar na moeda dos fluxos. Se lucro em moeda local e preço em moeda
   estrangeira, avalie em moeda local com Ke local e converta o resultado ao câmbio spot — nunca
   misture Ke de uma moeda com crescimento nominal de outra.
-- **Regime do MODELO, não só da moeda (v9.14 — Fisher).** O Ke acima é NOMINAL. Pergunte: *o g
-  contém inflação?* Em price-taker normalizado a nível, NÃO (o g que sobra é volume; fluxos em
-  preços de hoje) — descontar fluxo real a taxa nominal é o erro de Modigliani-Cohn (J6: ~28% do
-  valor). Duas rotas equivalentes por Fisher, escolha e declare: **(A)** Ke REAL,
-  (1+Ke_real) = (1+Ke_nom)/(1+π), `--moeda *-real` — corrige o horizonte inteiro; **(B)** Ke
-  nominal + crescimento de preço gratuito no terminal (`gordon`, rentab_TV → ∞, gp = π) — corrige
-  só o terminal; declare a diferença. NÃO aplicar em companhia com poder de preço sem normalização
-  (o g já contém reajustes — corrigir contaria a inflação em dobro). "Driver acompanha a inflação"
-  é HIPÓTESE: congelado × acompanhando são as duas âncoras da dupla entrega (§7).
+- **Regime do MODELO, não só da moeda — Fisher.** O Ke acima é NOMINAL. Pergunte: *o g contém
+  inflação?* Em price-taker normalizado a nível, NÃO: o g remanescente é volume e os fluxos ficam
+  em preços de hoje. Descontar fluxo real a taxa nominal é o erro de Modigliani-Cohn. Há duas rotas
+  **EXATAMENTE equivalentes** por Fisher: **(A)** manter os fluxos reais e usar Ke REAL,
+  `(1+Ke_real)=(1+Ke_nom)/(1+π)`; **(B)** manter Ke nominal e inflacionar **todo o horizonte
+  explícito e o terminal** à inflação coerente. A antiga rota "Ke nominal + inflação somente no
+  terminal" NÃO é Fisher equivalente: é uma aproximação terminal-only e só pode aparecer como
+  sensibilidade rotulada, com o erro/direção declarados. Enquanto o motor não carregar trajetória
+  nominal explícita por componente, a rota central é **A (real exata)**. NÃO aplicar em companhia
+  com poder de preço sem normalização (o g já contém reajustes — corrigir contaria a inflação em
+  dobro). "Driver acompanha a inflação" continua hipótese: congelado × acompanhando são as duas
+  âncoras da dupla entrega (§7).
 
 **Crescimento perpétuo (gp), quando a convenção `gordon` for usada** (a `convergencia` é invariante a gp por construção).
 `gp = meta de inflação de longo prazo da moeda + crescimento real declarado`, ambos com fonte.
@@ -171,17 +174,28 @@ exposta for separável (segmento, produto, contrato, nota de custos). Só declar
 — e diga por quê, porque elasticidade chutada é o maior buraco de determinismo que resta: muda o
 gate, muda quem vira cenário e muda o nível normalizado.
 
-**Base nominal vs real — declare, e não misture.** `g` e rentabilidade têm que estar na mesma base.
+**Base nominal vs real — invariante de coerência, declare e não misture.** Esta é uma convenção
+obrigatória de consistência, **não uma 11ª bifurcação econômica**: uma conversão nominal↔real feita
+integralmente não deve, por si só, criar ou destruir valor. `g`, gp, rentabilidade e custo de capital
+têm que estar na mesma base.
 O erro caro: `g` nominal (que embute inflação) combinado com rentabilidade contábil calculada sobre
 capital a custo histórico não reajustado. O ROIC sai inflado, o RiR = g/ROIC subestima o
 reinvestimento necessário, e o valor infla — o mesmo mecanismo da armadilha do ROIC de pico, por
 outra porta. Duas saídas, escolha e declare:
 - **Nominal:** exige capital reajustado, ou a rentabilidade derivada de `g/RiR` a partir do
   deployment em moeda corrente — que é imune ao problema, porque numerador e denominador estão na
-  mesma moeda do período. **É a rota preferida em ambiente inflacionário.**
+  mesma moeda do período. Só é exata quando **todos** os fluxos explícitos foram nominalizados
+  de forma coerente.
 - **Real:** `g` real e rentabilidade real, com `gp` real; converta ao final se o preço for nominal.
+  **É a rota central enquanto a trajetória nominal explícita por componente não estiver modelada integralmente.**
 Sinalize sempre que a inflação acumulada do período-base for material — nesse caso, a rentabilidade
 contábil deixa de ser comparável à marginal e a diferença entre elas não é vintage, é indexação.
+
+**Caixa remunerado no Gate ROIC↔ROE.** Se `Cash/E = D/E − ND/E > 0`, descubra se o LL/ROE
+informado inclui rendimento desse caixa. Se SIM, a reconciliação exige `Kcash(1−t)×Cash/E`; passe
+`--cash-yield` bruto. Se NÃO houver essa separação, o gate produz falso gap. A rota preferida é
+normalizar o LL excluindo resultado financeiro de excess cash, valorar a operação e adicionar o
+caixa separadamente. Nunca usar caixa remunerado para "explicar" ROIC operacional.
 
 **Contabilidade (d e t).** d = D&A como % do EBITDA do ano-base; cuidado — D&A absoluta não escala
 com o nível do driver (é por unidade produzida), então d cai quando o driver sobe. Decomponha o d
@@ -224,6 +238,17 @@ estado estacionário de capex?" — corrente × guidance de longo prazo são os 
 escolha metodológica correspondente (SKILL.md, item 4), cada um com seu par (d, RiR) coerente.
 Verificação manual na cadeia §11.1b; confronto executável no `ev` via `--capex-total` e `--dwc`
 (v9.24) — gap > 10% sai com o alerta de reclassificação.
+(v) **Guarda de moeda do d (v9.25).** A moeda do dado de origem decide, não a rota da derivação: d
+derivado de fluxo em moeda corrente — capex de sustentação observado, deployment recente do DFC,
+guidance, unit economics — já está a preços de hoje e **é proibido ajustar por inflação** (ajustar
+seria dupla contagem: a taxa nominal já desconta um fluxo corretamente nominal). O único caso de
+ajuste é d que seja, em substância, D&A contábil pura a custo histórico, E com inflação acumulada
+sobre a idade média do parque material — âncora de materialidade: ~15% acumulado (fator ≳ 1,15);
+abaixo, declare e siga sem ajuste. Dentro do gatilho duplo, a proxy entra a custo de reposição
+(fator ≡ inflação do bem de capital acumulada sobre a idade média; idade média ≈ depreciação
+acumulada ÷ D&A anual, ambas só dos ativos ainda em depreciação — ativo totalmente depreciado em
+operação é aviso de reposição adiada: registre). Fora do gatilho duplo, nada muda; dentro dele,
+ajustar ou declarar a direção (proxy contábil pura superestima o valor) — nunca o silêncio.
 
 **Declaração de fronteira EV/EBITDA (v9.7 — obrigatória quando a base é EBITDA).** A ponte
 (1−d)(1−t) é o elo fraco declarado do framework (paper §2.4); nenhuma saída EV/EBITDA vai à
@@ -252,11 +277,17 @@ número, e é o Gate 1 do SKILL.md.** O motor exige `--tv` explícito e não tem
 convenções (ver `derivacao.md` §3); declare a escolhida E a hipótese que ela carrega na entrega.
 - **`book`** (ex-`ic`): o NOPAT inteiro colapsa para W×IC — TV ancorado no capital investido
   MENSURADO; ler como fim de TODA renda econômica exige book confiável (classificação do §1) e é
-  hipótese mais dura que a exaustão no capital incremental. O colapso ocorre no ano
-  n+1 e o TV é o capital investido. Hipótese mais dura que "a vantagem se exaure"; adequada quando
-  o valor contábil é âncora crível de saída (price-taker de commodity, regulado com base de
-  remuneração). Exige `--roic-book` (média contábil/blended) quando marginal ≠ médio — sem isso o
-  motor conflaciona os dois papéis e alerta.
+  hipótese mais dura que a exaustão no capital incremental. O colapso ocorre no ano n+1 e o TV é o
+  capital investido. Adequada quando o book é âncora crível de saída (price-taker de commodity,
+  regulado com base de remuneração). **Enterprise:** `--roic-book` é a média **inicial/forward** do
+  estoque, temporalmente alinhada a NOPAT₁: `IC₀ = NOPAT₁/ROIC_book`. Se a fonte for ROIC trailing,
+  reconcilie-a para essa base antes de usar. Quando marginal ≠ médio, o TV é o IC **ACUMULADO**:
+  parte de IC₀ e recebe o capital novo ao ROIC marginal; o retorno médio no ano n é output, não
+  parâmetro congelado. **Equity [v9.30]:** `--roe-book` acumula o patrimônio por
+  clean surplus. A forma fechada de E_n coincide com a do firm, mas o valuation `book` é
+  **Div + E_n**: `Div_t = LL_t − ΔE_t = LL_t(1−g/ROE_marg)`. O termo `+Δcaixa` do módulo FCFE
+  não entra nesta convenção porque o caixa retido já está em E_n; somá-lo de novo é dupla contagem.
+  Assim, Caixa/E é neutro na `book` e excess cash/rendimento de caixa deve ser tratado separadamente.
 - **`convergencia`**: só o capital NOVO deixa de criar valor (RONIC = W); o NOPAT existente é
   preservado; TV = NOPAT/W. Exaustão da vantagem NO CAPITAL INCREMENTAL — as rendas dos ativos
   existentes não são eliminadas (o desaparecimento total é a `book`). Não referencia o book
@@ -275,14 +306,17 @@ convenções (ver `derivacao.md` §3); declare a escolhida E a hipótese que ela
   `--politica-tv continua` (default, FCFE canônico — a proporção de caixa segue na perpetuidade)
   ou `encerra` (a política morre no ano n); a escolha move 2–6% do P/L e sai no diagnóstico.
 - **Se rentabilidade marginal < custo de capital, o caminho depende de haver book separado.** SEM
-  `--roic-book`/`--roe-book`, a `book` premia o destruidor de valor (TV = NOPAT/ROIC cresce quando o
-  ROIC cai, e a convergência para cima até o custo de capital é criação de valor não declarada): use
-  `gordon` com rentabilidade terminal ABAIXO do custo e declare o spread negativo persistente como
-  hipótese, ou informe a média e re-rode. COM o book informado, o TV não acompanha o marginal e o
-  múltiplo cai monotonicamente com ele: a raiz é CONDICIONADA, admissível sob tese DECLARADA de
-  saída pelo capital investido (turnaround, capex regulatório, reconstrução operacional, liquidação,
-  venda pelo patrimônio). Se o próprio book estiver abaixo do custo, some o sub-alerta: o TV excede
-  NOPAT/WACC por W/ROIC_book e a tese passa a ser de RECUPERAÇÃO, não de continuidade.
+  book separado, a `book` conflaciona médio×marginal e pode premiar o destruidor de valor (o TV cresce
+  quando a variável única de retorno cai): separe os papéis ou use `gordon` com rentabilidade
+  terminal ABAIXO do custo e declare o spread negativo persistente. **Enterprise, com
+  `--roic-book`:** o TV parte de IC₀ e acumula o capital novo ao marginal; com g>0, elevar apenas o
+  marginal eleva o valor. A raiz é CONDICIONADA à tese declarada de saída pelo capital investido
+  (turnaround, capex regulatório, reconstrução operacional, liquidação). Isso não torna toda reversa
+  unívoca: o gradiente em g tem sinal do spread na **base forward**, mas a base corrente pode ter
+  máximo interior e duas raízes. **Equity, com `--roe-book`:** o patrimônio parte da média
+  inicial e acumula o lucro retido ao marginal. Na `book`, Caixa/E não altera o valor por si só;
+  o fluxo é dividendo e o terminal é E_n. Se o próprio book estiver abaixo do custo, some o
+  sub-alerta de RECUPERAÇÃO.
 
 **Teste do teto — procedimento, não impressão.**
 ```
@@ -458,6 +492,35 @@ que sai como resíduo do triângulo (g e RiR inputs) é aritmética, não evidê
 por unit economics do §11.2 ou fonte independente, a entrega declara "rentabilidade marginal
 derivada por resíduo, não validada".
 
+**Decomposição do g por componente (v9.25) — o espelho do lado do crescimento.** A v9.22 decompôs o
+custo do crescimento (RiR = RiR_fixo + RiR_wk); esta regra decompõe o próprio crescimento. Gatilho:
+**qualquer projeção NOMINAL** — que, por prática de mercado, já embute repasse de inflação no preço
+(o §2 reconhece: "o g já contém reajustes"). Decomposição declarada: g = g_volume + g_preço, com
+g_preço = inflação × repasse + preço real (repasse ∈ [0, 1], declarado; os extremos repasse 0 e 1
+SÃO as duas âncoras congelado × acompanhando da dupla entrega do §7 — mesmo eixo, agora nomeado).
+Acoplamento: capital FIXO só é cobrado pela expansão do VOLUME de vendas — planta fabril e
+capacidade instalada não crescem porque o PREÇO do produto subiu; GIRO é cobrado perna a perna, cada
+uma com o índice do SEU fluxo — recebíveis com o preço de venda, estoque com o custo de reposição do
+insumo, fornecedores com o custo de compra (funding, sinal oposto) — e o consumo do componente-preço
+é o ciclo de caixa (financeiro) ponderado por esses índices, com o SINAL do ciclo: ciclo de caixa
+negativo converte inflação de preço em geração de caixa. **Aplica-se quando o RiR é a perna DERIVADA
+do triângulo** (dois inputs livres, um output): o blendado é RiR = (g_volume × custo pleno + g_preço
+× custo só-de-giro) ÷ g, sobre o g TOTAL — nunca um componente escolhido. Ilustração pela identidade
+de abertura deste bloco: custo pleno = (capex fixo de crescimento + Δgiro) ÷ NOPAT; custo só-de-giro
+= Δgiro causado pelo componente-preço ÷ NOPAT. RiR OBSERVADO em moeda corrente já nasce blendado por
+construção (o deployment efetivo já reflete que o fixo não subiu com o preço) — re-blendar é dupla
+contagem, proibido. Fora do gatilho: price-taker normalizado a nível não tem componente de preço no
+g (fluxos em preços de hoje; inflação tratada pela rota real exata ou nominal exata). A rota
+terminal-only com preço "gratuito" no TV e rentab_TV → ∞ é **aproximação**, não Fisher equivalente:
+é o caso-limite desta regra com giro ≈ 0 e pode ser exata para royalty/streaming; em price-taker com
+giro material, a inflação de preço consome giro pelo ciclo ponderado, ou declara-se a direção — a
+aproximação terminal-only tende a superestimar quando o ciclo de caixa é positivo);
+na rampa, o g₁ da forma fechada e o delimitador são volume por âncora física, e o componente de
+preço "declarado à parte" (compressão 2 do §8f, texto vigente) segue esta regra — giro sim, fixo
+não. Em base real, o componente de preço é só o real acima da inflação. Duas omissões, duas
+direções: RiR pleno sobre g nominal subestima o valor; giro zero sobre o componente-preço
+superestima em ciclo de caixa positivo e subestima em ciclo de caixa negativo.
+
 **Padrão para verificações** — nunca "a verificação passou"; sempre o que foi testado, o número,
 a consequência: *"o único driver com gap relevante é o câmbio, a 3,1% do spot — abaixo do limiar
 de 10%, então os últimos doze meses seguem representando o nível corrente e não há normalização
@@ -466,6 +529,171 @@ a fazer."*
 **Onde a prosa pode ser curta:** disclaimer, limitações e riscos podem ser lista. Conclusão,
 premissas, verificações, memória de cálculo e expectativas embutidas, não — são o raciocínio.
 **Nunca um número único. Sempre a ponte para preço explícita.**
+
+## 5b. Entrega — texto integral (migrado do corpo da skill na v9.26)
+
+Leitura OBRIGATÓRIA antes de qualquer relatório completo (fluxos 2 e 3). O corpo da skill mantém
+o esqueleto da entrega; este é o texto integral que o esqueleto referencia — regra de
+substituição, quadro pedagógico, as dez bifurcações por extenso, primeira aparição e formato
+dentro de seção. Nada foi cortado na migração.
+
+### A entrega é um relatório de research — e um produto de mercado (fluxos 2 e 3)
+
+**Princípio da parede.** Gates, regras, convenções, jurisprudência, comandos e versões são a
+infraestrutura do analista — o leitor recebe os ACHADOS, nunca a infraestrutura. Teste de
+aceitação: um gestor que nunca viu esta skill entende 100% do texto, incluindo o porquê de cada
+escolha, sem pedir nenhum documento adicional.
+
+**Regra de substituição (o coração da parede).** Cada regra travada codifica uma razão econômica.
+No relatório, a escolha é justificada pela RAZÃO — em uma frase, com o número — ou por fonte
+externa citável (Damodaran, Mauboussin/Rappaport, McKinsey), nunca pela autoridade da regra.
+"Pela regra §9, caixa/E = 0" vira: "num negócio com braço financeiro, o caixa é liquidez
+operacional e regulatória, não excedente devolvível — e a companhia tem dívida líquida positiva".
+Se a razão não couber em uma frase, a escolha não foi entendida: volte à regra antes de escrever.
+
+**A saída do motor é processo, não produto.** O texto que os comandos imprimem — avisos, travas,
+nomes internos, referências de seção — é artefato de auditoria do analista. O CONTEÚDO de um aviso
+material atravessa a parede (omiti-lo esconderia achado); a REDAÇÃO dele, nunca — todo texto do
+motor passa pela tabela de tradução (`aplicacao.md` §5) antes de virar produto. A memória técnica é
+processo e pode carregar saída do motor verbatim; o relatório, não.
+
+**Lista de banimento no corpo do relatório** (uso interno segue livre): nomes e números de gates;
+códigos de regra/convenção/jurisprudência (R#, C#, D#, J#, §#, "paper §"); números de versão da
+skill; nomes de comandos e flags; enums do motor na prosa (`antecipacao_temporal`,
+`nao_confiavel`); os termos internos "dupla entrega", "bifurcação", "quadrante proibido", "guarda
+anti-empilhamento", "trava", "motor", "framework", "skill", "jurisprudência", "regra travada".
+Conceitos entram TRADUZIDOS (tabela em `aplicacao.md` §5). O banimento é de rótulo, nunca de
+conteúdo: grades, memórias de cálculo e marcadores de honestidade ("hipótese de construção",
+"não verificado nesta sessão", "direção do erro") continuam obrigatórios.
+
+**Formato dentro de cada seção** (inalterado): prosa com a conta inline; a tabela de seis colunas
+é formato de Excel, nunca o corpo; grades provam o raciocínio (uma frase acima, uma abaixo) e
+toda grade cujo output é preço por ação declara a métrica de referência.
+**Primeira aparição ensina (v9.21):** na primeira vez que cada variável da cadeia (encargo de
+reposição, alíquota, crescimento, retorno do capital novo, taxa de reinvestimento, custo de
+capital) é USADA fora do quadro, até duas frases explicam sua função na formação de valor — por
+que existe, não só qual número foi escolhido. Aparições seguintes não repetem. Teto duro: a
+explicação nunca vira parágrafo.
+
+Estrutura fixa, nesta ordem — conclusões na largada:
+
+1. **Conclusão** (abre o documento): faixa de valor (piso–base–teto) com veredicto explícito
+   contra o preço de tela (data e banda); múltiplos de tela corrente E forward com base
+   declarada; consenso (PT médio, nº de analistas) como referência externa, ou a lacuna
+   declarada quando não houver cobertura; e as **4–6 premissas
+   decisivas ABERTAS já aqui** — cada uma com o número e uma linha de justificativa própria.
+   **Quatro vagas da lista são FIXAS, sempre: (i) base de lucro/EBITDA; (ii) rentabilidade
+   marginal (ROIC/ROE), com a derivação em uma linha; (iii) g; (iv) custo de capital.** As
+   demais vagas são do caso (hipótese terminal, driver dominante, alavanca); a verificação das
+   fixas está nos critérios de aceitação. O
+   leitor com 60 segundos sai daqui com a tese, os números que a sustentam e a premissa cuja
+   inversão a derruba.
+
+   **Quadro "como o valor é formado" (v9.21 — fixo, ≤ meia página, entre a Conclusão e as
+   Premissas).** Box destacado, em linguagem plana, que ensina a mecânica antes de qualquer
+   variável ser usada: do EBITDA, (i) desconta-se o que a operação consome para **repor os
+   ativos existentes** — o encargo de reposição, "d" (sem repor, o lucro de hoje não se repete
+   amanhã); (ii) desconta-se o **imposto** sobre o lucro operacional, "t"; (iii) do que sobra,
+   separa-se a fração **reinvestida para crescer** — e quanto custa crescer depende do retorno
+   do capital novo (crescimento ÷ retorno = taxa de reinvestimento); (iv) o caixa residual é
+   descontado pela margem entre **custo de capital e crescimento**. Cada variável nomeada com
+   sua função em UMA linha e o valor adotado no caso. Fecha com a frase-síntese: o múltiplo
+   justo é essa cadeia comprimida — muda a variável, muda o múltiplo; o quadro é o mapa para
+   ler todo o resto do relatório. A lista de banimento vale integralmente dentro do quadro.
+
+2. **Premissas principais**: estimativas próprias × consenso (t, t+1, t+2) com desvios
+   justificados linha a linha; e a derivação premissa a premissa em prosa com a conta inline
+   (cadeias de §11) e os cinco atributos embutidos. **Regra do triângulo por cenário**:
+   g = RiR × ROIC tem dois graus de liberdade — declare quais dois são input e qual é output, e
+   mostre a taxa de reinvestimento de cada cenário. Cenário com RiR silencioso é cenário opaco.
+3. **Companhia, números & indústria** (mandato completo quando o fluxo é relatório de
+   companhia; dispensado em reversa rápida e screening — e NUNCA em delta: reavaliação roda o
+   mandato completo, sem herança, v9.24): **perfil** — o que a companhia é,
+   segmentos, ativos relevantes, posição competitiva; **históricos de 3–5 anos** em tabela
+   curta (receita, EBITDA e margem, lucro, dívida líquida/EBITDA, capex, retorno sobre o
+   capital) com a leitura de tendência em prosa; **guidance vigente** — o que a administração
+   promete, o que descontinuou, e o confronto com o realizado; **administração e governança**
+   quando materiais à tese; competição, share, penetração, bull/bear do sell-side (§1); as
+   verificações narradas pelos seus ACHADOS com as rubricas de tradução — qualidade do lucro e
+   do capital; estágio do ciclo de capital; representatividade da base (drivers × spot);
+   alavancas identificadas — nunca pelos nomes internos. Verificação silenciosa segue proibida:
+   o que foi testado, o número, a consequência. Proveniência de tudo: verificado nesta sessão /
+   derivado por regra / hipótese de construção / fornecido e revalidado.
+4. **Valuation**: cenários da grade canônica (§4) com âncora observável e preço/ação pela ponte
+   explícita; tabela de múltiplos justos centrada no caso-base com a base declarada (a célula
+   central reconcilia com a manchete); sensibilidades travadas (custo de capital, gp, degrau);
+   grade de sensibilidade ao driver quando a elasticidade do dominante ≥ 0,5 (§7). Cross-check
+   por segundo método declarado (múltiplo de saída sobre t+2, ou soma das partes no híbrido).
+   **A hipótese de valor terminal é re-testada aqui**, agora que a rentabilidade marginal existe
+   — uma linha mesmo quando não muda nada; é onde o erro mais caro é pego.
+   **Sensibilidade às escolhas metodológicas** (nome externo da dupla entrega; interno segue
+   "bifurcações"): as DEZ — base do lucro (reportada × normalizada); alavanca de lucro
+   (modelada com probabilidade × absorvida/excluída como opcionalidade); rentabilidade (marginal
+   × forward de consenso); g (reinvestimento × guidance/consenso); hipótese terminal; regime do
+   driver no terminal (congelado × acompanha inflação); **caixa/excedente em híbrida
+   financeira** (zero central × bruto — v9.16, regra em §9); **(v9.19) o ano de capex de
+   estado estacionário no par d×RiR** (corrente × guidance de longo prazo), com o RiR
+   re-derivado pela conservação em CADA ramo — nunca com o triângulo congelado; e **(v9.20) a
+   fronteira de consolidação quando minoritários/coinvestimento > ~20% do PL** (fatia de
+   terceiros no EV pelo valor contábil × econômico estimado — ignorá-la não é ramo, é erro;
+   gatilho em `aplicacao.md` §2); e **(v9.22) a leitura de capacidade quando o gatilho da
+   capacidade pré-construída dispara** (ramo corrente: ociosidade ignorada, RiR pleno, d
+   contábil × ramo capacidade: RiR por componente, fases do §8f, d do estado estacionário da
+   capacidade) — o ramo capacidade só é caso-base com observável direto de utilização OU
+   contraprova de receita-por-ativo contra pares a plena fechando dentro de ±15%; derivado só
+   do protocolo físico sem contraprova, é sensibilidade identificada, nunca base em silêncio.
+   **Base monetária não entra nessas dez escolhas:** é reportada separadamente como invariante de
+   coerência (nominal ou real), com g/gp/rentabilidade/custo de capital reconciliados na mesma base.
+   Escolha alternativa movendo > ~10%
+   ⟹ a tabela traz as duas, com o custo de cada uma e a escolha central justificada pela razão.
+   **Coerência interna dos cenários** (nome externo da guarda anti-empilhamento): o caso-base
+   usa a escolha CENTRAL de todas; o produto dos extremos conservadores É o bear (rotulado), o
+   dos otimistas, o bull — escolher o ramo conservador de tudo no caso-base não é prudência, é
+   cenário incoerente.
+5. **O que está no preço**: o menu de reconciliação (§4) — nível implícito COM o confronto
+   temporal contra o consenso, horizonte implícito, crescimento sem consumo de capital
+   implícito, curva iso quando houver dois vetores, e **custo de capital implícito SEMPRE**
+   (beta implícito contra a banda observada do beta — a explicação mais barata de esquecer).
+   Fronteiras bivariadas plausíveis depois dos univariados, com a dualidade dos eixos de
+   denominador declarada quando existir; **a seção fecha com o julgamento comparativo: qual
+   reconciliação exige a menor violência às âncoras observáveis, e qual observável a testaria.**
+   Perto da neutralidade a variável implícita é ruído com cara de precisão — reporte a
+   curvatura. É a seção onde a abordagem é insubstituível — recebe o espaço.
+6. **Riscos + veredicto**: os 4–6 que movem a tese, cada um com o observável que o monitoraria;
+   fecha com alavanca dominante, o que a fórmula não captura, e a premissa cuja inversão viraria
+   a conclusão.
+7. **Visão não-consensual** (obrigatória, ≤ 15 linhas): leitura que não está na cobertura,
+   construída SÓ com fatos já citados, com a cadeia factual explícita. Sem nenhuma, declare
+   "sem visão não-consensual nesta rodada" — não invente.
+8. **Metodologia, limitações e disclaimer**: um parágrafo de metodologia em linguagem plana —
+   a identidade central (abordagem de múltiplos justificados: o múltiplo como saída de um DCF
+   comprimido em poucas variáveis), citável sem mencionar a skill; a mecânica variável a
+   variável NÃO se repete aqui: mora no quadro de abertura, que este parágrafo referencia;
+   e o disclaimer específico ao caso, nunca genérico
+   (lista aceitável): pocket valuation e não DCF nem DD; o que não captura por construção;
+   premissas de estabilidade e quais o caso viola; contabilidade específica; direção do erro de
+   cada premissa congelada.
+
+**Memória técnica — o segundo artefato (v9.16).** O bloco YAML (§6) NÃO entra no relatório:
+é entregue como artefato separado rotulado "memória técnica — uso interno" (arquivo próprio
+quando a entrega for arquivo; bloco final destacado quando for chat). Mantém todos os campos
+internos — é onde a reprodutibilidade mora. No relatório, seu lugar é um quadro de premissas em
+linguagem plana (custo de capital, crescimento, retorno, taxa de reinvestimento, horizonte,
+hipótese terminal — uma linha cada), dentro do item 8. Título e nome de arquivo do relatório sem
+versão da skill; a versão vai na memória técnica. **Captura de aprendizado e oferta de
+aprofundamento são chat-only: nunca dentro de arquivo entregável.**
+
+**Critérios de aceitação, antes de enviar:** (i) leitor frio refaz a análise inteira só com o
+texto — número sem a conta = incompleto; (ii) só a prosa, pulando grades e contas, sustenta o
+raciocínio da conclusão ao detalhe; (iii) zero termos da lista de banimento no corpo (verifique
+por busca literal antes de entregar); (iv) as quatro premissas fixas presentes na Conclusão,
+cada uma com o número e a derivação — fixa ausente ou sem número = entrega incompleta; (v) um
+analista que não conhece teoria de múltiplos entende a FUNÇÃO de cada variável a partir do
+quadro e das primeiras aparições — variável usada sem função explicada = entrega incompleta.
+
+**Trava de encerramento:** não ofereça aprofundamento com a cobertura incompleta. Faltando
+espaço, corte prosa do veredicto e do disclaimer — nunca as premissas, a memória de cálculo ou a
+memória técnica.
 
 ## 6. Memória técnica — bloco de inputs reprodutível (obrigatório; NUNCA dentro do relatório)
 
@@ -480,8 +708,8 @@ Fecha toda valuation. É o que permite reproduzir a análise idêntica numa sess
 ```yaml
 companhia: TICKER
 data_analise: AAAA-MM-DD
-fase: investimento|distribuicao|mista|hibrida_financeira        # Gate 0.5 (v9.15)
-regime_base: A_reportada|B_normalizada                          # teorema da base coerente
+fase: investimento|distribuicao|mista|hibrida_financeira
+regime_base: A_reportada|B_normalizada
 consenso: {t1_eps: 0.0, t2_eps: 0.0, pt_medio: 0.0, n_analistas: 0, fonte: "...", data: AAAA-MM-DD}
 preco: {valor: 0.00, moeda: USD, fonte: "...", data: AAAA-MM-DD}
 fx: {par: USDBRL, valor: 0.000, fonte: "...", data: AAAA-MM-DD}
@@ -500,16 +728,55 @@ degrau:
   anos_transicao: 0
   perfil_transicao: rampa|pontual
   restricao_efetiva: "capital|funding|originacao|share"
+base_monetaria:
+  regime: nominal|real                 # invariante obrigatório; não é 11ª bifurcação econômica
+  moeda: USD
+  coerencia: "g, gp, rentabilidade e custo de capital reconciliados na mesma base"
+  fisher: real_exato|nominal_exato|terminal_only_aproximado
+crescimento:
+  total: 0.0
+  volume: 0.0
+  preco:
+    inflacao: 0.0
+    repasse: 0.0
+    real: 0.0
+  rir_por_componente: {volume: 0.0, preco_nominal: 0.0, preco_real: 0.0, criterio: "..."}
+depreciacao:
+  d_final: 0.0
+  origem: fluxo_economico_corrente|proxy_contabil_historica|outra
+  moeda_origem: USD
+  historico_ou_corrente: corrente|historica
+  idade_ativos: "..."
+  fator_reposicao: 1.0
+  ajuste_aplicado: false
+  justificativa: "..."
+clean_surplus:
+  aplicavel: false
+  gap: 0.0
+  status: fecha|fluxo_nao_explicado|nao_aplicavel
+  fluxo_nao_explicado: "..."
+book:
+  qualidade: reportado|ajustado|reconstruido|proxy|nao_confiavel
+  retorno_medio_inicial: 0.0            # ROIC_book ou ROE_book conforme lado
+  base_temporal: forward_NOPAT1_sobre_IC0|forward_LL1_sobre_PL0|trailing_reconciliado
+  nopat_ou_ll_associado: 0.0
+  capital_inicial_implicito: 0.0
+  rentabilidade_marginal: 0.0
+  retorno_medio_ano_n: 0.0              # output do IC/E acumulado nos dois lados
+  implementacao: enterprise_IC_acumulado_e_equity_E_acumulado_clean_surplus_DDM (v9.30)
+caixa:
+  cash_e: 0.0
+  cash_yield_bruto: 0.0
+  rendimento_caixa_no_ll: true|false
+  tratamento: separado_da_operacao|incluido_com_ajuste
 taxas:
-  base_monetaria: nominal|real       # g e rentabilidade OBRIGATORIAMENTE na mesma base
   g: 0.0
   rentabilidade: {tipo: ROE|ROIC, valores_por_cenario: [0,0,0,0], ancoras: ["...","..."]}
   custo_capital: {tipo: Ke|WACC, valor: 0.0, rf: 0.0, beta: 0.0, erp: 0.0, fonte_beta: "...",
                   canal_risco_pais: "i_beta_local+CRP_por_lucro | ii_beta_ADR_sem_CRP"}
   cap_anos: 10
-  convencao_tv: book|convergencia|gordon        # (aliases legados ic|spread aceitos)
-  roic_book: ...%                              # obrigatório em book quando marginal ≠ médio
-  convencao_preliminar: book|convergencia|gordon    # do Gate 1
+  convencao_tv: book|convergencia|gordon
+  convencao_preliminar: book|convergencia|gordon
   revalidacao_convencao: "mantida | trocada porque rentab marginal X% < custo Y%"
   rentab_tv: 0.0
   gp: 0.0
@@ -598,16 +865,18 @@ chamando `ev` célula a célula — nenhum número fora do motor. Quatro regras:
    por construção. Toda grade cujo output é preço por ação carrega, no cabeçalho ou na frase de
    abertura, o EBITDA de referência sobre o qual foi construída.
 
-**O regime do driver no terminal — a dupla entrega dos dois regimes (v9.14).** Gate de nível
+**O regime do driver no terminal — a dupla entrega dos dois regimes (v9.28).** Gate de nível
 disparado E convenção terminal sem crescimento de preço (`convergencia`, ou `gordon` com gp ≈ 0)
 ⟹ o caso-base está assumindo, sem dizer, o driver congelado em termos nominais — caindo ~inflação
 a.a. em termos REAIS, em perpetuidade — descontado a Ke nominal (a consistência de Fisher está em
 §2; o `normaliza` avisa). Como nenhuma das duas âncoras é "a verdade", a entrega traz OS DOIS
-regimes obrigatoriamente: **driver congelado nominal** (rota atual) × **driver acompanhando a
-inflação declarada** (rota B de §2, ou Ke real via rota A), com a diferença como informação. É a
-5ª bifurcação nomeada da dupla entrega (SKILL.md). Limite honesto: o regime "acompanha inflação
-sem custo" é o teto — no mundo real, repor capacidade e girar capital a preços correntes consome
-parte do ganho.
+regimes obrigatoriamente: **driver congelado nominal** × **driver acompanhando a inflação declarada**.
+A segunda âncora precisa usar uma rota Fisher exata: **A**, fluxos reais com Ke real (central no motor
+comprimido), ou **B**, TODO o horizonte nominalizado com Ke nominal. Devolver inflação apenas no TV
+é a rota **C terminal-only**, uma aproximação que pode aparecer somente como sensibilidade rotulada.
+A diferença entre as âncoras é informação. É a 5ª bifurcação nomeada da dupla entrega (SKILL.md).
+Limite honesto: "acompanha inflação sem custo" é um teto; no mundo real, repor capacidade e girar
+capital a preços correntes pode consumir parte do ganho.
 
 ## 8. Degrau de nível e capacidade ociosa — o nível que ainda pode mudar
 
@@ -791,7 +1060,7 @@ degrau), nunca dois; (2) **volume ≠ preço** — g_rampa é volume; repasse de
 capacidade plena, SEMPRE acoplada à re-derivação do RiR** — mover d congelando o triângulo é o
 quadrante proibido de sempre; âncora do d da plena (v9.23): D&A do parque ÷ EBITDA a plena
 capacidade — a intensidade estacionária de reposição por unidade de EBITDA; capacidade NOVA da
-fase 2 entra nessa mesma razão (aproximação declarada). O mesmo raciocínio vale para G&A fixo
+fase 2 entra nessa mesma razão (aproximação declarada). A D&A do parque segue a guarda de moeda do d (item v da cadeia do d, §1); parque recém-construído tem idade média baixa e fator ≈ 1 por construção — na rampa, o ajuste tipicamente não se aplica. O mesmo raciocínio vale para G&A fixo
 DENTRO do EBITDA: a rampa também o dilui — modelá-lo é re-base de margem declarado; omiti-lo tem
 direção do erro conhecida (subestima) — conservadorismo consciente, nunca implícito; (5) **a rentabilidade terminal não herda a rampa** — o ROIC alto da
 fase 1 é alto porque o fixo é gratuito, e morre com ela; fase 2 e terminal usam a rentabilidade
@@ -896,10 +1165,16 @@ Gap > 10% ⟹ o par (d, RiR) está na base errada — reclassifique antes de qua
 capex, seu ΔWC e seu par (d, RiR) — a rampa com capex só de manutenção e RiR_wk; a pós-plena
 com o vetor pleno. Fase sem conservação exibida = fase opaca.
 
-**Trava da `book`:** se a convenção for `book` e M ≠ C, o TV precisa da MÉDIA, não da marginal —
-passe `--roic-book C` (ou `--roe-book`). O TV divide por ROIC como ROIC médio do estoque
-(IC_n = NOPAT/ROIC_médio); usar M nos dois papéis conflaciona marginal×médio e o erro pode passar
-de 30% do valor (M 25% vs C 10%: −33%). O motor alerta quando `book` roda sem o parâmetro.
+**Trava da `book`:** se a convenção for `book` e M ≠ C, separe MÉDIA e marginal. **Enterprise:**
+passe `--roic-book C`; C é a média inicial/forward que ancora `IC₀ = NOPAT₁/C`, e o TV acumula o
+capital novo ao marginal M. Se a fonte for trailing, alinhe a base temporal antes. Usar M nos dois
+papéis conflaciona marginal×médio e pode mover materialmente o valor — no anchor do paper §6.11
+(g 4%, M 25%, C 10%, W 8%, n 10), 9,718x conflacionado contra 12,608x separado (−22,9%).
+**Equity:** passe `--roe-book C`; C ancora `E₀ = LL₁/C` e o patrimônio é acumulado por
+clean surplus ao ROE marginal. No `book`, a identidade de validação obrigatória é
+`DDM = residual income = motor`; Caixa/E não entra no valor por si só porque Δcaixa retido já está
+em E_n. O motor alerta sempre que `book` roda sem o parâmetro separado quando ele é economicamente
+necessário.
 
 ### 11.2 A regra do triângulo (g, RiR, rentabilidade)
 
@@ -1093,7 +1368,10 @@ valor num deleveraging pesado e +10 a +21% em recap — ignorá-la superavalia o
 direção mais cara; (2) o diagnóstico de Ku — se o gap entre fases passa de 0,5 p.p., ou o
 de-risking operacional é justificado por escrito (saída da RJ reduz risco do NEGÓCIO, não só da
 dívida?) ou os Ke se re-derivam de Ku único via `apv` antes de qualquer conclusão; (3) o rebase —
-com razão ≠ 1, o NI da fase 2 entra ×(ROE₂/ROE₁)·razão e a entrega narra o degrau composto:
+com razão ≠ 1, a convenção bifásica declara que o NI da fase 2 entra ×(ROE₂/ROE₁)·razão.
+Esse fator é uma **hipótese de rebase de nível**, não uma identidade que decorra do ROE marginal;
+ROE₂ continua sendo o marginal usado na retenção da fase 2. A entrega deve narrar explicitamente o
+degrau composto e qualificar qualquer ROE₂ implícito como condicionado a essa convenção:
 "o lucro rebasa h× na transição por [margem/juros], e o crescimento g₂ aplica SOBRE a base
 rebasada"; (4) o gate de 10% — ponte dominante pede modelagem explícita das fases, não ajuste.
 
@@ -1110,8 +1388,8 @@ Com evento de estrutura datado, a ordem de operações é FORÇADA pelo motor, n
 exige `--transicao` (sem default). Declarando `ponte` com os parâmetros do regime 1, o motor
 calcula o PV internamente (nunca transcreva o número à mão — erro de sinal em transcrição é o
 modo de falha clássico), desconta do alvo e roda a curva sobre o alvo líquido no regime 2,
-resolvendo a rentabilidade do regime 2 pela INVERSÃO BIFÁSICA EXATA (v9.3) — f1, ponte e TV
-saem com os regimes declarados e ROE₂ sai em forma fechada, com cada ponto verificado contra o
+resolvendo a rentabilidade do regime 2 por uma INVERSÃO BIFÁSICA FECHADA — f1, ponte e TV
+saem com os regimes declarados e ROE₂ sai em forma fechada **condicionada à convenção de rebase**, com cada ponto verificado contra o
 bifásico completo. Declarando `nenhuma`, o output registra a premissa de regime único.
 No `rev`, a mesma premissa sai como campo fixo do output e combinações resolver×base
 inconsistentes falham com explicação em vez de rodar no lado errado. Na entrega: alvo cheio,
@@ -1121,8 +1399,10 @@ linhas separadas.
 
 ### §6b — Moeda, regime e âncora macro no bloco de inputs (v9.4)
 
-Todo bloco de inputs de valuation real declara, na primeira linha: moeda e regime (`--moeda`),
-com g, gp e custo de capital verificados na mesma unidade, e o rf nominal da moeda (`--rf`)
+Todo bloco de inputs de valuation real declara, na primeira linha: moeda e regime (`--moeda`).
+Essa linha é **invariante de coerência, não uma escolha econômica adicional**: com conversão completa,
+nominal e real devem representar o mesmo valor. g, gp, rentabilidade e custo de capital são verificados
+na mesma unidade, e o rf nominal da moeda (`--rf`)
 quando houver perpetuidade com crescimento. Na memória de cálculo, a convenção de moeda é linha
 própria, e qualquer gp acima do teto macro entra como premissa EXCEPCIONAL com a tese que a
 sustenta — nunca como número solto. Erro-alvo destas guardas: g projetado em BRL nominal

@@ -10,9 +10,12 @@ import argparse, sys, json
 
 # ---------------- convenções de valor terminal ----------------
 # 'book'         (ex-'ic'):     renda residual truncada em n. O NOPAT INTEIRO colapsa de
-#                               ROIC×IC para W×IC no ano n+1; TV = capital investido =
-#                               NOPAT_{n+1}/ROIC_book. Equivale exatamente a
-#                               EV = IC0 + Σ_{t≤n} EVA_t (Preinreich–Lücke truncado).
+#                               ROIC×IC para W×IC no ano n+1; TV = capital investido IC_n.
+#                               [v9.28] Com book separado, IC_0 = NOPAT_1/ROIC_book e TODO
+#                               capital novo do explícito acumula ao ROIC marginal; portanto
+#                               IC_n NÃO é NOPAT_{n+1}/ROIC_book salvo nos casos de colapso.
+#                               Equivale a renda residual truncada com estoque de capital
+#                               reconciliado à trajetória de reinvestimento.
 # 'convergencia' (nova):        RONIC = W no capital NOVO, NOPAT existente preservado —
 #                               TV = NOPAT_{n+1}/W. Exaustão da vantagem NO CAPITAL INCREMENTAL
 #                               (McKinsey/Mauboussin); rendas do estoque preservadas. Invariante a gp.
@@ -28,20 +31,23 @@ def tv_canon(tv):
 # ---------------- núcleo ----------------
 def ev_nopat(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid_year=False):
     """EV/NOPAT current. tv em {'book','convergencia','gordon'} (aliases 'ic'/'spread' aceitos).
-    roic_book: ROIC MÉDIO do estoque para o TV da 'book' (IC_n = NOPAT/ROIC_médio). Sem ele,
-    a 'book' usa o ROIC do explícito (marginal) como se fosse médio — conflação sinalizada
-    no diagnóstico; o erro pode passar de 30% do valor quando marginal ≠ médio.
-    mid_year (C3): convenção de meio de ano — fluxos uniformes ao longo do período em vez de
-    concentrados no fim. Multiplica por (1+W)^0.5. DEFAULT False (fim de ano), que é a
+    roic_book: ROIC MÉDIO INICIAL/FORWARD do estoque que ancora IC_0 na 'book'. [v9.28] O TV é o IC
+    ACUMULADO: IC_0 = NOPAT_1/ROIC_médio e o capital novo entra ao MARGINAL (RiR = g/ROIC),
+    de modo que o médio DERIVA na direção do marginal ao longo do explícito — coerente com os
+    fluxos descontados (forma fechada no ramo book; contraprova por acumulação em testes.py).
+    Sem roic_book, a 'book' usa o ROIC do explícito (marginal) como se fosse médio — conflação
+    sinalizada no diagnóstico; o erro pode ser material quando marginal ≠ médio.
+    mid_year (C3): convenção midpoint — desloca cada fluxo anual do fim para o meio do período;
+    é aproximação de midpoint, não integração contínua de um fluxo uniforme. Multiplica por (1+W)^0.5. DEFAULT False (fim de ano), que é a
     convenção da planilha de referência; a maior parte do sell-side usa mid-year, então
     comparações de NÍVEL com múltiplos de terceiros exigem declarar qual das duas está em uso."""
     tv = tv_canon(tv)
-    if roic <= 0 or w <= -1 or n < 1:
+    if g <= -1 or roic <= 0 or w <= -1 or n < 1:
         return float('nan')
     ret = 1 - g / roic
     s = sum(ret * (1 + g) ** t / (1 + w) ** t for t in range(1, n + 1))
     if tv == 'gordon':
-        if roic_tv is None or roic_tv <= 0 or gp >= w:
+        if roic_tv is None or roic_tv <= 0 or gp <= -1 or gp >= w:
             return float('nan')
         s += (1 + g) ** (n + 1) * (1 - gp / roic_tv) / (w - gp) / (1 + w) ** n
     elif tv == 'convergencia':
@@ -52,7 +58,14 @@ def ev_nopat(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid
         rb = roic_book if roic_book is not None else roic
         if rb <= 0:
             return float('nan')
-        s += (1 + g) ** (n + 1) / (rb * (1 + w) ** n)
+        # [v9.28] IC_n por acumulação coerente com o fluxo descontado: IC_0 = NOPAT_1/ROIC_médio;
+        # capital novo entra ao MARGINAL (RiR = g/ROIC). Forma fechada:
+        # IC_n = (1+g)·(1/ROIC_médio − 1/ROIC_marg) + (1+g)^{n+1}/ROIC_marg.
+        # Colapsa exatamente no comportamento anterior quando médio = marginal ou g = 0.
+        ic_n = (1 + g) * (1.0 / rb - 1.0 / roic) + (1 + g) ** (n + 1) / roic
+        if ic_n <= 0:
+            return float('nan')
+        s += ic_n / (1 + w) ** n
     return s * ((1 + w) ** 0.5 if mid_year else 1.0)
 
 def ev_ebitda(g, roic, w, n, d, t, **kw):
@@ -75,6 +88,10 @@ def rampa_bifasica(receita0, ebitda0, da_parque, wk, w, tax, n, t_rampa, g2, kap
     Unidades: monetários na unidade do usuário; taxas em FRAÇÃO (o CLI converte de %)."""
     if t_rampa < 1 or n <= t_rampa:
         raise ValueError('composição exige 1 <= t_rampa < n (a fase 2 precisa de >= 1 ano explícito)')
+    if w <= -1 or g2 <= -1:
+        raise ValueError('domínio inválido: requer WACC > -100% e g2 > -100%')
+    if wk < 0 or kappa < 0:
+        raise ValueError('domínio inválido: wk e kappa devem ser >= 0')
     capacidade = None
     if g1 is None:
         if util is None or not (0.0 < util < 1.0):
@@ -99,13 +116,25 @@ def rampa_bifasica(receita0, ebitda0, da_parque, wk, w, tax, n, t_rampa, g2, kap
     pv1_exp = sum(f / (1 + w) ** t for t, f in enumerate(fcff1, 1))
     r1 = (1 + g1) / (1 + w)
     soma_r1 = float(T) if abs(r1 - 1.0) < 1e-12 else r1 * (1 - r1 ** T) / (1 - r1)
-    pv1 = alfa * soma_r1 + beta * (1 - (1 + w) ** -T) / w
+    # Limite analítico em W=0: a anuidade plana vale exatamente T·beta.
+    ann_beta = float(T) if abs(w) < 1e-14 else (1 - (1 + w) ** -T) / w
+    pv1 = alfa * soma_r1 + beta * ann_beta
     assert abs(pv1 - pv1_exp) < 1e-7 * max(1.0, abs(pv1_exp)), 'VP fechado != explícito'
     ebT = m * rev[T]
     d2 = da_parque / ebT
     m2n = m * (1 - d2) * (1 - tax)
-    rir2 = (wk + kappa) * g2 / ((1 + g2) * m2n)
-    roic2 = g2 / rir2 if rir2 else float('nan')
+    if m2n <= 0:
+        raise ValueError('fase 2 inválida: margem NOPAT deve ser positiva para mapear capital incremental')
+    den_cap = wk + kappa
+    if den_cap <= 1e-15:
+        rir2 = 0.0
+        roic2 = 1e12
+        roic2_limite = True
+    else:
+        # Forma simplificada exata, definida também em g2=0. A forma antiga g2/RiR gerava 0/0.
+        rir2 = den_cap * g2 / ((1 + g2) * m2n)
+        roic2 = (1 + g2) * m2n / den_cap
+        roic2_limite = False
     nopT = ebT * (1 - d2) * (1 - tax)
     mn2 = ev_nopat(g2, roic2, w, n - T, tv=tv, roic_tv=roic_tv, gp=gp, roic_book=roic_book)
     ev_T = mn2 * nopT
@@ -117,7 +146,8 @@ def rampa_bifasica(receita0, ebitda0, da_parque, wk, w, tax, n, t_rampa, g2, kap
            'rir_fase1_%': {'ano_1': round(rir1[0] * 100, 3), f'ano_{T}': round(rir1[-1] * 100, 3),
                            'nota': 'VARIA — a rampa não tem vetor único; a compressão exata é alfa/beta'},
            'alfa': round(alfa, 6), 'beta': round(beta, 6),
-           'rir2_%': round(rir2 * 100, 3), 'roic2_%': round(roic2 * 100, 3),
+           'rir2_%': round(rir2 * 100, 3),
+           'roic2_%': ('infinito — capital incremental zero' if roic2_limite else round(roic2 * 100, 3)),
            'vp_fase1': round(pv1, 4), 'valor_fase2_no_ano_T': round(ev_T, 4),
            'EV': round(ev, 4), 'EV/EBITDA0': round(ev / ebitda0, 4),
            'checks_internos': {'P1_fluxo_a_fluxo_max_abs': p1,
@@ -193,18 +223,25 @@ def pe(g, roe, ke, n, gde, nde, tv='book', roe_tv=None, gp=0.0, roe_book=None,
         a dividendos + Δcaixa na planilha vF8 (linhas 226–235).
       'encerra': a política morre no ano n (comportamento anterior à correção) — hipótese
         legítima, mas tem que ser declarada.
-    'book': crescimento de valor = 0 no terminal ⟹ Δcaixa = 0 ⟹ termo nulo por construção
-    (consistente com a planilha). 'convergencia': TV = LL/Ke sem gp declarado ⟹ termo nulo;
+    'book': [v9.30] valuation canônico por CLEAN SURPLUS: os fluxos explícitos são DIVIDENDOS
+    (Div_t = LL_t − ΔE_t), e o TV é E_n acumulado. Como E_n já contém o caixa retido, somar
+    Δcaixa ao fluxo explícito e depois E_n no terminal contaria o mesmo caixa duas vezes. Por isso
+    Caixa/E NÃO altera o valor da convenção book por si só; excess cash/rendimento de caixa deve ser
+    tratado separadamente. 'convergencia': TV = LL/Ke sem gp declarado ⟹ termo nulo;
     para política contínua com crescimento terminal, use 'gordon'.
     mid_year (C3): convenção de meio de ano, multiplica por (1+Ke)^0.5. Default False."""
     tv = tv_canon(tv)
-    if roe <= 0 or ke <= -1 or n < 1:
+    if g <= -1 or roe <= 0 or ke <= -1 or n < 1:
         return float('nan')
     caixa = gde - nde
-    ret = (1 - g / roe) + caixa * (g / roe)
+    # [v9.30] Na convenção book, clean surplus exige DDM + book: Div = LL − ΔE =
+    # LL·(1−g/ROE_marg). O termo +Δcaixa pertence ao FCFE de uma política de sweep, mas esse
+    # mesmo caixa permanece dentro de E_n; usar FCFE + E_n duplica caixa. Gordon/convergência
+    # continuam no módulo financeiro legado, onde não há book terminal contendo o caixa.
+    ret = (1 - g / roe) if tv == 'book' else ((1 - g / roe) + caixa * (g / roe))
     s = sum(ret * (1 + g) ** t / (1 + ke) ** t for t in range(1, n + 1))
     if tv == 'gordon':
-        if roe_tv is None or roe_tv <= 0 or gp >= ke:
+        if roe_tv is None or roe_tv <= 0 or gp <= -1 or gp >= ke:
             return float('nan')
         ret_tv = (1 - gp / roe_tv) + (caixa * (gp / roe_tv) if politica_tv == 'continua' else 0.0)
         s += (1 + g) ** (n + 1) * ret_tv / (ke - gp) / (1 + ke) ** n
@@ -216,12 +253,33 @@ def pe(g, roe, ke, n, gde, nde, tv='book', roe_tv=None, gp=0.0, roe_book=None,
         rb = roe_book if roe_book is not None else roe
         if rb <= 0:
             return float('nan')
-        s += (1 + g) ** (n + 1) / (rb * (1 + ke) ** n)
+        # [v9.30] E_n por clean surplus; valuation book por dividendos + E_n
+        # (derivação reproduzida na suíte; a planilha de desenvolvimento não integra o ZIP canônico), NÃO por analogia: sob a política de
+        # caixa constante (C = caixa·E) e a identidade vF8 (FCFE = Div + Δcaixa), a retenção
+        # líquida sofre o gross-up da política e o caixa CANCELA — ΔE_t = (g/ROE_marg)·LL_t,
+        # INVARIANTE a caixa/E. A forma fechada coincide com a do firm por esse cancelamento:
+        # E_n = (1+g)·(1/ROE_médio_inicial − 1/ROE_marg) + (1+g)^{n+1}/ROE_marg.
+        # Colapsos do ESTOQUE: médio = marginal ⟹ E_n = LL_{n+1}/ROE; g = 0 ⟹ E_n = 1/médio.
+        # [v9.30] O VALUATION book não preserva o antigo anchor vF8 com caixa porque aquele anchor
+        # somava Δcaixa aos fluxos e o mesmo caixa novamente dentro de E_n.
+        e_n = (1 + g) * (1.0 / rb - 1.0 / roe) + (1 + g) ** (n + 1) / roe
+        if e_n <= 0:
+            return float('nan')
+        s += e_n / (1 + ke) ** n
     return s * ((1 + ke) ** 0.5 if mid_year else 1.0)
 
 # ---------------- solver ----------------
+def _dedupe_roots(roots, atol=1e-10, rtol=1e-8):
+    """Deduplica raízes numéricas: uma raiz sobre um ponto da grade pertence aos dois
+    intervalos adjacentes e não pode virar dois regimes econômicos no output."""
+    out = []
+    for x in sorted(roots):
+        if not out or abs(x - out[-1]) > max(atol, rtol * max(abs(x), abs(out[-1]), 1.0)):
+            out.append(x)
+    return out
+
 def solve(f, lo, hi, steps=800):
-    """Varredura + bissecção; retorna TODAS as raízes com mudança de sinal no intervalo."""
+    """Varredura + bissecção; retorna raízes DISTINTAS com mudança de sinal no intervalo."""
     roots, x0, y0 = [], lo, f(lo)
     for i in range(1, steps + 1):
         x1 = lo + (hi - lo) * i / steps
@@ -235,7 +293,7 @@ def solve(f, lo, hi, steps=800):
                 else: a, fa = m, fm
             roots.append((a + b) / 2)
         x0, y0 = x1, y1
-    return roots
+    return _dedupe_roots(roots)
 
 def solve_full(f, lo, hi, steps=800, ref=1.0, tang_rel=1e-4):
     """Raízes por mudança de sinal + candidatos TANGENCIAIS (mínimos locais de |f| sem
@@ -322,7 +380,7 @@ def _guardas_damodaran(d, tv, gp, custo, rf=None, moeda=None, rotulo_custo='Ke')
 
 
 def coerencia_vetor(g=None, roic=None, roe=None, w=None, ke=None, kd=None, tax=None,
-                    d=None, gde=None, nde=None, rir_observado=None, ebitda_ic=None, tol=5e-3):
+                    d=None, gde=None, nde=None, cash_yield=None, rir_observado=None, ebitda_ic=None, tol=5e-3):
     """[v9.11] Gate de COERÊNCIA do vetor de inputs (declaratório: registra e avisa, nunca
     bloqueia nem converte — mesmo contrato do Gate 0).
 
@@ -337,12 +395,14 @@ def coerencia_vetor(g=None, roic=None, roe=None, w=None, ke=None, kd=None, tax=N
     projeto (a skill aplica o framework, não substitui o modelo do analista).
 
     Identidades (referência de célula da planilha vF8, aba 'Justified Multiples Logic (2)'):
-      (1) linha 122  ROE = ROIC·(1 + ND/E) − Kd·(1−t)·(D/E)    [alavancagem]
+      (1) linha 122, ajustada na v9.28 para caixa remunerado:
+          ROE = ROIC·(1 + ND/E) − Kd·(1−t)·(D/E) + Kcash·(1−t)·(Cash/E)    [alavancagem]
           O ROIC remunera o capital investido (= dívida LÍQUIDA + PL) e os juros incidem sobre a
-          dívida BRUTA — por isso a identidade precisa dos DOIS, ND/E e D/E. Com caixa > 0 elas
-          divergem e usar só ND/E erra: na âncora, Kd 14,2714% × (1−30%) sobre dívida bruta 35
-          dá 3,4965, que sobre a dívida líquida 30 é 11,655% — não os 9,99% de Kd(1−t).
-      (2) célula C164  WACC = [Ke + Kd·(1−t)·(D/E)] / (1 + ND/E)
+          dívida BRUTA. Se o LL inclui rendimento de caixa e o ROIC exclui esse caixa do capital
+          investido, Cash/E = D/E − ND/E e o termo Kcash líquido é obrigatório. Sem --cash-yield,
+          o gate assume que esse rendimento foi retirado do LL (ou é imaterial) e avisa.
+      (2) célula C164, mesma simetria:
+          WACC = [Ke + Kd·(1−t)·(D/E) − Kcash·(1−t)·(Cash/E)] / (1 + ND/E)
           Simetria estrutural: a MESMA transformação leva ROE→ROIC e Ke→WACC, e é ela que faz
           "ROIC = WACC ⟺ ROE = Ke" ser identidade EXATA no motor. Note que este WACC não é o
           weighted-average de manual com pesos a mercado sobre dívida bruta: o capital investido
@@ -364,33 +424,43 @@ def coerencia_vetor(g=None, roic=None, roe=None, w=None, ke=None, kd=None, tax=N
             return True
         return False
 
-    # (1) ROE × ROIC × alavancagem — planilha linha 122
+    # (1) ROE × ROIC × alavancagem, com caixa remunerado separado quando aplicável.
     if not falta('ROE×ROIC×alavancagem', ('roic', roic), ('roe', roe), ('gde', gde), ('nde', nde),
                  ('kd', kd), ('tax', tax)):
         kd_liq = kd * (1 - tax)
-        roe_id = roic * (1 + nde) - kd_liq * gde
+        caixa = gde - nde
+        ky_liq = (cash_yield or 0.0) * (1 - tax)
+        roe_id = roic * (1 + nde) - kd_liq * gde + ky_liq * caixa
         checados.append('ROE×ROIC×alavancagem')
+        if caixa > 1e-9 and cash_yield is None:
+            dg.append('CAIXA REMUNERADO [vetor]: Cash/E = D/E − ND/E > 0 e --cash-yield não foi '
+                      'informado. A identidade assume rendimento de caixa excluído do LL (ou imaterial). '
+                      'Se o ROE informado inclui juros sobre caixa, informe --cash-yield bruto; rota '
+                      'preferida: retire o resultado de excess cash do LL e valore o caixa separadamente.')
         if abs(roe_id - roe) > tol:
+            termo_caixa = f" + Kcash_líq·Cash/E ({ky_liq:.2%}×{caixa:.3f})" if cash_yield is not None else ''
             dg.append(f"INCOERÊNCIA [vetor]: ROE informado ({roe:.2%}) ≠ ROE implicado pela "
-                      f"alavancagem ({roe_id:.2%}); identidade ROE = ROIC·(1 + ND/E) − Kd(1−t)·(D/E) "
-                      f"com ROIC {roic:.2%}, ND/E {nde:.3f}, D/E {gde:.3f}, Kd líq {kd_liq:.2%}. "
-                      f"Desvio de {(roe - roe_id) * 100:+.2f} p.p. Um deles foi movido sem os "
-                      f"outros — é o sintoma de vetor sem pré-imagem em DRE/BP.")
+                      f"alavancagem ({roe_id:.2%}); identidade operacional ROE = ROIC·(1 + ND/E) − "
+                      f"Kd(1−t)·(D/E){termo_caixa}. ROIC {roic:.2%}, ND/E {nde:.3f}, D/E {gde:.3f}, "
+                      f"Kd líq {kd_liq:.2%}. Desvio de {(roe - roe_id) * 100:+.2f} p.p. Um componente "
+                      f"foi movido sem os demais ou o resultado do caixa não foi separado.")
 
-    # (2) WACC × Ke × Kd × t × D/E × ND/E — planilha C164
+    # (2) WACC × Ke × Kd × t × D/E × ND/E — mesma transformação, líquida do retorno do caixa.
     if not falta('WACC×Ke×Kd×alavancagem', ('w', w), ('ke', ke), ('kd', kd), ('tax', tax),
                  ('gde', gde), ('nde', nde)):
-        w_id = (ke + kd * (1 - tax) * gde) / (1 + nde)
+        caixa = gde - nde
+        ky_liq = (cash_yield or 0.0) * (1 - tax)
+        w_id = (ke + kd * (1 - tax) * gde - ky_liq * caixa) / (1 + nde)
         checados.append('WACC×Ke×Kd×alavancagem')
         if abs(w_id - w) > tol:
             dg.append(f"INCOERÊNCIA [vetor]: WACC informado ({w:.2%}) ≠ WACC implicado ({w_id:.2%}) "
-                      f"por Ke {ke:.2%}, Kd {kd:.2%}, t {tax:.0%}, D/E {gde:.3f} e ND/E {nde:.3f}; "
-                      f"identidade WACC = [Ke + Kd(1−t)·(D/E)] / (1 + ND/E). Desvio de "
-                      f"{(w - w_id) * 100:+.2f} p.p. — o custo de capital deixou de corresponder à "
-                      f"estrutura informada, e a neutralidade ROIC=WACC ⟺ ROE=Ke não vale mais.")
+                      f"por Ke {ke:.2%}, Kd {kd:.2%}, t {tax:.0%}, D/E {gde:.3f}, ND/E {nde:.3f}"
+                      + (f" e Kcash {cash_yield:.2%}" if cash_yield is not None else '') + "; "
+                      f"a transformação usa capital investido líquido e deduz retorno de caixa quando "
+                      f"ele está no Ke/ROE. Desvio de {(w - w_id) * 100:+.2f} p.p.")
         # simetria: a mesma transformação em ROE tem de devolver o ROIC informado
         if roe is not None and roic is not None:
-            roic_id = (roe + kd * (1 - tax) * gde) / (1 + nde)
+            roic_id = (roe + kd * (1 - tax) * gde - ky_liq * caixa) / (1 + nde)
             checados.append('simetria ROE→ROIC ≡ Ke→WACC')
             if abs(roic_id - roic) > tol:
                 dg.append(f"INCOERÊNCIA [vetor]: a transformação que leva Ke→WACC não leva o ROE "
@@ -446,14 +516,17 @@ def diag_firm(g, roic, w, tv='book', n=10, roic_book=None, roic_tv=None, rf=None
         d.append("CONVENÇÃO 'book' (ex-'ic') [hipótese, não lei]: renda residual truncada em n — o NOPAT "
                  "INTEIRO colapsa de ROIC×IC para WACC×IC no ano n+1 e o TV é o capital investido. É mais "
                  "agressiva que 'a vantagem se exaure' no sentido padrão (RONIC=WACC só no capital NOVO, "
-                 "NOPAT preservado): para essa hipótese use tv='convergencia'. As propriedades famosas "
-                 "(múltiplo cai com ROIC; teto em g) são PROPRIEDADES DESTA CONVENÇÃO, não da convergência "
-                 "competitiva em geral — sob 'convergencia' o múltiplo SOBE com o ROIC.")
+                 "NOPAT preservado): para essa hipótese use tv='convergencia'. No caso CONFLACIONADO "
+                 "(book=marginal), propriedades como o múltiplo poder cair quando a variável única de ROIC "
+                 "sobe e existir teto sob certas inversões pertencem a esta convenção — não à convergência "
+                 "competitiva em geral. Com --roic-book separado, interprete médio inicial e marginal como "
+                 "variáveis distintas; sob 'convergencia' o múltiplo sobe com o ROIC marginal.")
         if roic_book is None:
-            d.append("ATENÇÃO (conflação marginal×médio): o TV da 'book' usa o MESMO ROIC do explícito como "
-                     "se fosse o ROIC MÉDIO do estoque (IC_n = NOPAT/ROIC). Se a rentabilidade marginal "
-                     "difere da contábil/blended — exatamente o caso que aplicacao.md §11.1 manda derivar — "
-                     "informe --roic-book com a MÉDIA; o erro pode passar de 30% do valor.")
+            d.append("ATENÇÃO (conflação marginal×médio): sem --roic-book, a 'book' usa o MESMO ROIC do explícito para "
+                     "ancorar IC_0 = NOPAT_1/ROIC e para remunerar o capital novo. Isso força retorno médio "
+                     "inicial = marginal por hipótese. Se a rentabilidade marginal difere da contábil/blended — "
+                     "exatamente o caso que aplicacao.md §11.1 manda derivar — informe --roic-book com a MÉDIA "
+                     "forward do estoque; o erro pode ser material.")
     if tv == 'gordon' and roic_tv is not None:
         if roic_tv < w - 5e-4:
             d.append(f"REGIME DECLARADO: ROIC_TV ({roic_tv:.1%}) < WACC — destruição persistente na "
@@ -474,30 +547,37 @@ def diag_firm(g, roic, w, tv='book', n=10, roic_book=None, roic_tv=None, rf=None
     if roic < w and tv == 'book':
         if roic_book is None:
             d.append("ALERTA DE CONFLAÇÃO [B-01]: ROIC < WACC na 'book' com o MESMO ROIC nos dois papéis. "
-                     "AQUI o TV = capital investido = NOPAT/ROIC cresce quando o ROIC cai, e a convergência "
-                     "do ROIC PARA CIMA até o WACC é hipótese criadora de valor não declarada — o múltiplo "
-                     "justo sobe conforme o negócio piora. A perversidade é da CONFLAÇÃO, não da convenção: "
-                     "informe --roic-book com a MÉDIA do estoque e o TV deixa de acompanhar o marginal. "
+                     "AQUI o mesmo ROIC baixo ancora um IC_0 artificialmente alto E remunera o capital novo, de modo que "
+                     "o TV cresce quando o ROIC cai e o múltiplo pode subir conforme o negócio piora. A perversidade "
+                     "é da CONFLAÇÃO, não da convenção: informe --roic-book com a MÉDIA forward do estoque. "
                      "Para spread negativo persistente use tv='gordon' com --roic-tv abaixo do WACC.")
         else:
             d.append(f"CONVENÇÃO CONDICIONADA [B-01]: ROIC marginal ({roic:.1%}) < WACC ({w:.1%}) com ROIC "
-                     f"book informado ({roic_book:.1%}). O TV está ancorado no book e NÃO acompanha o "
-                     "marginal — não há perversidade: o múltiplo CAI quando o marginal cai, como deve. O "
+                     f"book informado ({roic_book:.1%}). [v9.27] O TV parte do book e ACUMULA o capital "
+                     "novo ao marginal (a média deriva na direção dele; o eco abaixo mostra o médio no ano "
+                     "n) — não há perversidade: o múltiplo acompanha o marginal, como deve. O "
                      "explícito destrói valor, mas a 'book' permanece ADMISSÍVEL sob tese DECLARADA de saída "
                      "pelo capital investido (turnaround, capex regulatório, reconstrução operacional, "
                      "liquidação ou venda pelo patrimônio). Sem essa tese na entrega, use tv='gordon' com "
                      "--roic-tv abaixo do WACC.")
             if roic_book < w:
                 d.append(f"SUB-ALERTA [B-01, papel MÉDIO]: ROIC book ({roic_book:.1%}) < WACC ({w:.1%}) ⟹ "
-                         f"TV = NOPAT/ROIC_book excede NOPAT/WACC em {w/roic_book:.2f}x. A saída pelo capital "
+                         f"a âncora inicial do TV (IC_0 = NOPAT/ROIC_book) excede NOPAT/WACC em {w/roic_book:.2f}x. A saída pelo capital "
                          "investido embute RECUPERAÇÃO acima do valor capitalizado de lucros sub-custo — "
                          "hipótese de recuperação, não de continuidade, e exige tese própria. O cruzamento "
                          "é exato em ROIC_book = WACC.")
+    if tv == 'book' and roic_book is not None and abs(roic_book - roic) >= 5e-4 and abs(g) > 1e-9:
+        ic_n = (1 + g) * (1.0 / roic_book - 1.0 / roic) + (1 + g) ** (n + 1) / roic
+        if ic_n > 0:
+            medio_n = (1 + g) ** (n + 1) / ic_n
+            d.append(f"ECO [v9.27, deriva do médio]: ROIC médio do estoque parte de {roic_book:.1%} e chega a "
+                     f"{medio_n:.1%} no ano {n} (capital novo ao marginal de {roic:.1%}); "
+                     f"TV = IC acumulado = {ic_n/(1+g):.2f}x NOPAT_1.")
     if abs(roic - w) < 5e-4:
         if tv == 'book' and roic_book is not None and abs(roic_book - w) >= 5e-4:
             d.append(f"ATENÇÃO: ROIC marginal ≈ WACC mas ROIC book = {roic_book:.1%} ≠ WACC — sob 'book' "
-                     f"a neutralidade é INCOMPLETA: o TV = 1/(ROIC_book(1+W)^n) depende do book e o "
-                     f"múltiplo forward NÃO é 1/WACC. Neutralidade completa sob 'book' exige marginal E "
+                     f"a neutralidade é INCOMPLETA: o TV depende do book inicial (e, com g > 0, da "
+                     f"acumulação ao marginal) e o múltiplo forward NÃO é 1/WACC. Neutralidade completa sob 'book' exige marginal E "
                      f"book iguais ao WACC; sob 'convergencia'/'gordon' o book não entra no TV e "
                      f"marginal = WACC basta.")
         else:
@@ -532,8 +612,16 @@ def diag_eq(g, roe, ke, gde, nde, tv='book', n=10, roe_book=None, roe_tv=None, p
                  "tv='convergencia'. Sob 'convergencia' o P/L justo SOBE com o ROE; sob 'book', cai.")
         if roe_book is None:
             d.append("ATENÇÃO (conflação marginal×médio): o TV da 'book' usa o ROE do explícito (marginal) "
-                     "como se fosse o ROE MÉDIO contábil (E_n = LL/ROE). Se diferem, informe --roe-book "
-                     "com a média; o erro pode passar de 30% do valor.")
+                     "como se fosse o ROE MÉDIO contábil INICIAL. Se diferem, informe --roe-book "
+                     "com a média; o erro pode ser material.")
+        elif abs(roe_book - roe) >= 5e-4 and abs(g) > 1e-9:
+            e_n = (1 + g) * (1.0 / roe_book - 1.0 / roe) + (1 + g) ** (n + 1) / roe
+            if e_n > 0:
+                medio_n = (1 + g) ** (n + 1) / e_n
+                d.append(f"ECO [v9.30, deriva do médio]: ROE médio parte de {roe_book:.1%} e chega a "
+                         f"{medio_n:.1%} no ano {n} (lucro retido ao marginal de {roe:.1%}; a política de "
+                         f"caixa não altera E_n; na book o valuation usa dividendos + E_n para não duplicar caixa); "
+                         f"TV = equity acumulado = {e_n/(1+g):.2f}x LL_1.")
     if tv == 'gordon' and roe_tv is not None:
         if abs(caixa) > 1e-9 and gp > 0:
             if politica_tv == 'continua':
@@ -589,35 +677,43 @@ def diag_eq(g, roe, ke, gde, nde, tv='book', n=10, roe_book=None, roe_tv=None, p
                      "persistente use tv='gordon' com --roe-tv abaixo do Ke.")
         else:
             d.append(f"CONVENÇÃO CONDICIONADA [B-01]: ROE marginal ({roe:.1%}) < Ke ({ke:.1%}) com ROE book "
-                     f"informado ({roe_book:.1%}). O TV está ancorado no book e NÃO acompanha o marginal — "
-                     "não há perversidade: o P/L CAI quando o marginal cai, como deve. A retenção destrói "
+                     f"informado ({roe_book:.1%}). [v9.30] O TV parte do book e ACUMULA o lucro retido ao "
+                     "marginal (a média deriva na direção dele; o eco mostra o médio no ano n) — "
+                     "não há perversidade: o P/L acompanha o marginal, como deve. A retenção destrói "
                      "valor no explícito, mas a 'book' permanece ADMISSÍVEL sob tese DECLARADA de saída pelo "
                      "patrimônio (turnaround, capex regulatório, reconstrução operacional, liquidação ou "
                      "venda pelo book). Sem essa tese na entrega, use tv='gordon' com --roe-tv abaixo do Ke.")
             if roe_book < ke:
                 d.append(f"SUB-ALERTA [B-01, papel MÉDIO]: ROE book ({roe_book:.1%}) < Ke ({ke:.1%}) ⟹ "
-                         f"TV = LL/ROE_book excede LL/Ke em {ke/roe_book:.2f}x. A saída pelo patrimônio embute "
+                         f"a âncora inicial do TV (E_0 = LL/ROE_book) excede LL/Ke em {ke/roe_book:.2f}x. A saída pelo patrimônio embute "
                          "RECUPERAÇÃO acima do valor capitalizado de lucros sub-custo — hipótese de "
                          "recuperação, não de continuidade, e exige tese própria. O cruzamento é exato em "
                          "ROE_book = Ke.")
     if abs(roe - ke) < 5e-4:
         if tv == 'book' and roe_book is not None and abs(roe_book - ke) >= 5e-4:
             d.append(f"ATENÇÃO: ROE marginal ≈ Ke mas ROE book = {roe_book:.1%} ≠ Ke — sob 'book' a "
-                     f"neutralidade é INCOMPLETA: o TV = 1/(ROE_book(1+Ke)^n) depende do book e o P/L "
-                     f"forward NÃO é 1/Ke, mesmo com caixa/E = 0. Neutralidade completa sob 'book' exige "
-                     f"marginal E book iguais ao Ke (além de caixa/E = 0); sob 'convergencia'/'gordon' "
+                     f"neutralidade é INCOMPLETA: o TV depende do book inicial (e, com g > 0, da "
+                     f"acumulação ao marginal) e o P/L "
+                     f"forward NÃO é 1/Ke. Neutralidade completa sob 'book' exige "
+                     f"marginal E book iguais ao Ke; Caixa/E é neutro nessa convenção porque o valuation "
+                     f"é Div + E_n por clean surplus. Sob 'convergencia'/'gordon' "
                      f"o book não entra no TV e marginal = Ke basta.")
+        elif tv == 'book':
+            d.append("NEUTRALIDADE [book/clean surplus]: ROE marginal ≈ Ke e ROE book ≈ Ke — P/L "
+                     "FORWARD invariante a g (= 1/Ke), independentemente de Caixa/E. O book usa "
+                     "dividendos + E_n; caixa retido já está em E_n e não é contado novamente. O "
+                     "corrente varia com g apenas por reajuste de base.")
         elif abs(caixa) < 1e-9:
             d.append("NEUTRALIDADE [identidade, condicionada a caixa/E=0]: ROE ≈ Ke — P/L FORWARD "
-                     "invariante a g (= 1/Ke). 'book' e 'convergencia' coincidem neste ponto. "
-                     "Sob 'book' a identidade pressupõe ROE book = Ke também (aqui satisfeito ou "
-                     "conflacionado). O corrente varia com g por reajuste de base.")
+                     "invariante a g (= 1/Ke) nesta convenção sem book terminal. O corrente varia "
+                     "com g por reajuste de base.")
         else:
-            d.append(f"ATENÇÃO: ROE ≈ Ke NÃO é linha de neutralidade com caixa/E = {caixa:.1%}. O termo "
+            d.append(f"ATENÇÃO [módulo FCFE, não-book]: ROE ≈ Ke NÃO é linha de neutralidade com "
+                     f"caixa/E = {caixa:.1%}. O termo "
                      f"(GD/E − ND/E)·(g/ROE) do FCFE libera caixa a cada ponto de g, então o P/L forward "
                      f"continua subindo com g mesmo sem spread — este é o MÓDULO DE POLÍTICA de caixa "
-                     f"proporcional, não identidade geral. Neutralidade no lado equity exige ROE = Ke "
-                     f"E GD/E = ND/E; a neutralidade operacional pura sai na decomposição do output.")
+                     f"proporcional de gordon/convergencia, não identidade geral. Na `book`, essa "
+                     f"liberação não é somada a E_n porque duplicaria caixa.")
     if abs(g) < 1e-6:
         if tv == 'gordon':
             d.append("NEUTRALIDADE: g = 0 na convenção 'gordon' — P/L invariante a ROE "
@@ -710,18 +806,23 @@ def rentab_pos_degrau(rentab, h, m=1.0):
 def desconto_transicao(custo_capital, anos, perfil='rampa'):
     """O motor entrega o degrau instantâneo; a realidade leva `anos`.
     O desconto incide SOMENTE sobre o incremento, nunca sobre a base.
-    perfil='rampa'   -> deployment linear ao longo de T anos (PADRÃO, realista)
+    perfil='rampa'   -> deployment linear em tranches anuais ao longo de T anos; T fracionário
+                        recebe uma tranche proporcional no último período, sem saltos de arredondamento.
     perfil='pontual' -> o degrau inteiro cai no ano T; só com evento datado
                         (licença, decisão regulatória, fechamento de aquisição)."""
     T = max(anos, 0)
     if T <= 0:
         return 1.0
+    if custo_capital <= -1:
+        return float('nan')
     if perfil == 'pontual':
         return 1.0 / (1.0 + custo_capital) ** T
-    n = int(round(T))
-    if n < 1:
-        return 1.0 / (1.0 + custo_capital) ** T
-    return sum(1.0 / (1.0 + custo_capital) ** t for t in range(1, n + 1)) / n
+    n_full = int(T)
+    frac = T - n_full
+    numer = sum(1.0 / (1.0 + custo_capital) ** t for t in range(1, n_full + 1))
+    if frac > 1e-12:
+        numer += frac / (1.0 + custo_capital) ** T
+    return numer / T
 
 def valor_transicionado(valor_base, valor_degrau, custo_capital, anos, perfil='rampa'):
     f = desconto_transicao(custo_capital, anos, perfil)
@@ -781,6 +882,7 @@ def registro_drivers(drivers, limiar=0.10):
     elasticidade minúscula é irrelevante; gap moderado com elasticidade alta é o que move
     o valor. Só vira CENÁRIO quem passa do limiar E está entre os dois maiores."""
     out = []
+    _raw = {}
     for d in drivers:
         gap = (d['spot'] / d['base'] - 1) if d['base'] else float('nan')
         sentido = d.get('sentido', 'receita')
@@ -794,21 +896,25 @@ def registro_drivers(drivers, limiar=0.10):
             el = d.get('elast', 1.0)
             fonte = ('declarada — derive sempre que houver linha exposta e métrica-base; '
                      'para driver de custo a elasticidade declarada deve vir NEGATIVA')
+        efeito_raw = el * gap
+        impacto_raw = abs(efeito_raw)
+        _raw[d['nome']] = (efeito_raw, impacto_raw)
         out.append({'nome': d['nome'], 'base': d['base'], 'spot': d['spot'],
                     'sentido': sentido,
                     'gap_%': round(gap * 100, 2), 'elast': round(el, 4),
                     'elast_fonte': fonte,
-                    'efeito_liquido_%': round(el * gap * 100, 2),   # COM sinal
-                    'impacto_%': round(abs(el * gap) * 100, 2)})
-    out.sort(key=lambda x: -x['impacto_%'])
-    relevantes = [d for d in out if d['impacto_%'] > limiar * 100]
+                    'efeito_liquido_%': round(efeito_raw * 100, 2),
+                    'impacto_%': round(impacto_raw * 100, 2)})
+    out.sort(key=lambda x: -_raw[x['nome']][1])
+    relevantes = [d for d in out if _raw[d['nome']][1] > limiar]
     # [v9.13] o líquido decide o gate AGREGADO — antes ele era calculado, exibido na compensação
     # e IGNORADO pela luz: 6 drivers todos < 10% somando −12,6% devolviam GATE: false (caso FNV,
     # rodada 2 da execução fria). A doutrina já dizia "o líquido decide"; o booleano contradizia.
-    liq = sum(d['efeito_liquido_%'] for d in out if d['efeito_liquido_%'] == d['efeito_liquido_%'])
-    bruto = sum(d['impacto_%'] for d in out if d['impacto_%'] == d['impacto_%'])
+    liq_raw = sum(_raw[d['nome']][0] for d in out if _raw[d['nome']][0] == _raw[d['nome']][0])
+    bruto_raw = sum(_raw[d['nome']][1] for d in out if _raw[d['nome']][1] == _raw[d['nome']][1])
+    liq, bruto = liq_raw * 100, bruto_raw * 100
     gate_individual = len(relevantes) > 0
-    gate_agregado = abs(liq) > limiar * 100
+    gate_agregado = abs(liq_raw) > limiar
     gate = gate_individual or gate_agregado
     # seleção de cenário: individuais acima do limiar; se SÓ o agregado disparou, promovem-se os
     # dois maiores contribuintes — o cenário normalizado é obrigatório e precisa de protagonistas
@@ -922,12 +1028,16 @@ def apv_recursao(fcff1, g, n, ku, kd, tax, d0, fcff_tv=None, gtv=0.0, conv='mm')
     D/V DERIVA (a série vai no output em DV_t_%: na âncora do selftest vai de 18,75% a
     36,28%). HP verdadeiro (com a circularidade D=L×V resolvida) é roadmap planilha-primeiro,
     assim como Miles-Ezzell verdadeiro (primeiro shield a Kd, posteriores a Ku, Fernández).
-    'hp' e 'me' são ACEITOS como aliases legados com aviso, número a número.
+    'hp' e 'me' NÃO são aliases numéricos: desde v9.28 retornam erro explícito porque
+    Harris-Pringle e Miles-Ezzell exigem políticas de dívida próprias.
     Terminal: Vu_n = FCFF_TV/(Ku−gtv); dívida cresce a gtv no terminal.
     Devolve a trilha completa + checks de reconciliação FCFE@Ke_t = E0 e FCFF@WACC_t = V0."""
-    alias = conv if conv in ('hp', 'me') else None
-    if alias:
-        conv = 'ku'  # aliases legados, número a número (padrão ic->book / spread->gordon)
+    if conv not in ('mm', 'ku'):
+        return {'erro': f"convenção APV '{conv}' não implementada. Use 'mm' ou 'ku'. "
+                        "Miles-Ezzell e Harris-Pringle exigem políticas de dívida próprias; "
+                        "não são aliases numéricos."}
+    if g <= -1 or gtv <= -1:
+        return {'erro': 'requer g > -100% e gtv > -100%'}
     if ku - gtv <= 0 or n < 1:
         return {'erro': 'requer Ku > gtv e n >= 1'}
     fcff = [fcff1 * (1 + g) ** (t - 1) for t in range(1, n + 1)]
@@ -963,19 +1073,9 @@ def apv_recursao(fcff1, g, n, ku, kd, tax, d0, fcff_tv=None, gtv=0.0, conv='mm')
     chk4 = e_pv - E[0]; chk5 = max(abs(a - b) for a, b in zip(ke_t, ke_f)) if conv == 'mm' else None
     chk6 = v_pv - V[0]
     dv = [D[t] / V[t] for t in range(n + 1)]
-    avisos_alias = {
-        'me': ("alias legado 'me' aceito, número a número — o regime implementado desconta TODOS os "
-               "shields a Ku sobre dívida exógena. Miles-Ezzell verdadeiro desconta o PRIMEIRO shield "
-               "a Kd (Fernández) e NÃO está implementado (roadmap); declare --conv ku."),
-        'hp': ("alias legado 'hp' aceito, número a número — o regime implementado usa a convenção de "
-               "RISCO de Harris-Pringle (shields a Ku) sobre a trajetória EXÓGENA D_t = D0(1+g)^t. "
-               "Harris-Pringle completo exige D_t = L×V_t com D/V CONSTANTE, que este motor não impõe "
-               "(veja DV_t_%); HP verdadeiro é roadmap planilha-primeiro. Declare --conv ku."),
-    }
     return {'convencao': ('MM — dívida determinística, shields a Kd' if conv == 'mm'
                           else 'Ku — shields a Ku sobre dívida EXÓGENA D_t = D0(1+g)^t '
                                '(convenção de risco de Harris-Pringle; D/V NÃO é mantido constante)'),
-            **({'aviso_alias': avisos_alias[alias]} if alias else {}),
             'Vu0': round(Vu[0], 6), 'VTS0': round(VTS[0], 6),
             'V0': round(V[0], 6), 'E0': round(E[0], 6), 'D0': d0,
             'Ke_t_%': [round(k * 100, 4) for k in ke_t],
@@ -991,6 +1091,12 @@ def apv_recursao(fcff1, g, n, ku, kd, tax, d0, fcff_tv=None, gtv=0.0, conv='mm')
                                                           else 'n/a (regime ku — a fórmula de '
                                                                'Fernández só vale sob MM)'),
             'check_FCFF_at_WACC_t_igual_V0': round(chk6, 9),
+            'convencao_fluxo_transicao_C7': ('FCFF_{n+1} usa a taxa explícita g por default; gtv rege a perpetuidade. '
+                                             'Se a estabilidade começar já em n+1, informe --fcff-tv explicitamente.'),
+            'FCFF_n': round(fcff[-1], 6), 'FCFF_n1_usado_no_TV': round(ftv, 6),
+            'g_transicao_%': round(g * 100, 4), 'gtv_%': round(gtv * 100, 4),
+            'efeito_C7_alternativa_gtv_em_n1_%': round((((fcff[-1] * (1 + gtv) - ftv) / (ku - gtv))
+                                                       / (1 + ku) ** n) / V[0] * 100, 4) if V[0] else None,
             'nota': ('Ke e WACC variam no tempo porque a alavancagem a MERCADO deriva. Um WACC único '
                      'aplicado a todos os períodos é inconsistente com a própria trilha — use a série. '
                      'O comando kewacc continua disponível como sanity check ESTÁTICO de perpetuidade.')}
@@ -999,27 +1105,60 @@ def apv_recursao(fcff1, g, n, ku, kd, tax, d0, fcff_tv=None, gtv=0.0, conv='mm')
 ANCHORS = dict(g=0.11, roic=0.3435157894736844, w=0.18733157894736852, n=10,
                d=0.06666666666666651, t=0.30,
                roe=0.4482692307692308, ke=0.22, gde=0.5384615384615384, nde=0.4615384615384615)
+def _equity_book_end(ni0, g, roe_marg, roe_book, n):
+    """[v9.30] Patrimônio contábil ao fim de n períodos sob clean surplus.
+
+    E0 = NI1/ROE_book e ΔE_t = (g/ROE_marg)·NI_t. É o state variable que deve
+    atravessar fases; reestimar E como NI/ROE_book no corte congela indevidamente o retorno médio.
+    """
+    if roe_marg <= 0 or roe_book <= 0 or g <= -1 or n < 0:
+        return float('nan')
+    return ni0 * ((1 + g) * (1.0 / roe_book - 1.0 / roe_marg)
+                  + (1 + g) ** (n + 1) / roe_marg)
+
+
 def _pe2_book(g1, roe1, ke1, n1, gde1, nde1, g2, roe2, ke2, n2, gde2, nde2,
               kd, tax, rb1=None):
-    """Bifásico book sem fade (interno, v9.3): valor por unidade de NI0 e componentes.
-    Estrutura idêntica à fórmula fechada validada por soma explícita de FCFE na suíte.
-    rb1: ROE médio contábil do regime 1 para a âncora de equity (E = NI/rb1) — sem ele,
-    usa roe1 (conflação sinalizada pelo chamador)."""
-    a1, a2 = 1 - (gde1 - nde1), 1 - (gde2 - nde2)
+    """[v9.30] Bifásico `book` por unidade de NI0, com E como variável de estado.
+
+    Fase 1 e fase 2 são valorizadas por dividendos + patrimônio terminal (clean surplus).
+    O patrimônio ao corte é ACUMULADO a partir do ROE book inicial e do ROE marginal da fase 1;
+    não é reestimado como NI/ROE_book. Caixa/E não entra nos dividendos do `book` — o caixa retido
+    já está dentro de E. A única transferência financeira separada é a ponte discreta de releveraging.
+    rb1 ausente mantém a hipótese conflacionada book=marginal, mas sem congelar o state variable.
+    """
     rbb = rb1 if (rb1 is not None and abs(rb1) > 1e-12) else roe1
     razao = (1 + nde1) / (1 + nde2)
 
     def anu(g, ke, n):
-        return n * 1.0 if abs(ke - g) < 1e-9 else             (1 + g) * (1 - ((1 + g) / (1 + ke)) ** n) / (ke - g)
+        return n * 1.0 if abs(ke - g) < 1e-9 else \
+            (1 + g) * (1 - ((1 + g) / (1 + ke)) ** n) / (ke - g)
 
-    f1 = (1 - a1 * g1 / roe1) * anu(g1, ke1, n1)
-    K = (1 + g1) ** (n1 + 1) / ((1 + g2) * rbb) * razao / (1 + ke1) ** n1
+    # Fase 1: DDM sob clean surplus.
+    f1 = (1 - g1 / roe1) * anu(g1, ke1, n1)
+    e_pre = _equity_book_end(1.0, g1, roe1, rbb, n1)
+
+    # Fase 2 preserva DOIS estados: patrimônio acumulado e nível de lucro. A semântica histórica
+    # da ponte rebaseia o primeiro lucro da fase 2 por (ROE2/ROE1)·razao; o book separado NÃO
+    # pode substituir ROE1 por ROE_book nessa relação. Assim, quando as fases são idênticas, o
+    # corte artificial não muda a trajetória de NI.
+    ni1_next = (1 + g1) ** (n1 + 1)  # NI_{n1+1} na base NI0=1
+    K = ni1_next * razao / (roe1 * (1 + g2) * (1 + ke1) ** n1)
     A2 = anu(g2, ke2, n2)
-    f2 = K * A2 * (roe2 - a2 * g2)
-    ponte = ((1 + g1) ** (n1 + 1) / rbb) / (1 + ke1) ** n1 / (1 + ke2)             * (gde2 * razao - gde1) * (1 + kd * (1 - tax))
-    tv = (1 + g1) ** (n1 + 1) / rbb * razao / (1 + ke1) ** n1          * ((1 + g2) / (1 + ke2)) ** n2
+    f2 = K * A2 * (roe2 - g2)
+
+    ponte = (e_pre / (1 + ke1) ** n1 / (1 + ke2)
+             * (gde2 * razao - gde1) * (1 + kd * (1 - tax)))
+    # E terminal é STATE VARIABLE: parte de E_pre·razao e soma retenção da fase 2. Não é
+    # reestimado como NI/ROE2. Como NI2_1 = NI1_next·razao·ROE2/ROE1, o ROE2 cancela da
+    # acumulação do book, mas continua determinando os dividendos da fase 2.
+    e2_start = e_pre * razao
+    e2_end = e2_start + (ni1_next * razao / roe1) * ((1 + g2) ** n2 - 1)
+    tv = e2_end / (1 + ke1) ** n1 / (1 + ke2) ** n2
     return {'f1': f1, 'K': K, 'A2': A2, 'f2': f2, 'ponte': ponte, 'tv_desc': tv,
-            'total': f1 + f2 + ponte + tv, 'alpha2': a2, 'razao': razao}
+            'total': f1 + f2 + ponte + tv, 'alpha2': 1.0, 'razao': razao,
+            'E_pre': e_pre, 'E2_start': e2_start, 'E2_end': e2_end,
+            'NI2_1': ni1_next * razao * roe2 / roe1}
 
 
 def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
@@ -1029,17 +1168,26 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
     múltiplo-alvo. Mecânica validada na planilha vF8.1 (aba Iso-Valor, prova por fluxos
     explícitos, checks = 0; reconciliação com a aba Logic a ~2e-15).
 
-    Sob 'book' o múltiplo é LINEAR em 1/rentabilidade — M = S(g) + [B(g) − α·g·S(g)]/rent,
-    com S = anuidade e B = fator do TV — e a inversão é FECHADA:
-        rent* = (B − α·g·S)/(alvo − S)
+    Sob 'book' o múltiplo é LINEAR em 1/rentabilidade e a inversão é FECHADA. [v9.30]
+    O book equity é DDM + patrimônio terminal, portanto α_book = 1 também no lado pe: caixa/E
+    não cria valor por si só e não entra na inversão. Conflacionado:
+    M = S + (B − g·S)/rent. Com book separado, nos dois lados:
+    M = S + B1/rb + (B − B1 − g·S)/rent, B1 = (1+g)/(1+custo)^n.
     Sob 'convergencia'/'gordon' a inversão usa a bissecção do motor (solve) sobre pe/ev.
-    lado: 'pe' (α = 1−(gde−nde)) ou 'ev' (α = 1). Cada ponto é VERIFICADO re-avaliando o
-    múltiplo no motor — |M(g, rent*) − alvo| < tol ou o ponto sai marcado."""
+    Fora de `book`, o lado pe continua usando o módulo FCFE com α = 1−(gde−nde); no `book`,
+    α_book = 1 nos dois lados. Cada ponto é VERIFICADO re-avaliando o múltiplo no motor —
+    |M(g, rent*) − alvo| < tol ou o ponto sai marcado."""
     tv = tv_canon(tv)
-    alpha = (1 - (gde - nde)) if lado == 'pe' else 1.0
+    # [v9.31] O metadado reporta o coeficiente efetivamente usado: na `book`, clean surplus
+    # implica alpha_book = 1 também no equity; fora dela, o FCFE mantém 1-(GD/E-ND/E).
+    alpha = 1.0 if tv == 'book' else ((1 - (gde - nde)) if lado == 'pe' else 1.0)
     avisos = []
     comp = {'transicao': transicao}
     if transicao == 'ponte':
+        if rent_book is not None:
+            raise SystemExit("iso --transicao ponte: --rent-book pertence ao regime único e não entra no bifásico. "
+                             "Use --pt-roe1-book para o book médio da fase 1. ROE2_book separado não é "
+                             "implementado nesta versão; aceitar --rent-book aqui seria um input silenciosamente ignorado.")
         if lado != 'pe':
             raise SystemExit("iso: --transicao ponte só está definida no lado pe (a ponte é objeto de equity).")
         if not ponte_params:
@@ -1048,10 +1196,16 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
                              "--pt-roe1 [--pt-roe1-book] ou --pt-equity). O motor calcula o PV — "
                              "nunca transcreva a ponte à mão.")
         if tv_canon(tv) != 'book':
-            raise SystemExit("iso --transicao ponte (v9.3): a inversão bifásica exata está derivada "
-                             "para a convenção book (TV = equity contábil, independente de ROE₂). "
+            raise SystemExit("iso --transicao ponte: a inversão bifásica fechada está derivada "
+                             "para a convenção book (TV = equity contábil, independente de ROE₂), "
+                             "condicionada à convenção de rebase do primeiro lucro. "
                              "Bifásico com gordon/convergencia entra com o pe2 (roadmap).")
         pk = dict(ponte_params)
+        if pk.get('equity') is not None:
+            raise SystemExit("iso --transicao ponte: --pt-equity é monetário, enquanto --alvo é múltiplo por NI0. "
+                             "Sem uma base NI0 explícita, misturar as escalas é inconsistente. Use "
+                             "--pt-roe1 e --pt-roe1-book para a inversão em múltiplos; --equity permanece "
+                             "suportado no comando `ponte` standalone.")
         if pk.get('roe1') is None:
             raise SystemExit("iso --transicao ponte (v9.3): --pt-roe1 é obrigatório — a anuidade da "
                              "fase 1 exige o ROE marginal do regime 1 (--pt-equity sozinho não basta).")
@@ -1063,10 +1217,11 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
         comp.update(alvo_cheio=alvo, PV_ponte=pt['PV_ponte'],
                     composicao=('ponte nula: estrutura igual nos dois regimes'
                                 if abs(pt['delta_estrutura']) < 1e-12 else
-                                'EXATA condicional — inversão bifásica fechada (book, sem fade; ROE2 no papel duplo marginal=médio, como a vF19): '
-                                'o valor total é linear em ROE₂; f1, ponte e TV são removidos com os '
+                                'FECHADA E CONDICIONAL — inversão bifásica (book, sem fade; E é state variable): '
+                                'o valor total é linear em ROE₂; f1, ponte e TV acumulado são removidos com os '
                                 'parâmetros declarados e ROE₂* sai por divisão, verificado re-avaliando '
-                                'o bifásico completo em cada ponto'),
+                                'o bifásico completo em cada ponto. ROE₂* é condicionado ao rebase NI2_1=NI1_next·(ROE2/ROE1)·razão; '
+                                'não é identificação estrutural pura do marginal'),
                     diagnosticos_ponte=pt['diagnosticos'])
         if pk.get('roe1_book') is None and pk.get('equity') is None:
             avisos.append("ATENÇÃO (conflação marginal×médio no regime 1): sem --pt-roe1-book, a âncora "
@@ -1074,11 +1229,11 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
                           "propaga para f1 não, mas para ponte, K e TV sim.")
     elif transicao != 'nenhuma':
         raise SystemExit("iso: --transicao deve ser 'nenhuma' (regime único declarado) ou 'ponte'.")
-    if tv == 'book' and rent_book is None:
+    if transicao == 'nenhuma' and tv == 'book' and rent_book is None:
         avisos.append("ATENÇÃO (conflação marginal×médio, P6.11): sem --rent-book, a inversão usa a "
                       "MESMA rentabilidade nos dois papéis — marginal (retenção) e média contábil (TV). "
-                      "Se diferem, a rentabilidade implícita sai distorcida (o erro pode passar de 30% e "
-                      "gerar raízes sem sentido). Informe --rent-book com a média do estoque.")
+                      "Se diferem, a rentabilidade implícita pode sair materialmente distorcida e gerar "
+                      "raízes sem sentido. Informe --rent-book com a média do estoque.")
     curva = []
     for g in grade_g:
         pt = {'g_%': g * 100}
@@ -1094,7 +1249,7 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
                           diagnostico='K·A₂ ≈ 0: a rentabilidade do regime 2 não entra no valor neste '
                                       'ponto — não identificável')
                 curva.append(pt); continue
-            rent = residuo / den + base['alpha2'] * g
+            rent = residuo / den + g
             p = dict(pt)
             m = _pe2_book(pk['g1'], pk['roe1'], pk['ke1'], pk['n1'], pk['gde1'], pk['nde1'],
                           g, rent, custo, n, gde, nde, pk['kd'], pk['tax'],
@@ -1105,9 +1260,10 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
                 diag = ('incompatível neste g — ou o alvo é irreconciliável com os regimes declarados, '
                         'ou a COMPOSIÇÃO está mal-posta (parâmetros da fase 1 errados distorcem o resíduo)')
             elif rent < custo:
-                diag = ('marginal < custo no regime 2: o bifásico não expõe book separado na fase 2 — '
-                        'TV CONFLACIONADO (o TV acompanha o marginal e cresce quando ele cai); '
-                        'declarar gordon (exige pe2)')
+                diag = ('marginal < custo no regime 2: retenção destrói valor. O TV book carrega o '
+                        'patrimônio acumulado como state variable; a convenção continua admissível '
+                        'somente sob tese declarada de saída pelo book. Para spread negativo persistente '
+                        'sem essa tese, use gordon quando o pe2 correspondente existir.')
             elif rir > 1:
                 diag = 'RiR > 100% no regime 2: exige fonte de funding declarada'
             else:
@@ -1124,24 +1280,27 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
             S = n if abs(custo - g) < 1e-9 else (1 + g) * (1 - ((1 + g) / (1 + custo)) ** n) / (custo - g)
             B = (1 + g) ** (n + 1) / (1 + custo) ** n
             if rent_book is not None:
-                # inversão com papéis separados (B1): M = S + B/rb − α·g·S/rent (linear em 1/rent)
-                den = S + B / rent_book - alvo
-                if abs(alpha * g * S) < 1e-12:
+                # [v9.30] papéis separados com capital/patrimônio ACUMULADO. No `book` equity,
+                # clean surplus implica dividendos + E_n; logo caixa/E não entra e α_book = 1.
+                B1 = (1 + g) / (1 + custo) ** n
+                num = B - B1 - g * S
+                den = alvo - S - B1 / rent_book
+                if abs(num) < 1e-12:
                     pt.update(rent_implicita=None,
-                              diagnostico='g·α ≈ 0: retenção nula — a rentabilidade MARGINAL não entra no '
-                                          'múltiplo e não é identificável neste g (só a média, via TV)')
+                              diagnostico='coeficiente de 1/rent ≈ 0 (g ≈ 0): a rentabilidade MARGINAL não '
+                                          'entra no múltiplo e não é identificável neste g (só a média, via TV)')
                     curva.append(pt); continue
                 if abs(den) < 1e-9:
                     pt.update(rent_implicita=None,
-                              diagnostico='alvo ≈ S + B/rent_book: variável não identificada — ruído com cara de precisão')
+                              diagnostico='alvo ≈ S + B1/rent_book: variável não identificada — ruído com cara de precisão')
                     curva.append(pt); continue
-                rent = alpha * g * S / den
+                rent = num / den
             else:
                 if abs(alvo - S) < 1e-6:
                     pt.update(rent_implicita=None,
                               diagnostico='alvo ≈ piso S(g): variável não identificada — ruído com cara de precisão')
                     curva.append(pt); continue
-                rent = (B - alpha * g * S) / (alvo - S)
+                rent = (B - g * S) / (alvo - S)
             rents = [rent]
         else:
             fmult = (lambda x: pe(g, x, custo, n, gde, nde, tv=tv, roe_tv=rent_tv, gp=gp,
@@ -1172,9 +1331,14 @@ def iso_curva(lado, alvo, custo, n, grade_g, tv='book', gde=0.0, nde=0.0,
                             'cresce quando o retorno cai — informe o book (--roic-book/--roe-book) ou '
                             'declare gordon com spread negativo')
                 else:
-                    diag = ('CONDICIONADA: marginal < custo com book informado — o TV está ancorado no '
-                            'book e não acompanha o marginal; admissível sob tese DECLARADA de saída '
-                            'pelo capital investido')
+                    if lado == 'ev':
+                        diag = ('CONDICIONADA: marginal < custo com book informado — o TV parte do book inicial, '
+                                'mas acompanha o marginal pelo capital novo acumulado; não há convergência implícita '
+                                'para cima. Admissível sob tese DECLARADA de saída pelo capital investido')
+                    else:
+                        diag = ('CONDICIONADA: marginal < custo com book informado — o TV parte do book '
+                                'inicial e acumula o lucro retido ao marginal; na book o fluxo é dividendo '
+                                'e Caixa/E é neutro. Admissível sob tese DECLARADA de saída pelo patrimônio')
                     if rent_book < custo:
                         diag += (f' | SUB-ALERTA: book ({rent_book:.1%}) < custo ({custo:.1%}) — o TV '
                                  f'embute recuperação {custo/rent_book:.2f}x acima do valor capitalizado '
@@ -1249,8 +1413,9 @@ def ponte_releveraging(n1, ke1, ke2, gde1, nde1, gde2, nde2, kd, tax, g1,
       razão = (1+ND/E₁)/(1+ND/E₂)  — rebase do equity quando o caixa líquido relativo muda
       E_pre = equity ao fim da fase 1, na base da fase 1
       (1+Kd_at): ajuste de timing de um ano de juros após impostos sobre a Δdívida
-    Base de E_pre: --equity (E0 hoje: E_pre = E0·(1+g1)^n1) OU --roe1 (base-lucro, como a
-    vF19: E_pre = NI0·(1+g1)^(n1+1)/ROE1; sem --ni assume NI0 = 1 e o PV lê-se como Δ P/L).
+    Base de E_pre: --equity (E0 hoje: E_pre = E0·(1+g1)^n1, convenção standalone existente)
+    OU base-lucro. [v9.30] Na base-lucro, se --roe1-book é informado, E_pre é ACUMULADO por
+    clean surplus com ROE marginal; não é reestimado como NI/ROE_book no corte.
     """
     kd_at = kd * (1 - tax)
     kd1 = kd if kd1 is None else kd1
@@ -1262,14 +1427,13 @@ def ponte_releveraging(n1, ke1, ke2, gde1, nde1, gde2, nde2, kd, tax, g1,
     elif roe1 is not None and abs(roe1) > 1e-12:
         ni0 = 1.0 if ni is None else ni
         rb1 = roe1_book if (roe1_book is not None and abs(roe1_book) > 1e-12) else roe1
-        e_pre = ni0 * (1 + g1) ** (n1 + 1) / rb1
+        e_pre = _equity_book_end(ni0, g1, roe1, rb1, n1)
         base = 'lucro (NI0=%s, ROE %s)' % ('1 — PV lê-se como Δ P/L' if ni is None else ni,
                                            'book' if roe1_book is not None else 'marginal como proxy de book')
         if roe1_book is None:
-            aviso_conflacao = ("ATENÇÃO (conflação marginal×médio, P6.11): E_pré = NI/ROE usa aqui o ROE "
-                               "MARGINAL como proxy do ROE MÉDIO contábil. Se diferem, informe --roe1-book "
-                               "com a média (ou ancore por --equity); o erro em E_pré é proporcional à razão "
-                               "entre os dois.")
+            aviso_conflacao = ("ATENÇÃO (conflação marginal×médio, P6.11): sem --roe1-book, E_pré parte "
+                               "de E0 = NI1/ROE1 e acumula ao mesmo ROE marginal — hipótese book=marginal. "
+                               "Se a média inicial difere, informe --roe1-book.")
     else:
         raise SystemExit("ponte: informe --equity OU --roe1 (com --ni opcional) para ancorar E_pre.")
     delta_estrutura = gde2 * razao - gde1
@@ -1300,9 +1464,10 @@ def ponte_releveraging(n1, ke1, ke2, gde1, nde1, gde2, nde2, kd, tax, g1,
                    " — consistentes com um Ku único (gap < 0,5 p.p.)."))
     if abs(razao - 1) > 1e-9:
         diag.append(f"REBASE (razão = {razao:.4f} ≠ 1): o equity E o lucro rebasam juntos na "
-                    f"transição — o NI da fase 2 entra multiplicado por (ROE2/ROE1)·razão. "
-                    f"NÃO some esta ponte a um valuation que não rebasou a base de lucro "
-                    f"(degrau composto: nível × taxa, teorema da classificação).")
+                    f"transição — pela convenção bifásica, o NI da fase 2 entra multiplicado por "
+                    f"(ROE2/ROE1)·razão. Esse fator é HIPÓTESE DE REBASE DE NÍVEL, não identidade "
+                    f"derivada do ROE marginal. NÃO some esta ponte a um valuation que não rebasou "
+                    f"a base de lucro; qualquer ROE2 implícito é condicionado a essa convenção.")
     if pl_base is not None and abs(pl_base) > 1e-12:
         pct = pv / pl_base * 100
         diag.append(f"Ponte = {pct:+.1f}% do valor-base informado."
@@ -1317,7 +1482,7 @@ def ponte_releveraging(n1, ke1, ke2, gde1, nde1, gde2, nde2, kd, tax, g1,
                 "reversa monofásica — a subtração deixa a fase 1 e o rebase de nível dentro do "
                 "alvo e produz rentabilidades sem sentido (auditoria nº 2, achado B2). A rota "
                 "correta é `iso --transicao ponte` com os parâmetros do regime 1: o motor "
-                "inverte o bifásico exato em forma fechada.")
+                "inverte o bifásico em forma fechada, condicionada à convenção de rebase declarada.")
     return {'fluxo_ano_n1_mais_1': fluxo, 'PV_ponte': pv,
             'delta_estrutura': delta_estrutura, 'razao_rebase': razao,
             'E_pre_transicao': e_pre, 'base_de_ancoragem': base,
@@ -1354,8 +1519,9 @@ def selftest():
                             kd=0.11, tax=0.30, g1=0.12, roe1=0.10846315789473689)
     pt0 = ponte_releveraging(n1=5, ke1=0.22, ke2=0.16, gde1=0.8, nde1=0.6, gde2=0.8, nde2=0.6,
                              kd=0.11, tax=0.30, g1=0.12, roe1=0.10846315789473689)
-    # anchors v9.1: iso-valor (planilha vF8.1, aba Iso-Valor — reconciliação com a Logic)
-    iso_pe = iso_curva('pe', 5.733730022636558, 0.22, 10, [0.11],
+    # anchor equity `book` v9.30: a antiga planilha vF8 somava Δcaixa aos fluxos e também E_n;
+    # clean surplus corrige o P/L para DDM + book. O ROE implícito continua o mesmo.
+    iso_pe = iso_curva('pe', 5.617294815452462, 0.22, 10, [0.11],
                        tv='book', gde=0.538461538461538, nde=0.461538461538462)
     iso_ev = iso_curva('ev', 6.429566333754988, 0.187331578947369, 10, [0.11], tv='book')
     r_pe = iso_pe['curva'][0]['rent_implicita_pct'] / 100
@@ -1366,7 +1532,7 @@ def selftest():
     iso_b1 = iso_curva('pe', alvo_b1, 0.22, 10, [0.11], tv='book',
                        gde=0.538461538461538, nde=0.461538461538462, rent_book=0.28)
     r_b1 = iso_b1['curva'][0]['rent_implicita_pct'] / 100
-    # (b) v9.3 (correção B2): inversão bifásica EXATA — caso verdadeiro vF19 (ROE2 = 43.45%)
+    # (b) inversão bifásica FECHADA CONDICIONAL à convenção de rebase — caso histórico vF19 (ROE2 = 43.45%)
     _alvo2 = _pe2_book(0.12, 0.1085, 0.22, 5, 0.8, 0.6, 0.15, 0.4345, 0.16, 12, 0.3, 0.2,
                        0.11, 0.30)['total']
     iso_tr = iso_curva('pe', _alvo2, 0.16, 12, [0.15], tv='book', gde=0.3, nde=0.2,
@@ -1379,7 +1545,7 @@ def selftest():
     rp = rampa_bifasica(265.0, 26.8, 6.8, 0.191, 0.119, 0.35, 10, 5, 0.08, 0.179364,
                         util=0.65, tv='convergencia')
     ok = (abs(mn - 6.429566333754988) < 1e-9 and abs(me - 4.200650004719926) < 1e-9
-          and abs(mp - 5.733730022636558) < 1e-9 and abs(eb_novo - 630.6294) < 1e-3
+          and abs(mp - 5.617294815452462) < 1e-9 and abs(eb_novo - 630.6294) < 1e-3
           and abs(h - 1.4846153846153847) < 1e-12 and abs(rdep - 0.2969230769230769) < 1e-12
           and abs(ftr - 0.48225308641975306) < 1e-12 and abs(ftr_r - 0.6471836419753086) < 1e-12
           and abs(el - 1.6373227605671663) < 1e-12 and abs(ni - 1040.0) < 1e-6
@@ -1401,13 +1567,14 @@ def selftest():
           and iso_pe['curva'][0]['check_multiplo'] == 0.0 and iso_ev['curva'][0]['check_multiplo'] == 0.0
           and abs(r_b1 - 0.4483) < 1e-9 and iso_b1['curva'][0]['check_multiplo'] == 0.0
           and abs(r_tr - 0.4345) < 1e-9 and iso_tr['curva'][0]['check_multiplo'] == 0.0
-          and 'EXATA' in ct['composicao']
+          and 'FECHADA E CONDICIONAL' in ct['composicao']
           and abs(rp['EV'] - 170.9304) < 1e-3 and abs(rp['vp_fase1'] - 45.2592) < 1e-3
           and abs(rp['valor_fase2_no_ano_T'] - 220.4887) < 1e-3
           and abs(rp['g1_%'] - 8.9977) < 1e-3 and abs(rp['roic2_%'] - 16.007) < 1e-2
           and rp['checks_internos']['P1_fluxo_a_fluxo_max_abs'] < 1e-9
           and abs(rp['checks_internos']['P4_receita_T_menos_capacidade']) < 1e-6)
-    print(f"EV/NOPAT {mn:.6f} (ref 6.429566) | EV/EBITDA {me:.6f} (ref 4.200650) | P/L {mp:.6f} (ref 5.733730)")
+    print(f"EV/NOPAT {mn:.6f} (ref 6.429566) | EV/EBITDA {me:.6f} (ref 4.200650) | "
+          f"P/L book-clean-surplus {mp:.6f} (ref v9.30 5.617295)")
     print(f"normaliza: EBITDA_norm {eb_novo:.4f} (ref 630.6294)")
     print(f"degrau: h {h:.6f} (ref 1.484615) | rentab_pos {rdep*100:.4f}% (ref 29.6923%) | "
           f"transicao 4a@20% pontual {ftr:.6f} (ref 0.482253) | rampa {ftr_r:.6f} (ref 0.647184)")
@@ -1422,20 +1589,46 @@ def selftest():
     print(f"C1 politica caixa TV: continua {c1c:.6f} (ref 11.189863) | encerra {c1e:.6f} (ref 10.918218)")
     print(f"ponte vF19: fluxo {pt['fluxo_ano_n1_mais_1']:.6f} (ref -7.839739) | PV {pt['PV_ponte']:.6f} "
           f"(ref -2.500601) | colapso estrutura igual = {pt0['PV_ponte']:.1e} (ref 0)")
-    print(f"iso vF8.1: ROE* {r_pe*100:.6f}% (ref 44.826923%) | ROIC* {r_ev*100:.6f}% (ref 34.351579%) | "
+    print(f"iso: ROE* {r_pe*100:.6f}% (ref 44.826923%, alvo book v9.30) | ROIC* {r_ev*100:.6f}% (ref 34.351579%) | "
           f"verificação no motor = 0/0")
     print(f"iso v9.2/9.3: B1 recupera marginal {r_b1*100:.4f}% (ref 44.8300%) | inversão bifásica "
-          f"EXATA recupera ROE2 {r_tr*100:.4f}% (ref 43.4500%, caso verdadeiro vF19)")
+          f"FECHADA CONDICIONAL recupera ROE2 {r_tr*100:.4f}% (ref 43.4500%, caso verdadeiro vF19)")
     print(f"rampa v9.24 (planilha ELMT ago/26): EV {rp['EV']:.4f} (ref 170.9304) | fase1 {rp['vp_fase1']:.4f} "
           f"(ref 45.2592) | fase2@T {rp['valor_fase2_no_ano_T']:.4f} (ref 220.4887) | "
           f"g1 {rp['g1_%']:.4f}% | ROIC2 {rp['roic2_%']:.3f}% | P1/P4 = "
           f"{rp['checks_internos']['P1_fluxo_a_fluxo_max_abs']:.1e}/"
           f"{rp['checks_internos']['P4_receita_T_menos_capacidade']:.1e}")
-    print("SELFTEST OK — motor reproduz as planilhas de referência (vF8 incl. APV; ponte vF19; rampa ELMT)."
+    print("SELFTEST OK — anchors enterprise/APV/ponte/rampa preservados; v9.31 fecha semântica/cross-layer sem alterar o núcleo numérico."
           if ok else "SELFTEST FALHOU — NÃO USE OS RESULTADOS.")
     sys.exit(0 if ok else 1)
 
 # ---------------- saída JSON (NaN/Inf -> null: JSON válido sempre) ----------------
+_DOMAIN_WARNINGS = []
+
+def avaliar_dominios_cli(ns):
+    """Hardening v9.28: separa impossibilidade matemática de regime econômico anômalo.
+    Valores recebidos são os pontos percentuais BRUTOS da CLI."""
+    d = vars(ns) if hasattr(ns, '__dict__') else dict(ns)
+    erros, avisos = [], []
+    for nome in ('g', 'g1', 'g2', 'gp', 'gtv'):
+        v = d.get(nome)
+        if v is not None and v <= -100:
+            erros.append(f'--{nome.replace("_", "-")} deve ser > -100%; recebido {v}%')
+    for nome in ('wacc', 'ke', 'ku', 'kd'):
+        v = d.get(nome)
+        if v is not None and v <= -100:
+            erros.append(f'--{nome.replace("_", "-")} deve ser > -100%; recebido {v}%')
+    n = d.get('n')
+    if n is not None and n < 1:
+        erros.append(f'--n deve ser >= 1; recebido {n}')
+    tax = d.get('tax')
+    if tax is not None and (tax < 0 or tax > 100):
+        avisos.append(f'REGIME ANÔMALO: tax={tax}% fora de [0%,100%]. Exige justificativa explícita (NOL, crédito fiscal, benefício ou one-off).')
+    da = d.get('da')
+    if da is not None and (da < 0 or da > 100):
+        avisos.append(f'REGIME ANÔMALO: d=D&A/EBITDA={da}% fora de [0%,100%]. Pode ocorrer, mas exige reconciliação econômica de D&A, capex e EBITDA.')
+    return erros, avisos
+
 def _json_sane(o):
     if isinstance(o, float) and (o != o or o == float('inf') or o == float('-inf')):
         return None
@@ -1446,6 +1639,9 @@ def _json_sane(o):
     return o
 
 def jprint(out):
+    if isinstance(out, dict) and _DOMAIN_WARNINGS:
+        out = dict(out)
+        out.setdefault('avisos_dominio', list(_DOMAIN_WARNINGS))
     print(json.dumps(_json_sane(out), indent=2, ensure_ascii=False))
 
 # [C7] Convenção do fluxo de transição no gordon — declarável, ecoada e QUANTIFICADA no output.
@@ -1491,8 +1687,22 @@ def main():
     for _fluxo in (sys.stdout, sys.stderr):
         if hasattr(_fluxo, 'reconfigure'):
             _fluxo.reconfigure(encoding='utf-8')
-    p = argparse.ArgumentParser(description=__doc__)
-    sub = p.add_subparsers(dest='cmd', required=True)
+    class ParserGate1(argparse.ArgumentParser):
+        """[v9.27] Só a AUSÊNCIA de --tv vira parada do Gate 1; valor inválido segue argparse."""
+        def error(self, message):
+            if message.startswith('the following arguments are required:') and '--tv' in message:
+                print(json.dumps({
+                    'erro': 'convenção terminal não declarada — Gate 1',
+                    'instrucao': 'PARE. Não escolha uma convenção por conta própria: pergunte ao '
+                                 'usuário qual hipótese sobre a morte do spread e rode o Gate 1.',
+                    'opcoes': {'book': 'renda residual truncada — TV = capital investido',
+                               'convergencia': 'RONIC=WACC no capital novo — TV = NOPAT/W',
+                               'gordon': 'ROIC_TV e gp livres (exige --roic-tv; --gp)'}},
+                    ensure_ascii=False, indent=2))
+                raise SystemExit(2)
+            super().error(message)
+    p = ParserGate1(description=__doc__)
+    sub = p.add_subparsers(dest='cmd', required=True, parser_class=ParserGate1)
 
     def rates(sp, names):
         for nm, df in names: sp.add_argument('--' + nm, type=float, default=df)
@@ -1502,7 +1712,7 @@ def main():
         script existente quebra; o que faltar sai declarado em nao_checadas_por_falta_de_input).
         `cruzada` é a variável do OUTRO lado — o gate precisa de ROIC e ROE juntos para testar a
         identidade de alavancagem da planilha (linha 122)."""
-        for nm in cruzada + ['kd', 'rir-observado']:
+        for nm in cruzada + ['kd', 'cash-yield', 'rir-observado']:
             sp.add_argument('--' + nm, type=float, default=None,
                             help='[v9.11] opcional — gate de coerência do vetor (%%)')
         sp.add_argument('--ebitda-ic', type=float, default=None,
@@ -1518,7 +1728,7 @@ def main():
     flags_coerencia(s, ['roe', 'ke', 'gde', 'nde'])
     s.add_argument('--n', type=int, default=10); s.add_argument('--tv', required=True, choices=TVS, help=TVHELP)
     s.add_argument('--mid-year', action='store_true',
-                   help='[C3] convencao de meio de ano (fluxos uniformes): multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
+                   help='[C3] convenção midpoint: desloca os fluxos anuais do fim para o meio do período e multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
     s.add_argument('--roic-ue', type=float, default=None,
                    help='[v9.24] ROIC de unit economics (%%) — terceiro canal do triangulo (§11.2), espelho do --rir-observado')
     s.add_argument('--capex-total', type=float, default=None,
@@ -1552,14 +1762,14 @@ def main():
     s.add_argument('--n', type=int, default=10); s.add_argument('--tv', required=True, choices=TVS, help=TVHELP)
     s.add_argument('--politica-tv', default='continua', choices=['continua', 'encerra'], help='politica de caixa no terminal do gordon (correcao C1): continua (canonica, default) ou encerra no ano n')
     s.add_argument('--mid-year', action='store_true',
-                   help='[C3] convencao de meio de ano (fluxos uniformes): multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
+                   help='[C3] convenção midpoint: desloca os fluxos anuais do fim para o meio do período e multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
     s = sub.add_parser('rev'); rates(s, [('alvo', None), ('g', None), ('roic', None), ('roe', None), ('wacc', None), ('ke', None), ('da', 0.0), ('tax', 0.0), ('gde', 0.0), ('nde', 0.0), ('roic-tv', None), ('roe-tv', None), ('roic-book', None), ('roe-book', None), ('gp', 0.0)])
     s.add_argument('--rf', type=float, default=None, help='[v9.4] taxa livre de risco NOMINAL da moeda do modelo (%%) — ativa a âncora macro do gp (Damodaran)')
     s.add_argument('--moeda', type=str, default=None, help='[v9.4] moeda e regime do modelo (ex.: BRL-nominal, USD-nominal, BRL-real)')
     s.add_argument('--n', type=int, default=10); s.add_argument('--tv', required=True, choices=TVS, help=TVHELP)
     s.add_argument('--resolver', required=True, choices=['g', 'roic', 'roe', 'ke', 'wacc', 'gp', 'cap'])
     s.add_argument('--mid-year', action='store_true',
-                   help='[C3] convencao de meio de ano (fluxos uniformes): multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
+                   help='[C3] convenção midpoint: desloca os fluxos anuais do fim para o meio do período e multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
     s.add_argument('--politica-tv', default='continua', choices=['continua', 'encerra'])
     s.add_argument('--base', default='ebitda', choices=['ebitda', 'nopat', 'pl'], help='métrica do múltiplo-alvo')
     s.add_argument('--tol', type=float, default=1.0, help='tolerância do alvo em %% para o intervalo de identificação (default 1)')
@@ -1571,14 +1781,14 @@ def main():
                         'do autofinanciável, admissível SOMENTE com fonte de funding declarada '
                         '(paper §6.10, corolário 1). Default: busca restrita a RiR <= 100%%.')
     s = sub.add_parser('kewacc', help='sanity check ESTATICO de perpetuidade — para a trilha dinamica use apv'); rates(s, [('ku', None), ('ke', None), ('kd', None), ('tax', None), ('de', None)])
-    s.add_argument('--conv', default='mm', choices=['mm', 'ku', 'hp', 'me'])
+    s.add_argument('--conv', default='mm', choices=['mm', 'ku'])
     s = sub.add_parser('apv', help='recursao backward APV (vF8): Ke_t e WACC_t consistentes periodo a periodo')
     rates(s, [('ku', None), ('kd', None), ('tax', None), ('g', None), ('gtv', 0.0)])
     s.add_argument('--fcff1', type=float, required=True, help='FCFF do ano 1 (unidade monetaria)')
-    s.add_argument('--fcff-tv', type=float, default=None, help='FCFF do ano terminal (default: FCFF_n x (1+g))')
+    s.add_argument('--fcff-tv', type=float, default=None, help='FCFF de n+1 usado no TV. Default C7: FCFF_n x (1+g); informe para iniciar gtv já em n+1.')
     s.add_argument('--d0', type=float, required=True, help='divida bruta inicial a mercado')
     s.add_argument('--n', type=int, default=10)
-    s.add_argument('--conv', default='mm', choices=['mm', 'ku', 'hp', 'me'])
+    s.add_argument('--conv', default='mm', choices=['mm', 'ku'])
     s = sub.add_parser('tabela')
     s.add_argument('--rf', type=float, default=None, help='[v9.4] taxa livre de risco NOMINAL da moeda do modelo (%%) — ativa a âncora macro do gp (Damodaran)')
     s.add_argument('--moeda', type=str, default=None, help='[v9.4] moeda e regime do modelo (ex.: BRL-nominal, USD-nominal, BRL-real)')
@@ -1591,7 +1801,7 @@ def main():
     s.add_argument('--tv', required=True, choices=TVS, help=TVHELP)
     s.add_argument('--base', default='forward', choices=['forward', 'corrente'])
     s.add_argument('--mid-year', action='store_true',
-                   help='[C3] convencao de meio de ano (fluxos uniformes): multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
+                   help='[C3] convenção midpoint: desloca os fluxos anuais do fim para o meio do período e multiplica por (1+custo)^0.5. Default: fim de ano, como a planilha de referencia.')
     s.add_argument('--politica-tv', default='continua', choices=['continua', 'encerra'])
     s = sub.add_parser('normaliza'); rates(s, [('ebitda-base', None), ('da', None), ('preco-base', None), ('preco-novo', None),
               ('vol', None), ('rev-driver', None), ('tax', 0.0),
@@ -1642,16 +1852,16 @@ def main():
     s.add_argument('--moeda', type=str, default=None, help='[v9.4] moeda e regime do modelo (ex.: BRL-nominal, USD-nominal, BRL-real)')
     s.add_argument('--politica-tv', default='continua', choices=['continua', 'encerra'])
     s.add_argument('--rent-book', type=float, default=None,
-                   help='[B1] rentabilidade MÉDIA contábil (%%) para o TV da book — separa os papéis '
-                        'marginal×médio; sem ela, a inversão conflaciona e avisa')
+                   help='[B1] rentabilidade MÉDIA contábil (%%) para o TV da book em --transicao nenhuma — separa '
+                        'marginal×médio; com --transicao ponte é rejeitada porque a fase 1 usa --pt-roe1-book')
     s.add_argument('--transicao', required=True, choices=['nenhuma', 'ponte'],
                    help='[v9.2, obrigatório] nenhuma = regime único declarado; ponte = evento de estrutura '
-                        'datado — inversão bifásica exata (v9.3): resolve ROE2 em forma fechada')
+                        'datado — inversão bifásica fechada, condicionada à convenção de rebase do primeiro lucro; resolve ROE2 em forma fechada')
     for pf, ph in [('pt-n1', 'anos do regime 1'), ('pt-ke1', 'Ke do regime 1 (%%)'),
                    ('pt-gde1', 'GD/E do regime 1 (%%)'), ('pt-nde1', 'ND/E do regime 1 (%%)'),
                    ('pt-kd', 'Kd (%%)'), ('pt-tax', 'alíquota (%%)'), ('pt-g1', 'g do regime 1 (%%)'),
                    ('pt-roe1', 'ROE marginal do regime 1 (%%)'), ('pt-roe1-book', 'ROE médio do regime 1 (%%)'),
-                   ('pt-equity', 'equity de hoje (monetário) — alternativa a --pt-roe1')]:
+                   ('pt-equity', 'LEGADO no iso: equity monetário sem NI0 não é compatível com alvo em múltiplo; use --pt-roe1 [--pt-roe1-book]. --equity segue suportado no comando ponte standalone')]:
         s.add_argument('--' + pf, type=(int if pf == 'pt-n1' else float), default=None, help=ph)
     s = sub.add_parser('ponte', help='ponte de releveraging (v9): precifica a mudança discreta '
                        'de estrutura de capital entre dois regimes como fluxo único ao acionista')
@@ -1666,6 +1876,12 @@ def main():
     a = p.parse_args()
 
     if a.cmd == 'selftest': selftest()
+
+    global _DOMAIN_WARNINGS
+    _erros_dom, _DOMAIN_WARNINGS = avaliar_dominios_cli(a)
+    if _erros_dom:
+        jprint({'erro': 'domínio matemático inválido', 'detalhes': _erros_dom})
+        raise SystemExit(2)
 
     pc = lambda x: None if x is None else x / 100.0
 
@@ -1686,7 +1902,7 @@ def main():
         mn = ev_nopat(g, roic, w, a.n, **kw); me = mn * (1 - d) * (1 - t)
         out = {'EV/NOPAT_curr': round(mn, 4), 'EV/NOPAT_fwd': round(mn / (1 + g), 4),
                'EV/EBITDA_curr': round(me, 4), 'EV/EBITDA_fwd': round(me / (1 + g), 4),
-               'convencao_temporal': ('meio de ano (fluxos uniformes)' if getattr(a, 'mid_year', False)
+               'convencao_temporal': ('midpoint / meio do período' if getattr(a, 'mid_year', False)
                                      else 'fim de ano (default, = planilha de referência)'),
                'diagnosticos': diag_firm(g, roic, w, tv=a.tv, n=a.n, roic_book=rb, rf=None if getattr(a, 'rf', None) is None else a.rf / 100, moeda=getattr(a, 'moeda', None), gp=pc(a.gp) or 0.0,
                                          roic_tv=pc(getattr(a, 'roic_tv'))), 'tv': a.tv}
@@ -1696,6 +1912,7 @@ def main():
                                       tax=pc(a.tax), d=pc(a.da),
                                       gde=pc(getattr(a, 'gde', None)),
                                       nde=pc(getattr(a, 'nde', None)),
+                                      cash_yield=pc(getattr(a, 'cash_yield', None)),
                                       rir_observado=pc(getattr(a, 'rir_observado', None)),
                                       ebitda_ic=getattr(a, 'ebitda_ic', None))
         out['diagnosticos'] = out['diagnosticos'] + dg_c
@@ -1752,7 +1969,7 @@ def main():
         m = pe(g, roe, ke, a.n, gde, nde, **kw)
         out = {'PL_curr': round(m, 4), 'PL_fwd': round(m / (1 + g), 4),
                'politica_caixa_tv': getattr(a, 'politica_tv', 'continua'),
-               'convencao_temporal': ('meio de ano (fluxos uniformes)' if getattr(a, 'mid_year', False)
+               'convencao_temporal': ('midpoint / meio do período' if getattr(a, 'mid_year', False)
                                      else 'fim de ano (default, = planilha de referência)'),
                'diagnosticos': diag_eq(g, roe, ke, gde, nde, tv=a.tv, n=a.n, roe_book=rb,
                                        roe_tv=pc(getattr(a, 'roe_tv')),
@@ -1765,6 +1982,7 @@ def main():
                                       kd=pc(getattr(a, 'kd', None)),
                                       tax=pc(getattr(a, 'tax', None)),
                                       d=pc(getattr(a, 'da', None)), gde=gde, nde=nde,
+                                      cash_yield=pc(getattr(a, 'cash_yield', None)),
                                       rir_observado=pc(getattr(a, 'rir_observado', None)),
                                       ebitda_ic=getattr(a, 'ebitda_ic', None))
         out['diagnosticos'] = out['diagnosticos'] + dg_c
@@ -1779,15 +1997,21 @@ def main():
                 out['efeito_c7_alternativa_gp_%'] = round(ef * 100, 2)
         if abs(gde - nde) > 1e-9:
             m_op = pe(g, roe, ke, a.n, 0.0, 0.0, **kw)
+            nota_caixa = (
+                'Na convenção book, clean surplus exige Div + E_n: o caixa retido já está no '
+                'patrimônio terminal e Caixa/E é neutro no valuation. Excess cash/rendimento de '
+                'caixa deve ser tratado separadamente; efeito_politica_caixa deve ser zero.'
+                if a.tv == 'book' else
+                'PL_operacional = mesmo motor com caixa/E = 0. O efeito-caixa vem do MÓDULO DE '
+                'POLÍTICA "proporção de caixa constante, payout endógeno via sweep" — não é '
+                'identidade geral. Se o caixa for excedente distribuível (não operacional), a rota '
+                'alternativa é Equity = PL_operacional × LL + excess cash, e as duas rotas devem ser '
+                'reconciliadas sob a política declarada.'
+            )
             out['decomposicao'] = {
                 'PL_operacional_curr': round(m_op, 4),
                 'efeito_politica_caixa': round(m - m_op, 4),
-                'nota': ('PL_operacional = mesmo motor com caixa/E = 0 (neutralidade ROE=Ke vale aqui). '
-                         'O efeito-caixa vem do MÓDULO DE POLÍTICA "proporção de caixa constante, '
-                         'payout endógeno via sweep" — não é identidade geral. Se o caixa for '
-                         'excedente distribuível (não operacional), a rota alternativa é '
-                         'Equity = PL_operacional × LL + excess cash, e as duas rotas devem ser '
-                         'reconciliadas sob a política declarada.')}
+                'nota': nota_caixa}
         if aviso_tv: out['aviso_tv'] = aviso_tv
         if a.ni is not None:
             eq = m * a.ni; out['Equity'] = round(eq, 2)
@@ -1825,7 +2049,7 @@ def main():
         alvo_base = getattr(a, 'alvo_base', 'corrente')
         nota_regime = ('PREMISSA (regime único): esta reversa assume UMA estrutura de capital ao longo '
                        'do CAP. Evento de estrutura DATADO no horizonte ⟹ use `iso --transicao ponte` '
-                       '(inversão bifásica exata, v9.3); NÃO reverta sobre alvo subtraído da ponte — '
+                       '(inversão bifásica fechada condicionada ao rebase declarado); NÃO reverta sobre alvo subtraído da ponte — '
                        'a subtração deixa a fase 1 e o rebase dentro do alvo (achado B2).')
         base_f = (lambda gg, rr, kk, nn, kw: _raw(gg, rr, kk, nn, kw) / (1 + gg)) \
                  if alvo_base == 'forward' else _raw
@@ -1888,7 +2112,7 @@ def main():
                     dflt['gp_%'] = '0,0 (default — declare se o terminal cresce; guarda macro v9.4 aplica)'
             if tvc == 'book' and rb is None:
                 dflt[rot_r + '_book_%'] = ('= ' + rot_r + ' marginal (CONFLACIONADO por ausência de --'
-                                           + rot_r + '-book — trava da book, erro pode passar de 30%'
+                                           + rot_r + '-book — trava da book, erro potencialmente material'
                                            + ('; a raiz resolvida assume o papel DUPLO marginal=book'
                                               if var in ('roic', 'roe') else '') + ')')
             if eqside and tvc == 'gordon':
@@ -1896,7 +2120,7 @@ def main():
                     getattr(a, 'politica_tv', 'continua')
                     + ('' if '--politica-tv' in argv else ' (default C1)'))
             if getattr(a, 'mid_year', False):
-                inf['convencao_temporal'] = 'mid-year (C3)'
+                inf['convencao_temporal'] = 'midpoint / mid-year (C3)'
             else:
                 dflt['convencao_temporal'] = 'fim de ano (default C3 — planilha)'
             if '--alvo-base' in argv:
@@ -2077,17 +2301,23 @@ def main():
                 if rb_rev is None:
                     out['aviso_convencao'] = (f"raiz(es) {[round(x*100,2) for x in sub]}% ABAIXO do {lbl} "
                         f"({k*100:.1f}%) na convenção 'book' SEM book informado: o alvo é reconciliado por um "
-                        f"book que ACOMPANHA o marginal e converge PARA CIMA até o custo de capital — "
-                        f"hipótese criadora de valor não declarada (conflação marginal×médio). Informe "
+                        f"mesmo retorno nos papéis médio e marginal; o terminal então força o lucro inteiro "
+                        f"a Ke/WACC sobre esse estoque, embutindo recuperação não declarada. Informe "
                         f"--{var}-book com a MÉDIA do estoque, reverta em outra variável ou use tv='gordon' "
                         f"com {var}_tv abaixo do custo de capital.")
                 else:
+                    if var == 'roic':
+                        leitura_book = ("o TV parte do book inicial e acompanha o marginal pelo capital novo "
+                                        "acumulado; não há convergência implícita para cima")
+                    else:
+                        leitura_book = ("o TV parte do book inicial e acompanha o marginal pelo lucro "
+                                        "retido acumulado (clean surplus, v9.30); não há convergência "
+                                        "implícita para cima")
                     out['aviso_convencao'] = (f"raiz(es) {[round(x*100,2) for x in sub]}% ABAIXO do {lbl} "
                         f"({k*100:.1f}%) na convenção 'book' COM book informado ({rb_rev*100:.1f}%): raiz(es) "
-                        f"CONDICIONADAS, não vazias — o TV está ancorado no book e não há convergência "
-                        f"implícita para cima. Leitura admissível sob tese DECLARADA de saída pelo capital "
-                        f"investido (turnaround, capex regulatório, liquidação)."
-                        + (f" SUB-ALERTA: book < {lbl} — o TV embute recuperação {k/rb_rev:.2f}x acima do "
+                        f"CONDICIONADAS, não vazias — {leitura_book}. Leitura admissível sob tese DECLARADA "
+                        f"de saída pelo capital investido/patrimônio (turnaround, capex regulatório, liquidação)."
+                        + (f" SUB-ALERTA: book < {lbl} — a âncora inicial embute recuperação {k/rb_rev:.2f}x acima do "
                            f"valor capitalizado a custo de capital." if rb_rev < k else ""))
         if aviso_tv: out['aviso_tv'] = aviso_tv
         jprint(out)
@@ -2100,11 +2330,9 @@ def main():
         # default preservado (nenhum script quebra), aviso quando entrou por default.
         import sys as _sys
         out['regime_divida'] = ('mm: dívida DETERMINÍSTICA, tax shields descontados a Kd '
-                                '(MM/Myers/Fernández)' if a.conv == 'mm' else
+                                '(MM/Myers sob a política declarada)' if a.conv == 'mm' else
                                 'ku: dívida EXÓGENA D_t = D0(1+g)^t, tax shields descontados a Ku '
-                                '(convenção de risco de Harris-Pringle; D/V não constante — ver '
-                                'DV_t_%)' + (f" — via alias legado '{a.conv}'"
-                                             if a.conv in ('hp', 'me') else ''))
+                                '(convenção de risco tipo Harris-Pringle; NÃO é HP completo porque D/V não é constante)')
         if '--conv' not in _sys.argv[1:]:
             out['aviso_regime_divida'] = ('regime de dívida NÃO declarado — assumido mm (default). '
                                           'A equivalência Ke↔WACC↔APV depende da política de dívida '
@@ -2121,13 +2349,22 @@ def main():
         grade = [gmin + (gmax - gmin) * i / (k - 1) for i in range(k)]
         pp = None
         if a.transicao == 'ponte':
+            if a.rent_book is not None:
+                raise SystemExit("iso --transicao ponte: --rent-book não é usado no bifásico e por isso é rejeitado. "
+                                 "Use --pt-roe1-book para a média contábil da fase 1; ROE2_book separado "
+                                 "não é implementado nesta versão.")
             faltam = [f for f in ('pt_n1', 'pt_ke1', 'pt_gde1', 'pt_nde1', 'pt_kd', 'pt_tax', 'pt_g1')
                       if getattr(a, f) is None]
-            if faltam or (a.pt_roe1 is None and a.pt_equity is None):
+            if a.pt_equity is not None:
+                raise SystemExit("iso --transicao ponte: --pt-equity é monetário, enquanto --alvo é múltiplo por NI0. "
+                                 "Sem uma base NI0 explícita, misturar as escalas é inconsistente. Use "
+                                 "--pt-roe1 e, se aplicável, --pt-roe1-book. O comando `ponte` standalone "
+                                 "continua aceitando --equity monetário.")
+            if a.pt_roe1 is None:
+                faltam.append('pt_roe1')
+            if faltam:
                 raise SystemExit("iso --transicao ponte: faltam parâmetros do regime 1: "
-                                 + ', '.join('--' + f.replace('_', '-') for f in faltam)
-                                 + ("" if (a.pt_roe1 is not None or a.pt_equity is not None)
-                                    else ", e --pt-roe1 ou --pt-equity"))
+                                 + ', '.join('--' + f.replace('_', '-') for f in faltam))
             pp = dict(n1=a.pt_n1, ke1=a.pt_ke1 / 100, gde1=a.pt_gde1 / 100, nde1=a.pt_nde1 / 100,
                       kd=a.pt_kd / 100, tax=a.pt_tax / 100, g1=a.pt_g1 / 100,
                       roe1=None if a.pt_roe1 is None else a.pt_roe1 / 100,
@@ -2158,7 +2395,7 @@ def main():
 
     elif a.cmd == 'kewacc':
         kd, t, de = pc(a.kd), pc(a.tax), pc(a.de)
-        conv_kw = 'ku' if a.conv in ('hp', 'me') else a.conv  # aliases legados
+        conv_kw = a.conv
         fac = (1 - t) if conv_kw == 'mm' else 1.0
         if a.ku is not None:
             ku = pc(a.ku); ke = ku + (ku - kd) * fac * de
@@ -2166,18 +2403,12 @@ def main():
             ke_in = pc(a.ke); ku = (ke_in + kd * fac * de) / (1 + fac * de); ke = ke_in
         wE, wD = 1 / (1 + de), de / (1 + de)
         wacc = ke * wE + kd * (1 - t) * wD
-        print(json.dumps({'convencao': ('MM (shields a Kd)' if conv_kw == 'mm'
-                                        else 'Ku (shields a Ku — convenção de risco de Harris-Pringle)'
-                                             + (f" [alias legado {a.conv}]"
-                                                if a.conv in ('hp', 'me') else '')),
-                          'Ku_%': round(ku * 100, 3), 'Ke_%': round(ke * 100, 3),
-                          'WACC_%': round(wacc * 100, 3), 'Kd_pos_impostos_%': round(kd * (1 - t) * 100, 3),
-                          'ESCOPO': 'sanity check ESTÁTICO sob perpetuidade com alavancagem constante — '
-                                    'NÃO é a recursão dinâmica. Para Ke_t e WACC_t consistentes período a '
-                                    'período (alavancagem a mercado derivando), use o comando `apv`, que '
-                                    'reconcilia FCFE@Ke_t = E0 e FCFF@WACC_t = V0 por construção.',
-                          'aviso': 'D/E a valor de MERCADO; Ke consistente varia no tempo se alavancagem a mercado deriva'},
-                         indent=2, ensure_ascii=False))
+        jprint({'convencao': ('MM (shields a Kd)' if conv_kw == 'mm'
+                              else 'Ku (shields a Ku sobre dívida exógena; convenção de risco, não HP completo)'),
+                'Ku_%': round(ku * 100, 3), 'Ke_%': round(ke * 100, 3),
+                'WACC_%': round(wacc * 100, 3), 'Kd_pos_impostos_%': round(kd * (1 - t) * 100, 3),
+                'ESCOPO': 'sanity check ESTÁTICO sob perpetuidade com alavancagem constante — NÃO é a recursão dinâmica. Para Ke_t e WACC_t use apv.',
+                'aviso': 'D/E a valor de MERCADO; Ke consistente varia no tempo se alavancagem a mercado deriva'})
 
     elif a.cmd == 'tabela':
         _gd = _guardas_damodaran([], a.tv, pc(getattr(a, 'gp', None)) or 0.0,
@@ -2250,12 +2481,12 @@ def main():
                 f"convenção '{tvc_norm}' não dá crescimento de preço ao terminal — o modelo está "
                 'assumindo o driver CONGELADO em termos nominais (= caindo ~inflação a.a. em '
                 'termos REAIS, em perpetuidade) descontado a custo de capital NOMINAL. Isso é uma '
-                'HIPÓTESE substantiva, não um default neutro. Consistência de Fisher — duas rotas '
-                'equivalentes: (A) descontar a custo de capital REAL (deflacione o Ke pela '
-                'inflação declarada; declare --moeda *-real), ou (B) manter o Ke nominal e '
-                "conceder o crescimento de preço GRATUITO no terminal (gordon com rentabilidade "
-                'terminal muito alta e gp = inflação). Entregue os DOIS regimes (congelado × '
-                'acompanha inflação) — a diferença é informação, não ruído.')
+                'HIPÓTESE substantiva, não um default neutro. Fisher admite duas rotas EXATAS: '
+                '(A) fluxos reais a custo REAL, com (1+K_real)=(1+K_nom)/(1+π); (B) fluxos NOMINAIS, '
+                'inflacionando TODO o horizonte explícito e o terminal, a K nominal. Conceder inflação '
+                'APENAS no terminal (gordon, rentabilidade terminal muito alta, gp=inflação) é uma '
+                'APROXIMAÇÃO terminal-only, não equivalência de Fisher. Entregue as âncoras congelado × '
+                'acompanha inflação e não misture fluxo real com taxa nominal.')
         if a.g is not None and a.roic is not None and a.wacc is not None:
             g, roic, w = pc(a.g), pc(a.roic), pc(a.wacc)
             kw = dict(tv=a.tv, roic_tv=pc(getattr(a, 'roic_tv')), gp=pc(a.gp) or 0.0,
