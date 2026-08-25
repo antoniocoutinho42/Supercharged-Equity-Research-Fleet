@@ -1,0 +1,6036 @@
+[
+  {
+    "id": 0,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.06,
+      "roic": 0.15,
+      "w": 0.061,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.15
+    }
+  },
+  {
+    "id": 1,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.07,
+      "roic": 0.18,
+      "w": 0.0705,
+      "n": 15,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 2,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.12,
+      "w": 0.0505,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.08,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 3,
+    "fn": "pe",
+    "args": {
+      "g": 0.06,
+      "roe": 0.15,
+      "ke": 0.061,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.15
+    }
+  },
+  {
+    "id": 4,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.12,
+      "ke": 0.0505,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.08,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 5,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.03,
+      "roic": 0.0,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 6,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.02,
+      "roic": -0.05,
+      "w": 0.08,
+      "n": 8,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 7,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.02,
+      "roic": -0.02,
+      "w": 0.08,
+      "n": 8,
+      "d": 0.2,
+      "t": 0.25,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 8,
+    "fn": "pe",
+    "args": {
+      "g": 0.03,
+      "roe": 0.0,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 9,
+    "fn": "pe",
+    "args": {
+      "g": 0.02,
+      "roe": -0.08,
+      "ke": 0.09,
+      "n": 8,
+      "gde": 0.1,
+      "nde": 0.05,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 10,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.18,
+      "roic": 0.1,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 11,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.25,
+      "roic": 0.08,
+      "w": 0.1,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 12,
+    "fn": "pe",
+    "args": {
+      "g": 0.18,
+      "roe": 0.1,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 13,
+    "fn": "pe",
+    "args": {
+      "g": 0.2,
+      "roe": 0.09,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.07,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 14,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.09
+    }
+  },
+  {
+    "id": 15,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.08,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.12
+    }
+  },
+  {
+    "id": 16,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.11
+    }
+  },
+  {
+    "id": 17,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.09,
+      "gp": 0.15
+    }
+  },
+  {
+    "id": 18,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": -1.2
+    }
+  },
+  {
+    "id": 19,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": -1.0
+    }
+  },
+  {
+    "id": 20,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": -1.5
+    }
+  },
+  {
+    "id": 21,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 1,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 22,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 0,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 23,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": -5,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 24,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.09,
+      "n": 1,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 25,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.09,
+      "n": 0,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 26,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.2,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 27,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.0,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 28,
+    "fn": "pe",
+    "args": {
+      "g": -1.5,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 29,
+    "fn": "pe",
+    "args": {
+      "g": -1.0,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 30,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.2,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.02
+    }
+  },
+  {
+    "id": 31,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.25,
+      "w": 0.1,
+      "n": 15,
+      "tv": "book",
+      "roic_book": 0.05
+    }
+  },
+  {
+    "id": 32,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.2,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.02
+    }
+  },
+  {
+    "id": 33,
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.22,
+      "ke": 0.1,
+      "n": 12,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.03
+    }
+  },
+  {
+    "id": 34,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.6,
+      "roic": 0.2,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.4
+    }
+  },
+  {
+    "id": 35,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.85,
+      "roic": 0.1,
+      "w": 0.08,
+      "n": 20,
+      "tv": "book",
+      "roic_book": 0.3
+    }
+  },
+  {
+    "id": 36,
+    "fn": "pe",
+    "args": {
+      "g": -0.6,
+      "roe": 0.2,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.4
+    }
+  },
+  {
+    "id": 37,
+    "fn": "pe",
+    "args": {
+      "g": -0.8,
+      "roe": 0.08,
+      "ke": 0.09,
+      "n": 25,
+      "gde": 0.1,
+      "nde": 0.05,
+      "tv": "book",
+      "roe_book": 0.25
+    }
+  },
+  {
+    "id": 38,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.0,
+      "nde": 0.0,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03
+    }
+  },
+  {
+    "id": 39,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03
+    }
+  },
+  {
+    "id": 40,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.6,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03
+    }
+  },
+  {
+    "id": 41,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.0,
+      "nde": 0.0,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 42,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 43,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.6,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 44,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.0,
+      "nde": 0.0,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 45,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 46,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.1,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.6,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 47,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.09,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.09
+    }
+  },
+  {
+    "id": 48,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.09,
+      "w": 0.09,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 49,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.09,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.09,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 50,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.0,
+      "roic": 0.09,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.09
+    }
+  },
+  {
+    "id": 51,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 52,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 53,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.6,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 54,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.6,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.03,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 55,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.1,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 56,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.06,
+      "roic": 0.11,
+      "w": 0.1,
+      "n": 12,
+      "tv": "gordon",
+      "roic_tv": 0.09,
+      "gp": 0.02,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 57,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "d": 0.2,
+      "t": 0.25,
+      "tv": "book",
+      "roic_book": 0.1,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 58,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 59,
+    "fn": "pe",
+    "args": {
+      "g": 0.06,
+      "roe": 0.14,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 60,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.13,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.3,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.08,
+      "gp": 0.02,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 61,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": -1.2,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.1
+    }
+  },
+  {
+    "id": 62,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": -1.0,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 63,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": -1.3,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.1
+    }
+  },
+  {
+    "id": 64,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": -1.0,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.1,
+      "gp": 0.02
+    }
+  },
+  {
+    "id": 65,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.03,
+      "roic": 0.12,
+      "w": -0.05,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 66,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.03,
+      "roic": 0.12,
+      "w": 0.0,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 67,
+    "fn": "pe",
+    "args": {
+      "g": 0.03,
+      "roe": 0.12,
+      "ke": -0.03,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 68,
+    "fn": "pe",
+    "args": {
+      "g": 0.03,
+      "roe": 0.12,
+      "ke": 0.0,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 69,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "gp": 0.03
+    }
+  },
+  {
+    "id": 70,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.11,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "gordon",
+      "gp": 0.03
+    }
+  },
+  {
+    "id": 71,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.0
+    }
+  },
+  {
+    "id": 72,
+    "fn": "pe",
+    "args": {
+      "g": 0.05,
+      "roe": 0.15,
+      "ke": 0.09,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": -0.02
+    }
+  },
+  {
+    "id": 73,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.12
+    }
+  },
+  {
+    "id": 74,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 75,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.025
+    }
+  },
+  {
+    "id": 76,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "w": 0.09,
+      "n": 10,
+      "d": 0.2,
+      "t": 0.25,
+      "tv": "book",
+      "roic_book": 0.12
+    }
+  },
+  {
+    "id": 77,
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.13
+    }
+  },
+  {
+    "id": 78,
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 79,
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.09,
+      "gp": 0.025
+    }
+  },
+  {
+    "id": 80,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.502965,
+      "roic": 0.379214,
+      "w": 0.083751,
+      "n": 8,
+      "tv": "book",
+      "roic_book": 0.157305
+    }
+  },
+  {
+    "id": 81,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.285187,
+      "roic": 0.087237,
+      "w": 0.338912,
+      "n": 40,
+      "tv": "book",
+      "roic_book": 0.587171,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 82,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.000834,
+      "roic": 0.079874,
+      "w": 0.320299,
+      "n": 36,
+      "tv": "book",
+      "roic_book": -0.025329
+    }
+  },
+  {
+    "id": 83,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.297332,
+      "roic": 0.000401,
+      "w": 0.166311,
+      "n": -2,
+      "tv": "book",
+      "roic_book": 0.011134
+    }
+  },
+  {
+    "id": 84,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.395348,
+      "roic": 0.103742,
+      "w": 0.170468,
+      "n": 15,
+      "tv": "book",
+      "roic_book": 0.419233
+    }
+  },
+  {
+    "id": 85,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.262276,
+      "roic": 0.021961,
+      "w": 0.260036,
+      "n": 23,
+      "tv": "book",
+      "roic_book": 0.268905,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 86,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.280784,
+      "roic": 0.327904,
+      "w": 0.098846,
+      "n": 42,
+      "tv": "book",
+      "roic_book": 0.468789
+    }
+  },
+  {
+    "id": 87,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.994576,
+      "roic": 0.344886,
+      "w": -0.698665,
+      "n": 29,
+      "tv": "book",
+      "roic_book": 0.436195
+    }
+  },
+  {
+    "id": 88,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.071857,
+      "roic": 0.246428,
+      "w": 0.159531,
+      "n": 43,
+      "tv": "book",
+      "roic_book": 0.104837
+    }
+  },
+  {
+    "id": 89,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.385181,
+      "roic": 0.163966,
+      "w": 0.08062,
+      "n": 43,
+      "tv": "book",
+      "roic_book": 0.039555,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 90,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.0852,
+      "roic": 0.342333,
+      "w": 0.347775,
+      "n": 3,
+      "tv": "book"
+    }
+  },
+  {
+    "id": 91,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.00404,
+      "roic": 0.448944,
+      "w": 0.024349,
+      "n": 42,
+      "tv": "book",
+      "roic_book": 0.181943
+    }
+  },
+  {
+    "id": 92,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.322975,
+      "roic": -0.016274,
+      "w": 0.257807,
+      "n": -2,
+      "tv": "book",
+      "roic_book": 0.105739,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 93,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.160098,
+      "roic": 0.317444,
+      "w": 0.18328,
+      "n": -3,
+      "tv": "book",
+      "roic_book": -0.031006
+    }
+  },
+  {
+    "id": 94,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.208916,
+      "roic": 0.058312,
+      "w": 0.180272,
+      "n": 45,
+      "tv": "book",
+      "roic_book": 0.051025
+    }
+  },
+  {
+    "id": 95,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.430928,
+      "roic": -0.078006,
+      "w": 0.327649,
+      "n": 41,
+      "tv": "book",
+      "roic_book": 0.085137
+    }
+  },
+  {
+    "id": 96,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.431183,
+      "roic": 0.211366,
+      "w": -0.723161,
+      "n": 11,
+      "tv": "book",
+      "roic_book": 0.186082
+    }
+  },
+  {
+    "id": 97,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.141012,
+      "roic": 0.192483,
+      "w": -0.215209,
+      "n": 28,
+      "tv": "book",
+      "roic_book": 0.241526
+    }
+  },
+  {
+    "id": 98,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.039188,
+      "roic": 0.315753,
+      "w": 0.323275,
+      "n": 37,
+      "tv": "book",
+      "roic_book": -0.019174,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 99,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.000943,
+      "roic": 0.157156,
+      "w": 0.253199,
+      "n": 23,
+      "tv": "book",
+      "roic_book": 0.357313
+    }
+  },
+  {
+    "id": 100,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.756181,
+      "roic": 0.180287,
+      "w": 0.188626,
+      "n": 9,
+      "tv": "book",
+      "roic_book": 0.25059
+    }
+  },
+  {
+    "id": 101,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.42178,
+      "roic": 0.233383,
+      "w": 0.220316,
+      "n": 20,
+      "tv": "book",
+      "roic_book": 0.441612,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 102,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.189645,
+      "roic": 0.062834,
+      "w": 0.10052,
+      "n": 32,
+      "tv": "book",
+      "roic_book": 0.16001
+    }
+  },
+  {
+    "id": 103,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.738303,
+      "roic": 0.323206,
+      "w": -0.045935,
+      "n": 28,
+      "tv": "book",
+      "roic_book": 0.09845
+    }
+  },
+  {
+    "id": 104,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.621407,
+      "roic": 0.108614,
+      "w": 0.262434,
+      "n": 30,
+      "tv": "book",
+      "roic_book": -0.022544,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 105,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.397124,
+      "roic": 0.448726,
+      "w": 0.137196,
+      "n": 18,
+      "tv": "book",
+      "roic_book": -0.034961,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 106,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.323316,
+      "roic": 0.263863,
+      "w": 0.21042,
+      "n": 31,
+      "tv": "book",
+      "roic_book": -0.031872
+    }
+  },
+  {
+    "id": 107,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.202062,
+      "roic": 0.09681,
+      "w": 0.067742,
+      "n": 17,
+      "tv": "book",
+      "roic_book": 0.154434,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 108,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.15375,
+      "roic": 0.054467,
+      "w": 0.249448,
+      "n": 21,
+      "tv": "book",
+      "roic_book": 0.068599
+    }
+  },
+  {
+    "id": 109,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.019247,
+      "roic": -0.00194,
+      "w": 0.039921,
+      "n": 4,
+      "tv": "book",
+      "roic_book": 0.326918
+    }
+  },
+  {
+    "id": 110,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.400948,
+      "roic": 0.328974,
+      "w": 0.274798,
+      "n": 25,
+      "tv": "book",
+      "roic_book": 0.299343,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 111,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.022063,
+      "roic": 0.351057,
+      "w": 0.284409,
+      "n": 7,
+      "tv": "book",
+      "roic_book": 0.481849,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 112,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.021255,
+      "roic": 0.051239,
+      "w": 0.280851,
+      "n": 4,
+      "tv": "book",
+      "roic_book": 0.133264
+    }
+  },
+  {
+    "id": 113,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.049669,
+      "roic": 0.263535,
+      "w": 0.305312,
+      "n": 5,
+      "tv": "book",
+      "roic_book": 0.18089,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 114,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.932195,
+      "roic": 0.330449,
+      "w": -0.468328,
+      "n": 17,
+      "tv": "book",
+      "roic_book": 0.512533
+    }
+  },
+  {
+    "id": 115,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.335946,
+      "roic": 0.416941,
+      "w": -0.238762,
+      "n": 2,
+      "tv": "book",
+      "roic_book": 0.206961
+    }
+  },
+  {
+    "id": 116,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.543352,
+      "roic": 0.399414,
+      "w": 0.028337,
+      "n": 39,
+      "tv": "book",
+      "roic_book": 0.331427,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 117,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.704381,
+      "roic": 0.214674,
+      "w": 0.275582,
+      "n": 42,
+      "tv": "book",
+      "roic_book": 0.494139,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 118,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.191119,
+      "roic": 0.331779,
+      "w": 0.317638,
+      "n": 10,
+      "tv": "book",
+      "roic_book": -0.013512,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 119,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.244369,
+      "roic": 0.118578,
+      "w": -1.031523,
+      "n": 14,
+      "tv": "book",
+      "roic_book": 0.119349
+    }
+  },
+  {
+    "id": 120,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.433125,
+      "roic": 0.095376,
+      "w": 0.162651,
+      "n": 19,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 121,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.040627,
+      "roic": 0.14627,
+      "w": 0.303723,
+      "n": 24,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 122,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.449386,
+      "roic": -0.022639,
+      "w": 0.118166,
+      "n": 9,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 123,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.000698,
+      "roic": -0.005509,
+      "w": -1.120572,
+      "n": 28,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 124,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.056378,
+      "roic": 0.213996,
+      "w": 0.30599,
+      "n": 11,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 125,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.157166,
+      "roic": -0.018506,
+      "w": 0.323887,
+      "n": 37,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 126,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.119798,
+      "roic": 0.14854,
+      "w": 0.136862,
+      "n": 35,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 127,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.00147,
+      "roic": 0.096224,
+      "w": 0.042776,
+      "n": 8,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 128,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.017698,
+      "roic": 0.439907,
+      "w": -0.193115,
+      "n": 24,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 129,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.09206,
+      "roic": -0.000863,
+      "w": 0.211944,
+      "n": 19,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 130,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.024054,
+      "roic": 0.439907,
+      "w": 0.105754,
+      "n": 35,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 131,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.033029,
+      "roic": 0.244017,
+      "w": 0.102745,
+      "n": 3,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 132,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.125363,
+      "roic": -0.057106,
+      "w": 0.085948,
+      "n": 7,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 133,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.313244,
+      "roic": 0.279148,
+      "w": -0.001521,
+      "n": 26,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 134,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.267294,
+      "roic": 0.407301,
+      "w": -0.533222,
+      "n": 1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 135,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.176696,
+      "roic": 0.047462,
+      "w": 0.120344,
+      "n": 32,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 136,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.277402,
+      "roic": 0.106855,
+      "w": 0.205888,
+      "n": 13,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 137,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.273745,
+      "roic": 0.447271,
+      "w": 0.081591,
+      "n": -3,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 138,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.253011,
+      "roic": 0.050154,
+      "w": 0.239852,
+      "n": 2,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 139,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.324403,
+      "roic": 0.346564,
+      "w": 0.254235,
+      "n": 43,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 140,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.090328,
+      "roic": 0.117988,
+      "w": 0.338817,
+      "n": 16,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 141,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.250908,
+      "roic": 0.016825,
+      "w": 0.029593,
+      "n": 16,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 142,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.789883,
+      "roic": 0.407392,
+      "w": 0.270619,
+      "n": 12,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 143,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.277735,
+      "roic": 0.390801,
+      "w": -0.710877,
+      "n": 16,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 144,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.915826,
+      "roic": 0.336333,
+      "w": -1.152473,
+      "n": 39,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 145,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.23095,
+      "roic": 0.287574,
+      "w": -0.864941,
+      "n": 20,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 146,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.095903,
+      "roic": 0.087312,
+      "w": 0.307329,
+      "n": 43,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 147,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.448842,
+      "roic": 0.244959,
+      "w": -0.668708,
+      "n": 29,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 148,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.025905,
+      "roic": 0.190144,
+      "w": 0.183473,
+      "n": 7,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 149,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.358851,
+      "roic": 0.215681,
+      "w": -0.731772,
+      "n": 14,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 150,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.109438,
+      "roic": 0.39047,
+      "w": 0.129647,
+      "n": -3,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 151,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.089144,
+      "roic": 0.040141,
+      "w": 0.134378,
+      "n": 31,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 152,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.110586,
+      "roic": 0.376146,
+      "w": 0.206326,
+      "n": -2,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 153,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.013745,
+      "roic": 0.337514,
+      "w": 0.288329,
+      "n": 37,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 154,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.152146,
+      "roic": 0.15247,
+      "w": 0.232809,
+      "n": 31,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 155,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.243935,
+      "roic": 0.271677,
+      "w": 0.261361,
+      "n": 19,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 156,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.345284,
+      "roic": 0.313353,
+      "w": -0.825089,
+      "n": -1,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 157,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.014144,
+      "roic": 0.220958,
+      "w": 0.230276,
+      "n": 0,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 158,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.084445,
+      "roic": 0.23002,
+      "w": 0.212225,
+      "n": 35,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 159,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.299874,
+      "roic": -0.055852,
+      "w": 0.250074,
+      "n": 24,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 160,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.016989,
+      "roic": 0.244348,
+      "w": 0.271227,
+      "n": 14,
+      "tv": "gordon",
+      "gp": 0.00258,
+      "roic_tv": 0.292573
+    }
+  },
+  {
+    "id": 161,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.280427,
+      "roic": 0.184931,
+      "w": 0.30278,
+      "n": 5,
+      "tv": "gordon",
+      "gp": 0.046554,
+      "roic_tv": 0.235711
+    }
+  },
+  {
+    "id": 162,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.118463,
+      "roic": 0.283636,
+      "w": -0.051574,
+      "n": 20,
+      "tv": "gordon",
+      "gp": 0.051189,
+      "roic_tv": -0.01792
+    }
+  },
+  {
+    "id": 163,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.210885,
+      "roic": 0.117185,
+      "w": 0.064497,
+      "n": 6,
+      "tv": "gordon",
+      "gp": 0.168725,
+      "roic_tv": 0.103719,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 164,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -1.224501,
+      "roic": 0.126518,
+      "w": 0.150011,
+      "n": 22,
+      "tv": "gordon",
+      "gp": 0.241475,
+      "roic_tv": 0.24416,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 165,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.364226,
+      "roic": 0.115363,
+      "w": 0.073244,
+      "n": 27,
+      "tv": "gordon",
+      "gp": -1.137854,
+      "roic_tv": 0.008912
+    }
+  },
+  {
+    "id": 166,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.072759,
+      "roic": 0.339603,
+      "w": 0.067258,
+      "n": 6,
+      "tv": "gordon",
+      "gp": 0.064045,
+      "roic_tv": 0.068863,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 167,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.269136,
+      "roic": 0.412785,
+      "w": 0.105989,
+      "n": -2,
+      "tv": "gordon",
+      "gp": 0.076049,
+      "roic_tv": 0.326121
+    }
+  },
+  {
+    "id": 168,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.293767,
+      "roic": 0.182929,
+      "w": 0.282779,
+      "n": 20,
+      "tv": "gordon",
+      "gp": 0.013689,
+      "roic_tv": 0.19018
+    }
+  },
+  {
+    "id": 169,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.099038,
+      "roic": 0.237988,
+      "w": 0.175827,
+      "n": 24,
+      "tv": "gordon",
+      "gp": 0.297888,
+      "roic_tv": 0.007533,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 170,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.301291,
+      "roic": 0.166363,
+      "w": 0.055236,
+      "n": 42,
+      "tv": "gordon",
+      "gp": 0.123842,
+      "roic_tv": 0.167229
+    }
+  },
+  {
+    "id": 171,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.356262,
+      "roic": 0.036276,
+      "w": 0.020251,
+      "n": 30,
+      "tv": "gordon",
+      "gp": 0.161359,
+      "roic_tv": 0.249034
+    }
+  },
+  {
+    "id": 172,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.423701,
+      "roic": 0.133113,
+      "w": 0.135776,
+      "n": 14,
+      "tv": "gordon",
+      "gp": 0.251776,
+      "roic_tv": -0.019608,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 173,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.274935,
+      "roic": 0.407434,
+      "w": -0.581181,
+      "n": 19,
+      "tv": "gordon",
+      "gp": 0.171277,
+      "roic_tv": 0.303507
+    }
+  },
+  {
+    "id": 174,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.392051,
+      "roic": 0.239235,
+      "w": 0.131974,
+      "n": -1,
+      "tv": "gordon",
+      "gp": 0.295199,
+      "roic_tv": 0.007791
+    }
+  },
+  {
+    "id": 175,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.334544,
+      "roic": 0.436245,
+      "w": 0.317197,
+      "n": 25,
+      "tv": "gordon",
+      "gp": 0.027139,
+      "roic_tv": 0.120683,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 176,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.144582,
+      "roic": -0.034527,
+      "w": 0.077221,
+      "n": 5,
+      "tv": "gordon",
+      "gp": 0.020316,
+      "roic_tv": 0.130427
+    }
+  },
+  {
+    "id": 177,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.207774,
+      "roic": 0.270498,
+      "w": 0.053048,
+      "n": 23,
+      "tv": "gordon",
+      "gp": -1.150972,
+      "roic_tv": -0.042566
+    }
+  },
+  {
+    "id": 178,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.234305,
+      "roic": 0.389445,
+      "w": 0.276232,
+      "n": 40,
+      "tv": "gordon",
+      "gp": 0.195595,
+      "roic_tv": 0.124149,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 179,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.312713,
+      "roic": 0.235463,
+      "w": 0.16024,
+      "n": 34,
+      "tv": "gordon",
+      "gp": -0.005,
+      "roic_tv": null
+    }
+  },
+  {
+    "id": 180,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.436454,
+      "roic": -0.024378,
+      "w": 0.215012,
+      "n": 14,
+      "tv": "gordon",
+      "gp": 0.231585,
+      "roic_tv": 0.198148,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 181,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.346427,
+      "roic": 0.262457,
+      "w": 0.138303,
+      "n": 43,
+      "tv": "gordon",
+      "gp": 0.119632,
+      "roic_tv": 0.145757,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 182,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.133558,
+      "roic": 0.418858,
+      "w": 0.334218,
+      "n": 0,
+      "tv": "gordon",
+      "gp": -0.009463,
+      "roic_tv": 0.25132,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 183,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.439917,
+      "roic": 0.010942,
+      "w": 0.030052,
+      "n": 17,
+      "tv": "gordon",
+      "gp": 0.069221,
+      "roic_tv": 0.294366
+    }
+  },
+  {
+    "id": 184,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.215147,
+      "roic": 0.077138,
+      "w": 0.170385,
+      "n": 0,
+      "tv": "gordon",
+      "gp": 0.15175,
+      "roic_tv": 0.126051
+    }
+  },
+  {
+    "id": 185,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.280866,
+      "roic": 0.164464,
+      "w": 0.30965,
+      "n": 41,
+      "tv": "gordon",
+      "gp": 0.044902,
+      "roic_tv": 0.060163
+    }
+  },
+  {
+    "id": 186,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.02854,
+      "roic": 0.067031,
+      "w": 0.319376,
+      "n": 7,
+      "tv": "gordon",
+      "gp": 0.023157,
+      "roic_tv": null,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 187,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.322159,
+      "roic": 0.204948,
+      "w": 0.250653,
+      "n": 34,
+      "tv": "gordon",
+      "gp": -0.061486,
+      "roic_tv": 0.174457
+    }
+  },
+  {
+    "id": 188,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.352375,
+      "roic": 0.156322,
+      "w": 0.217259,
+      "n": 13,
+      "tv": "gordon",
+      "gp": 0.151035,
+      "roic_tv": 0.100745,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 189,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.084817,
+      "roic": 0.026739,
+      "w": 0.020375,
+      "n": 19,
+      "tv": "gordon",
+      "gp": 0.226053,
+      "roic_tv": 0.238986
+    }
+  },
+  {
+    "id": 190,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.246802,
+      "roic": -0.037619,
+      "w": 0.058081,
+      "n": 40,
+      "tv": "gordon",
+      "gp": -1.131054,
+      "roic_tv": 0.141431
+    }
+  },
+  {
+    "id": 191,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.334868,
+      "roic": -0.027757,
+      "w": 0.234351,
+      "n": 10,
+      "tv": "gordon",
+      "gp": 0.235631,
+      "roic_tv": -0.016251,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 192,
+    "fn": "ev_nopat",
+    "args": {
+      "g": -0.955832,
+      "roic": 0.146873,
+      "w": 0.261427,
+      "n": 45,
+      "tv": "gordon",
+      "gp": 0.162025,
+      "roic_tv": 0.092734,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 193,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.127818,
+      "roic": 0.181835,
+      "w": 0.186221,
+      "n": 34,
+      "tv": "gordon",
+      "gp": 0.049817,
+      "roic_tv": 0.038153
+    }
+  },
+  {
+    "id": 194,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.125267,
+      "roic": 0.280242,
+      "w": -0.07842,
+      "n": 41,
+      "tv": "gordon",
+      "gp": 0.045706,
+      "roic_tv": null
+    }
+  },
+  {
+    "id": 195,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.369204,
+      "roic": 0.319975,
+      "w": 0.311203,
+      "n": 32,
+      "tv": "gordon",
+      "gp": 0.059785,
+      "roic_tv": 0.299433
+    }
+  },
+  {
+    "id": 196,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.289209,
+      "roic": 0.050782,
+      "w": 0.257758,
+      "n": 13,
+      "tv": "gordon",
+      "gp": -1.182845,
+      "roic_tv": 0.020254,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 197,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.380531,
+      "roic": 0.341769,
+      "w": 0.313578,
+      "n": 3,
+      "tv": "gordon",
+      "gp": 0.150668,
+      "roic_tv": 0.253206
+    }
+  },
+  {
+    "id": 198,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.011657,
+      "roic": 0.390415,
+      "w": 0.121724,
+      "n": 20,
+      "tv": "gordon",
+      "gp": 0.27895,
+      "roic_tv": 0.007595,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 199,
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.041473,
+      "roic": -0.002979,
+      "w": 0.259074,
+      "n": 26,
+      "tv": "gordon",
+      "gp": -0.956686,
+      "roic_tv": 0.085532,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 200,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.331239,
+      "roic": 0.086114,
+      "w": 0.102403,
+      "n": 43,
+      "tv": "book",
+      "roic_book": 0.145805,
+      "d": -0.071059,
+      "t": 0.157867
+    }
+  },
+  {
+    "id": 201,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.098861,
+      "roic": 0.327171,
+      "w": -0.942513,
+      "n": 4,
+      "tv": "book",
+      "roic_book": 0.226725,
+      "d": 0.296552,
+      "t": 0.215074
+    }
+  },
+  {
+    "id": 202,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.128306,
+      "roic": 0.431513,
+      "w": 0.160556,
+      "n": 42,
+      "tv": "book",
+      "roic_book": 0.416626,
+      "d": -0.090242,
+      "t": 0.156901
+    }
+  },
+  {
+    "id": 203,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.084503,
+      "roic": 0.019393,
+      "w": 0.090195,
+      "n": 28,
+      "tv": "book",
+      "roic_book": 0.361278,
+      "mid_year": true,
+      "d": -0.050494,
+      "t": 0.47321
+    }
+  },
+  {
+    "id": 204,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.185364,
+      "roic": 0.106064,
+      "w": 0.085972,
+      "n": 26,
+      "tv": "book",
+      "roic_book": 0.223928,
+      "d": 0.388782,
+      "t": 0.054412
+    }
+  },
+  {
+    "id": 205,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.032656,
+      "roic": 0.253593,
+      "w": 0.054298,
+      "n": 25,
+      "tv": "book",
+      "roic_book": 0.531599,
+      "d": 0.197105,
+      "t": -0.015463
+    }
+  },
+  {
+    "id": 206,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.142681,
+      "roic": 0.41179,
+      "w": 0.177651,
+      "n": 33,
+      "tv": "book",
+      "roic_book": 0.40504,
+      "d": 0.308637,
+      "t": -0.026751
+    }
+  },
+  {
+    "id": 207,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.202263,
+      "roic": 0.311248,
+      "w": 0.083358,
+      "n": 41,
+      "tv": "book",
+      "roic_book": 0.041298,
+      "d": 0.211652,
+      "t": 0.482351
+    }
+  },
+  {
+    "id": 208,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.276904,
+      "roic": 0.159563,
+      "w": 0.326134,
+      "n": 35,
+      "tv": "book",
+      "roic_book": -0.023891,
+      "d": 0.483322,
+      "t": 0.150255
+    }
+  },
+  {
+    "id": 209,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.073371,
+      "roic": 0.117862,
+      "w": 0.331804,
+      "n": 20,
+      "tv": "book",
+      "roic_book": 0.495405,
+      "d": 0.038075,
+      "t": 0.445478
+    }
+  },
+  {
+    "id": 210,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.150504,
+      "roic": 0.079313,
+      "w": 0.057725,
+      "n": 16,
+      "tv": "book",
+      "roic_book": 0.257403,
+      "d": 0.213994,
+      "t": 0.125857
+    }
+  },
+  {
+    "id": 211,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.249843,
+      "roic": 0.090435,
+      "w": 0.312449,
+      "n": 9,
+      "tv": "book",
+      "roic_book": 0.427524,
+      "mid_year": true,
+      "d": 0.219636,
+      "t": 0.501976
+    }
+  },
+  {
+    "id": 212,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.220164,
+      "roic": 0.425284,
+      "w": 0.299133,
+      "n": 9,
+      "tv": "book",
+      "roic_book": 0.089163,
+      "mid_year": true,
+      "d": 0.397941,
+      "t": 0.34199
+    }
+  },
+  {
+    "id": 213,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.274327,
+      "roic": 0.406377,
+      "w": 0.025599,
+      "n": 13,
+      "tv": "book",
+      "roic_book": 0.150376,
+      "mid_year": true,
+      "d": 0.076092,
+      "t": 0.434025
+    }
+  },
+  {
+    "id": 214,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.191923,
+      "roic": 0.387693,
+      "w": 0.053207,
+      "n": 24,
+      "tv": "book",
+      "roic_book": 0.135513,
+      "d": 0.090329,
+      "t": 0.544216
+    }
+  },
+  {
+    "id": 215,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.253532,
+      "roic": 0.019611,
+      "w": 0.324711,
+      "n": 26,
+      "tv": "book",
+      "d": 0.082139,
+      "t": 0.052968
+    }
+  },
+  {
+    "id": 216,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.16625,
+      "roic": 0.029628,
+      "w": -0.583812,
+      "n": 9,
+      "tv": "book",
+      "roic_book": 0.03409,
+      "d": -0.094608,
+      "t": 0.46954
+    }
+  },
+  {
+    "id": 217,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.20327,
+      "roic": 0.276471,
+      "w": -0.157469,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.588187,
+      "d": 0.30806,
+      "t": -0.092157
+    }
+  },
+  {
+    "id": 218,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.025773,
+      "roic": 0.080117,
+      "w": 0.230234,
+      "n": 38,
+      "tv": "book",
+      "roic_book": 0.309857,
+      "d": 0.371208,
+      "t": -0.046794
+    }
+  },
+  {
+    "id": 219,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.119966,
+      "roic": 0.043608,
+      "w": 0.297292,
+      "n": -3,
+      "tv": "book",
+      "roic_book": 0.205128,
+      "d": 0.108222,
+      "t": 0.11046
+    }
+  },
+  {
+    "id": 220,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.186995,
+      "roic": 0.444304,
+      "w": -0.869308,
+      "n": 34,
+      "tv": "book",
+      "roic_book": 0.426461,
+      "mid_year": true,
+      "d": 0.317535,
+      "t": 0.44655
+    }
+  },
+  {
+    "id": 221,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.272211,
+      "roic": 0.41157,
+      "w": 0.207373,
+      "n": 3,
+      "tv": "book",
+      "roic_book": 0.07102,
+      "mid_year": true,
+      "d": 0.243409,
+      "t": 0.184143
+    }
+  },
+  {
+    "id": 222,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.126472,
+      "roic": 0.100151,
+      "w": 0.337096,
+      "n": 14,
+      "tv": "book",
+      "roic_book": 0.186817,
+      "d": 0.31197,
+      "t": 0.50322
+    }
+  },
+  {
+    "id": 223,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.082458,
+      "roic": 0.284883,
+      "w": 0.077841,
+      "n": 15,
+      "tv": "book",
+      "roic_book": 0.311573,
+      "d": 0.217859,
+      "t": 0.445864
+    }
+  },
+  {
+    "id": 224,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.387705,
+      "roic": 0.414478,
+      "w": 0.031389,
+      "n": 11,
+      "tv": "book",
+      "roic_book": 0.231367,
+      "d": -0.039567,
+      "t": -0.007254
+    }
+  },
+  {
+    "id": 225,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.219956,
+      "roic": 0.319207,
+      "w": 0.141503,
+      "n": 29,
+      "tv": "book",
+      "roic_book": 0.187851,
+      "mid_year": true,
+      "d": -0.013046,
+      "t": 0.069927
+    }
+  },
+  {
+    "id": 226,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.045807,
+      "roic": 0.368692,
+      "w": -0.998535,
+      "n": 29,
+      "tv": "book",
+      "d": 0.569931,
+      "t": 0.118497
+    }
+  },
+  {
+    "id": 227,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.08913,
+      "roic": 0.317658,
+      "w": 0.149394,
+      "n": 17,
+      "tv": "book",
+      "roic_book": 0.514539,
+      "mid_year": true,
+      "d": -0.095425,
+      "t": 0.457262
+    }
+  },
+  {
+    "id": 228,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.130275,
+      "roic": 0.216619,
+      "w": 0.061554,
+      "n": 2,
+      "tv": "book",
+      "d": 0.210266,
+      "t": 0.214782
+    }
+  },
+  {
+    "id": 229,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -1.044756,
+      "roic": 0.15528,
+      "w": 0.216496,
+      "n": 36,
+      "tv": "book",
+      "roic_book": 0.51074,
+      "d": -0.037616,
+      "t": 0.453318
+    }
+  },
+  {
+    "id": 230,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.758537,
+      "roic": 0.391594,
+      "w": 0.314126,
+      "n": 6,
+      "tv": "book",
+      "roic_book": 0.123368,
+      "d": 0.012753,
+      "t": 0.390683
+    }
+  },
+  {
+    "id": 231,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.005642,
+      "roic": 0.097618,
+      "w": 0.22539,
+      "n": 8,
+      "tv": "book",
+      "roic_book": 0.091133,
+      "d": 0.22561,
+      "t": 0.079293
+    }
+  },
+  {
+    "id": 232,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.360202,
+      "roic": 0.086503,
+      "w": 0.2751,
+      "n": 42,
+      "tv": "book",
+      "roic_book": 0.199589,
+      "d": -0.014706,
+      "t": 0.060431
+    }
+  },
+  {
+    "id": 233,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.420968,
+      "roic": 0.068992,
+      "w": 0.055385,
+      "n": 35,
+      "tv": "book",
+      "roic_book": 0.341359,
+      "d": 0.1519,
+      "t": 0.312258
+    }
+  },
+  {
+    "id": 234,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.348824,
+      "roic": 0.418892,
+      "w": 0.231108,
+      "n": 20,
+      "tv": "book",
+      "roic_book": 0.569874,
+      "mid_year": true,
+      "d": 0.275673,
+      "t": -0.028766
+    }
+  },
+  {
+    "id": 235,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.024224,
+      "roic": 0.101107,
+      "w": 0.345558,
+      "n": 33,
+      "tv": "book",
+      "roic_book": 0.551318,
+      "d": 0.140444,
+      "t": -0.052299
+    }
+  },
+  {
+    "id": 236,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.095503,
+      "roic": 0.380587,
+      "w": 0.3286,
+      "n": 9,
+      "tv": "book",
+      "roic_book": 0.321055,
+      "d": 0.420117,
+      "t": 0.068759
+    }
+  },
+  {
+    "id": 237,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.39198,
+      "roic": 0.087257,
+      "w": -0.365712,
+      "n": 13,
+      "tv": "book",
+      "roic_book": 0.226174,
+      "d": 0.074989,
+      "t": 0.529267
+    }
+  },
+  {
+    "id": 238,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.15621,
+      "roic": 0.097198,
+      "w": 0.223753,
+      "n": 11,
+      "tv": "book",
+      "roic_book": 0.158037,
+      "d": 0.026992,
+      "t": 0.213517
+    }
+  },
+  {
+    "id": 239,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.150721,
+      "roic": 0.093692,
+      "w": 0.223417,
+      "n": 24,
+      "tv": "book",
+      "roic_book": 0.523211,
+      "d": -0.015451,
+      "t": 0.17431
+    }
+  },
+  {
+    "id": 240,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.032752,
+      "roic": 0.323311,
+      "w": 0.315954,
+      "n": 21,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.539976,
+      "t": 0.304617
+    }
+  },
+  {
+    "id": 241,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.120892,
+      "roic": 0.134793,
+      "w": 0.096267,
+      "n": 24,
+      "tv": "convergencia",
+      "d": -0.007576,
+      "t": 0.464995
+    }
+  },
+  {
+    "id": 242,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.37477,
+      "roic": 0.19468,
+      "w": 0.076749,
+      "n": 41,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.509207,
+      "t": 0.27194
+    }
+  },
+  {
+    "id": 243,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.049423,
+      "roic": 0.251076,
+      "w": 0.086989,
+      "n": 16,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.039355,
+      "t": 0.257609
+    }
+  },
+  {
+    "id": 244,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.253195,
+      "roic": 0.210448,
+      "w": 0.164916,
+      "n": 2,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.252642,
+      "t": 0.336109
+    }
+  },
+  {
+    "id": 245,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.367629,
+      "roic": 0.151234,
+      "w": -0.862529,
+      "n": 17,
+      "tv": "convergencia",
+      "d": -0.058866,
+      "t": 0.214582
+    }
+  },
+  {
+    "id": 246,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.22688,
+      "roic": -0.006641,
+      "w": 0.177821,
+      "n": 31,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.263479,
+      "t": -0.080605
+    }
+  },
+  {
+    "id": 247,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.083871,
+      "roic": 0.249322,
+      "w": 0.067524,
+      "n": 1,
+      "tv": "convergencia",
+      "d": 0.298495,
+      "t": -0.011042
+    }
+  },
+  {
+    "id": 248,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.2949,
+      "roic": 0.094968,
+      "w": 0.195273,
+      "n": 8,
+      "tv": "convergencia",
+      "d": 0.401302,
+      "t": 0.242182
+    }
+  },
+  {
+    "id": 249,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.284556,
+      "roic": 0.222014,
+      "w": 0.263009,
+      "n": 38,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.284019,
+      "t": 0.12454
+    }
+  },
+  {
+    "id": 250,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.361942,
+      "roic": 0.35831,
+      "w": 0.287349,
+      "n": 38,
+      "tv": "convergencia",
+      "d": 0.348664,
+      "t": -0.056926
+    }
+  },
+  {
+    "id": 251,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.143331,
+      "roic": 0.216906,
+      "w": -0.398109,
+      "n": 14,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.495537,
+      "t": 0.121526
+    }
+  },
+  {
+    "id": 252,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.019886,
+      "roic": 0.410326,
+      "w": 0.309007,
+      "n": 41,
+      "tv": "convergencia",
+      "d": 0.408338,
+      "t": 0.199672
+    }
+  },
+  {
+    "id": 253,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.873017,
+      "roic": 0.199497,
+      "w": 0.331462,
+      "n": -1,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.032424,
+      "t": -0.047129
+    }
+  },
+  {
+    "id": 254,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.361652,
+      "roic": 0.401036,
+      "w": 0.306209,
+      "n": 42,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.453351,
+      "t": 0.4312
+    }
+  },
+  {
+    "id": 255,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.243668,
+      "roic": 0.250879,
+      "w": 0.179898,
+      "n": 20,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.522655,
+      "t": 0.566081
+    }
+  },
+  {
+    "id": 256,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.050375,
+      "roic": 0.116436,
+      "w": 0.204393,
+      "n": 29,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.030552,
+      "t": 0.267318
+    }
+  },
+  {
+    "id": 257,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.392262,
+      "roic": 0.186524,
+      "w": 0.258515,
+      "n": 9,
+      "tv": "convergencia",
+      "d": 0.012555,
+      "t": 0.565694
+    }
+  },
+  {
+    "id": 258,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.100182,
+      "roic": 0.360059,
+      "w": 0.301566,
+      "n": 11,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.205867,
+      "t": 0.596343
+    }
+  },
+  {
+    "id": 259,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.212053,
+      "roic": 0.271507,
+      "w": 0.189854,
+      "n": 4,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.278736,
+      "t": 0.188451
+    }
+  },
+  {
+    "id": 260,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.40335,
+      "roic": 0.154939,
+      "w": 0.156753,
+      "n": 30,
+      "tv": "convergencia",
+      "d": -0.037432,
+      "t": 0.441417
+    }
+  },
+  {
+    "id": 261,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.2562,
+      "roic": 0.203502,
+      "w": 0.123122,
+      "n": -2,
+      "tv": "convergencia",
+      "d": 0.113512,
+      "t": 0.314726
+    }
+  },
+  {
+    "id": 262,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.134102,
+      "roic": 0.324015,
+      "w": 0.15925,
+      "n": 35,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.025658,
+      "t": 0.250783
+    }
+  },
+  {
+    "id": 263,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.249087,
+      "roic": 0.252614,
+      "w": 0.087172,
+      "n": 34,
+      "tv": "convergencia",
+      "d": 0.439298,
+      "t": 0.057884
+    }
+  },
+  {
+    "id": 264,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.070699,
+      "roic": 0.051248,
+      "w": 0.303622,
+      "n": 8,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.07211,
+      "t": 0.587255
+    }
+  },
+  {
+    "id": 265,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.257481,
+      "roic": 0.408611,
+      "w": 0.054768,
+      "n": 14,
+      "tv": "convergencia",
+      "d": 0.488747,
+      "t": 0.54858
+    }
+  },
+  {
+    "id": 266,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.137093,
+      "roic": 0.378817,
+      "w": 0.127238,
+      "n": 35,
+      "tv": "convergencia",
+      "d": 0.141735,
+      "t": 0.574681
+    }
+  },
+  {
+    "id": 267,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.044377,
+      "roic": 0.360025,
+      "w": 0.196741,
+      "n": 7,
+      "tv": "convergencia",
+      "d": 0.43947,
+      "t": 0.138084
+    }
+  },
+  {
+    "id": 268,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.428994,
+      "roic": 0.31648,
+      "w": 0.026862,
+      "n": 40,
+      "tv": "convergencia",
+      "d": 0.059056,
+      "t": -0.035314
+    }
+  },
+  {
+    "id": 269,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.481813,
+      "roic": 0.152645,
+      "w": 0.183559,
+      "n": 32,
+      "tv": "convergencia",
+      "d": 0.26965,
+      "t": 0.38337
+    }
+  },
+  {
+    "id": 270,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.358338,
+      "roic": 0.173161,
+      "w": 0.030072,
+      "n": 30,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.001568,
+      "t": 0.477644
+    }
+  },
+  {
+    "id": 271,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.044685,
+      "roic": 0.317519,
+      "w": 0.339018,
+      "n": 23,
+      "tv": "convergencia",
+      "d": 0.528756,
+      "t": 0.589043
+    }
+  },
+  {
+    "id": 272,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.265911,
+      "roic": 0.273815,
+      "w": 0.133633,
+      "n": 6,
+      "tv": "convergencia",
+      "d": 0.421086,
+      "t": 0.114038
+    }
+  },
+  {
+    "id": 273,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.428609,
+      "roic": 0.389496,
+      "w": 0.134318,
+      "n": 39,
+      "tv": "convergencia",
+      "d": 0.153279,
+      "t": 0.316652
+    }
+  },
+  {
+    "id": 274,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.146466,
+      "roic": 0.162778,
+      "w": -0.747285,
+      "n": 40,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.038954,
+      "t": 0.396933
+    }
+  },
+  {
+    "id": 275,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.384653,
+      "roic": 0.06413,
+      "w": 0.212097,
+      "n": 19,
+      "tv": "convergencia",
+      "d": 0.218249,
+      "t": 0.400067
+    }
+  },
+  {
+    "id": 276,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.179132,
+      "roic": -0.020489,
+      "w": 0.276855,
+      "n": 33,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.526323,
+      "t": 0.483503
+    }
+  },
+  {
+    "id": 277,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.11382,
+      "roic": 0.250239,
+      "w": -1.033713,
+      "n": 37,
+      "tv": "convergencia",
+      "d": 0.159885,
+      "t": 0.514137
+    }
+  },
+  {
+    "id": 278,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.212928,
+      "roic": 0.329092,
+      "w": 0.048835,
+      "n": 5,
+      "tv": "convergencia",
+      "d": 0.509229,
+      "t": 0.310457
+    }
+  },
+  {
+    "id": 279,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.272776,
+      "roic": -0.003002,
+      "w": 0.243932,
+      "n": 26,
+      "tv": "convergencia",
+      "mid_year": true,
+      "d": 0.13318,
+      "t": 0.465915
+    }
+  },
+  {
+    "id": 280,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.409903,
+      "roic": 0.058398,
+      "w": 0.281332,
+      "n": 45,
+      "tv": "gordon",
+      "gp": 0.211182,
+      "roic_tv": 0.277558,
+      "mid_year": true,
+      "d": 0.449318,
+      "t": 0.114398
+    }
+  },
+  {
+    "id": 281,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.376199,
+      "roic": 0.211768,
+      "w": 0.241632,
+      "n": 42,
+      "tv": "gordon",
+      "gp": 0.216683,
+      "roic_tv": 0.189653,
+      "d": 0.242609,
+      "t": 0.0088
+    }
+  },
+  {
+    "id": 282,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.406546,
+      "roic": 0.02981,
+      "w": 0.051271,
+      "n": 0,
+      "tv": "gordon",
+      "gp": 0.016353,
+      "roic_tv": -0.03638,
+      "mid_year": true,
+      "d": -0.03817,
+      "t": 0.185678
+    }
+  },
+  {
+    "id": 283,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.083529,
+      "roic": 0.096693,
+      "w": 0.190908,
+      "n": -3,
+      "tv": "gordon",
+      "gp": 0.233962,
+      "roic_tv": 0.209152,
+      "d": 0.571576,
+      "t": 0.066388
+    }
+  },
+  {
+    "id": 284,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.141091,
+      "roic": 0.42149,
+      "w": -0.50521,
+      "n": 30,
+      "tv": "gordon",
+      "gp": -0.011465,
+      "roic_tv": 0.055098,
+      "d": 0.057394,
+      "t": -0.047768
+    }
+  },
+  {
+    "id": 285,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.03318,
+      "roic": 0.034008,
+      "w": -1.032701,
+      "n": 7,
+      "tv": "gordon",
+      "gp": 0.088251,
+      "roic_tv": 0.132042,
+      "mid_year": true,
+      "d": 0.022359,
+      "t": 0.364788
+    }
+  },
+  {
+    "id": 286,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.26248,
+      "roic": 0.080838,
+      "w": 0.048591,
+      "n": 25,
+      "tv": "gordon",
+      "gp": 0.052952,
+      "roic_tv": -0.036201,
+      "mid_year": true,
+      "d": 0.090599,
+      "t": -0.022312
+    }
+  },
+  {
+    "id": 287,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.128732,
+      "roic": 0.087275,
+      "w": 0.218061,
+      "n": 40,
+      "tv": "gordon",
+      "gp": 0.032926,
+      "roic_tv": 0.181812,
+      "d": 0.078681,
+      "t": 0.2871
+    }
+  },
+  {
+    "id": 288,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.045308,
+      "roic": 0.425283,
+      "w": 0.036523,
+      "n": 43,
+      "tv": "gordon",
+      "gp": 0.088516,
+      "roic_tv": 0.183977,
+      "d": -0.00154,
+      "t": 0.105221
+    }
+  },
+  {
+    "id": 289,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.31545,
+      "roic": 0.346048,
+      "w": 0.150294,
+      "n": 4,
+      "tv": "gordon",
+      "gp": 0.204647,
+      "roic_tv": 0.208292,
+      "d": -0.00195,
+      "t": -0.094617
+    }
+  },
+  {
+    "id": 290,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.995259,
+      "roic": 0.336674,
+      "w": -0.322421,
+      "n": 26,
+      "tv": "gordon",
+      "gp": 0.149335,
+      "roic_tv": 0.287037,
+      "d": 0.172943,
+      "t": 0.572608
+    }
+  },
+  {
+    "id": 291,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.361346,
+      "roic": 0.040325,
+      "w": 0.170251,
+      "n": 13,
+      "tv": "gordon",
+      "gp": 0.038721,
+      "roic_tv": 0.18327,
+      "d": 0.267846,
+      "t": 0.219496
+    }
+  },
+  {
+    "id": 292,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.361922,
+      "roic": 0.233906,
+      "w": 0.309258,
+      "n": 45,
+      "tv": "gordon",
+      "gp": 0.06604,
+      "roic_tv": 0.177171,
+      "mid_year": true,
+      "d": 0.339034,
+      "t": 0.029537
+    }
+  },
+  {
+    "id": 293,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.385435,
+      "roic": 0.056012,
+      "w": 0.196593,
+      "n": 22,
+      "tv": "gordon",
+      "gp": 0.233753,
+      "roic_tv": 0.105082,
+      "d": 0.518703,
+      "t": 0.377353
+    }
+  },
+  {
+    "id": 294,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.171005,
+      "roic": 0.337841,
+      "w": -1.082429,
+      "n": 33,
+      "tv": "gordon",
+      "gp": 0.079973,
+      "roic_tv": 0.051149,
+      "d": 0.400658,
+      "t": 0.241892
+    }
+  },
+  {
+    "id": 295,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.382376,
+      "roic": 0.254154,
+      "w": 0.142201,
+      "n": 39,
+      "tv": "gordon",
+      "gp": 0.271352,
+      "roic_tv": 0.00223,
+      "mid_year": true,
+      "d": 0.332658,
+      "t": 0.101849
+    }
+  },
+  {
+    "id": 296,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.597318,
+      "roic": 0.162891,
+      "w": 0.24566,
+      "n": 8,
+      "tv": "gordon",
+      "gp": 0.235584,
+      "roic_tv": 0.232224,
+      "d": 0.358415,
+      "t": -0.070473
+    }
+  },
+  {
+    "id": 297,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.213646,
+      "roic": 0.108448,
+      "w": 0.306713,
+      "n": 9,
+      "tv": "gordon",
+      "gp": 0.174844,
+      "roic_tv": null,
+      "d": 0.077043,
+      "t": 0.309409
+    }
+  },
+  {
+    "id": 298,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.133112,
+      "roic": 0.150762,
+      "w": 0.29506,
+      "n": 29,
+      "tv": "gordon",
+      "gp": 0.164852,
+      "roic_tv": 0.206254,
+      "mid_year": true,
+      "d": 0.366923,
+      "t": 0.085296
+    }
+  },
+  {
+    "id": 299,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.106303,
+      "roic": 0.179705,
+      "w": 0.20147,
+      "n": 17,
+      "tv": "gordon",
+      "gp": 0.248183,
+      "roic_tv": 0.087995,
+      "d": 0.09001,
+      "t": 0.113374
+    }
+  },
+  {
+    "id": 300,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.285437,
+      "roic": 0.197937,
+      "w": 0.196119,
+      "n": 22,
+      "tv": "gordon",
+      "gp": 0.143843,
+      "roic_tv": 0.003841,
+      "mid_year": true,
+      "d": 0.00663,
+      "t": 0.005094
+    }
+  },
+  {
+    "id": 301,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.042651,
+      "roic": 0.267922,
+      "w": -0.875257,
+      "n": 42,
+      "tv": "gordon",
+      "gp": 0.046157,
+      "roic_tv": 0.152625,
+      "d": 0.493298,
+      "t": 0.279514
+    }
+  },
+  {
+    "id": 302,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.382396,
+      "roic": 0.378773,
+      "w": -0.506346,
+      "n": 29,
+      "tv": "gordon",
+      "gp": -0.3401,
+      "roic_tv": 0.257192,
+      "d": 0.356109,
+      "t": 0.255543
+    }
+  },
+  {
+    "id": 303,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.209637,
+      "roic": 0.297416,
+      "w": 0.167142,
+      "n": 34,
+      "tv": "gordon",
+      "gp": -0.0118,
+      "roic_tv": 0.271051,
+      "d": 0.43969,
+      "t": 0.520359
+    }
+  },
+  {
+    "id": 304,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.754074,
+      "roic": 0.278383,
+      "w": 0.12445,
+      "n": 25,
+      "tv": "gordon",
+      "gp": -0.096367,
+      "roic_tv": -0.003699,
+      "d": 0.085949,
+      "t": 0.517966
+    }
+  },
+  {
+    "id": 305,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.274549,
+      "roic": -0.013791,
+      "w": 0.130405,
+      "n": 30,
+      "tv": "gordon",
+      "gp": -0.179188,
+      "roic_tv": 0.318105,
+      "d": 0.152483,
+      "t": 0.505184
+    }
+  },
+  {
+    "id": 306,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.376538,
+      "roic": 0.085272,
+      "w": 0.098705,
+      "n": 13,
+      "tv": "gordon",
+      "gp": -0.659354,
+      "roic_tv": -0.038647,
+      "d": 0.426545,
+      "t": 0.542625
+    }
+  },
+  {
+    "id": 307,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.196089,
+      "roic": 0.404362,
+      "w": -0.443918,
+      "n": 34,
+      "tv": "gordon",
+      "gp": 0.255207,
+      "roic_tv": 0.211697,
+      "d": 0.004794,
+      "t": -0.037331
+    }
+  },
+  {
+    "id": 308,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.113944,
+      "roic": 0.131375,
+      "w": -0.690207,
+      "n": 20,
+      "tv": "gordon",
+      "gp": 0.123058,
+      "roic_tv": -0.041072,
+      "d": 0.257393,
+      "t": 0.420779
+    }
+  },
+  {
+    "id": 309,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.212772,
+      "roic": 0.350208,
+      "w": 0.305262,
+      "n": 32,
+      "tv": "gordon",
+      "gp": -1.236468,
+      "roic_tv": null,
+      "mid_year": true,
+      "d": 0.058998,
+      "t": 0.362374
+    }
+  },
+  {
+    "id": 310,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.085992,
+      "roic": -0.000746,
+      "w": 0.247301,
+      "n": 29,
+      "tv": "gordon",
+      "gp": 0.001837,
+      "roic_tv": 0.0305,
+      "mid_year": true,
+      "d": 0.421216,
+      "t": -0.071509
+    }
+  },
+  {
+    "id": 311,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.316017,
+      "roic": 0.434253,
+      "w": 0.185606,
+      "n": 21,
+      "tv": "gordon",
+      "gp": 0.077757,
+      "roic_tv": -0.02114,
+      "d": -0.007323,
+      "t": 0.579498
+    }
+  },
+  {
+    "id": 312,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": -0.628268,
+      "roic": 0.425863,
+      "w": 0.06469,
+      "n": 32,
+      "tv": "gordon",
+      "gp": 0.113182,
+      "roic_tv": 0.123217,
+      "d": -0.078648,
+      "t": 0.238937
+    }
+  },
+  {
+    "id": 313,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.283871,
+      "roic": 0.371572,
+      "w": 0.243841,
+      "n": 43,
+      "tv": "gordon",
+      "gp": 0.239325,
+      "roic_tv": 0.059475,
+      "d": 0.367353,
+      "t": 0.327765
+    }
+  },
+  {
+    "id": 314,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.277983,
+      "roic": 0.414074,
+      "w": 0.077745,
+      "n": 12,
+      "tv": "gordon",
+      "gp": 0.037267,
+      "roic_tv": 0.343643,
+      "d": 0.005972,
+      "t": 0.20338
+    }
+  },
+  {
+    "id": 315,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.437628,
+      "roic": 0.232935,
+      "w": 0.123565,
+      "n": 14,
+      "tv": "gordon",
+      "gp": 0.147727,
+      "roic_tv": null,
+      "d": -0.009408,
+      "t": 0.202798
+    }
+  },
+  {
+    "id": 316,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.185374,
+      "roic": 0.406926,
+      "w": 0.042909,
+      "n": 16,
+      "tv": "gordon",
+      "gp": 0.028727,
+      "roic_tv": 0.177676,
+      "d": 0.084053,
+      "t": -0.052714
+    }
+  },
+  {
+    "id": 317,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.438726,
+      "roic": 0.272962,
+      "w": 0.061235,
+      "n": 40,
+      "tv": "gordon",
+      "gp": 0.2613,
+      "roic_tv": 0.155993,
+      "d": 0.471833,
+      "t": 0.477034
+    }
+  },
+  {
+    "id": 318,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.089538,
+      "roic": -0.045581,
+      "w": 0.105434,
+      "n": 43,
+      "tv": "gordon",
+      "gp": 0.046996,
+      "roic_tv": -0.001048,
+      "mid_year": true,
+      "d": 0.40789,
+      "t": 0.365188
+    }
+  },
+  {
+    "id": 319,
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.001183,
+      "roic": 0.317563,
+      "w": 0.263332,
+      "n": 4,
+      "tv": "gordon",
+      "gp": 0.046987,
+      "roic_tv": 0.348741,
+      "mid_year": true,
+      "d": -0.017482,
+      "t": 0.043142
+    }
+  },
+  {
+    "id": 320,
+    "fn": "pe",
+    "args": {
+      "g": -0.464168,
+      "roe": 0.369228,
+      "ke": 0.107414,
+      "n": 19,
+      "gde": 0.30766,
+      "nde": 0.877862,
+      "tv": "book",
+      "roe_book": 0.057537
+    }
+  },
+  {
+    "id": 321,
+    "fn": "pe",
+    "args": {
+      "g": 0.100648,
+      "roe": 0.212602,
+      "ke": 0.184861,
+      "n": 40,
+      "gde": 0.464435,
+      "nde": 0.097529,
+      "tv": "book",
+      "roe_book": 0.557404,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 322,
+    "fn": "pe",
+    "args": {
+      "g": 0.201693,
+      "roe": -0.016182,
+      "ke": 0.258696,
+      "n": 19,
+      "gde": 0.498889,
+      "nde": 0.199017,
+      "tv": "book",
+      "roe_book": 0.331197
+    }
+  },
+  {
+    "id": 323,
+    "fn": "pe",
+    "args": {
+      "g": 0.151774,
+      "roe": 0.386062,
+      "ke": 0.102841,
+      "n": -3,
+      "gde": 0.421898,
+      "nde": 0.318089,
+      "tv": "book",
+      "roe_book": 0.116446
+    }
+  },
+  {
+    "id": 324,
+    "fn": "pe",
+    "args": {
+      "g": 0.003152,
+      "roe": 0.432077,
+      "ke": 0.340676,
+      "n": 7,
+      "gde": 0.578495,
+      "nde": 0.387507,
+      "tv": "book",
+      "roe_book": 0.320971
+    }
+  },
+  {
+    "id": 325,
+    "fn": "pe",
+    "args": {
+      "g": 0.098029,
+      "roe": -0.078738,
+      "ke": 0.135489,
+      "n": 41,
+      "gde": 0.787905,
+      "nde": 0.090652,
+      "tv": "book",
+      "roe_book": 0.543138,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 326,
+    "fn": "pe",
+    "args": {
+      "g": 0.174066,
+      "roe": 0.133872,
+      "ke": -0.607314,
+      "n": 19,
+      "gde": 0.262389,
+      "nde": 0.393979,
+      "tv": "book",
+      "roe_book": 0.247827,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 327,
+    "fn": "pe",
+    "args": {
+      "g": 0.414751,
+      "roe": -0.070149,
+      "ke": 0.245066,
+      "n": 15,
+      "gde": 0.604927,
+      "nde": 0.812241,
+      "tv": "book",
+      "roe_book": 0.058402
+    }
+  },
+  {
+    "id": 328,
+    "fn": "pe",
+    "args": {
+      "g": -0.035828,
+      "roe": 0.300966,
+      "ke": 0.045656,
+      "n": -1,
+      "gde": 0.318118,
+      "nde": 0.798941,
+      "tv": "book",
+      "roe_book": 0.224177
+    }
+  },
+  {
+    "id": 329,
+    "fn": "pe",
+    "args": {
+      "g": 0.010999,
+      "roe": 0.208054,
+      "ke": -0.310397,
+      "n": 3,
+      "gde": 0.827661,
+      "nde": 0.293496,
+      "tv": "book",
+      "roe_book": 0.474033,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 330,
+    "fn": "pe",
+    "args": {
+      "g": 0.324031,
+      "roe": 0.039064,
+      "ke": 0.325718,
+      "n": 16,
+      "gde": 0.076264,
+      "nde": 0.115289,
+      "tv": "book",
+      "roe_book": 0.531025,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 331,
+    "fn": "pe",
+    "args": {
+      "g": 0.20002,
+      "roe": 0.240707,
+      "ke": 0.065324,
+      "n": 16,
+      "gde": 0.108339,
+      "nde": 0.325301,
+      "tv": "book",
+      "roe_book": 0.114572
+    }
+  },
+  {
+    "id": 332,
+    "fn": "pe",
+    "args": {
+      "g": -0.945198,
+      "roe": 0.236041,
+      "ke": 0.044061,
+      "n": 3,
+      "gde": 0.765189,
+      "nde": 0.082207,
+      "tv": "book",
+      "roe_book": 0.220127,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 333,
+    "fn": "pe",
+    "args": {
+      "g": 0.304848,
+      "roe": 0.440813,
+      "ke": 0.325198,
+      "n": 35,
+      "gde": 0.814914,
+      "nde": 0.023349,
+      "tv": "book",
+      "roe_book": 0.234906
+    }
+  },
+  {
+    "id": 334,
+    "fn": "pe",
+    "args": {
+      "g": 0.382683,
+      "roe": 0.102479,
+      "ke": 0.292078,
+      "n": 29,
+      "gde": 0.779066,
+      "nde": 0.655943,
+      "tv": "book",
+      "roe_book": 0.20071
+    }
+  },
+  {
+    "id": 335,
+    "fn": "pe",
+    "args": {
+      "g": 0.252333,
+      "roe": 0.232815,
+      "ke": -0.129343,
+      "n": 37,
+      "gde": 0.72853,
+      "nde": 0.006426,
+      "tv": "book",
+      "roe_book": 0.065018
+    }
+  },
+  {
+    "id": 336,
+    "fn": "pe",
+    "args": {
+      "g": 0.161541,
+      "roe": 0.432514,
+      "ke": 0.163607,
+      "n": -3,
+      "gde": 0.830534,
+      "nde": 0.756211,
+      "tv": "book",
+      "roe_book": 0.131587
+    }
+  },
+  {
+    "id": 337,
+    "fn": "pe",
+    "args": {
+      "g": 0.153596,
+      "roe": 0.014414,
+      "ke": 0.315299,
+      "n": 35,
+      "gde": 0.173749,
+      "nde": 0.798748,
+      "tv": "book",
+      "roe_book": 0.230774,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 338,
+    "fn": "pe",
+    "args": {
+      "g": -0.009433,
+      "roe": 0.303558,
+      "ke": -0.680213,
+      "n": 1,
+      "gde": 0.53818,
+      "nde": 0.044455,
+      "tv": "book",
+      "roe_book": 0.169395
+    }
+  },
+  {
+    "id": 339,
+    "fn": "pe",
+    "args": {
+      "g": 0.295138,
+      "roe": 0.126562,
+      "ke": 0.290763,
+      "n": 45,
+      "gde": 0.493908,
+      "nde": 0.453104,
+      "tv": "book",
+      "roe_book": 0.050262,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 340,
+    "fn": "pe",
+    "args": {
+      "g": 0.108126,
+      "roe": 0.331755,
+      "ke": 0.341162,
+      "n": 8,
+      "gde": 0.306153,
+      "nde": 0.859556,
+      "tv": "book",
+      "roe_book": 0.431916
+    }
+  },
+  {
+    "id": 341,
+    "fn": "pe",
+    "args": {
+      "g": 0.415794,
+      "roe": 0.227691,
+      "ke": 0.344047,
+      "n": 38,
+      "gde": 0.421545,
+      "nde": 0.167268,
+      "tv": "book",
+      "roe_book": 0.277256
+    }
+  },
+  {
+    "id": 342,
+    "fn": "pe",
+    "args": {
+      "g": 0.379258,
+      "roe": 0.336768,
+      "ke": 0.068975,
+      "n": 34,
+      "gde": 0.156932,
+      "nde": 0.676739,
+      "tv": "book",
+      "roe_book": 0.378436
+    }
+  },
+  {
+    "id": 343,
+    "fn": "pe",
+    "args": {
+      "g": 0.075784,
+      "roe": 0.173837,
+      "ke": -0.436775,
+      "n": 30,
+      "gde": 0.895524,
+      "nde": 0.311128,
+      "tv": "book",
+      "roe_book": 0.424528
+    }
+  },
+  {
+    "id": 344,
+    "fn": "pe",
+    "args": {
+      "g": 0.391533,
+      "roe": 0.328334,
+      "ke": -0.080483,
+      "n": 8,
+      "gde": 0.623144,
+      "nde": 0.435941,
+      "tv": "book",
+      "roe_book": 0.420081
+    }
+  },
+  {
+    "id": 345,
+    "fn": "pe",
+    "args": {
+      "g": 0.017098,
+      "roe": 0.091171,
+      "ke": -0.056596,
+      "n": 9,
+      "gde": 0.276006,
+      "nde": 0.001951,
+      "tv": "book",
+      "roe_book": 0.243971
+    }
+  },
+  {
+    "id": 346,
+    "fn": "pe",
+    "args": {
+      "g": 0.284066,
+      "roe": 0.250639,
+      "ke": 0.061471,
+      "n": 29,
+      "gde": 0.139317,
+      "nde": 0.886426,
+      "tv": "book",
+      "roe_book": 0.066954
+    }
+  },
+  {
+    "id": 347,
+    "fn": "pe",
+    "args": {
+      "g": 0.146279,
+      "roe": 0.114415,
+      "ke": 0.298576,
+      "n": 17,
+      "gde": 0.74692,
+      "nde": 0.127152,
+      "tv": "book",
+      "roe_book": 0.01432,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 348,
+    "fn": "pe",
+    "args": {
+      "g": -0.295518,
+      "roe": 0.106159,
+      "ke": 0.146282,
+      "n": 5,
+      "gde": 0.102044,
+      "nde": 0.071093,
+      "tv": "book",
+      "roe_book": 0.02462,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 349,
+    "fn": "pe",
+    "args": {
+      "g": 0.358825,
+      "roe": 0.421788,
+      "ke": 0.162955,
+      "n": 36,
+      "gde": 0.684265,
+      "nde": 0.159631,
+      "tv": "book",
+      "roe_book": 0.224778
+    }
+  },
+  {
+    "id": 350,
+    "fn": "pe",
+    "args": {
+      "g": 0.403005,
+      "roe": -0.020789,
+      "ke": 0.333784,
+      "n": 1,
+      "gde": 0.122022,
+      "nde": 0.786266,
+      "tv": "book",
+      "roe_book": 0.373787
+    }
+  },
+  {
+    "id": 351,
+    "fn": "pe",
+    "args": {
+      "g": 0.410229,
+      "roe": 0.36607,
+      "ke": 0.076848,
+      "n": 0,
+      "gde": 0.616945,
+      "nde": 0.019347,
+      "tv": "book",
+      "roe_book": 0.421626,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 352,
+    "fn": "pe",
+    "args": {
+      "g": 0.267146,
+      "roe": 0.106221,
+      "ke": 0.11125,
+      "n": 35,
+      "gde": 0.844735,
+      "nde": 0.175798,
+      "tv": "book",
+      "roe_book": 0.076254,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 353,
+    "fn": "pe",
+    "args": {
+      "g": 0.279954,
+      "roe": 0.16254,
+      "ke": 0.206271,
+      "n": 12,
+      "gde": 0.34103,
+      "nde": 0.292553,
+      "tv": "book",
+      "roe_book": 0.256638
+    }
+  },
+  {
+    "id": 354,
+    "fn": "pe",
+    "args": {
+      "g": 0.241666,
+      "roe": 0.365734,
+      "ke": 0.079024,
+      "n": 6,
+      "gde": 0.846664,
+      "nde": 0.164561,
+      "tv": "book",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 355,
+    "fn": "pe",
+    "args": {
+      "g": 0.338107,
+      "roe": 0.211918,
+      "ke": 0.101441,
+      "n": -1,
+      "gde": 0.787734,
+      "nde": 0.228932,
+      "tv": "book",
+      "roe_book": 0.487483
+    }
+  },
+  {
+    "id": 356,
+    "fn": "pe",
+    "args": {
+      "g": 0.341901,
+      "roe": -0.046891,
+      "ke": 0.108717,
+      "n": 38,
+      "gde": 0.57286,
+      "nde": 0.573625,
+      "tv": "book",
+      "roe_book": 0.50185
+    }
+  },
+  {
+    "id": 357,
+    "fn": "pe",
+    "args": {
+      "g": 0.049323,
+      "roe": 0.036394,
+      "ke": 0.042493,
+      "n": 18,
+      "gde": 0.509299,
+      "nde": 0.486657,
+      "tv": "book",
+      "roe_book": 0.308463
+    }
+  },
+  {
+    "id": 358,
+    "fn": "pe",
+    "args": {
+      "g": 0.4316,
+      "roe": 0.446681,
+      "ke": 0.189123,
+      "n": 30,
+      "gde": 0.192978,
+      "nde": 0.79434,
+      "tv": "book",
+      "roe_book": 0.194196,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 359,
+    "fn": "pe",
+    "args": {
+      "g": 0.248474,
+      "roe": -0.058864,
+      "ke": 0.082636,
+      "n": 23,
+      "gde": 0.710783,
+      "nde": 0.012109,
+      "tv": "book",
+      "roe_book": 0.364248,
+      "mid_year": true
+    }
+  },
+  {
+    "id": 360,
+    "fn": "pe",
+    "args": {
+      "g": -1.269623,
+      "roe": -0.068601,
+      "ke": 0.213654,
+      "n": 19,
+      "gde": 0.37781,
+      "nde": 0.151941,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 361,
+    "fn": "pe",
+    "args": {
+      "g": 0.249592,
+      "roe": 0.407484,
+      "ke": 0.029484,
+      "n": 27,
+      "gde": 0.822279,
+      "nde": 0.207745,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 362,
+    "fn": "pe",
+    "args": {
+      "g": 0.050593,
+      "roe": 0.048909,
+      "ke": 0.119991,
+      "n": 35,
+      "gde": 0.389822,
+      "nde": 0.033521,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 363,
+    "fn": "pe",
+    "args": {
+      "g": 0.294802,
+      "roe": 0.091961,
+      "ke": 0.11917,
+      "n": 12,
+      "gde": 0.005025,
+      "nde": 0.281416,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 364,
+    "fn": "pe",
+    "args": {
+      "g": 0.424058,
+      "roe": 0.213131,
+      "ke": 0.03946,
+      "n": 18,
+      "gde": 0.286283,
+      "nde": 0.258443,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 365,
+    "fn": "pe",
+    "args": {
+      "g": -0.286269,
+      "roe": 0.352687,
+      "ke": 0.225818,
+      "n": 23,
+      "gde": 0.67824,
+      "nde": 0.08485,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 366,
+    "fn": "pe",
+    "args": {
+      "g": 0.173605,
+      "roe": 0.095858,
+      "ke": 0.3108,
+      "n": 7,
+      "gde": 0.461542,
+      "nde": 0.405661,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 367,
+    "fn": "pe",
+    "args": {
+      "g": 0.147086,
+      "roe": 0.427429,
+      "ke": 0.050999,
+      "n": 15,
+      "gde": 0.731981,
+      "nde": 0.133429,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 368,
+    "fn": "pe",
+    "args": {
+      "g": 0.134418,
+      "roe": 0.336264,
+      "ke": 0.271842,
+      "n": 3,
+      "gde": 0.665922,
+      "nde": 0.429983,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 369,
+    "fn": "pe",
+    "args": {
+      "g": 0.198345,
+      "roe": 0.246549,
+      "ke": 0.057316,
+      "n": 33,
+      "gde": 0.121586,
+      "nde": 0.589501,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 370,
+    "fn": "pe",
+    "args": {
+      "g": 0.414975,
+      "roe": 0.358005,
+      "ke": 0.101822,
+      "n": 11,
+      "gde": 0.771386,
+      "nde": 0.613482,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 371,
+    "fn": "pe",
+    "args": {
+      "g": -0.832369,
+      "roe": 0.299232,
+      "ke": -0.590588,
+      "n": 37,
+      "gde": 0.320747,
+      "nde": 0.365987,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 372,
+    "fn": "pe",
+    "args": {
+      "g": -0.00519,
+      "roe": 0.20405,
+      "ke": 0.23164,
+      "n": 11,
+      "gde": 0.751914,
+      "nde": 0.058255,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 373,
+    "fn": "pe",
+    "args": {
+      "g": 0.211341,
+      "roe": 0.005565,
+      "ke": 0.346935,
+      "n": 31,
+      "gde": 0.639706,
+      "nde": 0.700255,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 374,
+    "fn": "pe",
+    "args": {
+      "g": 0.003276,
+      "roe": 0.263493,
+      "ke": 0.060098,
+      "n": 19,
+      "gde": 0.324754,
+      "nde": 0.318941,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 375,
+    "fn": "pe",
+    "args": {
+      "g": -1.080871,
+      "roe": -0.066595,
+      "ke": 0.234451,
+      "n": 34,
+      "gde": 0.578498,
+      "nde": 0.886237,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 376,
+    "fn": "pe",
+    "args": {
+      "g": 0.391056,
+      "roe": -0.023165,
+      "ke": 0.033844,
+      "n": 0,
+      "gde": 0.640868,
+      "nde": 0.077002,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 377,
+    "fn": "pe",
+    "args": {
+      "g": 0.010101,
+      "roe": 0.440969,
+      "ke": 0.311174,
+      "n": 1,
+      "gde": 0.220133,
+      "nde": 0.863039,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 378,
+    "fn": "pe",
+    "args": {
+      "g": 0.17762,
+      "roe": 0.111528,
+      "ke": 0.132296,
+      "n": 16,
+      "gde": 0.027897,
+      "nde": 0.433583,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 379,
+    "fn": "pe",
+    "args": {
+      "g": -0.025514,
+      "roe": 0.197514,
+      "ke": 0.034785,
+      "n": 43,
+      "gde": 0.038566,
+      "nde": 0.090985,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 380,
+    "fn": "pe",
+    "args": {
+      "g": -0.026622,
+      "roe": 0.393977,
+      "ke": 0.328732,
+      "n": 0,
+      "gde": 0.697604,
+      "nde": 0.589917,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 381,
+    "fn": "pe",
+    "args": {
+      "g": 0.387012,
+      "roe": -0.036138,
+      "ke": 0.298379,
+      "n": -3,
+      "gde": 0.64075,
+      "nde": 0.307665,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 382,
+    "fn": "pe",
+    "args": {
+      "g": 0.30238,
+      "roe": 0.412911,
+      "ke": 0.056183,
+      "n": 28,
+      "gde": 0.392194,
+      "nde": 0.019677,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 383,
+    "fn": "pe",
+    "args": {
+      "g": -0.4001,
+      "roe": 0.424084,
+      "ke": 0.257225,
+      "n": 27,
+      "gde": 0.521049,
+      "nde": 0.493445,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 384,
+    "fn": "pe",
+    "args": {
+      "g": -0.58236,
+      "roe": 0.214791,
+      "ke": 0.24238,
+      "n": -3,
+      "gde": 0.810057,
+      "nde": 0.617941,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 385,
+    "fn": "pe",
+    "args": {
+      "g": -0.045034,
+      "roe": 0.028566,
+      "ke": 0.19657,
+      "n": 29,
+      "gde": 0.590953,
+      "nde": 0.54379,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 386,
+    "fn": "pe",
+    "args": {
+      "g": 0.273009,
+      "roe": 0.347092,
+      "ke": 0.199059,
+      "n": 31,
+      "gde": 0.21166,
+      "nde": 0.005202,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 387,
+    "fn": "pe",
+    "args": {
+      "g": 0.409361,
+      "roe": 0.251969,
+      "ke": 0.279565,
+      "n": 44,
+      "gde": 0.035681,
+      "nde": 0.076383,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 388,
+    "fn": "pe",
+    "args": {
+      "g": 0.39865,
+      "roe": 0.145093,
+      "ke": -0.752132,
+      "n": 15,
+      "gde": 0.462148,
+      "nde": 0.854334,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 389,
+    "fn": "pe",
+    "args": {
+      "g": 0.316278,
+      "roe": 0.11587,
+      "ke": 0.107768,
+      "n": 32,
+      "gde": 0.798156,
+      "nde": 0.301525,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 390,
+    "fn": "pe",
+    "args": {
+      "g": 0.165078,
+      "roe": 0.264484,
+      "ke": 0.063977,
+      "n": 31,
+      "gde": 0.102164,
+      "nde": 0.757705,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 391,
+    "fn": "pe",
+    "args": {
+      "g": 0.023961,
+      "roe": 0.172358,
+      "ke": 0.308432,
+      "n": 19,
+      "gde": 0.406609,
+      "nde": 0.631369,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 392,
+    "fn": "pe",
+    "args": {
+      "g": 0.075622,
+      "roe": -0.079953,
+      "ke": -0.554301,
+      "n": 12,
+      "gde": 0.235495,
+      "nde": 0.22214,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 393,
+    "fn": "pe",
+    "args": {
+      "g": 0.061079,
+      "roe": 0.404996,
+      "ke": 0.077091,
+      "n": 11,
+      "gde": 0.808707,
+      "nde": 0.424194,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 394,
+    "fn": "pe",
+    "args": {
+      "g": 0.254973,
+      "roe": 0.351836,
+      "ke": 0.170871,
+      "n": 13,
+      "gde": 0.335165,
+      "nde": 0.721221,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 395,
+    "fn": "pe",
+    "args": {
+      "g": -0.027675,
+      "roe": 0.025708,
+      "ke": 0.059473,
+      "n": 18,
+      "gde": 0.753297,
+      "nde": 0.095634,
+      "tv": "convergencia",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 396,
+    "fn": "pe",
+    "args": {
+      "g": 0.070156,
+      "roe": 0.019587,
+      "ke": 0.070694,
+      "n": 44,
+      "gde": 0.173413,
+      "nde": 0.427469,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 397,
+    "fn": "pe",
+    "args": {
+      "g": -0.579941,
+      "roe": 0.432468,
+      "ke": 0.034508,
+      "n": 12,
+      "gde": 0.644896,
+      "nde": 0.011891,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 398,
+    "fn": "pe",
+    "args": {
+      "g": 0.334224,
+      "roe": 0.335094,
+      "ke": 0.236131,
+      "n": 16,
+      "gde": 0.132229,
+      "nde": 0.784867,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 399,
+    "fn": "pe",
+    "args": {
+      "g": 0.233921,
+      "roe": -0.055149,
+      "ke": 0.173582,
+      "n": 13,
+      "gde": 0.81315,
+      "nde": 0.392115,
+      "tv": "convergencia"
+    }
+  },
+  {
+    "id": 400,
+    "fn": "pe",
+    "args": {
+      "g": -1.079782,
+      "roe": 0.176323,
+      "ke": 0.166074,
+      "n": 43,
+      "gde": 0.654811,
+      "nde": 0.846896,
+      "tv": "gordon",
+      "gp": 0.091342,
+      "roe_tv": 0.104407,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 401,
+    "fn": "pe",
+    "args": {
+      "g": 0.15357,
+      "roe": 0.043933,
+      "ke": 0.07856,
+      "n": 10,
+      "gde": 0.517146,
+      "nde": 0.176268,
+      "tv": "gordon",
+      "gp": 0.149724,
+      "roe_tv": -0.009451,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 402,
+    "fn": "pe",
+    "args": {
+      "g": 0.128432,
+      "roe": 0.413921,
+      "ke": 0.014774,
+      "n": 7,
+      "gde": 0.456695,
+      "nde": 0.089538,
+      "tv": "gordon",
+      "gp": 0.172712,
+      "roe_tv": 0.040186,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 403,
+    "fn": "pe",
+    "args": {
+      "g": -0.024369,
+      "roe": 0.176274,
+      "ke": 0.342333,
+      "n": 5,
+      "gde": 0.6227,
+      "nde": 0.114529,
+      "tv": "gordon",
+      "gp": 0.218876,
+      "roe_tv": 0.21099,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 404,
+    "fn": "pe",
+    "args": {
+      "g": 0.336592,
+      "roe": 0.402489,
+      "ke": -0.119534,
+      "n": 7,
+      "gde": 0.247833,
+      "nde": 0.791419,
+      "tv": "gordon",
+      "gp": 0.019277,
+      "roe_tv": 0.232838,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 405,
+    "fn": "pe",
+    "args": {
+      "g": 0.133457,
+      "roe": 0.098156,
+      "ke": 0.064179,
+      "n": 32,
+      "gde": 0.328022,
+      "nde": 0.695294,
+      "tv": "gordon",
+      "gp": 0.034754,
+      "roe_tv": 0.021335,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 406,
+    "fn": "pe",
+    "args": {
+      "g": 0.373379,
+      "roe": 0.072509,
+      "ke": 0.105152,
+      "n": 3,
+      "gde": 0.870535,
+      "nde": 0.60868,
+      "tv": "gordon",
+      "gp": 0.141975,
+      "roe_tv": 0.159795,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 407,
+    "fn": "pe",
+    "args": {
+      "g": 0.041928,
+      "roe": 0.248669,
+      "ke": 0.293723,
+      "n": 26,
+      "gde": 0.330043,
+      "nde": 0.070286,
+      "tv": "gordon",
+      "gp": 0.181468,
+      "roe_tv": 0.155566,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 408,
+    "fn": "pe",
+    "args": {
+      "g": -0.02415,
+      "roe": 0.361506,
+      "ke": 0.309094,
+      "n": 34,
+      "gde": 0.612588,
+      "nde": 0.261588,
+      "tv": "gordon",
+      "gp": -1.127814,
+      "roe_tv": 0.317074,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 409,
+    "fn": "pe",
+    "args": {
+      "g": -0.022434,
+      "roe": 0.012486,
+      "ke": 0.223495,
+      "n": 10,
+      "gde": 0.410469,
+      "nde": 0.492973,
+      "tv": "gordon",
+      "gp": 0.182119,
+      "roe_tv": 0.189333,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 410,
+    "fn": "pe",
+    "args": {
+      "g": 0.43712,
+      "roe": 0.224895,
+      "ke": -0.305292,
+      "n": 12,
+      "gde": 0.376818,
+      "nde": 0.627599,
+      "tv": "gordon",
+      "gp": 0.029476,
+      "roe_tv": 0.095817,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 411,
+    "fn": "pe",
+    "args": {
+      "g": 0.055366,
+      "roe": 0.305547,
+      "ke": 0.172961,
+      "n": 25,
+      "gde": 0.226532,
+      "nde": 0.10572,
+      "tv": "gordon",
+      "gp": 0.046529,
+      "roe_tv": 0.251773,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 412,
+    "fn": "pe",
+    "args": {
+      "g": 0.14534,
+      "roe": 0.261012,
+      "ke": 0.151376,
+      "n": 21,
+      "gde": 0.53274,
+      "nde": 0.633249,
+      "tv": "gordon",
+      "gp": 0.03874,
+      "roe_tv": 0.004926,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 413,
+    "fn": "pe",
+    "args": {
+      "g": 0.101971,
+      "roe": 0.284769,
+      "ke": 0.288834,
+      "n": 22,
+      "gde": 0.335325,
+      "nde": 0.225665,
+      "tv": "gordon",
+      "gp": 0.121159,
+      "roe_tv": 0.198605,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 414,
+    "fn": "pe",
+    "args": {
+      "g": 0.281933,
+      "roe": 0.354987,
+      "ke": 0.327546,
+      "n": -1,
+      "gde": 0.167652,
+      "nde": 0.218125,
+      "tv": "gordon",
+      "gp": 0.090572,
+      "roe_tv": 0.062517,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 415,
+    "fn": "pe",
+    "args": {
+      "g": 0.269089,
+      "roe": 0.164773,
+      "ke": 0.156029,
+      "n": -2,
+      "gde": 0.383194,
+      "nde": 0.197835,
+      "tv": "gordon",
+      "gp": 0.144934,
+      "roe_tv": 0.13763,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 416,
+    "fn": "pe",
+    "args": {
+      "g": 0.446493,
+      "roe": 0.148516,
+      "ke": 0.329459,
+      "n": 2,
+      "gde": 0.037595,
+      "nde": 0.413274,
+      "tv": "gordon",
+      "gp": 0.079874,
+      "roe_tv": 0.191307,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 417,
+    "fn": "pe",
+    "args": {
+      "g": 0.140156,
+      "roe": 0.122007,
+      "ke": 0.271203,
+      "n": 0,
+      "gde": 0.29252,
+      "nde": 0.854278,
+      "tv": "gordon",
+      "gp": 0.134965,
+      "roe_tv": 0.226348,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 418,
+    "fn": "pe",
+    "args": {
+      "g": 0.196379,
+      "roe": 0.415723,
+      "ke": 0.217264,
+      "n": 13,
+      "gde": 0.188901,
+      "nde": 0.100427,
+      "tv": "gordon",
+      "gp": -0.666991,
+      "roe_tv": 0.297961,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 419,
+    "fn": "pe",
+    "args": {
+      "g": -0.582703,
+      "roe": 0.034534,
+      "ke": 0.259155,
+      "n": 28,
+      "gde": 0.330437,
+      "nde": 0.551387,
+      "tv": "gordon",
+      "gp": 0.161316,
+      "roe_tv": null,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 420,
+    "fn": "pe",
+    "args": {
+      "g": 0.437723,
+      "roe": 0.067966,
+      "ke": 0.270824,
+      "n": 7,
+      "gde": 0.010997,
+      "nde": 0.575227,
+      "tv": "gordon",
+      "gp": 0.005805,
+      "roe_tv": 0.260639,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 421,
+    "fn": "pe",
+    "args": {
+      "g": 0.387471,
+      "roe": 0.221771,
+      "ke": 0.239147,
+      "n": -3,
+      "gde": 0.685454,
+      "nde": 0.165169,
+      "tv": "gordon",
+      "gp": 0.141989,
+      "roe_tv": 0.151519,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 422,
+    "fn": "pe",
+    "args": {
+      "g": 0.096616,
+      "roe": -0.028197,
+      "ke": 0.127394,
+      "n": 32,
+      "gde": 0.402184,
+      "nde": 0.520825,
+      "tv": "gordon",
+      "gp": 0.250701,
+      "roe_tv": 0.085732,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 423,
+    "fn": "pe",
+    "args": {
+      "g": -0.716903,
+      "roe": 0.334297,
+      "ke": 0.033445,
+      "n": 35,
+      "gde": 0.1914,
+      "nde": 0.471953,
+      "tv": "gordon",
+      "gp": 0.261828,
+      "roe_tv": null,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 424,
+    "fn": "pe",
+    "args": {
+      "g": -0.652889,
+      "roe": 0.234901,
+      "ke": 0.087144,
+      "n": 25,
+      "gde": 0.019252,
+      "nde": 0.253765,
+      "tv": "gordon",
+      "gp": 0.157889,
+      "roe_tv": 0.090566,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 425,
+    "fn": "pe",
+    "args": {
+      "g": 0.012347,
+      "roe": 0.239903,
+      "ke": 0.328049,
+      "n": 34,
+      "gde": 0.800737,
+      "nde": 0.031471,
+      "tv": "gordon",
+      "gp": 0.104505,
+      "roe_tv": 0.201567,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 426,
+    "fn": "pe",
+    "args": {
+      "g": 0.092088,
+      "roe": 0.110491,
+      "ke": 0.345554,
+      "n": 39,
+      "gde": 0.075909,
+      "nde": 0.443789,
+      "tv": "gordon",
+      "gp": 0.267637,
+      "roe_tv": 0.000515,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 427,
+    "fn": "pe",
+    "args": {
+      "g": 0.422873,
+      "roe": 0.220649,
+      "ke": 0.227032,
+      "n": 21,
+      "gde": 0.560868,
+      "nde": 0.897247,
+      "tv": "gordon",
+      "gp": 0.005834,
+      "roe_tv": 0.064841,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 428,
+    "fn": "pe",
+    "args": {
+      "g": 0.411404,
+      "roe": 0.103439,
+      "ke": -1.000594,
+      "n": 22,
+      "gde": 0.324167,
+      "nde": 0.364596,
+      "tv": "gordon",
+      "gp": 0.177108,
+      "roe_tv": -0.016051,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 429,
+    "fn": "pe",
+    "args": {
+      "g": 0.054158,
+      "roe": 0.162601,
+      "ke": 0.159696,
+      "n": 8,
+      "gde": 0.616372,
+      "nde": 0.642178,
+      "tv": "gordon",
+      "gp": 0.188669,
+      "roe_tv": 0.244097,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 430,
+    "fn": "pe",
+    "args": {
+      "g": 0.232591,
+      "roe": 0.110392,
+      "ke": 0.275886,
+      "n": 21,
+      "gde": 0.460833,
+      "nde": 0.147721,
+      "tv": "gordon",
+      "gp": 0.064915,
+      "roe_tv": 0.142128,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 431,
+    "fn": "pe",
+    "args": {
+      "g": 0.187576,
+      "roe": 0.132405,
+      "ke": 0.177336,
+      "n": 9,
+      "gde": 0.321964,
+      "nde": 0.38102,
+      "tv": "gordon",
+      "gp": -1.259702,
+      "roe_tv": -0.048571,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 432,
+    "fn": "pe",
+    "args": {
+      "g": 0.280023,
+      "roe": -0.020134,
+      "ke": 0.158176,
+      "n": 42,
+      "gde": 0.608034,
+      "nde": 0.809385,
+      "tv": "gordon",
+      "gp": 0.060229,
+      "roe_tv": 0.235931,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 433,
+    "fn": "pe",
+    "args": {
+      "g": 0.414812,
+      "roe": 0.188109,
+      "ke": 0.116794,
+      "n": 10,
+      "gde": 0.134806,
+      "nde": 0.632378,
+      "tv": "gordon",
+      "gp": 0.075967,
+      "roe_tv": 0.096222,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 434,
+    "fn": "pe",
+    "args": {
+      "g": 0.079585,
+      "roe": 0.384306,
+      "ke": 0.02627,
+      "n": 32,
+      "gde": 0.429274,
+      "nde": 0.155237,
+      "tv": "gordon",
+      "gp": 0.199131,
+      "roe_tv": 0.05133,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 435,
+    "fn": "pe",
+    "args": {
+      "g": 0.031503,
+      "roe": 0.110057,
+      "ke": 0.185793,
+      "n": 20,
+      "gde": 0.761473,
+      "nde": 0.39178,
+      "tv": "gordon",
+      "gp": 0.206686,
+      "roe_tv": 0.183856,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 436,
+    "fn": "pe",
+    "args": {
+      "g": 0.132144,
+      "roe": 0.142278,
+      "ke": 0.349133,
+      "n": 11,
+      "gde": 0.303812,
+      "nde": 0.746182,
+      "tv": "gordon",
+      "gp": 0.133488,
+      "roe_tv": 0.014186,
+      "politica_tv": "encerra"
+    }
+  },
+  {
+    "id": 437,
+    "fn": "pe",
+    "args": {
+      "g": -0.82195,
+      "roe": 0.396751,
+      "ke": -0.147231,
+      "n": 29,
+      "gde": 0.05103,
+      "nde": 0.705383,
+      "tv": "gordon",
+      "gp": 0.139455,
+      "roe_tv": 0.160191,
+      "politica_tv": "continua",
+      "mid_year": true
+    }
+  },
+  {
+    "id": 438,
+    "fn": "pe",
+    "args": {
+      "g": 0.137016,
+      "roe": 0.354609,
+      "ke": 0.049911,
+      "n": 9,
+      "gde": 0.465809,
+      "nde": 0.624711,
+      "tv": "gordon",
+      "gp": -0.5768,
+      "roe_tv": -0.049051,
+      "politica_tv": "continua"
+    }
+  },
+  {
+    "id": 439,
+    "fn": "pe",
+    "args": {
+      "g": 0.121967,
+      "roe": 0.431681,
+      "ke": 0.334736,
+      "n": 30,
+      "gde": 0.479472,
+      "nde": 0.817714,
+      "tv": "gordon",
+      "gp": 0.132548,
+      "roe_tv": 0.251837,
+      "politica_tv": "encerra",
+      "mid_year": true
+    }
+  }
+]
