@@ -237,7 +237,16 @@ def test_cobertura_da_fixture_no_harness():
     assert sum(1 for x in py if x is None) >= 20
     assert sum(1 for x in py if x is not None) >= 200, "poucos finitos: piso do D6 (>=200) nao bate"
     assert len(vetores) >= 300
-    combos = {(v["fn"], v["args"]["tv"]) for v in vetores}
+    # `tv` e OPCIONAL na fixture: desde a 4B.1 ha vetores sem a chave, de
+    # proposito, para exercitar o default por presenca do motor ('book').
+    # Indexar direto (`v["args"]["tv"]`) estoura KeyError neles — foi o que
+    # esta linha fazia, escrita no FIX 5 da revisao final da 4A, na mesma
+    # revisao que documentou esta exata classe de bug em duas funcoes de
+    # tests/test_vetores_paridade.py (comentario nas linhas 110-129 acima) e
+    # nao percebeu que a estava introduzindo numa terceira, aqui. `.get` e
+    # obrigatorio: os extras (None, 'ic', 'spread') nao afetam `faltando`,
+    # que e um "contem pelo menos" sobre as 9 combinacoes canonicas.
+    combos = {(v["fn"], v["args"].get("tv")) for v in vetores}
     esperados = {(fn, tv) for fn in ("ev_nopat", "ev_ebitda", "pe")
                  for tv in ("book", "convergencia", "gordon")}
     faltando = esperados - combos
