@@ -50,7 +50,7 @@ _bytecode_original = sys.dont_write_bytecode
 sys.dont_write_bytecode = True
 try:
     sys.path.insert(0, str(_VENDOR_SCRIPTS))
-    from justos import ev_ebitda, ev_nopat, pe  # noqa: E402
+    from justos import ev_ebitda, ev_nopat, pe, tv_canon  # noqa: E402
 finally:
     sys.dont_write_bytecode = _bytecode_original
 
@@ -221,23 +221,69 @@ def _bloco_patologico() -> list[dict]:
 
     # --- 13. resíduo da 4A — aliases legados de tv_canon ('ic'->'book',
     # 'spread'->'gordon') e tv AUSENTE (cai no default 'book' do motor).
-    # Nenhum vetor da fixture batia estes três caminhos antes desta seção: um
-    # alias transposto no espelho ('ic'->'gordon', por exemplo) ou um default
-    # ausente resolvido por '??' em vez de checagem de presença embarcaria em
-    # silêncio (ver task-4b-1-brief.md). Reusa DE PROPÓSITO os mesmos
-    # parâmetros dos casos saudáveis logo acima (mesmo g/roic-roe/w-ke/n, e
-    # mesmo roic_book/roe_book=0.12/0.13 nos dois 'ic') para que o resultado
-    # seja comparável por inspeção: 'ic' com roic_book=0.12 tem de bater
-    # exatamente o 'book' de mesmo roic_book, dois blocos acima — só o nome
-    # da convenção muda. tv ausente reusa g/roic-roe/w-ke/n sem roic_book/
-    # roe_book (cai no ramo médio=marginal do 'book', igual a um 'book'
-    # explícito sem book informado).
+    # Nenhum vetor da fixture batia estes três caminhos antes desta seção.
+    # Os aliases fecham uma lacuna real: um alias transposto no espelho
+    # ('ic'->'gordon', por exemplo) diverge nestes vetores — provado por
+    # mutação (task-4b-1-review.md, item 1: mutante M1 pega, 2 divergências
+    # de finitude + 2 numéricas).
+    #
+    # tv AUSENTE fecha uma lacuna DIFERENTE e mais estreita do que o
+    # comentário original desta seção afirmava (retificado pela revisão de
+    # 4B.1 — task-4b-1-review.md, achado F1). O que estes dois vetores
+    # travam é o VALOR do default do ramo 'else' do motor ('book', não outra
+    # coisa — provado por mutação M2, que troca esse default por 'gordon' e
+    # o pega). Eles NÃO travam a distinção entre resolver o default por
+    # PRESENÇA de chave e resolver por '??' (`args.tv ?? 'book'`): para uma
+    # chave AUSENTE as duas resoluções são IDÊNTICAS por construção — só um
+    # `tv: null` EXPLÍCITO as separa, e nenhum vetor desta seção usa null
+    # (mutante M3, que reintroduz o bug do '??' desta classe no espelho,
+    # roda LIMPO sobre a fixture inteira — 0 divergências em 448 vetores,
+    # reconfirmado após a Seção 14 abaixo).
+    # Essa distinção presença×'??' para `tv` é travada FORA da fixture, por
+    # test_paridade_js.py::test_tv_e_politica_tv_null_aliases_e_tv_ausente_fora_da_fixture.
+    # A Seção 14 abaixo fecha o mesmo tipo de lacuna DENTRO da fixture, mas
+    # para `politica_tv`, não para `tv` (achado F2 da mesma revisão).
+    #
+    # Reusa DE PROPÓSITO os mesmos parâmetros dos casos saudáveis logo acima
+    # (mesmo g/roic-roe/w-ke/n, e mesmo roic_book/roe_book=0.12/0.13 nos
+    # dois 'ic') para que o resultado seja comparável por inspeção: 'ic' com
+    # roic_book=0.12 tem de bater exatamente o 'book' de mesmo roic_book,
+    # dois blocos acima — só o nome da convenção muda. tv ausente reusa
+    # g/roic-roe/w-ke/n sem roic_book/roe_book (cai no ramo médio=marginal
+    # do 'book', igual a um 'book' explícito sem book informado).
     v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10, tv="ic", roic_book=0.12))
     v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="ic", roe_book=0.13))
     v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10, tv="spread", roic_tv=0.10, gp=0.025))
     v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="spread", roe_tv=0.09, gp=0.025))
     v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10))  # tv ausente -> default 'book'
     v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10))  # tv ausente -> default 'book'
+
+    # --- 14. presença×'??' para `politica_tv` — achado F2 da revisão de
+    # 4B.1 (task-4b-1-review.md). A fixture não tinha vetor NENHUM cobrindo
+    # o defaulting por PRESENÇA de `politica_tv`: só um teste in-memory fora
+    # da fixture (test_paridade_js.py::
+    # test_tv_e_politica_tv_null_aliases_e_tv_ausente_fora_da_fixture)
+    # travava a regressão CRITICAL que a revisão final da 4A corrigiu (um
+    # espelho que resolvesse `args.politica_tv ?? 'continua'` trata ausência
+    # e null presente do mesmo jeito; o Python só aplica 'continua' na
+    # AUSÊNCIA da chave — assinatura de pe() no vendor). `politica_tv` só
+    # entra no ramo 'gordon' de pe() (justos.py:246): `ret_tv = (1 -
+    # gp/roe_tv) + (caixa*(gp/roe_tv) if politica_tv == 'continua' else
+    # 0.0)`, com caixa = gde - nde (justos.py:236). Um `politica_tv=None`
+    # explícito não bate a string 'continua' e cai no mesmo ramo que
+    # 'encerra' (o termo de caixa SAI); ausente cai no default Python
+    # 'continua' (o termo ENTRA). Reusa DE PROPÓSITO os mesmos parâmetros do
+    # par 'continua'/'encerra' saudável da Seção 11 (mesmo g/roe/ke/n/gde/
+    # nde/roe_tv/gp; caixa=0.20, gp=0.03, caixa*(gp/roe_tv)=0.06 ≠ 0) para
+    # que o resultado seja comparável por inspeção: o vetor com
+    # `politica_tv` AUSENTE tem que bater EXATAMENTE o 'continua' daquele
+    # par, e o vetor com `politica_tv=None` tem que bater EXATAMENTE o
+    # 'encerra' daquele par — só o mecanismo de resolução muda, não o ramo
+    # final.
+    v.append(_vetor("pe", g=0.05, roe=0.15, ke=0.11, n=10, gde=0.30, nde=0.10, tv="gordon",
+                     roe_tv=0.10, gp=0.03, politica_tv=None))  # null explícito -> ramo 'else' (== 'encerra')
+    v.append(_vetor("pe", g=0.05, roe=0.15, ke=0.11, n=10, gde=0.30, nde=0.10, tv="gordon",
+                     roe_tv=0.10, gp=0.03))  # politica_tv ausente -> default Python 'continua'
 
     return v
 

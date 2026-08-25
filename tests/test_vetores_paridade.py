@@ -7,7 +7,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 FIXTURE = RAIZ / "tests" / "fixtures" / "vetores_paridade.json"
 SCRIPTS = RAIZ / "skills" / "er-valuation" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from vetores_paridade import avaliar_python, gerar  # noqa: E402
+from vetores_paridade import avaliar_python, gerar, tv_canon  # noqa: E402
 
 
 def test_gerador_e_deterministico():
@@ -31,9 +31,14 @@ def test_fixture_cobre_as_tres_funcoes():
 
 
 def test_fixture_cobre_as_tres_convencoes_terminais():
+    """As tres canonicas presentes E o fechamento do dominio conhecido (F5,
+    task-4b-1-review.md): o `>=` sozinho deixa um `tv` desconhecido entrar
+    calado -- o motor o trataria como 'book' pelo `else` de `tv_canon`, e
+    fixar comportamento nao-especificado nao e trabalho desta fixture."""
     vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
     tvs = {v["args"].get("tv") for v in vetores}
     assert {"book", "convergencia", "gordon"} <= tvs
+    assert tvs <= {"book", "convergencia", "gordon", "ic", "spread", None}
 
 
 def test_fixture_cobre_os_aliases_legados_de_convencao():
@@ -45,10 +50,50 @@ def test_fixture_cobre_os_aliases_legados_de_convencao():
 
 
 def test_fixture_cobre_tv_ausente():
-    """Ausente cai no default 'book' do motor — caminho distinto de tv='book'
-    explicito no espelho, que resolve o default por presenca da chave."""
+    """Trava o VALOR do default do ramo 'else' do motor ('book') no caminho
+    de resolucao por AUSENCIA de chave -- nao a distincao presenca x '??'
+    (retificado pela revisao de 4B.1, task-4b-1-review.md achado F1): para
+    uma chave ausente, checagem de presenca e '??' sao identicas por
+    construcao -- so um `tv: null` EXPLICITO as separa, e nenhum vetor desta
+    fixture usa tv null. Essa distincao para `tv` e travada FORA da fixture
+    por test_paridade_js.py::test_tv_e_politica_tv_null_aliases_e_tv_
+    ausente_fora_da_fixture; para `politica_tv` (mesmo padrao de default no
+    Python) ela ESTA na fixture, ver
+    test_fixture_cobre_politica_tv_ausente_e_null_explicito abaixo."""
     vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert any("tv" not in v["args"] for v in vetores)
+
+
+def test_fixture_cobre_politica_tv_ausente_e_null_explicito():
+    """F2 (task-4b-1-review.md): o CRITICAL da revisao final da 4A -- o
+    motor so aplica o default 'continua' de politica_tv na AUSENCIA da
+    chave (assinatura de pe() no vendor); um None explicito cai no mesmo
+    ramo que 'encerra' (justos.py:246) -- nao tinha vetor NENHUM na fixture,
+    so um teste in-memory fora dela (test_paridade_js.py::
+    test_tv_e_politica_tv_null_aliases_e_tv_ausente_fora_da_fixture)."""
+    vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+    def gordon_pe(v):
+        return v["fn"] == "pe" and v["args"].get("tv") == "gordon"
+
+    assert any(gordon_pe(v) and "politica_tv" not in v["args"] for v in vetores)
+    assert any(gordon_pe(v) and "politica_tv" in v["args"] and v["args"]["politica_tv"] is None
+               for v in vetores)
+
+
+def test_politica_tv_ausente_e_null_discriminam_valores_no_motor():
+    """A distincao acima e MATERIAL, nao decorativa: com os MESMOS
+    parametros fora de politica_tv (o par que a Secao 14 do gerador
+    acrescenta), ausente (default Python 'continua') e None explicito
+    (mesmo ramo que 'encerra') tem que devolver valores DIFERENTES no motor
+    -- e essa diferenca que um espelho resolvendo por `??` (trata os dois
+    igual) apagaria."""
+    base = {"g": 0.05, "roe": 0.15, "ke": 0.11, "n": 10, "gde": 0.30, "nde": 0.10,
+            "tv": "gordon", "roe_tv": 0.10, "gp": 0.03}
+    ausente = avaliar_python([{"id": 0, "fn": "pe", "args": dict(base)}])[0]
+    nulo = avaliar_python([{"id": 1, "fn": "pe", "args": dict(base, politica_tv=None)}])[0]
+    assert ausente is not None and nulo is not None, "guarda disparou onde nao deveria"
+    assert ausente != nulo, "ausente e null bateram no mesmo valor -- nao discrimina"
 
 
 def test_fixture_exercita_book_com_medio_diferente_do_marginal():
@@ -56,7 +101,10 @@ def test_fixture_exercita_book_com_medio_diferente_do_marginal():
     vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
     def separado(v):
         a = v["args"]
-        if a.get("tv") != "book":
+        # F4 (task-4b-1-review.md): resolve o alias ANTES de comparar --
+        # senao os vetores tv="ic" (book de verdade, so o nome do alias
+        # muda) escapam da contagem por comparar contra a string crua.
+        if tv_canon(a.get("tv")) != "book":
             return False
         med = a.get("roic_book") if v["fn"] != "pe" else a.get("roe_book")
         marg = a.get("roic") if v["fn"] != "pe" else a.get("roe")

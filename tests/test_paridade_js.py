@@ -24,7 +24,7 @@ from vetores_paridade import avaliar_python, ev_nopat, pe  # noqa: E402
 
 TAU = 1e-12
 # FOLGA_MINIMA: quantas vezes TAU tem de estar acima do erro observado.
-# MEDIDO, nao escolhido: sobre os 440 vetores da fixture o erro relativo
+# MEDIDO, nao escolhido: sobre os 448 vetores da fixture o erro relativo
 # maximo e 2.07e-15 (~9 ULP de um double — o ruido esperado de somar ~30
 # termos com potencias), o que da folga de 482x contra TAU. O piso de 100x
 # deixa espaco para variacao entre maquinas e versoes do node sem deixar de
@@ -109,24 +109,42 @@ def test_tau_tem_folga_medida():
 
 # ---------------------------------------------------------------------------
 # Casos "fora da fixture" (revisao final da fatia 4A — ver relatorio
-# task-4a-final-fixes-report.md). `tv`/`politica_tv` explicitos como null, os
-# aliases de `tv_canon` ('ic'/'spread') e `tv` ausente NAO podem entrar em
-# tests/fixtures/vetores_paridade.json: tests/test_vetores_paridade.py (fora
-# do escopo desta revisao) fixa o dominio de `args["tv"]` por IGUALDADE
-# ESTRITA a {"book","convergencia","gordon"}
-# (`test_fixture_cobre_as_tres_convencoes_terminais`) e indexa `a["tv"]` sem
-# `.get()` em `test_fixture_exercita_book_com_medio_diferente_do_marginal` —
-# um vetor com `tv` ausente ali estoura KeyError, e um vetor com tv
-# null/alias quebra a igualdade estrita. Os dois sao testes fora da lista de
-# arquivos desta tarefa; a paridade destes casos e verificada aqui, com
-# vetores construidos em memoria via `_lado_js_adhoc`, sem tocar a fixture
-# commitada nem o teste que a governa.
+# task-4a-final-fixes-report.md). Historico, RETIFICADO pela revisao da 4B.1
+# (task-4b-1-review.md, achados F1-F3): ate f258862,
+# tests/test_vetores_paridade.py fixava o dominio de `args["tv"]` por
+# IGUALDADE ESTRITA a {"book","convergencia","gordon"} e indexava `a["tv"]`
+# sem `.get()` em duas funcoes — um vetor com `tv` ausente ou alias
+# quebraria a suite ali. f258862 e 1221d04 corrigiram os tres sitios (as
+# duas funcoes de test_vetores_paridade.py e o proprio `combos` deste
+# arquivo, em `test_cobertura_da_fixture_no_harness` abaixo) com equalidade
+# relaxada + `.get()`; os aliases ('ic'/'spread') e `tv` ausente estao na
+# fixture commitada DESDE ENTAO. A premissa de que eles "nao podem entrar"
+# morreu com esses dois commits.
 #
-# `gp: null` e `n` nao-inteiro tem um motivo DIFERENTE para ficar de fora: o
-# Python ESTOURA (TypeError) para os dois — nao ha valor `float | None`
-# nenhum para `avaliar_python` devolver, e abrir uma excecao dentro daquela
-# funcao so para estes vetores contaminaria o contrato que as outras 440
-# linhas respeitam.
+# O que efetivamente continua fora da fixture, e por que:
+# - `tv: null` explicito: sem barreira estrutural remanescente (`.get()`
+#   devolve None tanto para ausente quanto para null, e o fechamento de
+#   dominio de `test_fixture_cobre_as_tres_convencoes_terminais` aceita
+#   None) — so nao foi acrescentado. A distincao presenca-x-null para `tv`
+#   continua coberta SO aqui (vetores 0/1 abaixo).
+# - `politica_tv: null` explicito: idem, ate a correcao dos achados da
+#   revisao de 4B.1 (task-4b-1-review.md, achado F2): a fixture commitada
+#   nao tinha vetor NENHUM cobrindo o defaulting por presenca de
+#   `politica_tv`, so este teste ad-hoc. A Secao 14 de `_bloco_patologico()`
+#   (vetores_paridade.py) acrescentou um par ausente/null. O vetor 2 abaixo
+#   passou a DUPLICAR essa cobertura; nao e mais a UNICA defesa contra um
+#   espelho que resolvesse `politica_tv` por `??`.
+# - `gp: null` e `n` nao-inteiro: motivo estrutural DIFERENTE, que nao
+#   mudou — Python ESTOURA (TypeError) para os dois, nao ha valor
+#   `float | None` nenhum para `avaliar_python` devolver, e abrir uma
+#   excecao dentro daquela funcao so para estes vetores contaminaria o
+#   contrato que as outras 448 linhas respeitam. Cobertos em
+#   `test_gp_none_estoura_no_python_e_o_espelho_recusa_por_nan` e
+#   `test_n_nao_inteiro_estoura_no_python_e_o_espelho_recusa_por_nan`
+#   abaixo.
+#
+# A paridade dos casos que seguem e verificada aqui, com vetores construidos
+# em memoria via `_lado_js_adhoc`, sem tocar a fixture commitada.
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
@@ -177,7 +195,7 @@ def test_gp_none_estoura_no_python_e_o_espelho_recusa_por_nan(tmp_path):
     guarda nunca chega a rodar. Escolha desta revisao: EXCLUIR este caso da
     fixture commitada (`avaliar_python` nao tem canal de excecao, e abrir um
     so' para este vetor contaminaria o contrato `float | None` que as outras
-    440 linhas respeitam) e cobrir com este teste dedicado. Do lado JS, uma
+    448 linhas respeitam) e cobrir com este teste dedicado. Do lado JS, uma
     funcao pura nao pode propagar um TypeError do Python para quem chama do
     outro lado do processo — a convencao explicita desta revisao e que `gp`
     null recusa por NaN, a mesma linguagem de todo outro guarda deste
@@ -242,10 +260,14 @@ def test_cobertura_da_fixture_no_harness():
     # Indexar direto (`v["args"]["tv"]`) estoura KeyError neles — foi o que
     # esta linha fazia, escrita no FIX 5 da revisao final da 4A, na mesma
     # revisao que documentou esta exata classe de bug em duas funcoes de
-    # tests/test_vetores_paridade.py (comentario nas linhas 110-129 acima) e
-    # nao percebeu que a estava introduzindo numa terceira, aqui. `.get` e
-    # obrigatorio: os extras (None, 'ic', 'spread') nao afetam `faltando`,
-    # que e um "contem pelo menos" sobre as 9 combinacoes canonicas.
+    # tests/test_vetores_paridade.py (ver o comentario acima de
+    # `test_tv_e_politica_tv_null_aliases_e_tv_ausente_fora_da_fixture`,
+    # retificado pela revisao de 4B.1 — task-4b-1-review.md, achado F3;
+    # referencia por NOME de teste agora, nao por numero de linha, que e o
+    # que ficou velho da vez passada) e nao percebeu que a estava
+    # introduzindo numa terceira, aqui. `.get` e obrigatorio: os extras
+    # (None, 'ic', 'spread') nao afetam `faltando`, que e um "contem pelo
+    # menos" sobre as 9 combinacoes canonicas.
     combos = {(v["fn"], v["args"].get("tv")) for v in vetores}
     esperados = {(fn, tv) for fn in ("ev_nopat", "ev_ebitda", "pe")
                  for tv in ("book", "convergencia", "gordon")}
