@@ -30,10 +30,15 @@ Por cenário, a rota do caso decide o fluxo:
   `Preco_acao` saem prontos do motor, usados aqui verbatim, como no ramo
   EBITDA da rota firm. A saída do subcomando `rampa` não tem o mesmo shape
   de `ev`/`pe` (não carrega `diagnosticos`/`coerencia_vetor`/
-  `convencao_temporal`, e o cenário não declara `triangulo` — a rota não
-  usa o triângulo g = RiR x retorno); por isso `precificar_rampa` e a
-  composição do cenário rampa não reaproveitam `_monta_cenario`, que
-  presume esse shape.
+  `convencao_temporal`); por isso `precificar_rampa` e a composição do
+  cenário rampa não reaproveitam `_monta_cenario`, que presume esse shape.
+  É também a única rota cujo cenário NÃO declara `triangulo` — e a isenção
+  tem razão, não é esquecimento: a regra do triângulo existe para que a
+  taxa de reinvestimento nunca fique silenciosa ("cenário com RiR
+  silencioso é cenário opaco"), e nesta rota o próprio motor a reporta por
+  fase (`rir_fase1_%`, que varia ano a ano e por isso não tem vetor único,
+  e `rir2_%`). O propósito da regra é atendido por construção; exigir a
+  declaração duplicaria o que o motor já entrega.
 
 `caso["moeda"]` é sempre repassado ao motor como `--moeda` (nas duas rotas) —
 `caso.py` já exige e valida esse campo; sem repassá-lo, toda saída carregava
@@ -290,6 +295,16 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
     }
 
 
+# Chaves do motor PROMOVIDAS para dentro do shape do wrapper (`valor`/
+# `multiplos`) na rota rampa — nomeado aqui de propósito, não inferido, para
+# que qualquer mudança em quais chaves viram campo próprio seja deliberada.
+# São as ÚNICAS chaves que `_monta_cenario_rampa` omite do repasse abaixo:
+# entrariam duplicadas (mesmo número, dois nomes — uma vez como `EV`, outra
+# como `valor["EV"]`) se também fossem copiadas verbatim.
+_CHAVES_PROMOVIDAS_RAMPA: frozenset = frozenset(
+    {"EV", "Equity", "Preco_acao", "EV/EBITDA0"})
+
+
 def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
                           algebra: str, preco_valor: float) -> dict:
     """Compõe o registro de um cenário da rota rampa no shape de `resultados.json`.
@@ -297,24 +312,32 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
     Irmã de `_monta_cenario`, mas não a reaproveita: a saída do subcomando
     `rampa` do motor não tem o mesmo shape de `ev`/`pe` — não carrega
     `diagnosticos`/`coerencia_vetor`/`convencao_temporal` (só `ev`/`pe`
-    emitem essas chaves), e o cenário não declara `triangulo` (a rota não
-    usa o triângulo g = RiR x retorno: `g2` é premissa direta do vetor, e
-    RiR2/ROIC2 saem do motor como resultado, nunca como escolha de input).
-    Fabricar essas chaves aqui (`[]`, `{}` ou qualquer default) para manter
-    o mesmo shape seria inventar dado que o motor nunca produziu — proibido
-    pela mesma disciplina que rege todo o resto deste módulo.
+    emitem essas chaves), e o cenário não declara `triangulo` (ver o
+    comentário na rota rampa, em `avaliar()`, sobre por que isso é seguro).
 
-    Em vez disso, carrega `checks_internos` e `travas` — o motor se
-    autovalidando (fluxo a fluxo, forma fechada vs. explícita, fase 2
-    igual ao seu próprio `ev_nopat`, Receita_T = capacidade) e as travas
-    textuais (incluindo o delimitador) — como PRODUTO, não ruído; e as
-    trajetórias `d_trajetoria_fase1_%`/`rir_fase1_%`, cuja nota registra
-    que a rampa não tem um vetor único de RiR/d (é a razão de a forma
-    fechada alfa/beta existir — não pode ser descartada). `multiplos` é só
-    `EV/EBITDA0`, o headline desta rota (`METRICAS_POR_ROTA['rampa'] ==
-    {'EBITDA0'}`); `capacidade_receita` só existe na saída do motor quando
-    a premissa é `util` (não `g1`), e só entra aqui quando presente — nunca
-    inventada.
+    Repasse íntegro, não whitelist: correção de um achado da revisão — a
+    versão anterior desta função listava por nome as chaves que entravam
+    (`checks_internos`, `travas`, `d_trajetoria_fase1_%`, `rir_fase1_%`,
+    `capacidade_receita`), e essa lista, incompleta, derrubava treze outras
+    chaves que o motor emite, entre elas `rir2_%`/`roic2_%` — a taxa e o
+    retorno marginal de reinvestimento da FASE 2 — e
+    `vp_fase1`/`valor_fase2_no_ano_T` — a decomposição de valor entre as
+    duas fases, o ponto central de uma composição bifásica. Fabricar essas
+    chaves com um default (`[]`, `{}`, `None`) para "completar" a lista
+    seria inventar dado que o motor nunca produziu — proibido pela mesma
+    disciplina que rege todo o resto deste módulo; a correção certa é não
+    filtrar, não completar.
+
+    O critério agora é o oposto de uma whitelist: toda chave que o motor
+    devolveu sobrevive verbatim no cenário, SALVO as que
+    `_CHAVES_PROMOVIDAS_RAMPA` nomeia — as quatro que já viraram
+    `valor`/`multiplos` acima. Mesma disciplina que `reversa.reverter` já
+    aplica à saída do subcomando `rev` (ver `reversa.py`): nenhuma chave do
+    motor é removida, renomeada ou reformatada por decisão deste módulo. Uma
+    chave nova que o motor passe a emitir amanhã (por exemplo, se
+    `capacidade_receita` ganhar uma irmã) chega aqui sem exigir mudança
+    nenhuma neste arquivo — só uma chave nova que o wrapper decida PROMOVER
+    precisa entrar em `_CHAVES_PROMOVIDAS_RAMPA`.
     """
     multiplo_referencia = _exigir_valor(saida_motor, "EV/EBITDA0")
     upside = valor["preco_acao"] / preco_valor - 1
@@ -326,13 +349,11 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
         "valor": valor,
         "algebra_da_escala": algebra,
         "vs_preco": {"upside": upside},
-        "checks_internos": saida_motor["checks_internos"],
-        "travas": saida_motor["travas"],
-        "d_trajetoria_fase1_%": saida_motor["d_trajetoria_fase1_%"],
-        "rir_fase1_%": saida_motor["rir_fase1_%"],
     }
-    if "capacidade_receita" in saida_motor:
-        resultado["capacidade_receita"] = saida_motor["capacidade_receita"]
+    for chave, valor_do_motor in saida_motor.items():
+        if chave in _CHAVES_PROMOVIDAS_RAMPA:
+            continue
+        resultado[chave] = valor_do_motor
     return resultado
 
 
@@ -384,6 +405,11 @@ def avaliar(caso: dict) -> dict:
             cenarios[nome] = _monta_cenario(
                 cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
     elif rota == "rampa":
+        # Única rota sem `triangulo`, de propósito: a regra existe para a
+        # RiR nunca ficar silenciosa, e aqui o motor já devolve
+        # `rir_fase1_%`/`rir2_%` como resultado — cumprida por construção,
+        # não por declaração.
+        #
         # Mesma ponte da rota firm (D1 do plano da Fatia C: "a ponte para
         # preço é a mesma das outras rotas firm" — nd_efetivo vai em --nd
         # nas duas). `caso.py` já exige 'ponte' para 'rampa' do mesmo jeito

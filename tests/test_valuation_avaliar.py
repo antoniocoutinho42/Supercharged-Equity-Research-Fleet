@@ -12,7 +12,8 @@ SCRIPTS = RAIZ / "skills" / "er-valuation" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 from caso import carregar  # noqa: E402
 from avaliar import _exigir_valor, avaliar, escrever  # noqa: E402
-from motor import MotorFalhou  # noqa: E402
+from motor import MotorFalhou, rodar as _motor_rodar  # noqa: E402
+from ponte import compor as _compor_ponte  # noqa: E402
 
 
 def _res_firm() -> dict:
@@ -377,3 +378,54 @@ def test_rampa_leva_checks_e_travas_ao_resultado():
     r = avaliar(carregar(FIXTURES / "caso_rampa.json"))["cenarios"]["base"]
     assert r["checks_internos"]["P4_receita_T_menos_capacidade"] == pytest.approx(0.0)
     assert len(r["travas"]) == 3
+
+
+# --------------------------------------------------------------------------
+# Correção de achado (pós Fatia C, Task 1): a composição do cenário rampa
+# lia a saída do motor por uma WHITELIST nomeada (checks_internos, travas,
+# d_trajetoria_fase1_%, rir_fase1_%, capacidade_receita) — cinco chaves
+# entravam, treze não, entre elas rir2_%/roic2_% (a taxa e o retorno
+# marginal de reinvestimento da FASE 2 — sem elas o cenário fica opaco
+# sobre quase metade do lucro operacional sendo reinvestido) e
+# vp_fase1/valor_fase2_no_ano_T (a decomposição de valor entre as duas
+# fases — o ponto central de uma composição bifásica). O teste abaixo é a
+# guarda contra essa classe de regressão voltar: toda chave que o motor
+# devolveu tem de sobreviver no cenário, exceto as que o wrapper PROMOVE de
+# propósito para dentro de `valor`/`multiplos`. O conjunto de promovidas é
+# nomeado AQUI, à mão — nunca importado de `avaliar.py` — para que uma
+# mudança futura na promoção precise atualizar este teste deliberadamente,
+# em vez de o teste herdar a mudança em silêncio e parar de proteger nada.
+# --------------------------------------------------------------------------
+
+_CHAVES_PROMOVIDAS_ROTA_RAMPA = frozenset({"EV", "Equity", "Preco_acao", "EV/EBITDA0"})
+
+
+def test_rampa_repassa_toda_chave_do_motor_exceto_as_promovidas():
+    c = carregar(FIXTURES / "caso_rampa.json")
+    nd_efetivo = _compor_ponte(c["ponte"])["nd_efetivo"]
+    premissas = c["cenarios"]["base"]["premissas"]
+    saida_motor = _motor_rodar(
+        "rampa", premissas,
+        {"nd": nd_efetivo, "acoes": c["acoes_diluidas"]}, c["moeda"])
+
+    resultado_cenario = avaliar(c)["cenarios"]["base"]
+
+    faltando = [
+        chave for chave in saida_motor
+        if chave not in resultado_cenario
+        and chave not in _CHAVES_PROMOVIDAS_ROTA_RAMPA
+    ]
+    assert faltando == []
+
+
+def test_rampa_carrega_rir_e_decomposicao_de_valor_da_fase_2():
+    """As chaves centrais do achado: rir2_%/roic2_% (RiR e retorno marginal
+    da fase 2 — a metodologia exige que todo cenário declare o triângulo
+    RiR x retorno exatamente para que a taxa de reinvestimento nunca fique
+    silenciosa) e vp_fase1/valor_fase2_no_ano_T (a decomposição de valor
+    entre as duas fases — o ponto inteiro de uma composição bifásica)."""
+    r = avaliar(carregar(FIXTURES / "caso_rampa.json"))["cenarios"]["base"]
+    assert r["rir2_%"] == pytest.approx(49.977, abs=1e-3)
+    assert r["roic2_%"] == pytest.approx(16.007, abs=1e-3)
+    assert r["vp_fase1"] == pytest.approx(45.2592, abs=1e-3)
+    assert r["valor_fase2_no_ano_T"] == pytest.approx(220.4887, abs=1e-3)
