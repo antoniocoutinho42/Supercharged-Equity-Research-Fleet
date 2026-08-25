@@ -33,6 +33,13 @@ jobs:
       - name: pytest
         run: python -m pytest tests/ -q
 
+      - name: Paridade Python↔JS do espelho
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_paridade.json > /dev/null
+          python -m pytest tests/test_paridade_js.py -q
+
       - name: Estrutura do plugin
         run: |
           python -c "import json; d=json.load(open('.claude-plugin/plugin.json', encoding='utf-8')); assert all(k in d and d[k] for k in ('name','version','description')), 'campos obrigatorios faltando'; print('plugin.json OK:', d['name'], d['version'])"

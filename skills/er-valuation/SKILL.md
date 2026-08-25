@@ -141,3 +141,14 @@ por ações, álgebra entre múltiplos); entram numa fatia futura, com a
 Não está aqui e não é resumida aqui. A fonte canônica é o pacote congelado,
 indexado por `skills/er-multiplos-justos/SKILL.md`. Desenho:
 `docs/desenho-arquitetura-v4.md`.
+
+## Espelho JS (laboratório do relatório)
+
+`assets/motor_espelho.js` é a única matemática de valuation em JavaScript
+admitida neste projeto: espelha o núcleo do motor congelado
+(`vendor/multiplos-justos/scripts/justos.py`) para que o relatório interativo
+recalcule ao vivo quando o usuário edita premissas, sem depender de
+subprocesso a cada edição. Sua licença para existir é o harness
+`tests/test_paridade_js.py` — divergência numérica contra o motor reprova a
+suíte nomeando o vetor culpado, e sem `node` no PATH o teste pula declarando
+esse motivo explicitamente (o CI roda sempre, via `setup-node`).
