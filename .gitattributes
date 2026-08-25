@@ -10,3 +10,12 @@ skills/er-relatorio-html/assets/uPlot.min.css -text
 # skills/er-multiplos-justos/manifest_vendor.json): nunca converter EOL nestes
 # paths — qualquer conversão quebra o congelamento.
 vendor/** -text
+
+# Fixture de vetores de paridade (item 4, fatia A): gerada por
+# skills/er-valuation/scripts/vetores_paridade.py com `newline="\n"` e
+# comparada byte a byte contra uma regeração fresca em
+# test_fixture_commitada_reproduz_o_gerador (tests/test_vetores_paridade.py).
+# Sem "-text", um `core.autocrlf=true` local reescreve este arquivo em CRLF
+# no próximo checkout/stash/clean e o teste passa a reprovar por diferença de
+# fim de linha, não por regressão real — mesmo risco que os paths acima.
+tests/fixtures/vetores_paridade.json -text
