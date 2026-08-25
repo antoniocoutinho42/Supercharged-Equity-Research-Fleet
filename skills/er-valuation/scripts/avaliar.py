@@ -377,7 +377,7 @@ _CHAVES_PROMOVIDAS_RAMPA: frozenset = frozenset(
 
 
 def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
-                          algebra: str, preco_valor: float) -> dict:
+                          algebra: str, preco_valor: float, multiplo: float) -> dict:
     """Compõe o registro de um cenário da rota rampa no shape de `resultados.json`.
 
     Irmã de `_monta_cenario`, mas não a reaproveita: a saída do subcomando
@@ -409,20 +409,44 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
     `capacidade_receita` ganhar uma irmã) chega aqui sem exigir mudança
     nenhuma neste arquivo — só uma chave nova que o wrapper decida PROMOVER
     precisa entrar em `_CHAVES_PROMOVIDAS_RAMPA`.
+
+    FIX 6d (revisão final): `multiplo` chega como PARÂMETRO — já validado
+    por `_exigir_valor(saida, "EV/EBITDA0")` dentro de `precificar_rampa` —
+    em vez de recalculado aqui com uma segunda chamada idêntica a
+    `_exigir_valor` sobre o MESMO campo do MESMO `saida_motor`. Antes desta
+    correção, o retorno `multiplo` de `precificar_rampa` estava morto em
+    todo call site (`avaliar()` e `sotp._compor_parte` descartavam com
+    `_multiplo`) — confirmado por mutação — enquanto esta função relia
+    numa segunda leitura própria do mesmo campo. Escolhido usar o
+    parâmetro (em vez de dropar o retorno de `precificar_rampa`) para
+    manter a paridade de assinatura com `precificar_firm`/
+    `precificar_equity` — as três irmãs devolvem `multiplo`, e agora as
+    três também o usam a jusante. Fonte única de verdade: um só
+    `_exigir_valor(saida, "EV/EBITDA0")` no módulo inteiro, dentro de
+    `precificar_rampa`.
     """
-    multiplo_referencia = _exigir_valor(saida_motor, "EV/EBITDA0")
     upside = valor["preco_acao"] / preco_valor - 1
 
     resultado = {
         "ancora": cenario["ancora"],
         "premissas": cenario["premissas"],
-        "multiplos": {"EV/EBITDA0": multiplo_referencia},
+        "multiplos": {"EV/EBITDA0": multiplo},
         "valor": valor,
         "algebra_da_escala": algebra,
         "vs_preco": {"upside": upside},
     }
+    # FIX 6e (revisão final): além das quatro chaves já PROMOVIDAS acima
+    # (consumidas dentro de `valor`/`multiplos`, nunca top-level), o loop
+    # também pula qualquer chave que já exista em `resultado` — ancora,
+    # premissas, multiplos, valor, algebra_da_escala, vs_preco. Nenhuma
+    # colisão existe hoje (o motor não emite nenhum desses nomes), mas sem
+    # esta guarda uma chave nova do motor que algum dia colidisse com um
+    # campo autorado sobrescreveria esse campo em silêncio — `chave in
+    # resultado` fecha essa fronteira de forma estrutural, sem precisar
+    # enumerar cada campo autorado à mão numa segunda lista que poderia
+    # esquecer alguma.
     for chave, valor_do_motor in saida_motor.items():
-        if chave in _CHAVES_PROMOVIDAS_RAMPA:
+        if chave in resultado or chave in _CHAVES_PROMOVIDAS_RAMPA:
             continue
         resultado[chave] = valor_do_motor
     return resultado
@@ -489,10 +513,10 @@ def avaliar(caso: dict) -> dict:
         resultado["ponte"] = ponte
         nd_efetivo = ponte["nd_efetivo"]
         for nome, cenario in caso["cenarios"].items():
-            saida, valor, algebra, _multiplo = precificar_rampa(
+            saida, valor, algebra, multiplo = precificar_rampa(
                 cenario["premissas"], nd_efetivo, acoes, moeda)
             cenarios[nome] = _monta_cenario_rampa(
-                cenario, saida, valor, algebra, preco_valor)
+                cenario, saida, valor, algebra, preco_valor, multiplo)
     else:  # equity
         # Rota equity chega em Equity direto (P/L x LL): não há ponte de
         # dívida (`caso.py` já recusa um caso equity que declare `ponte`),

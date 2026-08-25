@@ -411,11 +411,17 @@ prosa é resolvido por placeholder auditável; número livre legítimo é marcad
 
 ## 13. Testes, fixtures e CI
 
-**Suíte da metodologia:** `selftest` + `testes.py` do vendor. Verificado nesta máquina em 2026-08-21:
-a suíte é **totalmente portátil** — importa apenas `sys`, `itertools`, `ast` e `os.path`, com as
-âncoras das planilhas de referência *hardcoded*; não há dependência de planilha externa nem de rede, e
-ambas passam. A suíte também verifica a integridade dos arquivos do próprio pacote, o que encaixa
-diretamente no manifest de hashes.
+**Suíte da metodologia:** `selftest` + `testes.py` do vendor. `testes.py` roda em contrato de
+**duas fases, cada uma sua própria invocação fresca**: `python scripts/testes.py --phase model` e
+`python scripts/testes.py --phase cli`. Uma invocação única, sem `--phase`, é **recusada de
+propósito** pelo próprio script (sai com código 2, sem rodar nada) — a fase `cli` abre 20+
+subprocessos reais, e somar as duas fases num só processo-pai, em ambiente com quota agressiva de
+subprocessos, produz falso negativo depois de dezenas de execuções acumuladas; separar em duas
+invocações frescas evita isso. Verificado nesta máquina em 2026-08-25: a suíte é **totalmente
+portátil** — importa apenas `sys`, `itertools`, `ast` e `os.path`, com as âncoras das planilhas de
+referência *hardcoded*; não há dependência de planilha externa nem de rede, e as duas fases passam.
+A suíte também verifica a integridade dos arquivos do próprio pacote, o que encaixa diretamente no
+manifest de hashes.
 
 Princípio mantido mesmo assim: **suíte portátil obrigatória no CI** × **regressões opcionais contra
 fixtures proprietários**, para qualquer fixture futuro derivado de planilha do dono.

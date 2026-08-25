@@ -458,3 +458,61 @@ def test_sotp_e_deterministico(tmp_path):
     escrever(avaliar(carregar(FIXTURES / "caso_sotp_segmento.json")), a)
     escrever(avaliar(carregar(FIXTURES / "caso_sotp_segmento.json")), b)
     assert filecmp.cmp(a, b, shallow=False)
+
+
+# --------------------------------------------------------------------------
+# Revisão final (task 3c), FIX 6d: `precificar_rampa` devolve `multiplo`,
+# mas todo call site descartava (`_multiplo`) e `_monta_cenario_rampa`
+# relia numa SEGUNDA leitura idêntica (`_exigir_valor(saida_motor,
+# "EV/EBITDA0")`) do mesmo campo do motor -- duas leituras do mesmo número,
+# confirmado morto por mutação. Escolha: usar o `multiplo` recebido como
+# parâmetro em `_monta_cenario_rampa`, não redescobri-lo -- mantém a
+# paridade de assinatura com `precificar_firm`/`precificar_equity` (as três
+# irmãs devolvem `multiplo` e agora as três também o usam) e deixa exatamente
+# UMA chamada a `_exigir_valor(saida, "EV/EBITDA0")` no módulo inteiro, dentro
+# de `precificar_rampa` -- em vez de dropar o retorno, o que quebraria essa
+# paridade documentada no próprio docstring de `precificar_rampa`.
+# --------------------------------------------------------------------------
+
+def test_monta_cenario_rampa_usa_o_multiplo_recebido_como_parametro():
+    """Prova de fonte única: um `multiplo` passado DIFERENTE do que está em
+    `saida_motor["EV/EBITDA0"]` aparece na saída -- confirmando que a função
+    não re-deriva o campo do payload do motor."""
+    from avaliar import _monta_cenario_rampa
+    cenario = {"ancora": "x", "premissas": {"g2": 1.0}}
+    saida_motor = {"EV/EBITDA0": 999.0, "EV": 1.0, "Equity": 1.0, "Preco_acao": 1.0}
+    valor = {"EV": 1.0, "Equity": 1.0, "preco_acao": 10.0}
+    resultado = _monta_cenario_rampa(cenario, saida_motor, valor, "algebra", 10.0, 6.378)
+    assert resultado["multiplos"]["EV/EBITDA0"] == pytest.approx(6.378)
+
+
+def test_rota_rampa_multiplo_continua_batendo_o_motor_no_pipeline_completo():
+    """Ponta a ponta: com o motor de verdade (não mockado), o `multiplo`
+    que passa a vir de `precificar_rampa` continua idêntico ao que o motor
+    devolveu -- a mudança de fonte não muda nenhum número."""
+    r = avaliar(carregar(FIXTURES / "caso_rampa.json"))
+    assert r["cenarios"]["base"]["multiplos"]["EV/EBITDA0"] == pytest.approx(6.378, abs=1e-3)
+
+
+# --------------------------------------------------------------------------
+# Revisão final (task 3c), FIX 6e: colisão de ordenação no loop de repasse
+# íntegro da rota rampa -- mesma guarda de `sotp._compor_parte` (ver o
+# teste irmão em test_valuation_sotp.py). Nenhuma colisão existe hoje (o
+# motor não emite nenhum campo autorado de `_monta_cenario_rampa`); este
+# teste MANUFATURA uma via monkeypatch para provar que a guarda
+# (`chave in resultado`) segura de verdade.
+# --------------------------------------------------------------------------
+
+def test_rampa_engine_key_colidindo_com_campo_autorado_nao_sobrescreve(monkeypatch):
+    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None):
+        return {
+            "EV": 170.9304, "Equity": 100.0, "Preco_acao": 9.05,
+            "EV/EBITDA0": 6.378,
+            "ancora": "CLOBBERED-PELO-MOTOR",  # colisão manufaturada
+        }
+
+    monkeypatch.setattr("avaliar.rodar", _rodar_fake)
+    c = carregar(FIXTURES / "caso_rampa.json")
+    r = avaliar(c)
+    assert r["cenarios"]["base"]["ancora"] == c["cenarios"]["base"]["ancora"]
+    assert r["cenarios"]["base"]["ancora"] != "CLOBBERED-PELO-MOTOR"

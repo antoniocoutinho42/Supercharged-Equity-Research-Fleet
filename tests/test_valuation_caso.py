@@ -1096,3 +1096,150 @@ def test_rampa_com_metrica_errada_recusa():
     c["metrica_base"]["tipo"] = "EBITDA"
     with pytest.raises(CasoInvalido, match="EBITDA0"):
         validar(c)
+
+
+# --------------------------------------------------------------------------
+# Revisão final (task 3c): review final da fatia C.
+#
+# FIX 1 (Crítico): rota rampa x blocos 'reversa'/'sensibilidades' (Fatia B)
+# — nenhuma das duas combinações tem metodologia definida nesta fatia (a
+# rampa não usa o triângulo g = RiR x retorno, e RESOLVER_POR_EIXO só
+# conhece 'firm'/'equity') e as duas escapavam como KeyError cru: 'rampa'.
+# 'rampa'+sensibilidades batia a guarda ANTES de qualquer chamada ao motor
+# (a primeira grade dispara `_validar_triangulo`, que indexa
+# `_TRIANGULO_POR_ROTA['rampa']` — chave ausente); 'rampa'+reversa passava
+# o portão inteiro (nenhuma checagem de caso.py toca um dict indexado por
+# rota) e só quebrava DEPOIS, dentro de `reversa.reverter`, já com os
+# cenários principais do caso rodados no motor. Decisão tomada, não
+# reaberta aqui: recusar as duas, pelo nome, como limitação declarada desta
+# fatia — mesmo padrão de equity+sotp (`test_sotp_na_rota_equity_recusa`,
+# acima).
+# --------------------------------------------------------------------------
+
+def test_rampa_com_reversa_recusa_no_gate():
+    c = _rampa()
+    c["mercado"] = {"rf": 12.0, "erp": 5.5, "fonte": "x", "data": "2026-08-24"}
+    c["reversa"] = {"cenario": "base", "eixos": ["custo_capital"]}
+    with pytest.raises(CasoInvalido, match="rampa"):
+        validar(c)
+
+
+def test_rampa_com_sensibilidades_recusa_no_gate():
+    c = _rampa()
+    c["sensibilidades"] = {
+        "cenario": "base",
+        "grades_1d": [{"premissa": "g2", "pontos": [7.0],
+                        "triangulo": {"inputs": ["g", "roic"], "output": "rir"}}],
+        "grades_2d": [],
+    }
+    with pytest.raises(CasoInvalido, match="rampa"):
+        validar(c)
+
+
+def test_rampa_sem_mercado_nem_reversa_continua_valida():
+    """A recusa e da COMBINACAO, nao da rota isolada -- rampa sem os blocos
+    novos continua exatamente tao valida quanto antes desta revisao."""
+    assert carregar(FIXTURES / "caso_rampa.json")["rota"] == "rampa"
+
+
+def test_grade_1d_e_2d_nao_quebram_com_keyerror_para_rota_sem_triangulo():
+    """FIX 1: defesa em profundidade nos dois call sites de
+    `_validar_triangulo` que faltavam a guarda de membership que o próprio
+    módulo, nos outros três call sites (cenário, parte de SOTP, blended de
+    materialidade), chama obrigatória. Inalcançável pela API pública depois
+    da recusa no gate acima (rampa nunca chega a uma grade) -- mas uma
+    rota futura sem triângulo, ou uma chamada direta como esta, não pode
+    quebrar com KeyError cru."""
+    from caso import _PREMISSAS_NAO_NUMERICAS, _PREMISSAS_POR_ROTA, _validar_grade_1d, _validar_grade_2d
+    permitidas = _PREMISSAS_POR_ROTA["rampa"] - _PREMISSAS_NAO_NUMERICAS
+    _validar_grade_1d({"premissa": "g2", "pontos": [7.0]}, "rampa", permitidas)
+    _validar_grade_2d(
+        {"premissa_x": "g2", "premissa_y": "wacc", "pontos_x": [7.0], "pontos_y": [10.0]},
+        "rampa", permitidas)
+
+
+# --------------------------------------------------------------------------
+# FIX 2 (Importante): 'sotp.tipo' pulava `_exigir_texto` -- quarta
+# instância da mesma classe de defeito neste módulo, no próprio módulo que
+# construiu `_exigir_texto` para fechá-la estruturalmente. `tipo` era
+# testado direto contra `_TIPOS_DE_SOTP` (um frozenset) sem passar pela
+# guarda antes -- um valor não-hasheável (lista, dict) levantava TypeError
+# cru em vez de CasoInvalido nomeando o campo.
+# --------------------------------------------------------------------------
+
+def _sotp() -> dict:
+    return json.loads((FIXTURES / "caso_sotp_segmento.json").read_text(encoding="utf-8"))
+
+
+def test_sotp_tipo_lista_recusa():
+    c = _sotp()
+    c["sotp"]["tipo"] = ["safra"]
+    with pytest.raises(CasoInvalido, match="tipo"):
+        validar(c)
+
+
+def test_sotp_tipo_dict_recusa():
+    c = _sotp()
+    c["sotp"]["tipo"] = {"valor": "safra"}
+    with pytest.raises(CasoInvalido, match="tipo"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
+# FIX 3 (Importante): 'sotp.topo.desconto_de_holding_pct' não tinha checagem
+# de domínio -- o portão exigia a razão (não-vazia) mas aceitava qualquer
+# número finito. Um valor negativo é um PRÊMIO disfarçado: a fórmula
+# `equity * (1 - desconto/100)` inverte de sinal e AUMENTA o equity quando
+# o desconto é negativo (confirmado: -25.0 leva equity de 6378.83 para
+# 7973.54) -- uma operação fora da lista autorizada. Um valor >= 100 anula
+# (100) ou inverte (>100) o equity.
+# --------------------------------------------------------------------------
+
+def test_desconto_de_holding_negativo_recusa():
+    c = _sotp()
+    c["sotp"]["topo"]["desconto_de_holding_pct"] = -25.0
+    c["sotp"]["topo"]["razao_do_desconto"] = "x"
+    with pytest.raises(CasoInvalido, match="domínio"):
+        validar(c)
+
+
+@pytest.mark.parametrize("valor", [0.0, 100.0, 140.0])
+def test_desconto_de_holding_fora_do_dominio_aberto_recusa(valor):
+    c = _sotp()
+    c["sotp"]["topo"]["desconto_de_holding_pct"] = valor
+    c["sotp"]["topo"]["razao_do_desconto"] = "x"
+    with pytest.raises(CasoInvalido, match="domínio"):
+        validar(c)
+
+
+def test_desconto_de_holding_dentro_do_dominio_e_aceito():
+    c = _sotp()
+    c["sotp"]["topo"]["desconto_de_holding_pct"] = 15.0
+    c["sotp"]["topo"]["razao_do_desconto"] = "controlador com histórico de não distribuir"
+    validar(c)
+
+
+# --------------------------------------------------------------------------
+# FIX 5 (Importante): 'ponte' e 'acoes_diluidas' declarados DENTRO de uma
+# parte de SOTP eram aceitos pelo portão e silenciosamente IGNORADOS por
+# `sotp._compor_parte` (que chama `precificar_firm`/`precificar_rampa` sem
+# nd_efetivo/acoes, de propósito -- "ponte por parte é o erro que a trava
+# existe para impedir"). O analista que declara isso acredita que a ponte
+# foi cruzada ali e recebe um número plausível, mas errado.
+# --------------------------------------------------------------------------
+
+def test_parte_com_ponte_recusa():
+    c = _sotp()
+    c["sotp"]["partes"][0]["ponte"] = {
+        "divida_bruta": 0.0, "caixa_e_equivalentes": 0.0,
+        "outros_ativos": 0.0, "outros_passivos": 0.0, "minoritarios": 0.0,
+    }
+    with pytest.raises(CasoInvalido, match="ponte"):
+        validar(c)
+
+
+def test_parte_com_acoes_diluidas_recusa():
+    c = _sotp()
+    c["sotp"]["partes"][0]["acoes_diluidas"] = 10.0
+    with pytest.raises(CasoInvalido, match="acoes_diluidas"):
+        validar(c)

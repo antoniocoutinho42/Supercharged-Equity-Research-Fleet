@@ -129,8 +129,17 @@ def _compor_parte(parte: dict, moeda: str | None) -> dict:
     if "triangulo" in parte:
         resultado["triangulo"] = parte["triangulo"]
 
+    # FIX 6e (revisão final): além da chave já PROMOVIDA acima ('EV'), o
+    # loop também pula qualquer chave que já exista em `resultado` — nome,
+    # rota, metrica_base, ancora, premissas, algebra_da_escala, e
+    # triangulo quando presente. Nenhuma colisão existe hoje (o motor não
+    # emite nenhum desses nomes), mas sem esta guarda uma chave nova do
+    # motor que algum dia colidisse com um campo autorado sobrescreveria
+    # esse campo em silêncio — `chave in resultado` fecha essa fronteira
+    # de forma estrutural, sem precisar enumerar cada campo autorado à
+    # mão numa segunda lista que poderia esquecer alguma.
     for chave, valor_do_motor in saida.items():
-        if chave in _CHAVES_PROMOVIDAS_PARTE:
+        if chave in resultado or chave in _CHAVES_PROMOVIDAS_PARTE:
             continue
         resultado[chave] = valor_do_motor
 
@@ -234,9 +243,13 @@ def compor_partes(caso: Caso, nome_cenario: str) -> dict:
     segmentado contra o EV do vetor blended (Fatia C, Task 3).
 
     Devolve
-    `{"partes": [...], "ev_das_partes": float, "materialidade": dict | None,
-      "topo": {...}, "ev_total": float, "equity": float,
-      "preco_acao": float, "ponte_unica": {...}}`.
+    `{"cenario": str, "partes": [...], "ev_das_partes": float,
+      "materialidade": dict | None, "topo": {...}, "ev_total": float,
+      "equity": float, "preco_acao": float, "ponte_unica": {...}}`.
+    `cenario` (FIX 6c, revisão final) ecoa `nome_cenario` — sem essa chave,
+    um leitor de `resultados.json` que só olhasse o bloco `sotp` não tinha
+    como saber qual cenário foi nomeado; a chave só existia no INPUT
+    (`caso["sotp"]["cenario"]`), nunca no output.
 
     Não valida `caso` de novo — `caso.validar()` é responsabilidade
     exclusiva de quem carrega o caso, a mesma disciplina que `avaliar()`
@@ -310,6 +323,7 @@ def compor_partes(caso: Caso, nome_cenario: str) -> dict:
     }
 
     return {
+        "cenario": nome_cenario,
         "partes": partes,
         "ev_das_partes": ev_das_partes,
         "materialidade": materialidade_resultado,

@@ -125,8 +125,11 @@ Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 ## Escopo desta fatia
 
 Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`
-aceita `LL`. São as que o motor emite diretamente — demais métricas são
-transformação de apresentação e entram depois, com a álgebra exibida.
+aceita `LL`; rota `rampa` aceita `EBITDA0` (o EBITDA do ano 0 — a escala
+sobre a qual o motor reporta o múltiplo-manchete desta rota, `EV/EBITDA0`;
+não é uma métrica normalizada como as demais). São as que o motor emite
+diretamente — demais métricas são transformação de apresentação e entram
+depois, com a álgebra exibida.
 
 Ainda não implementados aqui: métricas de apresentação (`EBIT`, `EPS`,
 `EBITDA/ação`, `NOPAT/ação`) — transformação sobre a métrica-base (divisão

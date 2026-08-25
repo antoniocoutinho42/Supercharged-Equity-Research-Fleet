@@ -163,11 +163,26 @@ def test_sotp_com_cenario_inexistente_recusa_no_gate():
 # --------------------------------------------------------------------------
 
 def test_materialidade_reporta_a_diferenca_com_sinal():
-    """A direcao do vies se calcula, nao se deduz."""
+    """A direcao do vies se calcula, nao se deduz.
+
+    FIX 4 (revisão final): sem pinar `ev_segmentado`/`ev_blended` contra um
+    número calculado por fora, um mutante que devolvesse `ev_das_partes *
+    1.05` no lugar do EV real do vetor blended sobrevivia a suíte inteira —
+    o assert de `diferenca` é uma tautologia sobre o PRÓPRIO dict que
+    `materialidade()` devolve (ela sempre bate consigo mesma, mutante ou
+    não). `ev_segmentado` é a SOMA das partes (D3) — pinado igual a
+    `ev_das_partes`, NUNCA `ev_total` (a docstring de `materialidade` é
+    explícita: os ajustes de topo são ponte-adjacentes, fora da pergunta
+    "segmentar muda o preço?"). Os dois números vêm de rodar o motor de
+    verdade sobre a fixture do segmento (conferido por fora deste teste).
+    """
     r = compor_partes(_sotp(), "base")
     m = r["materialidade"]
     assert m["diferenca"] == pytest.approx(m["ev_segmentado"] - m["ev_blended"])
     assert m["sinal"] in ("+", "-", "0")
+    assert m["ev_segmentado"] == pytest.approx(7278.83, abs=0.01)
+    assert m["ev_segmentado"] == pytest.approx(r["ev_das_partes"], abs=0.01)
+    assert m["ev_blended"] == pytest.approx(6973.93, abs=0.01)
 
 
 def test_materialidade_sinal_positivo_e_leitura_da_fixture_padrao():
@@ -305,3 +320,40 @@ def test_claims_homogeneos_somam_exatamente_o_consolidado():
     consolidado = rodar("firm", partes[0]["premissas"],
                         {"ebitda": soma_metrica, "nd": 0.0, "acoes": 1.0})
     assert r["ev_das_partes"] == pytest.approx(consolidado["EV"], abs=0.01)
+
+
+# --------------------------------------------------------------------------
+# Revisão final (task 3c), FIX 6c: `compor_partes` ecoa `cenario` no bloco
+# devolvido -- antes, um leitor de resultados.json via sotp não tinha como
+# saber, olhando só o bloco 'sotp', qual cenário foi nomeado (a chave só
+# existia no INPUT, `caso["sotp"]["cenario"]`, nunca no output).
+# --------------------------------------------------------------------------
+
+def test_compor_partes_ecoa_o_nome_do_cenario():
+    r = compor_partes(_sotp(), "base")
+    assert r["cenario"] == "base"
+
+
+# --------------------------------------------------------------------------
+# Revisão final (task 3c), FIX 6e: colisão de ordenação no loop de repasse
+# íntegro de `_compor_parte` -- uma chave nova do motor que algum dia
+# colidisse com um campo AUTORADO da parte (nome, rota, metrica_base,
+# ancora, premissas, algebra_da_escala, triangulo) sobrescreveria esse
+# campo em silêncio; hoje nenhuma colisão existe (o motor não emite
+# nenhum desses nomes) -- este teste MANUFATURA uma via monkeypatch para
+# provar que a guarda (`chave in resultado`) segura, não apenas documenta
+# a intenção.
+# --------------------------------------------------------------------------
+
+def test_parte_com_chave_do_motor_colidindo_com_campo_autorado_nao_sobrescreve(monkeypatch):
+    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None):
+        return {
+            "EV": 999.0, "EV/EBITDA_curr": 6.0, "diagnosticos": [],
+            "nome": "CLOBBERED-PELO-MOTOR",  # colisão manufaturada
+        }
+
+    monkeypatch.setattr("avaliar.rodar", _rodar_fake)
+    r = compor_partes(_sotp(), "base")
+    nomes = {p["nome"] for p in r["partes"]}
+    assert nomes == {"Industrial", "Serviços"}
+    assert "CLOBBERED-PELO-MOTOR" not in nomes

@@ -1027,10 +1027,42 @@ def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
     A exigência de 'mercado' (rf, erp) quando 'reversa' está presente já foi
     confirmada por `_validar_mercado` antes desta função rodar — não é
     responsabilidade dela.
+
+    FIX 1 (Crítico, revisão final): a rota 'rampa' não tem vocabulário de
+    reversa nesta fatia — `RESOLVER_POR_EIXO` (reversa.py) só mapeia
+    'firm'/'equity' para a variável que cada eixo resolve (wacc/ke,
+    roic/roe, g/g, cap/cap). Nenhuma checagem AQUI dentro toca um dict
+    indexado por rota, então um caso rampa+reversa passava por esta função
+    inteira sem recusa — e só quebrava DEPOIS, dentro de `reversa.reverter`
+    (`RESOLVER_POR_EIXO[eixo]['rampa']`, KeyError cru), já com os cenários
+    principais do caso rodados no motor: subprocessos desperdiçados antes
+    da recusa chegar. Decisão tomada, não reaberta aqui: recusar pelo NOME,
+    como limitação declarada desta fatia — mesmo padrão de equity+sotp
+    (`_validar_sotp`, mais abaixo). Acoplar reversa à composição bifásica
+    da rampa exige decidir quais eixos essa composição de duas fases admite
+    reverter — decisão de metodologia que esta fatia não toma; inventar a
+    resposta aqui seria o scope creep que a metodologia deste módulo
+    proíbe. O bloco 'reversa' continua disponível nas rotas 'firm' e
+    'equity'.
     """
     reversa = caso.get("reversa")
     if reversa is None:
         return
+
+    if rota == "rampa":
+        raise CasoInvalido(
+            "bloco 'reversa' presente na rota 'rampa': esta combinação não "
+            "está implementada nesta fatia. As premissas da rota rampa "
+            "(receita0, ebitda0, da_parque, wk, kappa, g2, t_rampa...) não "
+            "são o vocabulário que a máquina de reversa resolve contra — "
+            "'RESOLVER_POR_EIXO' só conhece a tradução de eixo para "
+            "variável (wacc/roic/g...) das rotas 'firm' e 'equity'. "
+            "Acoplar reversa a uma composição bifásica exige decidir quais "
+            "eixos essa composição admite reverter, uma decisão de "
+            "metodologia que esta fatia não toma. O bloco 'reversa' pode "
+            "ser usado com as rotas 'firm' e 'equity'. Remova o bloco, ou "
+            "troque a rota do caso."
+        )
 
     if not isinstance(reversa, dict):
         raise CasoInvalido(
@@ -1124,7 +1156,16 @@ def _validar_grade_1d(grade: Any, rota: str, permitidas: frozenset) -> None:
 
     prefixo = f"grade 1D '{premissa}'"
     _validar_pontos(prefixo, grade.get("pontos"))
-    _validar_triangulo(prefixo, grade.get("triangulo"), rota)
+    # FIX 1 (revisão final): guarda de membership uniforme com os outros
+    # três call sites de `_validar_triangulo` (cenário, parte de SOTP,
+    # blended de materialidade) — `_TRIANGULO_POR_ROTA` não tem chave para
+    # 'rampa'. Inalcançável para 'rampa' pela API pública, depois da
+    # recusa de rampa+sensibilidades em `_validar_sensibilidades` — mas o
+    # comentário deste módulo, nos outros três sites, chama esta guarda
+    # OBRIGATÓRIA; ausente destes dois, uma rota futura sem triângulo
+    # quebraria aqui com KeyError cru.
+    if rota in _TRIANGULO_POR_ROTA:
+        _validar_triangulo(prefixo, grade.get("triangulo"), rota)
 
 
 def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
@@ -1169,7 +1210,10 @@ def _validar_grade_2d(grade: Any, rota: str, permitidas: frozenset) -> None:
     prefixo = f"grade 2D '{premissa_x}' x '{premissa_y}'"
     _validar_pontos(f"{prefixo} (eixo x)", grade.get("pontos_x"))
     _validar_pontos(f"{prefixo} (eixo y)", grade.get("pontos_y"))
-    _validar_triangulo(prefixo, grade.get("triangulo"), rota)
+    # FIX 1 (revisão final): mesma guarda de membership de `_validar_grade_1d`
+    # — ver o comentário lá.
+    if rota in _TRIANGULO_POR_ROTA:
+        _validar_triangulo(prefixo, grade.get("triangulo"), rota)
 
 
 # --------------------------------------------------------------------------
@@ -1276,10 +1320,35 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
     'mid_year' não são número; deixar passar produzia caso.json válido
     para uma grade que o motor não sabe rodar, e a recusa só aparecia
     depois, num subprocesso do motor.
+
+    FIX 1 (Crítico, revisão final): mesma decisão e mesmo motivo da recusa
+    de reversa+rampa em `_validar_reversa` (ver aquele docstring) — mas
+    aqui o sintoma pré-fix era mais cedo e mais cru. Toda grade (1D ou 2D)
+    chama `_validar_triangulo`, que indexa `_TRIANGULO_POR_ROTA[rota]` — e
+    'rampa' não é chave desse dict (a rota não usa o triângulo
+    g = RiR x retorno: g2 é premissa direta do vetor). Um caso
+    rampa+sensibilidades batia em `KeyError: 'rampa'` NO PORTÃO, na
+    primeira grade declarada, antes de qualquer chamada ao motor — mas
+    ainda cru, sem nomear o motivo real (a combinação não é suportada,
+    não que o formato da grade esteja errado).
     """
     sensibilidades = caso.get("sensibilidades")
     if sensibilidades is None:
         return
+
+    if rota == "rampa":
+        raise CasoInvalido(
+            "bloco 'sensibilidades' presente na rota 'rampa': esta "
+            "combinação não está implementada nesta fatia. A rota rampa "
+            "não usa o triângulo g = RiR x retorno (g2 é premissa direta "
+            "do vetor; RiR2/ROIC2 saem do motor como resultado, nunca "
+            "como escolha de input) — as premissas da rota rampa não são "
+            "o vocabulário que uma grade de sensibilidade varia hoje, e "
+            "decidir o que uma grade significa numa composição bifásica é "
+            "decisão de metodologia que esta fatia não toma. O bloco "
+            "'sensibilidades' pode ser usado com as rotas 'firm' e "
+            "'equity'. Remova o bloco, ou troque a rota do caso."
+        )
 
     if not isinstance(sensibilidades, dict):
         raise CasoInvalido(
@@ -1418,6 +1487,36 @@ def _validar_parte(prefixo: str, parte: dict) -> None:
             f"parte de SOTP: {', '.join(sorted(_ROTAS_DE_PARTE_SOTP))}."
         )
 
+    # FIX 5 (Importante, revisão final): 'ponte' e 'acoes_diluidas' são
+    # campos do CASO inteiro — a ponte cruza uma única vez, no topo do
+    # SOTP (D3: "ponte por parte é o erro que a trava existe para
+    # impedir", ver docstring de `sotp.py`). Sem esta guarda, uma parte que
+    # declarasse um destes dois campos era aceita pelo portão e a
+    # declaração era silenciosamente IGNORADA por `sotp._compor_parte`
+    # (que chama `precificar_firm`/`precificar_rampa` sem nd_efetivo/
+    # acoes, de propósito, exatamente para nunca cruzar ponte por parte) —
+    # a falha exata que a parede de cruzamento único existe para impedir:
+    # o analista que declara uma ponte (ou uma contagem de ações) por
+    # parte acredita que ela foi usada ali e recebe um número plausível,
+    # mas errado, porque o campo nunca chega a `_compor_parte`. Mesma
+    # disciplina de `_validar_ponte` (recusa 'ponte' na rota equity) e
+    # `_validar_delimitador` (recusa 'delimitador' fora da rota rampa):
+    # presença do campo já é recusada, nomeando o motivo, nunca só um
+    # valor ruim dentro dele.
+    for campo_do_caso in ("ponte", "acoes_diluidas"):
+        if campo_do_caso in parte:
+            raise CasoInvalido(
+                f"{prefixo}: campo '{campo_do_caso}' presente numa parte "
+                "de SOTP: a ponte cruza uma única vez, no topo do SOTP, "
+                "nunca por parte — uma parte declara EV, nunca Equity nem "
+                "preço por ação. Este campo aqui é aceito e IGNORADO em "
+                "silêncio por `compor_partes` (que precifica cada parte "
+                "sem escala de dívida/ações, de propósito): o analista que "
+                "declara isto acredita que a ponte foi cruzada nesta "
+                f"parte e recebe um número plausível, mas errado. Remova "
+                f"'{campo_do_caso}' da parte."
+            )
+
     # `_validar_metrica` foi escrita para receber o CASO inteiro, mas só lê
     # `caso.get("metrica_base")` — uma parte tem a mesma chave, com o mesmo
     # shape (tipo, valor, fonte). Reaproveitada tal como está, sem variante.
@@ -1500,6 +1599,31 @@ def _validar_topo_sotp(topo: Any) -> None:
                 "'sotp.topo.desconto_de_holding_pct' não é um número "
                 f"finito: {desconto!r}."
             )
+        # FIX 3 (Importante, revisão final): o portão exigia a razão
+        # (não-vazia) mas não checava o DOMÍNIO do próprio número — só a
+        # razão de existir. `equity_depois = equity_antes * (1 - desconto /
+        # 100)` é a única fórmula que este campo aciona (sotp.py); um
+        # `desconto` <= 0 inverte o sinal do fator e vira um PRÊMIO
+        # disfarçado — confirmado: -25.0 leva o equity da fixture do
+        # segmento de 6378.83 para 7973.54 (aumenta, não reduz) — uma
+        # operação que não está na lista autorizada deste wrapper. Um
+        # `desconto` >= 100 anula (100: fator 0) ou inverte (>100: fator
+        # negativo) o equity. O intervalo ABERTO 0 < x < 100 é o domínio
+        # inteiro em que a fórmula faz o que o nome do campo promete.
+        if not (0 < desconto < 100):
+            raise CasoInvalido(
+                "'sotp.topo.desconto_de_holding_pct' fora do domínio: "
+                f"{desconto!r}. Tem de estar estritamente entre 0 e 100. "
+                "Um valor <= 0 é um PRÊMIO disfarçado de desconto — a "
+                "fórmula `equity * (1 - desconto/100)` inverte de sinal e "
+                "AUMENTA o equity quando o desconto é negativo, uma "
+                "operação que não está na lista autorizada deste wrapper. "
+                "Um valor >= 100 anula (100: fator zero) ou inverte "
+                "(acima de 100: fator negativo) o equity. Se um prêmio de "
+                "holding for algum dia uma necessidade metodológica real, "
+                "ele entra pelo nome, através da metodologia — nunca por "
+                "um truque de sinal neste campo."
+            )
         razao = topo.get("razao_do_desconto")
         if not isinstance(razao, str) or not razao.strip():
             raise CasoInvalido(
@@ -1550,6 +1674,12 @@ def _validar_sotp(caso: Caso, cenarios: dict) -> None:
     _validar_cenario_alvo("sotp.cenario", cenario_nome, cenarios)
 
     tipo = sotp.get("tipo")
+    # FIX 2 (Importante, revisão final): quarta instância da mesma classe de
+    # defeito neste módulo — um valor não-hasheável (lista, dict) alcançando
+    # `x not in <frozenset>` levanta TypeError cru, no próprio módulo que
+    # construiu `_exigir_texto` para fechar essa fronteira estruturalmente.
+    # `sotp.tipo` tinha ficado de fora.
+    _exigir_texto(tipo, "sotp.tipo")
     if tipo not in _TIPOS_DE_SOTP:
         raise CasoInvalido(
             f"'sotp.tipo' inválido: {tipo!r}. Tem de ser um de "
