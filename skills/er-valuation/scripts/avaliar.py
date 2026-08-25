@@ -128,7 +128,7 @@ _MULTIPLOS_POR_ROTA: dict[str, tuple[str, ...]] = {
 
 
 def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
-                     nd_efetivo: float, acoes: float,
+                     nd_efetivo: float | None = None, acoes: float | None = None,
                      moeda: str | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota firm; devolve
     (saída, valor, álgebra, múltiplo de referência).
@@ -162,29 +162,61 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
     chama decide se passa `--moeda`: `avaliar()` e `sensibilidades.py`
     sempre passam `caso["moeda"]` (ver docstring do módulo e de
     `sensibilidades.py`).
+
+    Fatia C, Task 2: `nd_efetivo`/`acoes` ganharam default `None` — sinal de
+    que quem chama não quer cruzar a ponte (uma parte de SOTP, por exemplo:
+    D3 do plano da fatia C proíbe ponte por parte — "é o erro que a trava
+    existe para impedir"). Com `nd_efetivo is None`, `valor` só tem `"EV"`
+    (nunca `"Equity"`/`"preco_acao"` — as duas chaves que uma ponte
+    cruzada produziria): no ramo EBITDA a escala passada ao motor leva só
+    `ebitda` (sem `nd`/`acoes` — o motor devolve `EV` e os múltiplos
+    normalmente; `Equity`/`Preco_acao` saem ausentes, porque a ponte nunca
+    foi informada — confirmado por sondagem direta do motor); no ramo
+    NOPAT a chamada em si não muda (já rodava sem escala nenhuma), só o
+    `valor` devolvido para de derivar `equity`/`preco_acao` da álgebra.
+    Todo call site existente (`avaliar.py`, `sensibilidades.py`) sempre
+    passa `nd_efetivo`/`acoes` explícitos — o default novo não muda
+    nenhum comportamento pré-existente, só abre um caminho a mais.
     """
     campo_multiplo = _campo_do_multiplo("firm", tipo_metrica)
+    sem_ponte = nd_efetivo is None
     if tipo_metrica == "EBITDA":
-        escala = {"ebitda": valor_metrica, "nd": nd_efetivo, "acoes": acoes}
+        escala = {"ebitda": valor_metrica}
+        if not sem_ponte:
+            escala["nd"] = nd_efetivo
+            escala["acoes"] = acoes
         saida = rodar("firm", premissas, escala, moeda)
-        valor = {
-            "EV": _exigir_valor(saida, "EV"),
-            "Equity": _exigir_valor(saida, "Equity"),
-            "preco_acao": _exigir_valor(saida, "Preco_acao"),
-        }
         multiplo = _exigir_valor(saida, campo_multiplo)
-        algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
+        if sem_ponte:
+            valor = {"EV": _exigir_valor(saida, "EV")}
+            algebra = (
+                "EV = EV/EBITDA_curr x EBITDA (motor, sem ponte — parte de SOTP)"
+            )
+        else:
+            valor = {
+                "EV": _exigir_valor(saida, "EV"),
+                "Equity": _exigir_valor(saida, "Equity"),
+                "preco_acao": _exigir_valor(saida, "Preco_acao"),
+            }
+            algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
         saida = rodar("firm", premissas, None, moeda)
         multiplo = _exigir_valor(saida, campo_multiplo)
         ev = multiplo * valor_metrica
-        equity = ev - nd_efetivo
-        preco_acao = equity / acoes
-        valor = {"EV": ev, "Equity": equity, "preco_acao": preco_acao}
-        algebra = (
-            "EV = EV/NOPAT_curr x NOPAT; Equity = EV - nd_efetivo; "
-            "preco_acao = Equity / acoes_diluidas (ponte aplicada aqui, fora do motor)"
-        )
+        if sem_ponte:
+            valor = {"EV": ev}
+            algebra = (
+                "EV = EV/NOPAT_curr x NOPAT (mesma definição de múltiplo; "
+                "sem ponte — parte de SOTP)"
+            )
+        else:
+            equity = ev - nd_efetivo
+            preco_acao = equity / acoes
+            valor = {"EV": ev, "Equity": equity, "preco_acao": preco_acao}
+            algebra = (
+                "EV = EV/NOPAT_curr x NOPAT; Equity = EV - nd_efetivo; "
+                "preco_acao = Equity / acoes_diluidas (ponte aplicada aqui, fora do motor)"
+            )
 
     return saida, valor, algebra, multiplo
 
@@ -213,7 +245,8 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
     return saida, valor, algebra, multiplo
 
 
-def precificar_rampa(premissas: dict, nd_efetivo: float, acoes: float,
+def precificar_rampa(premissas: dict, nd_efetivo: float | None = None,
+                      acoes: float | None = None,
                       moeda: str | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota rampa; devolve
     (saída, valor, álgebra, múltiplo de referência).
@@ -233,19 +266,37 @@ def precificar_rampa(premissas: dict, nd_efetivo: float, acoes: float,
     EBITDA do ANO 0, não uma métrica normalizada (é por isso que
     `METRICAS_POR_ROTA['rampa'] == {'EBITDA0'}`, ao contrário de
     `EV/EBITDA_curr`/`PL_curr` das outras duas rotas).
+
+    Fatia C, Task 2: `nd_efetivo`/`acoes` ganharam default `None`, mesmo
+    motivo e mesma disciplina de `precificar_firm` (ver aquele docstring)
+    — uma parte de SOTP na rota rampa nunca cruza ponte. Com `nd_efetivo
+    is None`, a chamada ao motor não leva `--nd`/`--acoes` nenhum (escala
+    `None` — `ebitda0`/`receita0` já ancoram `EV`/`EV/EBITDA0` sozinhos;
+    confirmado por sondagem direta do motor que os dois saem populados sem
+    nd/acoes, e só `Equity`/`Preco_acao` saem ausentes) e `valor` só tem
+    `"EV"`. Todo call site existente (`avaliar.py`) sempre passa
+    `nd_efetivo`/`acoes` explícitos — comportamento antigo intacto.
     """
-    escala = {"nd": nd_efetivo, "acoes": acoes}
+    sem_ponte = nd_efetivo is None
+    escala = None if sem_ponte else {"nd": nd_efetivo, "acoes": acoes}
     saida = rodar("rampa", premissas, escala, moeda)
-    valor = {
-        "EV": _exigir_valor(saida, "EV"),
-        "Equity": _exigir_valor(saida, "Equity"),
-        "preco_acao": _exigir_valor(saida, "Preco_acao"),
-    }
     multiplo = _exigir_valor(saida, "EV/EBITDA0")
-    algebra = (
-        "EV, Equity e Preco_acao vem prontos do motor "
-        "(composicao bifasica fase1+fase2; ponte feita pelo motor)"
-    )
+    if sem_ponte:
+        valor = {"EV": _exigir_valor(saida, "EV")}
+        algebra = (
+            "EV vem pronto do motor (composicao bifasica fase1+fase2; "
+            "sem ponte — parte de SOTP)"
+        )
+    else:
+        valor = {
+            "EV": _exigir_valor(saida, "EV"),
+            "Equity": _exigir_valor(saida, "Equity"),
+            "preco_acao": _exigir_valor(saida, "Preco_acao"),
+        }
+        algebra = (
+            "EV, Equity e Preco_acao vem prontos do motor "
+            "(composicao bifasica fase1+fase2; ponte feita pelo motor)"
+        )
     return saida, valor, algebra, multiplo
 
 

@@ -327,8 +327,9 @@ def validar(caso: Caso) -> None:
     rota -> ponte x rota -> delimitador x rota -> ações diluídas -> preço ->
     cada cenário (âncora, triângulo quando a rota tiver um, premissas
     obrigatórias, premissas desconhecidas) -> blocos
-    opcionais 'mercado', 'reversa' e 'sensibilidades', só quando presentes.
-    Não modifica `caso`; não preenche nada — só confirma ou recusa.
+    opcionais 'mercado', 'reversa', 'sensibilidades' e 'sotp', só quando
+    presentes. Não modifica `caso`; não preenche nada — só confirma ou
+    recusa.
 
     Revisão final (FIX 3): doze formatos malformados achados por sondagem
     manual escapavam desta função como AttributeError/TypeError cru — o
@@ -393,6 +394,7 @@ def validar(caso: Caso) -> None:
     _validar_mercado(caso, reversa_presente)
     _validar_reversa(caso, cenarios, rota)
     _validar_sensibilidades(caso, cenarios, rota)
+    _validar_sotp(caso)
 
 
 def _validar_campos_de_topo(caso: Caso) -> None:
@@ -698,37 +700,23 @@ def _validar_triangulo(prefixo: str, triangulo: Any, rota: str) -> None:
         )
 
 
-def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
-    prefixo = f"cenário '{nome}'"
+def _validar_premissas(prefixo: str, premissas_bruto: Any, rota: str) -> None:
+    """Valida o vetor 'premissas' de um cenário OU de uma parte de SOTP:
+    tipo do container, chaves textuais, premissas obrigatórias presentes,
+    premissas desconhecidas recusadas, tipo numérico e finitude de cada
+    uma, e a regra 'util' XOR 'g1' na rota rampa.
 
-    if not isinstance(cenario, dict):
-        # Revisão final (FIX 3): um cenário individual como string ou lista
-        # (em vez do objeto ancora/triangulo/premissas) levantava
-        # AttributeError cru no `.get("ancora")` logo abaixo.
-        raise CasoInvalido(
-            f"{prefixo} não é um objeto: {cenario!r}. Cada cenário declara "
-            "'ancora', 'triangulo' e 'premissas'."
-        )
-
-    if not cenario.get("ancora"):
-        raise CasoInvalido(
-            f"{prefixo} sem âncora: a metodologia exige um observável "
-            "concreto por cenário (consenso, guidance vigente, histórico "
-            "normalizado, run-rate, pares diretos) — cenário sem âncora é "
-            "cenário inventado."
-        )
-
-    # O triângulo g = RiR x retorno só existe para rotas presentes em
-    # `_TRIANGULO_POR_ROTA` (firm, equity). A rota rampa não usa esse
-    # mecanismo: g2 é premissa direta do vetor, e RiR2/ROIC2 saem do motor
-    # como resultado — nunca como escolha de input a validar aqui. Chamar
-    # `_validar_triangulo` incondicionalmente levantaria `KeyError` cru em
-    # `_TRIANGULO_POR_ROTA[rota]` para 'rampa' (e para qualquer rota futura
-    # sem triângulo) — a guarda de membership evita isso.
-    if rota in _TRIANGULO_POR_ROTA:
-        _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
-
-    premissas = cenario.get("premissas")
+    Extraída de `_validar_cenario` (Fatia C, Task 2) para ser
+    compartilhada com `_validar_parte`: uma parte de SOTP exige o MESMO
+    vocabulário de premissas, por rota, que um cenário do caso inteiro —
+    "cada parte tem rota, métrica, convenção... próprios" (D3 do plano da
+    fatia C) é a mesma regra, só que aplicada a um objeto menor (parte, não
+    caso inteiro). Duplicar este bloco de ~50 linhas numa segunda função
+    seria exatamente a variante que a metodologia deste módulo proíbe —
+    `prefixo` (`"cenário 'nome'"` ou `"parte 'nome'"`) é o único ponto que
+    varia entre as duas chamadas.
+    """
+    premissas = premissas_bruto
     if premissas is None:
         premissas = {}
     elif not isinstance(premissas, dict):
@@ -815,6 +803,39 @@ def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
 
     if rota == "rampa":
         _validar_util_xor_g1(prefixo, premissas)
+
+
+def _validar_cenario(nome: str, cenario: dict, rota: str) -> None:
+    prefixo = f"cenário '{nome}'"
+
+    if not isinstance(cenario, dict):
+        # Revisão final (FIX 3): um cenário individual como string ou lista
+        # (em vez do objeto ancora/triangulo/premissas) levantava
+        # AttributeError cru no `.get("ancora")` logo abaixo.
+        raise CasoInvalido(
+            f"{prefixo} não é um objeto: {cenario!r}. Cada cenário declara "
+            "'ancora', 'triangulo' e 'premissas'."
+        )
+
+    if not cenario.get("ancora"):
+        raise CasoInvalido(
+            f"{prefixo} sem âncora: a metodologia exige um observável "
+            "concreto por cenário (consenso, guidance vigente, histórico "
+            "normalizado, run-rate, pares diretos) — cenário sem âncora é "
+            "cenário inventado."
+        )
+
+    # O triângulo g = RiR x retorno só existe para rotas presentes em
+    # `_TRIANGULO_POR_ROTA` (firm, equity). A rota rampa não usa esse
+    # mecanismo: g2 é premissa direta do vetor, e RiR2/ROIC2 saem do motor
+    # como resultado — nunca como escolha de input a validar aqui. Chamar
+    # `_validar_triangulo` incondicionalmente levantaria `KeyError` cru em
+    # `_TRIANGULO_POR_ROTA[rota]` para 'rampa' (e para qualquer rota futura
+    # sem triângulo) — a guarda de membership evita isso.
+    if rota in _TRIANGULO_POR_ROTA:
+        _validar_triangulo(prefixo, cenario.get("triangulo"), rota)
+
+    _validar_premissas(prefixo, cenario.get("premissas"), rota)
 
 
 def _validar_util_xor_g1(prefixo: str, premissas: dict) -> None:
@@ -1281,6 +1302,214 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
             total_celulas += len(grade["pontos_x"]) * len(grade["pontos_y"])
 
     _validar_teto_de_celulas(sensibilidades, total_celulas)
+
+
+# --------------------------------------------------------------------------
+# Fatia C, Task 2: bloco opcional 'sotp' — soma de partes, ponte única no
+# topo.
+#
+# 'sotp' é independente da rota do caso: o caso continua precisando de tudo
+# que 'firm'/'equity'/'rampa' já exigem (validado ANTES desta função rodar,
+# dentro de `validar`) — 'sotp', quando presente, é uma composição
+# ADICIONAL, nunca uma substituição da validação de topo.
+#
+# Cada parte é validada com o MESMO vocabulário por rota que um cenário usa
+# (`_validar_metrica`, `_validar_triangulo`, `_validar_premissas`) — "uma
+# parte em gordon e outra em book é normal, não inconsistência" (D3 do plano
+# da fatia C). A rota da parte, porém, é restrita a quem de fato produz EV:
+# `_ROTAS_DE_PARTE_SOTP` exclui 'equity', mesmo essa rota sendo válida em
+# qualquer outro lugar do caso — ver o motivo no docstring de
+# `_validar_parte`.
+# --------------------------------------------------------------------------
+
+_TIPOS_DE_SOTP: frozenset = frozenset({"segmento", "safra"})
+
+# SOTP soma EV de partes (D3) — só rotas que o motor congelado de fato
+# emite 'EV' para podem ser parte. Confirmado por sondagem direta do motor
+# (2026-08-25): o subcomando 'pe' (rota equity) nunca emite 'EV' no JSON —
+# chega em Equity direto (P/L x LL) — e não tem ponte de dívida nenhuma
+# para desfazer. Somar a saída de uma parte 'equity' como se fosse EV
+# misturaria escala de firm (EV) com escala de equity (Equity por ação já
+# líquida de tudo), o exato erro de dupla-contagem que a trava do topo
+# único (D3) existe para impedir. 'firm' e 'rampa' são as duas rotas que
+# emitem 'EV' — as únicas aceitas aqui.
+_ROTAS_DE_PARTE_SOTP: frozenset = frozenset({"firm", "rampa"})
+
+# As duas linhas do topo que SEMPRE entram na soma (D4b), com sinal fixo —
+# diferente de 'desconto_de_holding_pct'/'razao_do_desconto', que são
+# opcionais e só existem juntas (D4).
+_CAMPOS_NUMERICOS_DO_TOPO: tuple = (
+    "custos_corporativos_vp", "participacoes_nao_consolidadas",
+)
+
+
+def _validar_parte(prefixo: str, parte: dict) -> None:
+    """Valida uma parte de SOTP: rota (restrita a quem produz EV), métrica,
+    âncora, triângulo (quando a rota da parte tiver um) e premissas — o
+    MESMO vocabulário que `_validar_cenario` exige para a rota dela.
+
+    Chamada só depois que quem chama já confirmou `parte` como `dict` e
+    `parte["nome"]` como string não vazia (`_validar_sotp`, abaixo) — esta
+    função não repete essas duas checagens.
+    """
+    rota = parte.get("rota")
+    _validar_rota(rota)
+    if rota not in _ROTAS_DE_PARTE_SOTP:
+        raise CasoInvalido(
+            f"{prefixo}: rota '{rota}' não produz EV — SOTP soma o EV de "
+            "cada parte (D3 do plano da fatia C), e a rota 'equity' chega "
+            "em Equity direto (P/L x LL), sem EV e sem ponte de dívida "
+            "nenhuma para desfazer; somar essa saída como EV misturaria "
+            "escalas incompatíveis — o mesmo erro de dupla-contagem que a "
+            f"trava do topo único existe para impedir. Rotas aceitas para "
+            f"parte de SOTP: {', '.join(sorted(_ROTAS_DE_PARTE_SOTP))}."
+        )
+
+    # `_validar_metrica` foi escrita para receber o CASO inteiro, mas só lê
+    # `caso.get("metrica_base")` — uma parte tem a mesma chave, com o mesmo
+    # shape (tipo, valor, fonte). Reaproveitada tal como está, sem variante.
+    _validar_metrica(parte, rota)
+
+    if not parte.get("ancora"):
+        raise CasoInvalido(
+            f"{prefixo} sem âncora: cada parte de SOTP exige o mesmo "
+            "observável concreto que a metodologia exige de um cenário — "
+            "parte sem âncora é parte inventada."
+        )
+
+    if rota in _TRIANGULO_POR_ROTA:
+        if "triangulo" not in parte:
+            raise CasoInvalido(
+                f"{prefixo} sem 'triangulo' declarado: cada parte de SOTP "
+                "exige a mesma configuração g = RiR x retorno que a "
+                "metodologia exige de um cenário — sem isso a taxa de "
+                "reinvestimento da parte fica silenciosa."
+            )
+        _validar_triangulo(prefixo, parte.get("triangulo"), rota)
+
+    _validar_premissas(prefixo, parte.get("premissas"), rota)
+
+
+def _validar_topo_sotp(topo: Any) -> None:
+    """Valida 'sotp.topo': os dois campos numéricos obrigatórios (D4b) e o
+    par opcional desconto/razão (D4).
+
+    'custos_corporativos_vp' e 'participacoes_nao_consolidadas' entram na
+    soma do topo sempre, com sinal fixo — custo corporativo não alocado é
+    despesa capitalizada, subtrai; participação não consolidada é ativo,
+    soma (D4b). Por isso os dois são obrigatórios e numéricos, mesmo
+    quando o valor é 0.0 — 0.0 é uma DECLARAÇÃO (não há custo corporativo
+    não alocado), `null`/ausente é um BURACO na soma.
+
+    'desconto_de_holding_pct' é opcional; quando declarado (não-nulo),
+    'razao_do_desconto' TEM de ser string não vazia — D4: "desconto de
+    holding só existe declarado com razão", a metodologia é explícita
+    sobre nunca aplicar por hábito.
+    """
+    if not isinstance(topo, dict):
+        raise CasoInvalido(
+            f"'sotp.topo' ausente ou não é um objeto: {topo!r}. Declare "
+            "'custos_corporativos_vp', 'participacoes_nao_consolidadas', "
+            "'desconto_de_holding_pct' e 'razao_do_desconto' — é onde a "
+            "ponte única do SOTP cruza, e só ali (D3)."
+        )
+
+    for campo in _CAMPOS_NUMERICOS_DO_TOPO:
+        valor = topo.get(campo)
+        if not _numero_valido(valor):
+            raise CasoInvalido(
+                f"'sotp.topo.{campo}' ausente ou não numérico: {valor!r}. "
+                "O topo soma as partes com os ajustes de topo (D4b) — sem "
+                "um número de verdade aqui não há soma para fazer, mesmo "
+                "quando o valor declarado é 0.0."
+            )
+        if not _finito(valor):
+            raise CasoInvalido(
+                f"'sotp.topo.{campo}' não é um número finito: {valor!r}. "
+                "NaN e Infinity envenenam a soma do topo em silêncio."
+            )
+
+    desconto = topo.get("desconto_de_holding_pct")
+    if desconto is not None:
+        if not _numero_valido(desconto) or not _finito(desconto):
+            raise CasoInvalido(
+                "'sotp.topo.desconto_de_holding_pct' não é um número "
+                f"finito: {desconto!r}."
+            )
+        razao = topo.get("razao_do_desconto")
+        if not isinstance(razao, str) or not razao.strip():
+            raise CasoInvalido(
+                "'sotp.topo.desconto_de_holding_pct' declarado sem "
+                "'razao_do_desconto' não vazia: a metodologia é explícita "
+                "— desconto de holding só existe declarado com razão, "
+                "nunca aplicado por hábito (D4). Declare a razão do "
+                "desconto, ou remova o desconto."
+            )
+
+
+def _validar_sotp(caso: Caso) -> None:
+    """Valida o bloco opcional 'sotp': tipo, partes (>= 2, nomes distintos,
+    cada uma válida para a rota dela) e topo.
+
+    `caso.get("sotp")` ausente ou `None` é um caso perfeitamente válido sem
+    SOTP nenhum — exatamente tão válido quanto antes desta fatia existir.
+    """
+    sotp = caso.get("sotp")
+    if sotp is None:
+        return
+
+    if not isinstance(sotp, dict):
+        raise CasoInvalido(
+            f"campo 'sotp' não é um objeto: {sotp!r}. Declare 'tipo', "
+            "'partes' e 'topo'."
+        )
+
+    tipo = sotp.get("tipo")
+    if tipo not in _TIPOS_DE_SOTP:
+        raise CasoInvalido(
+            f"'sotp.tipo' inválido: {tipo!r}. Tem de ser um de "
+            f"{', '.join(sorted(_TIPOS_DE_SOTP))} — 'segmento' (partes "
+            "economicamente distintas) ou 'safra' (base instalada x "
+            "capital novo)."
+        )
+
+    partes = _exigir_lista(sotp.get("partes"), "sotp.partes")
+    if len(partes) < 2:
+        raise CasoInvalido(
+            f"'sotp.partes' com {len(partes)} parte(s): SOTP soma ao "
+            "menos duas partes — soma de uma parte só é o consolidado com "
+            "passos a mais, não SOTP nenhum."
+        )
+
+    nomes: list = []
+    for indice, parte in enumerate(partes):
+        if not isinstance(parte, dict):
+            raise CasoInvalido(
+                f"'sotp.partes[{indice}]' não é um objeto: {parte!r}. "
+                "Cada parte declara 'nome', 'rota', 'metrica_base', "
+                "'ancora', 'triangulo' e 'premissas'."
+            )
+        nome = parte.get("nome")
+        if not isinstance(nome, str) or not nome.strip():
+            raise CasoInvalido(
+                f"'sotp.partes[{indice}]' sem 'nome' válido: {nome!r}. "
+                "Cada parte precisa de um nome não vazio — é a chave que "
+                "identifica a parte no resultado."
+            )
+        nomes.append(nome)
+
+    repetidos = sorted({nome for nome in nomes if nomes.count(nome) > 1})
+    if repetidos:
+        raise CasoInvalido(
+            f"'sotp.partes' com nome repetido: {repetidos!r}. Cada parte "
+            "precisa de um nome distinto — é a chave que identifica a "
+            "parte no resultado."
+        )
+
+    for parte in partes:
+        _validar_parte(f"parte '{parte['nome']}'", parte)
+
+    _validar_topo_sotp(sotp.get("topo"))
 
 
 def carregar(caminho: Path) -> Caso:

@@ -1,0 +1,69 @@
+{
+  "companhia": "Conglomerado SOTP S.A.",
+  "ticker": "CSOT3",
+  "moeda": "BRL-nominal",
+  "data_analise": "2026-08-25",
+  "data_base": null,
+  "preco": {"valor": 55.0, "fonte": "fixture sintética", "data": "2026-08-25"},
+  "rota": "firm",
+  "metrica_base": {"tipo": "EBITDA", "valor": 1000.0, "periodo": "2025A", "fonte": "consolidado"},
+  "acoes_diluidas": 100.0,
+  "ponte": {
+    "divida_bruta": 800.0, "caixa_e_equivalentes": 300.0,
+    "outros_ativos": 0.0, "outros_passivos": 0.0, "minoritarios": 0.0
+  },
+  "cenarios": {
+    "base": {
+      "ancora": "consolidado, premissas ponderadas por EBITDA",
+      "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+      "premissas": {
+        "g": 5.2, "roic": 14.3, "wacc": 10.3, "n": 10,
+        "da": 17.8, "tax": 25.0, "tv": "convergencia"
+      }
+    }
+  },
+  "sotp": {
+    "tipo": "segmento",
+    "partes": [
+      {
+        "nome": "Industrial",
+        "rota": "firm",
+        "metrica_base": {"tipo": "EBITDA", "valor": 700.0, "fonte": "nota de segmentos"},
+        "ancora": "média normalizada 2023-2025",
+        "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+        "premissas": {
+          "g": 4.0, "roic": 11.0, "wacc": 10.0, "n": 10,
+          "da": 22.0, "tax": 25.0, "tv": "convergencia"
+        }
+      },
+      {
+        "nome": "Serviços",
+        "rota": "firm",
+        "metrica_base": {"tipo": "EBITDA", "valor": 300.0, "fonte": "nota de segmentos"},
+        "ancora": "consenso t+1",
+        "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+        "premissas": {
+          "g": 8.0, "roic": 22.0, "wacc": 11.0, "n": 12,
+          "da": 8.0, "tax": 25.0, "tv": "gordon", "roic_tv": 14.0, "gp": 3.0
+        }
+      }
+    ],
+    "topo": {
+      "custos_corporativos_vp": 400.0,
+      "participacoes_nao_consolidadas": 0.0,
+      "desconto_de_holding_pct": null,
+      "razao_do_desconto": null
+    },
+    "materialidade": {
+      "blended": {
+        "ancora": "consolidado, premissas ponderadas por EBITDA",
+        "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+        "metrica_base": {"tipo": "EBITDA", "valor": 1000.0, "fonte": "consolidado"},
+        "premissas": {
+          "g": 5.2, "roic": 14.3, "wacc": 10.3, "n": 10,
+          "da": 17.8, "tax": 25.0, "tv": "convergencia"
+        }
+      }
+    }
+  }
+}
