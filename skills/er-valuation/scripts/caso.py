@@ -542,8 +542,17 @@ def _validar_ponte(caso: Caso, rota: str) -> None:
                 )
 
 
-def _validar_delimitador(caso: Caso, rota: str) -> None:
-    """Valida o campo de topo condicional-à-rota 'delimitador'.
+def _validar_delimitador(alvo: dict, rota: str) -> None:
+    """Valida o campo condicional-à-rota 'delimitador' em `alvo`.
+
+    `alvo` é o CASO inteiro quando a rota rampa é a rota do caso (topo) —
+    a chamada original, de dentro de `validar` — OU uma PARTE de SOTP
+    quando a rampa é uma parte, não a rota do caso inteiro (Fatia C, Task
+    3, chamada de dentro de `_validar_parte`). Generalizada de `caso: Caso`
+    para `alvo: dict` para servir às duas chamadas com a MESMA regra e a
+    MESMA mensagem — nenhuma das duas frases abaixo nomeia "caso" nem
+    "parte", só a rota, então o texto continua correto nos dois lugares
+    sem precisar de um parâmetro de prefixo.
 
     Só a rota 'rampa' tem fronteira de fase para delimitar: a composição
     bifásica do motor soma fase 1 (rampa de utilização) com fase 2
@@ -564,10 +573,10 @@ def _validar_delimitador(caso: Caso, rota: str) -> None:
     para não silenciar um dado que não se aplica — mesma disciplina de
     'ponte' presente na rota equity.
     """
-    tem_delimitador = "delimitador" in caso
+    tem_delimitador = "delimitador" in alvo
 
     if rota == "rampa":
-        valor = caso.get("delimitador")
+        valor = alvo.get("delimitador")
         if not tem_delimitador or not isinstance(valor, str) or not valor.strip():
             raise CasoInvalido(
                 f"campo 'delimitador' ausente ou vazio na rota rampa: "
@@ -1320,6 +1329,18 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
 # `_ROTAS_DE_PARTE_SOTP` exclui 'equity', mesmo essa rota sendo válida em
 # qualquer outro lugar do caso — ver o motivo no docstring de
 # `_validar_parte`.
+#
+# Fatia C, Task 3 acrescenta três checagens a este bloco, todas opcionais
+# ou condicionais (nenhuma muda o que já validava antes):
+#   - a parede da safra (`tipo == "safra"` exige exatamente uma parte na
+#     rota rampa — ver o bloco dentro de `_validar_sotp`);
+#   - o delimitador de uma parte em rampa é campo DELA, não do caso, mas a
+#     MESMA regra e a MESMA mensagem de `_validar_delimitador` (agora
+#     generalizada para aceitar caso OU parte) — chamada de dentro de
+#     `_validar_parte`;
+#   - o bloco opcional 'sotp.materialidade.blended' (`_validar_materialidade`,
+#     abaixo de `_validar_sotp`), com o mesmo vocabulário de um cenário,
+#     na rota do CASO inteiro.
 # --------------------------------------------------------------------------
 
 _TIPOS_DE_SOTP: frozenset = frozenset({"segmento", "safra"})
@@ -1369,6 +1390,17 @@ def _validar_parte(prefixo: str, parte: dict) -> None:
     # `caso.get("metrica_base")` — uma parte tem a mesma chave, com o mesmo
     # shape (tipo, valor, fonte). Reaproveitada tal como está, sem variante.
     _validar_metrica(parte, rota)
+
+    # Consequência de contrato (Fatia C, Task 3): na rota rampa do CASO
+    # inteiro, 'delimitador' é campo de topo (`_validar_delimitador(caso,
+    # rota)`, chamada de dentro de `validar`). Quando a rampa é uma PARTE
+    # de SOTP em vez da rota do caso, o delimitador é campo DELA — mesma
+    # regra, mesma mensagem, só o dict que muda (`_validar_delimitador` já
+    # foi generalizada para aceitar qualquer um dos dois). Sem esta
+    # chamada, uma parte em rampa sem delimitador validava normalmente — a
+    # fronteira de fase da parte ficava tão silenciosa quanto a do caso
+    # inteiro ficaria sem a checagem original.
+    _validar_delimitador(parte, rota)
 
     if not parte.get("ancora"):
         raise CasoInvalido(
@@ -1506,10 +1538,96 @@ def _validar_sotp(caso: Caso) -> None:
             "parte no resultado."
         )
 
+    # Parede da safra (Fatia C, Task 3): tradução mecânica de "o
+    # crescimento da parte instalada é SÓ rampa; o da expansão é SÓ
+    # capital novo — a mesma receita nunca aparece nas duas". Checada AQUI
+    # — antes da validação profunda de cada parte, logo abaixo — para que
+    # a violação da parede seja sempre o motivo nomeado na recusa, nunca
+    # mascarada por um efeito colateral de outra parte malformada (por
+    # exemplo, uma segunda parte em rampa que também não declarou
+    # 'delimitador' — sem essa ordem, seria essa a mensagem que o
+    # analista veria, não a parede). `parte.get("rota")` é seguro mesmo
+    # antes de `_validar_rota` rodar: comparação de igualdade contra a
+    # string 'rampa' nunca levanta, seja qual for o tipo do valor.
+    if tipo == "safra":
+        partes_em_rampa = [p for p in partes if p.get("rota") == "rampa"]
+        if len(partes_em_rampa) != 1:
+            raise CasoInvalido(
+                f"'sotp.tipo' safra com {len(partes_em_rampa)} parte(s) "
+                "na rota 'rampa': a parede da safra exige exatamente uma "
+                "parte na rota rampa — a base instalada. O crescimento da "
+                "parte instalada é SÓ rampa; o crescimento da expansão é "
+                "SÓ capital novo, pelo fluxo padrão (rota firm) — a "
+                "mesma receita nunca pode aparecer nas duas. Zero partes "
+                "em rampa apaga a base instalada da composição; duas ou "
+                "mais partes em rampa deixa ambíguo qual delas é a base "
+                "instalada de verdade."
+            )
+
     for parte in partes:
         _validar_parte(f"parte '{parte['nome']}'", parte)
 
     _validar_topo_sotp(sotp.get("topo"))
+    _validar_materialidade(sotp, caso["rota"])
+
+
+def _validar_materialidade(sotp: dict, rota: str) -> None:
+    """Valida o bloco opcional 'sotp.materialidade': quando presente,
+    'blended' é um vetor de premissas completo — o MESMO vocabulário que
+    um cenário ou uma parte exigem (ancora, triângulo quando a rota tiver
+    um, metrica_base, premissas) — reaproveitando `_validar_metrica`,
+    `_validar_triangulo` e `_validar_premissas`, sem variante nova.
+
+    `rota` aqui é a rota do CASO inteiro (`caso["rota"]`), não a de uma
+    parte: o vetor blended é a versão consolidada do caso inteiro — "as
+    premissas consolidadas" — então roda pela mesma rota que o resto do
+    caso já usa. É por isso que 'blended' não declara 'rota' própria (ao
+    contrário de uma parte de SOTP): não há uma rota "da materialidade",
+    só a rota do caso, aplicada a um vetor de premissas alternativo.
+
+    Ausente ou `None`: SOTP sem 'materialidade' é tão válido quanto SOTP
+    com ela — comparar segmentado x blended é OPCIONAL, o analista decide
+    se declara o vetor consolidado.
+    """
+    materialidade = sotp.get("materialidade")
+    if materialidade is None:
+        return
+
+    if not isinstance(materialidade, dict) or not isinstance(materialidade.get("blended"), dict):
+        raise CasoInvalido(
+            f"'sotp.materialidade' inválido: {materialidade!r}. Quando "
+            "declarado, tem de ser um objeto com 'blended' (ancora, "
+            "triângulo quando a rota do caso tiver um, metrica_base, "
+            "premissas) — o vetor de premissas consolidado, na mesma "
+            "rota do caso inteiro."
+        )
+
+    blended = materialidade["blended"]
+    prefixo = "sotp.materialidade.blended"
+
+    # Mesmo vocabulário de metrica_base que o caso inteiro e cada parte já
+    # exigem — `_validar_metrica` só lê `alvo.get("metrica_base")`, não
+    # importa se `alvo` é o caso, uma parte ou (agora) o vetor blended.
+    _validar_metrica(blended, rota)
+
+    if not blended.get("ancora"):
+        raise CasoInvalido(
+            f"{prefixo} sem âncora: o vetor blended exige o mesmo "
+            "observável concreto que a metodologia exige de um cenário "
+            "ou de uma parte — vetor sem âncora é vetor inventado."
+        )
+
+    if rota in _TRIANGULO_POR_ROTA:
+        if "triangulo" not in blended:
+            raise CasoInvalido(
+                f"{prefixo} sem 'triangulo' declarado: o vetor blended "
+                "exige a mesma configuração g = RiR x retorno que a "
+                "metodologia exige de um cenário — sem isso a taxa de "
+                "reinvestimento do blended fica silenciosa."
+            )
+        _validar_triangulo(prefixo, blended.get("triangulo"), rota)
+
+    _validar_premissas(prefixo, blended.get("premissas"), rota)
 
 
 def carregar(caminho: Path) -> Caso:

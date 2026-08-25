@@ -34,18 +34,36 @@ DEPOIS do desconto (nunca só o líquido), dentro de `topo`.
 
 `nome_cenario`: aceito para a mesma forma de chamada de
 `reversa.reverter(caso, nome_cenario, nd_efetivo)`/
-`sensibilidades.calcular(caso, nome_cenario, nd_efetivo)`, mas não usado
-nesta função — cada parte de SOTP declara um único vetor de premissas
-próprio (`ancora`/`triangulo`/`premissas` direto na parte, não aninhado sob
-um nome de cenário como `caso["cenarios"]`), então não há nada
-cenário-dependente do CASO para esta composição consultar. Mantido no
-contrato para que quem vier a acoplar isto em `avaliar()` (Fatia C, Task 4)
-tenha a mesma forma de chamada dos outros dois compositores por cenário.
+`sensibilidades.calcular(caso, nome_cenario, nd_efetivo)` — cada parte de
+SOTP declara um único vetor de premissas próprio (`ancora`/`triangulo`/
+`premissas` direto na parte, não aninhado sob um nome de cenário como
+`caso["cenarios"]`), então não há nada cenário-dependente do CASO para esta
+composição consultar, e a conta em si não varia com `nome_cenario` — isso
+continua verdade depois da Fatia C, Task 3. O que a Task 3 mudou (revisão
+da Task 2, achado (d)): `compor_partes` agora RECUSA um `nome_cenario` que
+não existe em `caso["cenarios"]`, em vez de aceitar qualquer string.  Sem
+essa guarda, `compor_partes(caso, "bear")` e `compor_partes(caso, "bull")`
+devolviam, em silêncio, exatamente os mesmos números — nenhum dos dois
+nomes influencia coisa nenhuma aqui — uma armadilha para quem vier a
+acoplar isto em `avaliar()` (Fatia C, Task 4) e esperar, por engano, um
+resultado cenário-dependente de um nome que nem existe no caso. A guarda
+existe só para que um nome inexistente falhe alto — nunca para fazer a
+conta variar por cenário; ela continua igualmente flat depois da guarda,
+para qualquer nome que exista.
+
+Fatia C, Task 3 também acrescenta `materialidade()`: quando o caso declara
+`sotp.materialidade.blended` (o vetor de premissas consolidado — "as
+premissas do blend"), `compor_partes` roda esse vetor pela mesma rota do
+caso e devolve `EV_segmentado − EV_blended`, com sinal, sob a chave
+`"materialidade"` do resultado (`None` quando o caso não declara
+`blended` — o bloco é opcional). Ver o docstring de `materialidade`,
+abaixo, para a leitura do sinal.
 """
 
 from typing import Any
 
 from avaliar import precificar_firm, precificar_rampa
+from caso import CasoInvalido
 from ponte import compor
 
 Caso = dict[str, Any]
@@ -119,23 +137,133 @@ def _compor_parte(parte: dict, moeda: str | None) -> dict:
     return resultado
 
 
+def materialidade(caso: Caso, nome_cenario: str, ev_segmentado: float) -> dict | None:
+    """Compara `ev_segmentado` (a soma das partes, D3 — sem os ajustes de
+    topo, D4b: eles são ponte-adjacentes, não parte da pergunta "segmentar
+    muda o preço?") contra o EV do vetor BLENDED que o caso declara em
+    `sotp.materialidade.blended` — as premissas consolidadas, "o que o
+    caso valeria se fosse precificado como um bloco só, com um múltiplo
+    só". Devolve `None` quando o caso não declara esse bloco:
+    `materialidade` é OPCIONAL, nem todo SOTP precisa dela.
+
+    A DIREÇÃO do viés se CALCULA, não se deduz: o múltiplo que o motor
+    devolve não é linear nas premissas, crescimento e rentabilidade de
+    partes heterogêneas não são ponderados pela mesma métrica ao somar, e
+    o Hessiano da função de precificação é indefinido na região relevante
+    — não há intuição confiável sobre se blendar SUPERESTIMA ou SUBESTIMA
+    o valor segmentado; só rodar os dois vetores e subtrair responde.
+    `diferenca = ev_segmentado - ev_blended`, com sinal: `"+"` quando o
+    segmentado excede o blended (o consolidado SUBESTIMA o valor implícito
+    pela soma das partes); `"-"` no sentido oposto (o consolidado
+    SUPERESTIMA); `"0"` quando os dois coincidem. `leitura` é a mesma
+    frase, em português, sem adjetivo de magnitude — "quanto" o viés é não
+    é uma pergunta que este wrapper responde, só "para que lado".
+
+    O vetor blended roda pela MESMA rota do caso inteiro (`caso["rota"]`),
+    SEM ponte (mesmo modo EV-only que cada parte de SOTP já usa —
+    `nd_efetivo`/`acoes` omitidos de `precificar_firm`/`precificar_rampa`)
+    — mesmo caminho de precificação e mesma recusa de `null` do motor que
+    qualquer outro vetor de premissas deste módulo, herdada de dentro
+    dessas duas funções (`caso.py` já validou `blended` com o mesmo
+    vocabulário de um cenário, na mesma rota — `_validar_materialidade`).
+    `blended` não declara 'rota' própria: é a versão consolidada do CASO
+    inteiro, não uma parte nova, então usa a rota que o caso já usa para
+    tudo mais — as duas únicas rotas que produzem EV para uma parte de
+    SOTP também são as únicas para as quais isto foi pensado (D3: a rota
+    equity nunca emite EV — ver `_ROTAS_DE_PARTE_SOTP` em `caso.py`).
+
+    `nome_cenario` não entra em nenhuma conta aqui — o vetor blended, como
+    o de cada parte de SOTP, é um vetor de premissas FLAT, declarado uma
+    vez só (não aninhado por nome de cenário); aceito só pela mesma forma
+    de chamada que `compor_partes` (que já valida `nome_cenario` antes de
+    chegar aqui) mantém com o resto do módulo.
+    """
+    sotp = caso["sotp"]
+    bloco = sotp.get("materialidade")
+    if bloco is None:
+        return None
+
+    blended = bloco["blended"]
+    moeda = caso["moeda"]
+    rota = caso["rota"]
+    metrica = blended["metrica_base"]
+    premissas = blended["premissas"]
+
+    if rota == "firm":
+        _saida, valor, _algebra, _multiplo = precificar_firm(
+            premissas, metrica["tipo"], metrica["valor"], moeda=moeda)
+    else:  # rampa — a outra rota que produz EV (D3, ver `caso.py`)
+        _saida, valor, _algebra, _multiplo = precificar_rampa(premissas, moeda=moeda)
+
+    ev_blended = valor["EV"]
+    diferenca = ev_segmentado - ev_blended
+
+    if diferenca > 0:
+        sinal = "+"
+        leitura = (
+            "EV segmentado acima do EV blended: o consolidado subestima "
+            "o valor implícito pela soma das partes."
+        )
+    elif diferenca < 0:
+        sinal = "-"
+        leitura = (
+            "EV segmentado abaixo do EV blended: o consolidado "
+            "superestima o valor implícito pela soma das partes."
+        )
+    else:
+        sinal = "0"
+        leitura = (
+            "EV segmentado igual ao EV blended: nenhum viés de "
+            "consolidação neste vetor de premissas."
+        )
+
+    return {
+        "ev_blended": ev_blended,
+        "ev_segmentado": ev_segmentado,
+        "diferenca": diferenca,
+        "sinal": sinal,
+        "leitura": leitura,
+    }
+
+
 def compor_partes(caso: Caso, nome_cenario: str) -> dict:
     """Compõe as partes de `caso["sotp"]`, soma os EVs, aplica os ajustes
-    de topo (D4b), cruza a ponte do caso uma única vez (D3) e — quando
-    declarado — aplica o desconto de holding sobre o equity pós-ponte (D4).
+    de topo (D4b), cruza a ponte do caso uma única vez (D3), aplica —
+    quando declarado — o desconto de holding sobre o equity pós-ponte (D4)
+    e compara — quando o caso declara `sotp.materialidade.blended` — o EV
+    segmentado contra o EV do vetor blended (Fatia C, Task 3).
 
     Devolve
-    `{"partes": [...], "ev_das_partes": float, "topo": {...},
-      "ev_total": float, "equity": float, "preco_acao": float,
-      "ponte_unica": {...}}`.
+    `{"partes": [...], "ev_das_partes": float, "materialidade": dict | None,
+      "topo": {...}, "ev_total": float, "equity": float,
+      "preco_acao": float, "ponte_unica": {...}}`.
 
     Não valida `caso` de novo — `caso.validar()` é responsabilidade
     exclusiva de quem carrega o caso, a mesma disciplina que `avaliar()`
     já documenta. `caso["sotp"]` chega com `tipo`, `partes` (>= 2, nomes
     distintos, cada uma com rota/métrica/âncora/triângulo/premissas
-    válidos para a rota dela) e `topo` (os quatro campos, desconto
-    exigindo razão) já confirmados.
+    válidos para a rota dela), `topo` (os quatro campos, desconto exigindo
+    razão) e, quando presente, `materialidade.blended` (mesmo vocabulário
+    de um cenário) já confirmados.
+
+    Levanta `CasoInvalido` quando `nome_cenario` não existe em
+    `caso["cenarios"]` — ver o docstring do módulo (achado (d) da revisão
+    da Task 2): partes de SOTP carregam um vetor de premissas FLAT (não
+    por cenário), então nada aqui muda com `nome_cenario` — a guarda
+    existe só para que um nome inexistente falhe alto, em vez de devolver,
+    em silêncio, os mesmos números que qualquer outro nome produziria.
     """
+    if nome_cenario not in caso["cenarios"]:
+        raise CasoInvalido(
+            f"cenário '{nome_cenario}' inexistente em 'cenarios': "
+            "compor_partes recebe nome_cenario pela mesma forma de "
+            "chamada de reversa.reverter/sensibilidades.calcular, mas "
+            "cada parte de SOTP carrega um vetor de premissas fixo (não "
+            "por cenário) — a checagem existe só para que um nome "
+            "inexistente falhe alto, em vez de devolver, em silêncio, os "
+            "mesmos números que qualquer outro nome produziria."
+        )
+
     sotp = caso["sotp"]
     moeda = caso["moeda"]
     topo_declarado = sotp["topo"]
@@ -143,6 +271,8 @@ def compor_partes(caso: Caso, nome_cenario: str) -> dict:
     partes = [_compor_parte(parte, moeda) for parte in sotp["partes"]]
 
     ev_das_partes = sum(p["EV"] for p in partes)
+
+    materialidade_resultado = materialidade(caso, nome_cenario, ev_das_partes)
 
     custos_corporativos_vp = topo_declarado["custos_corporativos_vp"]
     participacoes_nao_consolidadas = topo_declarado["participacoes_nao_consolidadas"]
@@ -182,6 +312,7 @@ def compor_partes(caso: Caso, nome_cenario: str) -> dict:
     return {
         "partes": partes,
         "ev_das_partes": ev_das_partes,
+        "materialidade": materialidade_resultado,
         "topo": topo_resultado,
         "ev_total": ev_total,
         "equity": equity_final,

@@ -1,0 +1,58 @@
+{
+  "companhia": "Claims Homogêneos S.A.",
+  "ticker": "HMOG3",
+  "moeda": "BRL-nominal",
+  "data_analise": "2026-08-25",
+  "data_base": null,
+  "preco": {"valor": 20.0, "fonte": "fixture sintética", "data": "2026-08-25"},
+  "rota": "firm",
+  "metrica_base": {"tipo": "EBITDA", "valor": 1000.0, "periodo": "2025A", "fonte": "consolidado"},
+  "acoes_diluidas": 100.0,
+  "ponte": {
+    "divida_bruta": 0.0, "caixa_e_equivalentes": 0.0,
+    "outros_ativos": 0.0, "outros_passivos": 0.0, "minoritarios": 0.0
+  },
+  "cenarios": {
+    "base": {
+      "ancora": "consolidado homogêneo",
+      "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+      "premissas": {
+        "g": 6.0, "roic": 15.0, "wacc": 10.0, "n": 10,
+        "da": 15.0, "tax": 25.0, "tv": "convergencia"
+      }
+    }
+  },
+  "sotp": {
+    "tipo": "segmento",
+    "partes": [
+      {
+        "nome": "Claim A",
+        "rota": "firm",
+        "metrica_base": {"tipo": "EBITDA", "valor": 600.0, "fonte": "fixture sintética"},
+        "ancora": "claim homogêneo A",
+        "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+        "premissas": {
+          "g": 6.0, "roic": 15.0, "wacc": 10.0, "n": 10,
+          "da": 15.0, "tax": 25.0, "tv": "convergencia"
+        }
+      },
+      {
+        "nome": "Claim B",
+        "rota": "firm",
+        "metrica_base": {"tipo": "EBITDA", "valor": 400.0, "fonte": "fixture sintética"},
+        "ancora": "claim homogêneo B",
+        "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+        "premissas": {
+          "g": 6.0, "roic": 15.0, "wacc": 10.0, "n": 10,
+          "da": 15.0, "tax": 25.0, "tv": "convergencia"
+        }
+      }
+    ],
+    "topo": {
+      "custos_corporativos_vp": 0.0,
+      "participacoes_nao_consolidadas": 0.0,
+      "desconto_de_holding_pct": null,
+      "razao_do_desconto": null
+    }
+  }
+}
