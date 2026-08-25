@@ -32,8 +32,23 @@ def test_fixture_cobre_as_tres_funcoes():
 
 def test_fixture_cobre_as_tres_convencoes_terminais():
     vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    tvs = {v["args"]["tv"] for v in vetores}
-    assert tvs == {"book", "convergencia", "gordon"}
+    tvs = {v["args"].get("tv") for v in vetores}
+    assert {"book", "convergencia", "gordon"} <= tvs
+
+
+def test_fixture_cobre_os_aliases_legados_de_convencao():
+    """tv_canon mapeia 'ic'->'book' e 'spread'->'gordon'. Um alias transposto no
+    espelho embarcaria em silencio sem estes vetores."""
+    vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    tvs = {v["args"].get("tv") for v in vetores}
+    assert {"ic", "spread"} <= tvs
+
+
+def test_fixture_cobre_tv_ausente():
+    """Ausente cai no default 'book' do motor — caminho distinto de tv='book'
+    explicito no espelho, que resolve o default por presenca da chave."""
+    vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    assert any("tv" not in v["args"] for v in vetores)
 
 
 def test_fixture_exercita_book_com_medio_diferente_do_marginal():
@@ -41,7 +56,7 @@ def test_fixture_exercita_book_com_medio_diferente_do_marginal():
     vetores = json.loads(FIXTURE.read_text(encoding="utf-8"))
     def separado(v):
         a = v["args"]
-        if a["tv"] != "book":
+        if a.get("tv") != "book":
             return False
         med = a.get("roic_book") if v["fn"] != "pe" else a.get("roe_book")
         marg = a.get("roic") if v["fn"] != "pe" else a.get("roe")

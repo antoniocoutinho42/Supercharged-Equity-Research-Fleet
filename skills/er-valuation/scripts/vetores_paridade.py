@@ -219,6 +219,26 @@ def _bloco_patologico() -> list[dict]:
     v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="convergencia"))
     v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="gordon", roe_tv=0.09, gp=0.025))
 
+    # --- 13. resíduo da 4A — aliases legados de tv_canon ('ic'->'book',
+    # 'spread'->'gordon') e tv AUSENTE (cai no default 'book' do motor).
+    # Nenhum vetor da fixture batia estes três caminhos antes desta seção: um
+    # alias transposto no espelho ('ic'->'gordon', por exemplo) ou um default
+    # ausente resolvido por '??' em vez de checagem de presença embarcaria em
+    # silêncio (ver task-4b-1-brief.md). Reusa DE PROPÓSITO os mesmos
+    # parâmetros dos casos saudáveis logo acima (mesmo g/roic-roe/w-ke/n, e
+    # mesmo roic_book/roe_book=0.12/0.13 nos dois 'ic') para que o resultado
+    # seja comparável por inspeção: 'ic' com roic_book=0.12 tem de bater
+    # exatamente o 'book' de mesmo roic_book, dois blocos acima — só o nome
+    # da convenção muda. tv ausente reusa g/roic-roe/w-ke/n sem roic_book/
+    # roe_book (cai no ramo médio=marginal do 'book', igual a um 'book'
+    # explícito sem book informado).
+    v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10, tv="ic", roic_book=0.12))
+    v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="ic", roe_book=0.13))
+    v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10, tv="spread", roic_tv=0.10, gp=0.025))
+    v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10, tv="spread", roe_tv=0.09, gp=0.025))
+    v.append(_vetor("ev_nopat", g=0.04, roic=0.15, w=0.09, n=10))  # tv ausente -> default 'book'
+    v.append(_vetor("pe", g=0.04, roe=0.16, ke=0.10, n=10, gde=0.25, nde=0.10))  # tv ausente -> default 'book'
+
     return v
 
 
