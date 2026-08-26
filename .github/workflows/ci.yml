@@ -35,7 +35,8 @@ jobs:
           PYTHONUTF8: "1"
         run: |
           node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_paridade.json > /dev/null
-          python -m pytest tests/test_paridade_js.py -q
+          node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_solver.json > /dev/null
+          python -m pytest tests/test_paridade_js.py tests/test_paridade_solver_js.py tests/test_paridade_wrapper_js.py -q
 
       - name: pytest
         run: python -m pytest tests/ -q

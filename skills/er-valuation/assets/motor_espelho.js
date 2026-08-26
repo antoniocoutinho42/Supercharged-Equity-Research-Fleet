@@ -7,6 +7,19 @@
 // paridade propria em tests/test_paridade_solver_js.py (harness separado do acima: o solver e
 // ITERATIVO e amplifica, o nucleo e forma fechada; ver o comentario da secao SOLVER abaixo).
 //
+// [item 4, fatia B, task 3] Ganhou o WRAPPER: alvo de mercado (espelha
+// skills/er-valuation/scripts/reversa.py:alvo_de_mercado) e as grades 1D/2D de sensibilidade
+// (espelha skills/er-valuation/scripts/sensibilidades.py:grade_1d/grade_2d). Natureza de risco
+// DIFERENTE das duas secoes acima: ali o lado Python de comparacao E' o motor congelado (direto
+// ou via solver); aqui o lado Python E' O WRAPPER — que atravessa a CLI do motor por subprocesso
+// (skills/er-valuation/scripts/motor.py:rodar), e essa CLI faz duas coisas que o nucleo em si
+// nao faz: converte premissa de ponto percentual para fracao (`g: 5.0` = 5%, dividido por 100 —
+// ver premissasParaNucleo abaixo) e ARREDONDA cada multiplo/preco antes de devolver o JSON
+// (round(mn,4), round(preco_acao,2) — vendor justos.py, blocos dos cmds 'ev'/'pe'). Um espelho
+// fiel ao nucleo e cego a essas duas conversoes produziria numero certo no lugar errado — por
+// isso a paridade desta secao vive num harness PROPRIO, tests/test_paridade_wrapper_js.py,
+// separado de tests/test_paridade_solver_js.py (que so' testa contra o motor).
+//
 // Regras de espelho: a ordem das operacoes segue o Python termo a termo — inclusive o laco
 // explicito t = 1..n somado na mesma ordem — porque divergencia de ordem em ponto flutuante e a
 // causa mais provavel de erro na casa que importa. Cada guarda do Python (retorno NaN) vira uma
@@ -436,19 +449,211 @@ function avaliarProblemas(problemas) {
   return problemas.map(resolverProblema);
 }
 
+// ============================================================================
+// WRAPPER (item 4, fatia B, task 3) — espelha skills/er-valuation/scripts/reversa.py
+// (alvo_de_mercado) e skills/er-valuation/scripts/sensibilidades.py (grade_1d/grade_2d). Ver o
+// comentario no topo do arquivo para o porque desta secao ter harness de paridade proprio.
+// ============================================================================
+
+// premissasParaNucleo (justos.py, blocos dos cmds 'ev'/'pe', ~linhas 1896-1901 e 1963-1968):
+// a CLI do motor recebe premissa em PONTO PERCENTUAL (g: 5.0 = 5%, convencao de caso.json — ver
+// tests/fixtures/caso_reversa_firm.json) e divide por 100 (`pc = lambda x: x/100.0`) ANTES de
+// chamar ev_nopat/ev_ebitda/pe — que trabalham em fracao, como o resto deste arquivo (4A e o
+// solver chamam essas funcoes DIRETO, pulando a CLI, entao nunca precisaram desta conversao). So'
+// o WRAPPER (esta secao) atravessa a CLI, entao so' aqui essa conversao importa.
+const CHAVES_NAO_PERCENTUAIS = new Set(['n', 'tv', 'mid_year', 'politica_tv']);
+
+// Renomeacao de chave que a CLI da rota firm faz (justos.py, cmd 'ev'): 'wacc' -> 'w' (parametro
+// de ev_nopat/ev_ebitda); 'da'/'tax' -> 'd'/'t' (escala EBITDA, `me = mn*(1-d)*(1-t)`). A rota
+// equity nao renomeia nada — pe() usa os MESMOS nomes que caso.json declara.
+const RENOMEIA_FIRM = { wacc: 'w', da: 'd', tax: 't' };
+
+function pct(valor) {
+  return (valor === null || valor === undefined) ? null : valor / 100.0;
+}
+
+// Presenca, nunca ausencia inventada — mesma disciplina do cabecalho do arquivo: uma chave
+// ausente em `premissas` fica ausente no resultado (o nucleo ja' sabe o default de cada uma).
+// 'gp' e' a UNICA excecao: o argparse da CLI da' a ela default 0.0 (`rates(s, [..., ('gp', 0.0),
+// ...])`), nao None — entao ausencia OU null em 'gp' chegam ao nucleo como AUSENCIA de chave (o
+// proprio nucleo ja' assume 0.0 via `'gp' in args ? args.gp : 0.0`), nunca como `gp: null`
+// preservado — que faria o nucleo ler null sob 'gordon' e devolver NaN onde o motor de verdade
+// devolve um numero. As outras premissas opcionais (roic_tv/roic_book/roe_tv/roe_book) tem
+// default None nos dois lados, entao ausencia e null colapsam no mesmo resultado de qualquer
+// jeito (ver cabecalho do arquivo) — so' 'gp' precisa deste caso especial.
+function premissasParaNucleo(premissas, renomeia) {
+  const out = {};
+  for (const chave of Object.keys(premissas)) {
+    const valor = premissas[chave];
+    const chaveNova = renomeia[chave] || chave;
+    if (CHAVES_NAO_PERCENTUAIS.has(chave)) {
+      out[chaveNova] = valor;
+      continue;
+    }
+    if (valor === null && chave === 'gp') continue;
+    out[chaveNova] = pct(valor);
+  }
+  return out;
+}
+
+function paraSaidaOuNulo(x) {
+  return Number.isFinite(x) ? x : null;
+}
+
+// precificarCelula espelha avaliar.py:precificar_firm/precificar_equity (chamadas por
+// sensibilidades.py:_precificar_celula, celula a celula) — a MESMA ponte de preco que o
+// cenario principal usa, nunca um numero fora do nucleo. Os arredondamentos abaixo nao sao
+// deste espelho: sao os do MOTOR (justos.py, blocos dos cmds 'ev'/'pe' — round(mn,4)/
+// round(me,4) para o multiplo, round(_,2) para EV/Equity/Preco_acao) — o wrapper Python le o
+// JSON do subprocesso DEPOIS desse arredondamento, entao um espelho que so' arredondasse no
+// final (e nao nos MESMOS pontos que o motor arredonda) divergiria da paridade em TAU=1e-12.
+//
+// Ramo NOPAT (rota firm): o motor NUNCA recebe --ebitda/--nd/--acoes nesta chamada
+// (precificar_firm, ramo NOPAT) — EV/Equity/preco_acao sao algebra do WRAPPER (avaliar.py,
+// linhas ~222-239) sobre o multiplo JA' ARREDONDADO que atravessou o JSON do subprocesso (nao
+// sobre `mn` cru): arredonda PRIMEIRO, so' DEPOIS multiplica.
+//
+// Ramo EBITDA (rota firm) e rota equity: o motor recebe a escala (--ebitda/--nd/--acoes ou
+// --ni/--acoes) e computa EV/Equity/Preco_acao ele mesmo, a partir do `me`/`m` CRU (nao do
+// multiplo arredondado) — o arredondamento do multiplo (EV/EBITDA_curr ou PL_curr) e' um
+// calculo SEPARADO, que nao alimenta a cadeia EV->Equity->Preco_acao.
+function precificarCelula(rota, premissas, metrica, ndEfetivo, acoes) {
+  if (rota === 'firm') {
+    const args = premissasParaNucleo(premissas, RENOMEIA_FIRM);
+    if (metrica.tipo === 'EBITDA') {
+      const me = evEbitda(args);
+      const multiplo = arredondarPy(me, 4);
+      const evBruto = me * metrica.valor;
+      const valor = arredondarPy((evBruto - ndEfetivo) / acoes, 2);
+      return { valor: paraSaidaOuNulo(valor), multiplo: paraSaidaOuNulo(multiplo) };
+    }
+    const mn = evNopat(args);
+    const multiplo = arredondarPy(mn, 4);
+    const ev = multiplo * metrica.valor;
+    const valor = (ev - ndEfetivo) / acoes;
+    return { valor: paraSaidaOuNulo(valor), multiplo: paraSaidaOuNulo(multiplo) };
+  }
+  // equity
+  const args = premissasParaNucleo(premissas, {});
+  const m = pe(args);
+  const multiplo = arredondarPy(m, 4);
+  const eqBruto = m * metrica.valor;
+  const valor = arredondarPy(eqBruto / acoes, 2);
+  return { valor: paraSaidaOuNulo(valor), multiplo: paraSaidaOuNulo(multiplo) };
+}
+
+// alvoDeMercado espelha reversa.py:alvo_de_mercado — a definicao de multiplo aplicada aos
+// dados JA' DECLARADOS do caso (preco, acoes, metrica-base e, na rota firm, a ponte via
+// ndEfetivo). Pura aritmetica, NENHUMA chamada ao nucleo — por isso nao ha conversao percentual
+// -> fracao aqui: preco/acoes/metrica.valor/ndEfetivo sao valor em moeda ou contagem, nunca
+// taxa. Devolve so' o NUMERO (`["valor"]` de alvo_de_mercado) — `algebra`/`base` sao prosa de
+// auditoria, fora do que a calibragem desta task pede para testar (numero e' material, string
+// nao — ver task-4b-3-brief.md).
+function alvoDeMercado({ rota, preco, acoes, ndEfetivo, metrica }) {
+  const marketCap = preco * acoes;
+  if (rota === 'firm') {
+    const evMercado = marketCap + ndEfetivo;
+    return evMercado / metrica.valor;
+  }
+  return marketCap / metrica.valor; // equity
+}
+
+// grade1D/grade2D espelham sensibilidades.py:grade_1d/grade_2d — cada celula e' uma chamada a
+// precificarCelula acima, nunca um numero fora do nucleo. D5 do plano da fatia B: a dedup de
+// diagnostico do wrapper (`diagnosticos_unicos`/"diag" por celula) NAO entra aqui — este espelho
+// existe para o LABORATORIO numerico (valor, multiplo, orientacao da grade), nao para reproduzir
+// a trilha de diagnostico do motor. `moeda` esta' na assinatura por paridade de forma com o
+// wrapper (sensibilidades.grade_1d/grade_2d recebem `caso["moeda"]`), mas nao entra em nenhuma
+// conta aqui: moeda so' troca o AVISO de diagnostico que o motor emite, nunca um numero.
+//
+// grade2D: `celulas[i][j]` = `(pontosY[i], pontosX[j])` — uma linha por valor de pontosY, uma
+// coluna por valor de pontosX. MESMA orientacao de sensibilidades.grade_2d (linhas 184-190):
+// `for y in pontos_y: for x in pontos_x: ...`. A fatia 3C descobriu que uma grade QUADRADA
+// esconde uma transposicao de eixos (o teste passava com os eixos trocados) — por isso o
+// harness de paridade desta task (test_grades_tem_a_orientacao_do_wrapper) exige uma grade
+// NAO quadrada.
+function grade1D({ rota, premissas, metrica, ndEfetivo, acoes, premissa, pontos }) {
+  return pontos.map((x) => {
+    const vetor = { ...premissas, [premissa]: x };
+    const { valor, multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
+    return { x, valor, multiplo };
+  });
+}
+
+function grade2D({ rota, premissas, metrica, ndEfetivo, acoes, premissaX, pontosX, premissaY, pontosY }) {
+  return pontosY.map((y) => pontosX.map((x) => {
+    const vetor = { ...premissas, [premissaX]: x, [premissaY]: y };
+    const { valor, multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
+    return { x, y, valor, multiplo };
+  }));
+}
+
+// ---------------- problemas de wrapper (contrato do brief task-4b-3) ----------------
+// Campos do shape do SOLVER que todo resultado de "alvo"/"grade1d"/"grade2d" tambem carrega,
+// vazios — nao e' o shape natural desses tres tipos (que so' tem "alvo" ou "celulas"), e'
+// compatibilidade retroativa deliberada: tests/test_paridade_solver_js.py (task 2, imutavel por
+// regra desta task) le a fixture INTEIRA sem filtrar por tipo e indexa `raizes`/`tangenciais`/
+// `identificacao` direto (sem fallback) em todo item da lista — sem estes tres campos aqui,
+// aquele harness levantaria erro assim que alcancasse um item de wrapper misturado na mesma
+// fixture (tests/fixtures/vetores_solver.json carrega os dois tipos de problema, por decisao do
+// plano da fatia B). O lado Python (vetores_solver.py, `_CAMPOS_SOLVER_VAZIOS`) carrega o MESMO
+// preenchimento — os dois lados tem de concordar, porque aquele harness compara os dois.
+const CAMPOS_SOLVER_VAZIOS = { raizes: [], tangenciais: [], identificacao: null };
+
+// `args` de um problema de wrapper esta' em snake_case (JSON compartilhado com o Python); as
+// tres funcoes acima usam camelCase (convencao do resto deste arquivo) — estes tres adaptadores
+// fazem a ponte de nome, nada mais.
+function resolverAlvo(item) {
+  const a = item.args;
+  const alvo = alvoDeMercado({
+    rota: a.rota, preco: a.preco, acoes: a.acoes, ndEfetivo: a.nd_efetivo, metrica: a.metrica,
+  });
+  return { id: item.id, alvo, ...CAMPOS_SOLVER_VAZIOS };
+}
+
+function resolverGrade1D(item) {
+  const a = item.args;
+  const celulas = grade1D({
+    rota: a.rota, premissas: a.premissas, metrica: a.metrica, ndEfetivo: a.nd_efetivo,
+    acoes: a.acoes, premissa: a.premissa, pontos: a.pontos, moeda: a.moeda,
+  });
+  return { id: item.id, celulas, ...CAMPOS_SOLVER_VAZIOS };
+}
+
+function resolverGrade2D(item) {
+  const a = item.args;
+  const celulas = grade2D({
+    rota: a.rota, premissas: a.premissas, metrica: a.metrica, ndEfetivo: a.nd_efetivo,
+    acoes: a.acoes, premissaX: a.premissa_x, pontosX: a.pontos_x,
+    premissaY: a.premissa_y, pontosY: a.pontos_y, moeda: a.moeda,
+  });
+  return { id: item.id, celulas, ...CAMPOS_SOLVER_VAZIOS };
+}
+
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
 // Sem `tipo`: item da fixture de VALOR da 4A (fn/args -> valor) — despachado
 // por `avaliarVetores`, o MESMO caminho de sempre, sem nenhuma linha
 // alterada nele: o harness da 4A continua verde sem mudanca. `tipo:
-// 'solver'`: problema de solver (esta task), despachado por
-// `resolverProblema`. Qualquer outro `tipo` LANCA — falha fechada, a mesma
-// disciplina do resto deste arquivo.
+// 'solver'`: problema de solver (task 2), despachado por `resolverProblema`.
+// `tipo: 'alvo'|'grade1d'|'grade2d'`: problema de wrapper (task 3),
+// despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`.
+// Qualquer outro `tipo` LANCA — falha fechada, a mesma disciplina do resto
+// deste arquivo.
 function avaliarItem(item) {
   if (!('tipo' in item)) {
     return avaliarVetores([item])[0];
   }
   if (item.tipo === 'solver') {
     return resolverProblema(item);
+  }
+  if (item.tipo === 'alvo') {
+    return resolverAlvo(item);
+  }
+  if (item.tipo === 'grade1d') {
+    return resolverGrade1D(item);
+  }
+  if (item.tipo === 'grade2d') {
+    return resolverGrade2D(item);
   }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
@@ -469,6 +674,8 @@ function avaliarItens(itens) {
 const superficiePublica = {
   evNopat, evEbitda, pe, ponteParaPreco, avaliarVetores,
   dedupeRaizes, resolver, resolverCompleto, identificacao, resolverProblema, avaliarProblemas,
+  alvoDeMercado, grade1D, grade2D, precificarCelula,
+  resolverAlvo, resolverGrade1D, resolverGrade2D,
   avaliarItem, avaliarItens,
 };
 

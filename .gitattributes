@@ -20,9 +20,8 @@ vendor/** -text
 # fim de linha, não por regressão real — mesmo risco que os paths acima.
 tests/fixtures/vetores_paridade.json -text
 
-# Fixture de problemas de solver (item 4, fatia B, task 2): mesma receita
+# Fixture de problemas de solver e de grade (item 4, fatia B): mesma receita
 # (`vetores_solver.py`, `newline="\n"`) e mesmo risco de EOL da fixture da 4A
-# acima — protegida aqui mesmo sem um teste de regeneração byte a byte
-# dedicado (a task 2 não cria um, por calibragem de escopo), porque a Task 3
-# desta fatia estende o mesmo arquivo e pode vir a adicionar um.
+# acima. A regeração byte a byte é cobrada em
+# test_paridade_solver_js.py::test_fixture_commitada_reproduz_o_gerador.
 tests/fixtures/vetores_solver.json -text

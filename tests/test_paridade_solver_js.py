@@ -65,6 +65,22 @@ def _rel(a, b):
     return abs(a - b) / max(abs(a), 1.0)
 
 
+def test_fixture_commitada_reproduz_o_gerador(tmp_path):
+    """Determinismo da fixture — o mesmo contrato que a fixture da 4A ja tem.
+
+    Sem isto, um gerador que perdesse a determinismo (`random` global, ordem de
+    dict, tempo) ou uma fixture editada a mao em vez de regerada divergiriam em
+    silencio: a paridade continuaria verde, mas a fixture deixaria de cobrir o
+    que diz cobrir. Nao precisa de node — e comparacao Python x disco."""
+    destino = tmp_path / "regerado.json"
+    r = subprocess.run(
+        [sys.executable, str(RAIZ / "skills" / "er-valuation" / "scripts" / "vetores_solver.py"),
+         "--out", str(destino)],
+        capture_output=True, text=True, encoding="utf-8", timeout=300)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert destino.read_bytes() == FIXTURE.read_bytes()
+
+
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
 def test_contagem_de_raizes_e_tangenciais_bate_exatamente():
     """As duas contagens — raizes E tangenciais —, EXATAS, antes de qualquer

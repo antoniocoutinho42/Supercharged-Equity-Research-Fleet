@@ -152,3 +152,10 @@ subprocesso a cada edição. Sua licença para existir é o harness
 `tests/test_paridade_js.py` — divergência numérica contra o motor reprova a
 suíte nomeando o vetor culpado, e sem `node` no PATH o teste pula declarando
 esse motivo explicitamente (o CI roda sempre, via `setup-node`).
+
+Além do núcleo, o espelho também cobre o solver de reversa e as grades 1D/2D
+de sensibilidade (alvo de mercado, `grade1D`, `grade2D`); a paridade
+correspondente vive em dois harnesses separados —
+`tests/test_paridade_solver_js.py` (contra o motor congelado) e
+`tests/test_paridade_wrapper_js.py` (contra `reversa.py`/`sensibilidades.py`)
+— porque são garantias contra fontes Python diferentes (motor × wrapper).

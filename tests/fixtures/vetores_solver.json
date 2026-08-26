@@ -771,5 +771,232 @@
     "hi": 0.8,
     "steps": 800,
     "completo": false
+  },
+  {
+    "id": 41,
+    "tipo": "alvo",
+    "args": {
+      "rota": "firm",
+      "preco": 42.5,
+      "acoes": 120.0,
+      "nd_efetivo": 350.0,
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 900.0
+      }
+    }
+  },
+  {
+    "id": 42,
+    "tipo": "alvo",
+    "args": {
+      "rota": "firm",
+      "preco": 18.75,
+      "acoes": 80.0,
+      "nd_efetivo": -200.0,
+      "metrica": {
+        "tipo": "NOPAT",
+        "valor": 300.0
+      }
+    }
+  },
+  {
+    "id": 43,
+    "tipo": "alvo",
+    "args": {
+      "rota": "equity",
+      "preco": 55.0,
+      "acoes": 100.0,
+      "nd_efetivo": 0.0,
+      "metrica": {
+        "tipo": "LL",
+        "valor": 250.0
+      }
+    }
+  },
+  {
+    "id": 44,
+    "tipo": "alvo",
+    "args": {
+      "rota": "equity",
+      "preco": 9.3,
+      "acoes": 500.0,
+      "nd_efetivo": 0.0,
+      "metrica": {
+        "tipo": "LL",
+        "valor": 700.0
+      }
+    }
+  },
+  {
+    "id": 45,
+    "tipo": "grade1d",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 900.0
+      },
+      "nd_efetivo": 350.0,
+      "acoes": 120.0,
+      "premissa": "wacc",
+      "pontos": [
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 46,
+    "tipo": "grade1d",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 4.0,
+        "roic": 15.0,
+        "wacc": 9.0,
+        "n": 10,
+        "da": 0.0,
+        "tax": 0.0,
+        "tv": "book",
+        "roic_book": 12.0
+      },
+      "metrica": {
+        "tipo": "NOPAT",
+        "valor": 300.0
+      },
+      "nd_efetivo": -200.0,
+      "acoes": 80.0,
+      "premissa": "roic",
+      "pontos": [
+        11.0,
+        13.0,
+        15.0,
+        17.0,
+        19.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 47,
+    "tipo": "grade1d",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 16.0,
+        "ke": 10.0,
+        "n": 10,
+        "gde": 25.0,
+        "nde": 10.0,
+        "tv": "convergencia"
+      },
+      "metrica": {
+        "tipo": "LL",
+        "valor": 250.0
+      },
+      "nd_efetivo": 0.0,
+      "acoes": 100.0,
+      "premissa": "ke",
+      "pontos": [
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 48,
+    "tipo": "grade2d",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 900.0
+      },
+      "nd_efetivo": 350.0,
+      "acoes": 120.0,
+      "premissa_x": "roic",
+      "pontos_x": [
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "premissa_y": "g",
+      "pontos_y": [
+        3.0,
+        5.0,
+        7.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 49,
+    "tipo": "grade2d",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 16.0,
+        "ke": 10.0,
+        "n": 10,
+        "gde": 25.0,
+        "nde": 10.0,
+        "tv": "convergencia"
+      },
+      "metrica": {
+        "tipo": "LL",
+        "valor": 250.0
+      },
+      "nd_efetivo": 0.0,
+      "acoes": 100.0,
+      "premissa_x": "ke",
+      "pontos_x": [
+        8.0,
+        9.0,
+        10.0
+      ],
+      "premissa_y": "roe",
+      "pontos_y": [
+        12.0,
+        14.0,
+        16.0,
+        18.0,
+        20.0
+      ],
+      "moeda": "BRL-nominal"
+    }
   }
 ]

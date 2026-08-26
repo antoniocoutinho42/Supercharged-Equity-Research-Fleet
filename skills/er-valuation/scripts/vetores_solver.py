@@ -1,22 +1,48 @@
-"""Gerador determinístico dos problemas de solver Python <-> JS (item 4, fatia B, task 2).
+"""Gerador determinístico dos problemas de solver e de wrapper Python <-> JS
+(item 4, fatia B, tasks 2 e 3).
 
 Mesmo contrato de forma que `vetores_paridade.py` (fatia A), aplicado a uma
 natureza de risco diferente: lá o espelho é forma fechada (uma diferença de
-1e-15 permanece 1e-15); aqui o espelho é o SOLVER do motor congelado —
-iterativo, e que AMPLIFICA. Este módulo faz duas coisas e nenhuma outra:
-`gerar()` produz a lista de problemas (bloco patológico escrito à mão + bloco
-aleatório semeado), e `avaliar_python()` roda cada problema contra
-`solve`/`solve_full`/`identificacao` do motor congelado
-(`vendor/multiplos-justos/scripts/justos.py`, linhas 272-347) e devolve o
-resultado correspondente. NÃO compara nada contra um espelho — a comparação é
-do harness, `tests/test_paridade_solver_js.py` — e NÃO conhece JavaScript:
-este arquivo nunca importa nem invoca `node`.
+1e-15 permanece 1e-15); o solver aqui é ITERATIVO e AMPLIFICA. Este módulo
+faz duas coisas e nenhuma outra: `gerar()` produz a lista de problemas (por
+tipo — ver abaixo), e `avaliar_python()` despacha cada problema, por
+`problema["tipo"]`, para o lado Python correspondente. NÃO compara nada
+contra um espelho — a comparação é dos harnesses
+(`tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`) —
+e NÃO conhece JavaScript: este arquivo nunca importa nem invoca `node`.
+
+Dois `tipo`s, duas fontes de verdade Python — a razão de existirem dois
+harnesses de teste separados para uma fixture só:
+
+- `tipo: "solver"` (task 2): roda `solve`/`solve_full`/`identificacao` do
+  motor CONGELADO (`vendor/multiplos-justos/scripts/justos.py`, linhas
+  272-347) diretamente — a mesma função interna, em fração, sem passar pela
+  CLI.
+- `tipo: "alvo"|"grade1d"|"grade2d"` (task 3): roda `reversa.alvo_de_mercado`
+  e `sensibilidades.grade_1d`/`grade_2d` — o WRAPPER, não o motor. Estas três
+  funções chamam o motor por SUBPROCESSO (`motor.rodar`), que atravessa a CLI
+  dele — e a CLI converte premissa de ponto percentual (`g: 5.0` = 5%,
+  convenção de `caso.json`) para fração antes de chamar `ev_nopat`/`pe`
+  (`pc = lambda x: x/100.0`, justos.py) e arredonda cada múltiplo/preço antes
+  de devolver o JSON (`round(mn,4)`, `round(preco_acao,2)`, mesmo arquivo). Um
+  espelho fiel ao motor mas cego a essas duas conversões da CLI produziria
+  números errados por ~100x (unidade) ou por ULPs de rounding no lugar errado
+  — exatamente o "número certo no lugar errado" que o docstring de
+  `tests/test_paridade_wrapper_js.py` descreve.
 
 A fixture emitida por `escrever()` é commitada em
-`tests/fixtures/vetores_solver.json`; o harness regenera e compara byte a
-byte, mesma disciplina da 4A.
+`tests/fixtures/vetores_solver.json`; os dois harnesses regeneram e comparam
+byte a byte, mesma disciplina da 4A. Os problemas de wrapper são acrescentados
+DEPOIS dos 41 de solver (nunca intercalados) — `avaliar_python`, chamado sem
+filtro pelo harness de solver (que não conhece `tipo` além de "solver"),
+devolve um resultado por item também para os tipos de wrapper, cada um com os
+três campos do shape do solver (`raizes`, `tangenciais`, `identificacao`)
+preenchidos vazios/`None` — nunca ausentes — para que aquele harness, que lê
+a fixture inteira sem filtrar por tipo, continue funcionando sem edição (ver
+`_CAMPOS_SOLVER_VAZIOS` abaixo e o relatório da task 3).
 
-Formato de um problema (contrato do brief task-4b-2, seção "Interfaces"):
+Formato de um problema de solver (contrato do brief task-4b-2, seção
+"Interfaces"):
     {"id": int, "tipo": "solver", "resolver": "<nome da premissa>",
      "fn": "ev_nopat"|"ev_ebitda"|"pe", "args": {...}, "alvo": float,
      "lo": float, "hi": float, "steps": 800, "completo": bool}
@@ -24,6 +50,26 @@ Formato de um problema (contrato do brief task-4b-2, seção "Interfaces"):
 injeta sob a chave `resolver` (`fn(**{**args, resolver: x})`), o mesmo jeito
 que o subcomando `rev` do vendor monta `f` (justos.py, bloco do cmd 'rev':
 `def f(x): ... return base_f(gg, rr, kk, a.n, kk2) - M`).
+
+Formato de um problema de wrapper (contrato do brief task-4b-3, seção
+"Interfaces"; `args` em snake_case — é JSON compartilhado com o Python, a
+convenção camelCase fica só dentro do espelho JS):
+    {"id": int, "tipo": "alvo",
+     "args": {"rota": "firm"|"equity", "preco": float, "acoes": float,
+              "nd_efetivo": float, "metrica": {"tipo": str, "valor": float}}}
+    {"id": int, "tipo": "grade1d",
+     "args": {"rota": ..., "premissas": {...}, "metrica": {...},
+              "nd_efetivo": float, "acoes": float, "premissa": str,
+              "pontos": [float, ...], "moeda": str}}
+    {"id": int, "tipo": "grade2d",
+     "args": {"rota": ..., "premissas": {...}, "metrica": {...},
+              "nd_efetivo": float, "acoes": float,
+              "premissa_x": str, "pontos_x": [float, ...],
+              "premissa_y": str, "pontos_y": [float, ...], "moeda": str}}
+`premissas` (grade1d/grade2d) está em PONTOS PERCENTUAIS — a mesma convenção
+de `caso.json` (ver `tests/fixtures/caso_reversa_firm.json`: `g: 5.0` = 5%) —
+não em fração: é o vetor central do cenário, tal como `sensibilidades.py` o
+recebe de `caso["cenarios"][nome]["premissas"]`.
 """
 import argparse
 import json
@@ -49,6 +95,16 @@ try:
     from justos import ev_ebitda, ev_nopat, identificacao, pe, solve, solve_full  # noqa: E402
 finally:
     sys.dont_write_bytecode = _bytecode_original
+
+# Task 3: `reversa.py`/`sensibilidades.py` são módulos IRMÃOS deste arquivo
+# (mesma pasta, `skills/er-valuation/scripts/`) — já alcançáveis pelo
+# `sys.path.insert` que os dois harnesses de teste fazem antes de importar
+# `vetores_solver` (ver `tests/test_paridade_wrapper_js.py`). Nenhuma dança de
+# bytecode aqui: os dois só chamam o motor por SUBPROCESSO (`motor.rodar`),
+# nunca por import — `motor.executar` já protege `vendor/` com
+# `PYTHONDONTWRITEBYTECODE=1` no ambiente do subprocesso.
+from reversa import alvo_de_mercado  # noqa: E402
+from sensibilidades import grade_1d, grade_2d  # noqa: E402
 
 SEMENTE_SOLVER = 20260826
 
@@ -283,22 +339,140 @@ def _bloco_aleatorio(rng: random.Random) -> list[dict]:
     return [_problema_aleatorio(rng) for _ in range(_TAMANHO_BLOCO_ALEATORIO)]
 
 
+# ---------------------------------------------------------------------------
+# Bloco 3 (task 3): problemas de WRAPPER — alvo de mercado, grade 1D, grade
+# 2D. Pequeno de propósito (calibragem do brief task-4b-3: ~8-12 problemas no
+# total bastam; o que discrimina é a ORIENTAÇÃO da grade e a aritmética da
+# célula, não o tamanho — cada célula custa uma chamada de SUBPROCESSO ao
+# motor congelado, `sensibilidades._precificar_celula`). Nenhum caso aqui
+# cruza fronteira de domínio (NaN) de propósito — testar a recusa do motor
+# através de uma grade quebraria a própria geração desta fixture
+# (`grade_1d`/`grade_2d` não capturam `MotorFalhou`; ver task-4b-3-report.md).
+_NOME_CENARIO = "cenario"
+
+
+def _problema_alvo(rota: str, preco: float, acoes: float, nd_efetivo: float, metrica: dict) -> dict:
+    return {"id": 0, "tipo": "alvo",
+            "args": {"rota": rota, "preco": preco, "acoes": acoes,
+                     "nd_efetivo": nd_efetivo, "metrica": metrica}}
+
+
+def _problema_grade1d(rota: str, premissas: dict, metrica: dict, nd_efetivo: float,
+                      acoes: float, premissa: str, pontos: list[float], moeda: str) -> dict:
+    return {"id": 0, "tipo": "grade1d",
+            "args": {"rota": rota, "premissas": premissas, "metrica": metrica,
+                     "nd_efetivo": nd_efetivo, "acoes": acoes,
+                     "premissa": premissa, "pontos": pontos, "moeda": moeda}}
+
+
+def _problema_grade2d(rota: str, premissas: dict, metrica: dict, nd_efetivo: float, acoes: float,
+                      premissa_x: str, pontos_x: list[float],
+                      premissa_y: str, pontos_y: list[float], moeda: str) -> dict:
+    return {"id": 0, "tipo": "grade2d",
+            "args": {"rota": rota, "premissas": premissas, "metrica": metrica,
+                     "nd_efetivo": nd_efetivo, "acoes": acoes,
+                     "premissa_x": premissa_x, "pontos_x": pontos_x,
+                     "premissa_y": premissa_y, "pontos_y": pontos_y, "moeda": moeda}}
+
+
+def _bloco_wrapper() -> list[dict]:
+    v: list[dict] = []
+
+    # --- alvo (4): as duas rotas, incluindo um caso de caixa líquido
+    # (nd_efetivo < 0) — a rota firm soma nd_efetivo ao market cap para
+    # chegar em EV_mercado, então um caso sem caixa líquido nunca exercitaria
+    # o sinal de subtração que essa soma vira quando nd_efetivo é negativo.
+    v.append(_problema_alvo("firm", preco=42.50, acoes=120.0, nd_efetivo=350.0,
+                            metrica={"tipo": "EBITDA", "valor": 900.0}))
+    v.append(_problema_alvo("firm", preco=18.75, acoes=80.0, nd_efetivo=-200.0,
+                            metrica={"tipo": "NOPAT", "valor": 300.0}))
+    v.append(_problema_alvo("equity", preco=55.0, acoes=100.0, nd_efetivo=0.0,
+                            metrica={"tipo": "LL", "valor": 250.0}))
+    v.append(_problema_alvo("equity", preco=9.30, acoes=500.0, nd_efetivo=0.0,
+                            metrica={"tipo": "LL", "valor": 700.0}))
+
+    # Vetores centrais reutilizados pelas grades abaixo — mesma convenção de
+    # PONTOS PERCENTUAIS de caso.json (ver tests/fixtures/caso_reversa_firm.json).
+    premissas_firm_ebitda = dict(g=5.0, roic=12.0, wacc=10.0, n=10, da=20.0, tax=25.0,
+                                 tv="gordon", roic_tv=10.0, gp=3.0)
+    premissas_firm_nopat = dict(g=4.0, roic=15.0, wacc=9.0, n=10, da=0.0, tax=0.0,
+                                tv="book", roic_book=12.0)
+    premissas_equity = dict(g=4.0, roe=16.0, ke=10.0, n=10, gde=25.0, nde=10.0,
+                            tv="convergencia")
+
+    # --- grade1d (3): uma por combinação rota x métrica já usada em `alvo`
+    # acima; cada uma inclui o PONTO CENTRAL (o valor que a própria premissa
+    # central já usa) — regra da metodologia exercitada por
+    # `test_celula_central_reproduz_o_caso_base`.
+    v.append(_problema_grade1d("firm", premissas_firm_ebitda, {"tipo": "EBITDA", "valor": 900.0},
+                               nd_efetivo=350.0, acoes=120.0, premissa="wacc",
+                               pontos=[8.0, 9.0, 10.0, 11.0, 12.0], moeda="BRL-nominal"))
+    v.append(_problema_grade1d("firm", premissas_firm_nopat, {"tipo": "NOPAT", "valor": 300.0},
+                               nd_efetivo=-200.0, acoes=80.0, premissa="roic",
+                               pontos=[11.0, 13.0, 15.0, 17.0, 19.0], moeda="BRL-nominal"))
+    v.append(_problema_grade1d("equity", premissas_equity, {"tipo": "LL", "valor": 250.0},
+                               nd_efetivo=0.0, acoes=100.0, premissa="ke",
+                               pontos=[8.0, 9.0, 10.0, 11.0, 12.0], moeda="BRL-nominal"))
+
+    # --- grade2d (2): NÃO quadradas de propósito — a fatia 3C descobriu que
+    # uma grade quadrada esconde uma transposição de eixos (o teste passava
+    # com os eixos trocados). 4x3 e 3x5, nunca NxN.
+    v.append(_problema_grade2d("firm", premissas_firm_ebitda, {"tipo": "EBITDA", "valor": 900.0},
+                               nd_efetivo=350.0, acoes=120.0,
+                               premissa_x="roic", pontos_x=[10.0, 12.0, 14.0, 16.0],
+                               premissa_y="g", pontos_y=[3.0, 5.0, 7.0], moeda="BRL-nominal"))
+    v.append(_problema_grade2d("equity", premissas_equity, {"tipo": "LL", "valor": 250.0},
+                               nd_efetivo=0.0, acoes=100.0,
+                               premissa_x="ke", pontos_x=[8.0, 9.0, 10.0],
+                               premissa_y="roe", pontos_y=[12.0, 14.0, 16.0, 18.0, 20.0],
+                               moeda="BRL-nominal"))
+
+    return v
+
+
 def gerar() -> list[dict]:
     """A lista completa de problemas, determinística — mesma disciplina de
     `vetores_paridade.gerar()`: `random.Random(SEMENTE_SOLVER)` nasce AQUI
     DENTRO, nunca uma instância de módulo reaproveitada, para que
     `gerar() == gerar()` valha trivialmente e o CLI (processo novo)
-    reproduza a fixture commitada byte a byte."""
+    reproduza a fixture commitada byte a byte.
+
+    Os problemas de wrapper (`_bloco_wrapper`, task 3) vêm SEMPRE por último,
+    depois dos 41 de solver — nunca intercalados. Isso não é regra da
+    metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2,
+    imutável por regra desta task) alinhado por posição com os IDs que ele já
+    conhece; a fixture inteira permanece uma lista única, um gerador único,
+    como o brief da task 3 pede."""
     rng = random.Random(SEMENTE_SOLVER)
-    problemas = _bloco_patologico() + _bloco_aleatorio(rng)
+    problemas = _bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper()
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
 
 
-def avaliar_python(problemas: list[dict]) -> list[dict]:
-    """Avalia cada problema no motor Python congelado, montando `f` do mesmo
-    jeito que o subcomando `rev` do vendor (justos.py, bloco do cmd 'rev'):
+# Todo resultado de tipo "alvo"/"grade1d"/"grade2d" carrega estes três campos
+# do shape do SOLVER, vazios — não é o shape natural desses três tipos (que
+# só têm "alvo" ou "celulas"), é compatibilidade retroativa deliberada:
+# `tests/test_paridade_solver_js.py` (task 2, imutável por regra desta task)
+# lê a fixture INTEIRA sem filtrar por `tipo` e indexa `a["raizes"]`/
+# `a["tangenciais"]`/`a["identificacao"]` direto (sem `.get`) em todo item —
+# sem estes três campos aqui, aquele harness levantaria `KeyError` assim que
+# alcançasse um item de wrapper misturado na mesma fixture. `zip`/`any` até
+# tolerariam alguns desses acessos por short-circuit ou por parada antecipada
+# do iterador mais curto, mas o comprehension de conjunto de
+# `test_fixture_cobre_o_que_discrimina` (identificacao) percorre a lista
+# INTEIRA sem short-circuit — por isso o preenchimento é incondicional, não
+# uma otimização best-effort. O espelho JS carrega o mesmo preenchimento, com
+# o mesmo comentário (`CAMPOS_SOLVER_VAZIOS`, motor_espelho.js) — os dois
+# lados precisam concordar, porque aquele harness compara os dois.
+_CAMPOS_SOLVER_VAZIOS = {"raizes": [], "tangenciais": [], "identificacao": None}
+
+
+def _avaliar_solver(problema: dict) -> dict:
+    """Um problema `tipo: "solver"` — corpo original de `avaliar_python`
+    (task 2), extraído sem mudança de comportamento para virar um dos ramos
+    de despacho por `tipo` (task 3). Monta `f` do mesmo jeito que o
+    subcomando `rev` do vendor (justos.py, bloco do cmd 'rev'):
     `f(x) = fn(**{**args, resolver: x}) - alvo`, `mult(x) = f(x) + alvo`
     (NÃO uma chamada fresca a `fn` — `mult = lambda x: f(x) + M` no vendor é
     literal, e (fn(x)-alvo)+alvo não é sempre bit-a-bit igual a fn(x); a
@@ -312,35 +486,138 @@ def avaliar_python(problemas: list[dict]) -> list[dict]:
     PRIMEIRA raiz (a lista já vem ordenada de `_dedupe_roots`) com
     `tol=0.01`; `None` quando não há raiz — o mesmo shape que
     `motor_espelho.js` promete devolver.
+    """
+    fn = _DESPACHO[problema["fn"]]
+    resolver = problema["resolver"]
+    alvo = problema["alvo"]
 
-    Não compara nada contra JS — isso é do harness
-    (`tests/test_paridade_solver_js.py`). Não sabe que JS existe.
+    def f(x, fn=fn, resolver=resolver, args=problema["args"], alvo=alvo):
+        return fn(**{**args, resolver: x}) - alvo
+
+    def mult(x, f=f, alvo=alvo):
+        return f(x) + alvo
+
+    if problema.get("completo"):
+        raizes, tangenciais = solve_full(f, problema["lo"], problema["hi"], problema["steps"], ref=alvo)
+    else:
+        raizes, tangenciais = solve(f, problema["lo"], problema["hi"], problema["steps"]), []
+
+    ident = identificacao(mult, raizes[0], alvo, _TOL_IDENTIFICACAO) if raizes else None
+
+    return {
+        "id": problema["id"],
+        "raizes": raizes,
+        "tangenciais": [{"x": t["x"], "residuo": t["residuo"]} for t in tangenciais],
+        "identificacao": ident,
+    }
+
+
+def _caso_minimo_grade(args: dict) -> dict:
+    """Caso MÍNIMO para chamar `grade_1d`/`grade_2d` direto — só os campos
+    que essas duas funções de fato leem (ver docstrings delas em
+    `sensibilidades.py`): rota, ações diluídas, métrica-base, moeda e o vetor
+    central de premissas do cenário-alvo. NÃO passa por `caso.validar()` —
+    `grade_1d`/`grade_2d` documentam que assumem essa validação já feita por
+    quem carregou o caso, e não a repetem; um `caso.json` de verdade exigiria
+    âncora/triângulo por cenário, teto de células etc., nenhum dos quais
+    `grade_1d`/`grade_2d` de fato leem (só ECOAM `spec["triangulo"]` de volta
+    na saída — daí o `triangulo` de preenchimento abaixo, em
+    `_spec_triangulo`, nunca lido por conta nenhuma)."""
+    return {
+        "rota": args["rota"],
+        "acoes_diluidas": args["acoes"],
+        "metrica_base": args["metrica"],
+        "moeda": args.get("moeda"),
+        "cenarios": {_NOME_CENARIO: {"premissas": args["premissas"]}},
+    }
+
+
+def _spec_triangulo(rota: str) -> dict:
+    """Triângulo g = RiR x retorno de PREENCHIMENTO — `grade_1d`/`grade_2d`
+    só ECOAM `spec["triangulo"]` na saída (ver `_caso_minimo_grade`), nunca
+    leem por dentro; não precisa ser uma permutação válida em torno das
+    premissas variadas por ESTA grade especificamente, só existir."""
+    retorno = "roic" if rota == "firm" else "roe"
+    return {"inputs": ["g", retorno], "output": "rir"}
+
+
+def _avaliar_alvo(problema: dict) -> dict:
+    """Um problema `tipo: "alvo"` — chama `reversa.alvo_de_mercado` de
+    verdade (não reimplementa a conta); devolve só `["valor"]` (o número),
+    não `["algebra"]`/`["base"]` (prosa de auditoria, fora do que a
+    calibragem desta task pede para testar — ver task-4b-3-brief.md)."""
+    args = problema["args"]
+    caso = {
+        "rota": args["rota"],
+        "preco": {"valor": args["preco"]},
+        "acoes_diluidas": args["acoes"],
+        "metrica_base": args["metrica"],
+    }
+    resultado = alvo_de_mercado(caso, _NOME_CENARIO, args["nd_efetivo"])
+    return {"id": problema["id"], "alvo": resultado["valor"], **_CAMPOS_SOLVER_VAZIOS}
+
+
+def _avaliar_grade1d(problema: dict) -> dict:
+    """Um problema `tipo: "grade1d"` — chama `sensibilidades.grade_1d` de
+    verdade. `celulas` reduz cada ponto de `resultado["pontos"]` a
+    `{x, valor, multiplo}` — sem `diag` (dedup de diagnóstico, D5 do plano:
+    não vai para o espelho nem para este harness)."""
+    args = problema["args"]
+    caso = _caso_minimo_grade(args)
+    spec = {"premissa": args["premissa"], "pontos": args["pontos"],
+            "triangulo": _spec_triangulo(args["rota"])}
+    resultado = grade_1d(caso, _NOME_CENARIO, spec, args["nd_efetivo"])
+    celulas = [{"x": p["x"], "valor": p["valor"], "multiplo": p["multiplo"]}
+               for p in resultado["pontos"]]
+    return {"id": problema["id"], "celulas": celulas, **_CAMPOS_SOLVER_VAZIOS}
+
+
+def _avaliar_grade2d(problema: dict) -> dict:
+    """Um problema `tipo: "grade2d"` — chama `sensibilidades.grade_2d` de
+    verdade. `celulas` preserva a forma linha x coluna de
+    `resultado["celulas"]` (`celulas[i][j]` = `pontos_y[i]` x `pontos_x[j]`,
+    a MESMA orientação que `sensibilidades.grade_2d` documenta), reduzindo
+    cada célula a `{x, y, valor, multiplo}` — sem `diag`, mesma razão de
+    `_avaliar_grade1d`."""
+    args = problema["args"]
+    caso = _caso_minimo_grade(args)
+    spec = {"premissa_x": args["premissa_x"], "pontos_x": args["pontos_x"],
+            "premissa_y": args["premissa_y"], "pontos_y": args["pontos_y"],
+            "triangulo": _spec_triangulo(args["rota"])}
+    resultado = grade_2d(caso, _NOME_CENARIO, spec, args["nd_efetivo"])
+    celulas = [[{"x": c["x"], "y": c["y"], "valor": c["valor"], "multiplo": c["multiplo"]}
+                for c in linha]
+               for linha in resultado["celulas"]]
+    return {"id": problema["id"], "celulas": celulas, **_CAMPOS_SOLVER_VAZIOS}
+
+
+_DESPACHO_POR_TIPO = {
+    "solver": _avaliar_solver,
+    "alvo": _avaliar_alvo,
+    "grade1d": _avaliar_grade1d,
+    "grade2d": _avaliar_grade2d,
+}
+
+
+def avaliar_python(problemas: list[dict]) -> list[dict]:
+    """Avalia cada problema, despachando por `problema["tipo"]` — quatro
+    ramos, dois lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
+    direto (`_avaliar_solver`, task 2); `"alvo"`/`"grade1d"`/`"grade2d"`
+    rodam o WRAPPER de verdade — `reversa.alvo_de_mercado`/
+    `sensibilidades.grade_1d`/`grade_2d` (task 3), nunca uma reimplementação
+    da conta. `tipo` desconhecido levanta `KeyError` nomeando o tipo — falha
+    fechada, mesma disciplina do despacho por `tipo` do espelho JS.
+
+    Não compara nada contra JS — isso é dos harnesses
+    (`tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`).
+    Não sabe que JS existe.
     """
     resultados = []
     for problema in problemas:
-        fn = _DESPACHO[problema["fn"]]
-        resolver = problema["resolver"]
-        alvo = problema["alvo"]
-
-        def f(x, fn=fn, resolver=resolver, args=problema["args"], alvo=alvo):
-            return fn(**{**args, resolver: x}) - alvo
-
-        def mult(x, f=f, alvo=alvo):
-            return f(x) + alvo
-
-        if problema.get("completo"):
-            raizes, tangenciais = solve_full(f, problema["lo"], problema["hi"], problema["steps"], ref=alvo)
-        else:
-            raizes, tangenciais = solve(f, problema["lo"], problema["hi"], problema["steps"]), []
-
-        ident = identificacao(mult, raizes[0], alvo, _TOL_IDENTIFICACAO) if raizes else None
-
-        resultados.append({
-            "id": problema["id"],
-            "raizes": raizes,
-            "tangenciais": [{"x": t["x"], "residuo": t["residuo"]} for t in tangenciais],
-            "identificacao": ident,
-        })
+        tipo = problema["tipo"]
+        if tipo not in _DESPACHO_POR_TIPO:
+            raise KeyError(f"tipo de problema desconhecido: {tipo!r}")
+        resultados.append(_DESPACHO_POR_TIPO[tipo](problema))
     return resultados
 
 
