@@ -1,0 +1,775 @@
+[
+  {
+    "id": 0,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book"
+    },
+    "alvo": 5.0,
+    "lo": 0.005,
+    "hi": 1.5,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 1,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.05,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book"
+    },
+    "alvo": 10.0,
+    "lo": 0.005,
+    "hi": 1.5,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 2,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "roic": 0.08,
+      "w": 0.09,
+      "n": 12,
+      "tv": "book",
+      "roic_book": 0.5
+    },
+    "alvo": 8.0,
+    "lo": 0.0,
+    "hi": 0.3,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 3,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "roic": 0.08,
+      "w": 0.09,
+      "n": 12,
+      "tv": "book",
+      "roic_book": 0.5
+    },
+    "alvo": 8.0,
+    "lo": 0.0,
+    "hi": 0.3,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 4,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "roic": 0.08,
+      "w": 0.09,
+      "n": 12,
+      "tv": "book",
+      "roic_book": 0.5
+    },
+    "alvo": 8.056250886022955,
+    "lo": 0.0,
+    "hi": 0.3,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 5,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "roic": 0.08,
+      "w": 0.09,
+      "n": 12,
+      "tv": "book",
+      "roic_book": 0.5
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.15,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 6,
+    "tipo": "solver",
+    "resolver": "w",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.12
+    },
+    "alvo": 10.0,
+    "lo": 0.02,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 7,
+    "tipo": "solver",
+    "resolver": "w",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "n": 10,
+      "tv": "convergencia"
+    },
+    "alvo": 10.0,
+    "lo": 0.02,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 8,
+    "tipo": "solver",
+    "resolver": "w",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "roic": 0.15,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.02
+    },
+    "alvo": 10.0,
+    "lo": 0.03,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 9,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.12
+    },
+    "alvo": 10.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 10,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "w": 0.09,
+      "n": 10,
+      "tv": "convergencia"
+    },
+    "alvo": 10.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 11,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.04,
+      "w": 0.09,
+      "n": 10,
+      "tv": "gordon",
+      "roic_tv": 0.1,
+      "gp": 0.02
+    },
+    "alvo": 10.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 12,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.13
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 13,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "convergencia"
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 14,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "roe": 0.16,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.09,
+      "gp": 0.025
+    },
+    "alvo": 8.0,
+    "lo": 0.03,
+    "hi": 0.35,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 15,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.13
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 16,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "convergencia"
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 17,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "g": 0.04,
+      "ke": 0.1,
+      "n": 10,
+      "gde": 0.25,
+      "nde": 0.1,
+      "tv": "gordon",
+      "roe_tv": 0.09,
+      "gp": 0.025
+    },
+    "alvo": 8.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 18,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.03,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.09
+    },
+    "alvo": 11.444444444444445,
+    "lo": 0.03,
+    "hi": 0.3,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 19,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "g": 0.03,
+      "ke": 0.09,
+      "n": 10,
+      "gde": 0.2,
+      "nde": 0.1,
+      "tv": "book",
+      "roe_book": 0.09
+    },
+    "alvo": 11.444444444444445,
+    "lo": 0.03,
+    "hi": 0.3,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 20,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_ebitda",
+    "args": {
+      "g": 0.04,
+      "w": 0.09,
+      "n": 10,
+      "tv": "book",
+      "roic_book": 0.12,
+      "d": 0.2,
+      "t": 0.25
+    },
+    "alvo": 6.0,
+    "lo": 0.02,
+    "hi": 0.6,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 21,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 4,
+      "tv": "gordon",
+      "roe": 0.295208,
+      "ke": 0.167611,
+      "gde": 0.092411,
+      "nde": 0.123202,
+      "roe_tv": 0.061324,
+      "gp": -0.005061
+    },
+    "alvo": 3.950684,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 22,
+    "tipo": "solver",
+    "resolver": "w",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 7,
+      "tv": "book",
+      "g": -0.037231,
+      "roic": 0.157614,
+      "roic_book": 0.108342
+    },
+    "alvo": 4.162922,
+    "lo": 0.02,
+    "hi": 0.4,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 23,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 6,
+      "tv": "convergencia",
+      "roe": 0.225554,
+      "ke": 0.08972,
+      "gde": 0.323659,
+      "nde": 0.381281
+    },
+    "alvo": 6.353787,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 24,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "n": 27,
+      "tv": "gordon",
+      "g": 0.330909,
+      "roe": 0.202341,
+      "gde": 0.069016,
+      "nde": 0.450936,
+      "roe_tv": 0.069293,
+      "gp": 0.057114
+    },
+    "alvo": 18.576849,
+    "lo": 0.02,
+    "hi": 0.4,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 25,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "n": 8,
+      "tv": "book",
+      "g": 0.120599,
+      "ke": 0.197957,
+      "gde": 0.146237,
+      "nde": 0.502914,
+      "roe_book": 0.154463
+    },
+    "alvo": 19.840939,
+    "lo": 0.03,
+    "hi": 0.8,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 26,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 5,
+      "tv": "gordon",
+      "roe": 0.236136,
+      "ke": 0.109711,
+      "gde": 0.538983,
+      "nde": 0.599842,
+      "roe_tv": 0.22459,
+      "gp": 0.043018
+    },
+    "alvo": 11.413129,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 27,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 27,
+      "tv": "convergencia",
+      "roe": 0.291238,
+      "ke": 0.031283,
+      "gde": 0.003058,
+      "nde": 0.131405
+    },
+    "alvo": 10.194635,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 28,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 30,
+      "tv": "book",
+      "roe": 0.279996,
+      "ke": 0.168693,
+      "gde": 0.475218,
+      "nde": 0.362055,
+      "roe_book": 0.348025
+    },
+    "alvo": 19.006491,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 29,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 8,
+      "tv": "book",
+      "roic": 0.299126,
+      "w": 0.174447,
+      "roic_book": 0.041778
+    },
+    "alvo": 6.199972,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 30,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 17,
+      "tv": "book",
+      "roe": 0.255494,
+      "ke": 0.192307,
+      "gde": 0.220734,
+      "nde": 0.46979,
+      "roe_book": 0.241705
+    },
+    "alvo": 19.874668,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 31,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "pe",
+    "args": {
+      "n": 24,
+      "tv": "book",
+      "roe": 0.14338,
+      "ke": 0.119435,
+      "gde": 0.204269,
+      "nde": 0.000264,
+      "roe_book": 0.353495
+    },
+    "alvo": 3.346359,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 32,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "n": 20,
+      "tv": "book",
+      "g": -0.010959,
+      "roe": 0.201367,
+      "gde": 0.431053,
+      "nde": 0.413722,
+      "roe_book": 0.093862
+    },
+    "alvo": 7.11712,
+    "lo": 0.02,
+    "hi": 0.4,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 33,
+    "tipo": "solver",
+    "resolver": "roe",
+    "fn": "pe",
+    "args": {
+      "n": 7,
+      "tv": "book",
+      "g": 0.155681,
+      "ke": 0.079408,
+      "gde": 0.411434,
+      "nde": 0.00711,
+      "roe_book": 0.122092
+    },
+    "alvo": 10.944058,
+    "lo": 0.03,
+    "hi": 0.8,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 34,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 26,
+      "tv": "convergencia",
+      "g": 0.190778,
+      "w": 0.142877
+    },
+    "alvo": 11.613538,
+    "lo": 0.03,
+    "hi": 0.8,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 35,
+    "tipo": "solver",
+    "resolver": "w",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 11,
+      "tv": "book",
+      "g": -0.004286,
+      "roic": 0.321246,
+      "roic_book": 0.026989
+    },
+    "alvo": 3.998485,
+    "lo": 0.02,
+    "hi": 0.4,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 36,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 22,
+      "tv": "convergencia",
+      "roic": 0.185849,
+      "w": 0.071409
+    },
+    "alvo": 19.865599,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 37,
+    "tipo": "solver",
+    "resolver": "ke",
+    "fn": "pe",
+    "args": {
+      "n": 7,
+      "tv": "convergencia",
+      "g": 0.261154,
+      "roe": 0.076061,
+      "gde": 0.262307,
+      "nde": 0.064265
+    },
+    "alvo": 14.106941,
+    "lo": 0.02,
+    "hi": 0.4,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 38,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 21,
+      "tv": "convergencia",
+      "g": -0.024932,
+      "w": 0.046936
+    },
+    "alvo": 18.347588,
+    "lo": 0.03,
+    "hi": 0.8,
+    "steps": 800,
+    "completo": false
+  },
+  {
+    "id": 39,
+    "tipo": "solver",
+    "resolver": "g",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 8,
+      "tv": "book",
+      "roic": 0.13416,
+      "w": 0.113661,
+      "roic_book": 0.028405
+    },
+    "alvo": 3.941519,
+    "lo": -0.3,
+    "hi": 0.45,
+    "steps": 800,
+    "completo": true
+  },
+  {
+    "id": 40,
+    "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "n": 9,
+      "tv": "book",
+      "g": 0.282862,
+      "w": 0.035819,
+      "roic_book": 0.044495
+    },
+    "alvo": 7.221118,
+    "lo": 0.03,
+    "hi": 0.8,
+    "steps": 800,
+    "completo": false
+  }
+]
