@@ -258,6 +258,35 @@ def _bloco_patologico() -> list[dict]:
                         dict(g=0.04, w=0.09, n=10, tv="book", roic_book=0.12, d=0.20, t=0.25),
                         alvo=6.0, lo=0.02, hi=0.60))
 
+    # --- 22. DEDUPE (revisão final 4B, achado F5): raiz EXATAMENTE sobre um ponto da
+    # varredura. `_dedupe_roots`/`dedupeRaizes` está correto por leitura mas nunca disparava
+    # nesta fixture — 36 raízes entravam, 36 saíam (review-4b-final.md) — porque nenhum caso
+    # tinha uma raiz colidindo com um ponto da grade. `g=0` é deliberado, não decoração: com
+    # g=0, `ret=1-g/roic=1` e `(1+g)**t=1` em toda parte, então ev_nopat(roic=x, g=0, w, n,
+    # tv='book') colapsa para uma CONSTANTE (a soma explícita, que não depende de roic) mais
+    # `1/(roic*(1+w)**n)` — monotônica em roic por construção, SEM nenhum `roic**t`/`(1+g)**t`
+    # no caminho, e com (1+w)**n o ÚNICO `**` que sobra (base/expoente "limpos": w=0.25, n
+    # inteiro). Isso importa porque `**`/pow() NÃO é bit-a-bit garantido entre V8 e CPython
+    # (achado tangencial já registrado no ledger desta task, ver _LO_HI_POR_RESOLVER acima) —
+    # a primeira tentativa desta construção (g=0.05, w=0.09) tinha exatamente essa divergência
+    # de 1 ULP entre os dois lados, o que fazia SÓ UM dos dois brackets adjacentes enxergar
+    # troca de sinal (o outro via os dois extremos com o MESMO sinal) e o dedupe nunca chegava
+    # a ver 2 raízes cruas do lado JS — verificado por chamada direta antes de descartar.
+    # Com g=0 os dois lados batem BIT A BIT: alvo = ev_nopat(roic=0.30, ...) calculado no
+    # próprio ponto x_5 da varredura (lo=0.05, hi=0.55, steps=10) faz f(x_5) = 0.0 EXATO nos
+    # dois lados. Verificado por chamada direta ao vendor: a varredura BRUTA (sem dedupe) acha
+    # 2 raízes — 0.2999999999999997 (bracket [x_4,x_5], que nunca atualiza `fa` porque ela
+    # começa positiva e só o lado direito zera) e 0.30000000000000004 (bracket [x_5,x_6], que
+    # ATUALIZA fa=0 no primeiro passo e nunca sai de 0) — e `_dedupe_roots` colapsa as duas em
+    # [0.2999999999999997]. Espelho JS conferido pelo MESMO caminho (evNopat/dedupeRaizes
+    # exportados): raízes cruas idênticas, dedupe idêntico, `resolverProblema` devolve
+    # 0.2999999999999997 — bit a bit igual ao Python. Sem este caso, remover qualquer um dos
+    # dois dedupes do espelho (ou trocar `y0*y1<=0` por `<0`, que é exatamente o que faz as
+    # duas raízes desta construção desaparecerem: produto = 0 deixa de satisfazer `<0`) não
+    # derrubava teste nenhum.
+    v.append(_problema("roic", "ev_nopat", dict(g=0.0, w=0.25, n=10, tv="book"),
+                        alvo=3.9284172117333336, lo=0.05, hi=0.55, steps=10, completo=False))
+
     return v
 
 
@@ -426,6 +455,38 @@ def _bloco_wrapper() -> list[dict]:
                                premissa_x="ke", pontos_x=[8.0, 9.0, 10.0],
                                premissa_y="roe", pontos_y=[12.0, 14.0, 16.0, 18.0, 20.0],
                                moeda="BRL-nominal"))
+
+    # --- grade1d (2), revisão final 4B — F4: os dois problemas equity de grade acima
+    # (premissas_equity) sempre declaram gde/nde e nunca usam politica_tv, então o harness era
+    # cego a F1 e F2 (review-4b-final.md). Os dois casos abaixo isolam cada achado, um por vez,
+    # reusando o vetor que o revisor mediu diretamente contra o vendor
+    # ({g:4, roe:18, ke:11, n:10, tv:'gordon', roe_tv:12, gp:3}).
+    #
+    # F1 — gde/nde AUSENTES (não `null`: são opcionais e o caso simplesmente não as declara,
+    # `caso.py:161`). `premissasParaNucleo` pré-correção não repunha o default 0.0 do argparse
+    # depois do colapso, então `pe()` lia `args.gde`/`args.nde` undefined e `caixa` virava NaN —
+    # a grade INTEIRA saía `null` enquanto o Python (motor com o default de verdade) devolvia
+    # preço. Varre "g" (não gde/nde: sweeping a própria premissa ausente reintroduziria a chave
+    # e mascararia o achado).
+    premissas_equity_sem_caixa = dict(g=4.0, roe=18.0, ke=11.0, n=10,
+                                      tv="gordon", roe_tv=12.0, gp=3.0)
+    v.append(_problema_grade1d("equity", premissas_equity_sem_caixa, {"tipo": "LL", "valor": 1000.0},
+                               nd_efetivo=0.0, acoes=100.0, premissa="g",
+                               pontos=[2.0, 3.0, 4.0, 5.0, 6.0], moeda="BRL-nominal"))
+
+    # F2 — `politica_tv: null` (explícito e legal, `caso.py:797`; o wrapper Python preserva e o
+    # argparse do motor aplica o default 'continua'). `premissasParaNucleo` pré-correção só
+    # colapsava `null` para 'gp' — 'politica_tv' está em CHAVES_NAO_PERCENTUAIS, então o `null`
+    # sobrevivia até `pe()`, que lia `'politica_tv' in args === true` e tomava o ramo
+    # 'encerra' (deixa o termo de caixa do terminal DE FORA) onde o motor de verdade, nunca
+    # tendo visto a flag, aplica 'continua' (ENTRA o termo de caixa) — número plausível e
+    # ERRADO, não célula vazia. gde/nde declarados aqui de propósito, para isolar só F2 (sem
+    # interação com F1 nesta mesma célula).
+    premissas_equity_politica_null = dict(g=4.0, roe=18.0, ke=11.0, n=10, gde=25.0, nde=10.0,
+                                          tv="gordon", roe_tv=12.0, gp=3.0, politica_tv=None)
+    v.append(_problema_grade1d("equity", premissas_equity_politica_null, {"tipo": "LL", "valor": 1000.0},
+                               nd_efetivo=0.0, acoes=100.0, premissa="roe",
+                               pontos=[16.0, 17.0, 18.0, 19.0, 20.0], moeda="BRL-nominal"))
 
     return v
 

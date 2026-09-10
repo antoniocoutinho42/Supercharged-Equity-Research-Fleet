@@ -472,25 +472,50 @@ function pct(valor) {
   return (valor === null || valor === undefined) ? null : valor / 100.0;
 }
 
-// Presenca, nunca ausencia inventada — mesma disciplina do cabecalho do arquivo: uma chave
-// ausente em `premissas` fica ausente no resultado (o nucleo ja' sabe o default de cada uma).
-// 'gp' e' a UNICA excecao: o argparse da CLI da' a ela default 0.0 (`rates(s, [..., ('gp', 0.0),
-// ...])`), nao None — entao ausencia OU null em 'gp' chegam ao nucleo como AUSENCIA de chave (o
-// proprio nucleo ja' assume 0.0 via `'gp' in args ? args.gp : 0.0`), nunca como `gp: null`
-// preservado — que faria o nucleo ler null sob 'gordon' e devolver NaN onde o motor de verdade
-// devolve um numero. As outras premissas opcionais (roic_tv/roic_book/roe_tv/roe_book) tem
-// default None nos dois lados, entao ausencia e null colapsam no mesmo resultado de qualquer
-// jeito (ver cabecalho do arquivo) — so' 'gp' precisa deste caso especial.
+// ATENCAO — semantica de default OPOSTA a do nucleo (ver cabecalho do arquivo, linhas 28-40) —
+// revisao final da fatia 4B, achados F1/F2/F3: e' a armadilha central deste arquivo e ja' pegou
+// uma vez (esta funcao so' tratava 'gp' antes desta correcao).
+//
+// No NUCLEO (evNopat/pe acima, chamados DIRETO com **kwargs pela rota 4A/solver), um `null`
+// explicito TEM DE atravessar intacto — muda o caminho executado, e os ids 86/87 de
+// vetores_paridade.json cobram exatamente essa diferenca. NAO mexa naquele caminho.
+//
+// Aqui, no WRAPPER, e' o INVERSO: `null` e AUSENCIA colapsam no MESMO resultado — a chave
+// simplesmente nao entra em `out`. E' a semantica de `motor.py:argv_para` (linha ~217:
+// `if valor is None: continue` — a flag da CLI nem e' emitida) seguida do argparse do motor
+// congelado, que aplica o SEU proprio default de subcomando (justos.py:1758/1763: gde=0.0,
+// nde=0.0, gp=0.0 em 'pe'; gp=0.0 em 'ev'; politica_tv='continua'). Um `null` explicito
+// PRESERVADO (o bug corrigido aqui) faria o nucleo ler `'chave' in args === true` com valor
+// `null` e tomar um ramo ERRADO — ex.: `politica_tv: null` virava "nao e 'continua'",
+// derrubando o termo de caixa do terminal onde o motor de verdade, nunca tendo visto a flag,
+// aplica 'continua' (F2). Por isso o loop abaixo pula QUALQUER chave com valor `null`, nao so'
+// 'gp': colapsar para ausencia e' sempre seguro aqui porque e' exatamente o que a CLI real faz
+// antes do nucleo.
+//
+// Duas premissas que o colapso por si so' NAO resolve, porque o nucleo so' aplica
+// presenca-ou-ausencia (nunca um default proprio para preencher o buraco):
+// - gde/nde (rota equity): opcionais no caso (`caso.py:161`, PREMISSAS_OBRIGATORIAS_EQUITY nao
+//   as exige), mas `pe()` (acima) LE `args.gde`/`args.nde` DIRETO, sem fallback de presenca —
+//   ausentes, `caixa = undefined - undefined = NaN` e o multiplo inteiro vira `null` mesmo
+//   quando o motor de verdade, com o default 0.0 do argparse, devolve um preco (F1).
+//   `precificarCelula` (abaixo) repoe esse default depois do colapso, so' na rota equity.
+// - tv: NAO tem default nenhum (`--tv required=True`, justos.py:1729) — e' a UNICA premissa
+//   obrigatoria que pode chegar aqui como `null` (as outras obrigatorias recusariam antes, na
+//   validacao do caso). Colapsar para ausencia faria o NUCLEO aplicar o SEU default ('book'),
+//   inventando um preco onde o motor de verdade sai com Gate 1 (exit 2, `MotorFalhou`) sem
+//   calcular nada (F3). `precificarCelula` recusa esse caso explicitamente, ANTES de chegar
+//   aqui, em vez de deixar o colapso inventar um numero.
 function premissasParaNucleo(premissas, renomeia) {
   const out = {};
   for (const chave of Object.keys(premissas)) {
     const valor = premissas[chave];
+    // Colapsa com ausencia — motor.py:argv_para:217. SEMPRE, para TODA chave, nao so' 'gp'.
+    if (valor === null) continue;
     const chaveNova = renomeia[chave] || chave;
     if (CHAVES_NAO_PERCENTUAIS.has(chave)) {
       out[chaveNova] = valor;
       continue;
     }
-    if (valor === null && chave === 'gp') continue;
     out[chaveNova] = pct(valor);
   }
   return out;
@@ -518,6 +543,16 @@ function paraSaidaOuNulo(x) {
 // multiplo arredondado) — o arredondamento do multiplo (EV/EBITDA_curr ou PL_curr) e' um
 // calculo SEPARADO, que nao alimenta a cadeia EV->Equity->Preco_acao.
 function precificarCelula(rota, premissas, metrica, ndEfetivo, acoes) {
+  // F3 (revisao final 4B): 'tv' e' a UNICA premissa obrigatoria sem default nenhum (--tv
+  // required=True, justos.py:1729) — o motor de verdade sai no Gate 1 (exit 2, MotorFalhou)
+  // sem calcular nada quando ela chega null. Diferente de gde/nde/politica_tv (que TEM default
+  // de argparse para repor depois do colapso null->ausencia em premissasParaNucleo), 'tv' nao
+  // tem o que repor: deixar colapsar faria o NUCLEO aplicar o SEU default ('book'), inventando
+  // um preco onde o motor recusa. Recusamos aqui, ANTES de premissasParaNucleo sequer rodar, no
+  // mesmo vocabulario null que todo outro guarda deste arquivo usa.
+  if (premissas.tv === null) {
+    return { valor: null, multiplo: null };
+  }
   if (rota === 'firm') {
     const args = premissasParaNucleo(premissas, RENOMEIA_FIRM);
     if (metrica.tipo === 'EBITDA') {
@@ -535,6 +570,12 @@ function precificarCelula(rota, premissas, metrica, ndEfetivo, acoes) {
   }
   // equity
   const args = premissasParaNucleo(premissas, {});
+  // gde/nde sao OPCIONAIS na rota equity (caso.py:161) mas pe() (acima) le args.gde/args.nde
+  // DIRETO, sem fallback de presenca — ausentes depois do colapso null->ausencia, caixa =
+  // undefined - undefined = NaN e o multiplo inteiro desaparece (achado F1). O argparse do
+  // motor da' a elas default 0.0 (justos.py:1758); repomos o mesmo aqui, so' nesta rota.
+  if (!('gde' in args)) args.gde = 0;
+  if (!('nde' in args)) args.nde = 0;
   const m = pe(args);
   const multiplo = arredondarPy(m, 4);
   const eqBruto = m * metrica.valor;

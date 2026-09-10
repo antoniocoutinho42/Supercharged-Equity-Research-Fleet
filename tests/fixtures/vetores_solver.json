@@ -394,6 +394,23 @@
   {
     "id": 21,
     "tipo": "solver",
+    "resolver": "roic",
+    "fn": "ev_nopat",
+    "args": {
+      "g": 0.0,
+      "w": 0.25,
+      "n": 10,
+      "tv": "book"
+    },
+    "alvo": 3.9284172117333336,
+    "lo": 0.05,
+    "hi": 0.55,
+    "steps": 10,
+    "completo": false
+  },
+  {
+    "id": 22,
+    "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
     "args": {
@@ -413,7 +430,7 @@
     "completo": false
   },
   {
-    "id": 22,
+    "id": 23,
     "tipo": "solver",
     "resolver": "w",
     "fn": "ev_nopat",
@@ -431,7 +448,7 @@
     "completo": false
   },
   {
-    "id": 23,
+    "id": 24,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -450,7 +467,7 @@
     "completo": false
   },
   {
-    "id": 24,
+    "id": 25,
     "tipo": "solver",
     "resolver": "ke",
     "fn": "pe",
@@ -471,7 +488,7 @@
     "completo": false
   },
   {
-    "id": 25,
+    "id": 26,
     "tipo": "solver",
     "resolver": "roe",
     "fn": "pe",
@@ -491,7 +508,7 @@
     "completo": true
   },
   {
-    "id": 26,
+    "id": 27,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -512,7 +529,7 @@
     "completo": false
   },
   {
-    "id": 27,
+    "id": 28,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -531,7 +548,7 @@
     "completo": false
   },
   {
-    "id": 28,
+    "id": 29,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -551,7 +568,7 @@
     "completo": true
   },
   {
-    "id": 29,
+    "id": 30,
     "tipo": "solver",
     "resolver": "g",
     "fn": "ev_nopat",
@@ -569,7 +586,7 @@
     "completo": false
   },
   {
-    "id": 30,
+    "id": 31,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -589,7 +606,7 @@
     "completo": true
   },
   {
-    "id": 31,
+    "id": 32,
     "tipo": "solver",
     "resolver": "g",
     "fn": "pe",
@@ -609,7 +626,7 @@
     "completo": true
   },
   {
-    "id": 32,
+    "id": 33,
     "tipo": "solver",
     "resolver": "ke",
     "fn": "pe",
@@ -629,7 +646,7 @@
     "completo": false
   },
   {
-    "id": 33,
+    "id": 34,
     "tipo": "solver",
     "resolver": "roe",
     "fn": "pe",
@@ -649,7 +666,7 @@
     "completo": false
   },
   {
-    "id": 34,
+    "id": 35,
     "tipo": "solver",
     "resolver": "roic",
     "fn": "ev_nopat",
@@ -666,7 +683,7 @@
     "completo": false
   },
   {
-    "id": 35,
+    "id": 36,
     "tipo": "solver",
     "resolver": "w",
     "fn": "ev_nopat",
@@ -684,7 +701,7 @@
     "completo": false
   },
   {
-    "id": 36,
+    "id": 37,
     "tipo": "solver",
     "resolver": "g",
     "fn": "ev_nopat",
@@ -701,7 +718,7 @@
     "completo": false
   },
   {
-    "id": 37,
+    "id": 38,
     "tipo": "solver",
     "resolver": "ke",
     "fn": "pe",
@@ -720,7 +737,7 @@
     "completo": false
   },
   {
-    "id": 38,
+    "id": 39,
     "tipo": "solver",
     "resolver": "roic",
     "fn": "ev_nopat",
@@ -737,7 +754,7 @@
     "completo": false
   },
   {
-    "id": 39,
+    "id": 40,
     "tipo": "solver",
     "resolver": "g",
     "fn": "ev_nopat",
@@ -755,7 +772,7 @@
     "completo": true
   },
   {
-    "id": 40,
+    "id": 41,
     "tipo": "solver",
     "resolver": "roic",
     "fn": "ev_nopat",
@@ -773,7 +790,7 @@
     "completo": false
   },
   {
-    "id": 41,
+    "id": 42,
     "tipo": "alvo",
     "args": {
       "rota": "firm",
@@ -787,7 +804,7 @@
     }
   },
   {
-    "id": 42,
+    "id": 43,
     "tipo": "alvo",
     "args": {
       "rota": "firm",
@@ -801,7 +818,7 @@
     }
   },
   {
-    "id": 43,
+    "id": 44,
     "tipo": "alvo",
     "args": {
       "rota": "equity",
@@ -815,7 +832,7 @@
     }
   },
   {
-    "id": 44,
+    "id": 45,
     "tipo": "alvo",
     "args": {
       "rota": "equity",
@@ -829,7 +846,7 @@
     }
   },
   {
-    "id": 45,
+    "id": 46,
     "tipo": "grade1d",
     "args": {
       "rota": "firm",
@@ -862,7 +879,7 @@
     }
   },
   {
-    "id": 46,
+    "id": 47,
     "tipo": "grade1d",
     "args": {
       "rota": "firm",
@@ -894,7 +911,7 @@
     }
   },
   {
-    "id": 47,
+    "id": 48,
     "tipo": "grade1d",
     "args": {
       "rota": "equity",
@@ -925,7 +942,7 @@
     }
   },
   {
-    "id": 48,
+    "id": 49,
     "tipo": "grade2d",
     "args": {
       "rota": "firm",
@@ -963,7 +980,7 @@
     }
   },
   {
-    "id": 49,
+    "id": 50,
     "tipo": "grade2d",
     "args": {
       "rota": "equity",
@@ -994,6 +1011,71 @@
         14.0,
         16.0,
         18.0,
+        20.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 51,
+    "tipo": "grade1d",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 18.0,
+        "ke": 11.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 12.0,
+        "gp": 3.0
+      },
+      "metrica": {
+        "tipo": "LL",
+        "valor": 1000.0
+      },
+      "nd_efetivo": 0.0,
+      "acoes": 100.0,
+      "premissa": "g",
+      "pontos": [
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 52,
+    "tipo": "grade1d",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 18.0,
+        "ke": 11.0,
+        "n": 10,
+        "gde": 25.0,
+        "nde": 10.0,
+        "tv": "gordon",
+        "roe_tv": 12.0,
+        "gp": 3.0,
+        "politica_tv": null
+      },
+      "metrica": {
+        "tipo": "LL",
+        "valor": 1000.0
+      },
+      "nd_efetivo": 0.0,
+      "acoes": 100.0,
+      "premissa": "roe",
+      "pontos": [
+        16.0,
+        17.0,
+        18.0,
+        19.0,
         20.0
       ],
       "moeda": "BRL-nominal"
