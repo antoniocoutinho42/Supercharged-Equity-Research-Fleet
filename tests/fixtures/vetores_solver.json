@@ -1080,5 +1080,305 @@
       ],
       "moeda": "BRL-nominal"
     }
+  },
+  {
+    "id": 53,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book"
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 54,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "util": 55.0,
+        "tv": "convergencia",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 55,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "gordon",
+        "roic_tv": 12.0,
+        "gp": 2.0,
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 56,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": -5.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": null,
+      "acoes": null,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 57,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 10.0,
+        "kappa": 90.0,
+        "g2": 25.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 58,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 0.0,
+        "kappa": 0.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 59,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 7.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 7.0,
+        "tv": "convergencia",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 60,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 0.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 5.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 61,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 5,
+        "g1": 6.0,
+        "tv": "book",
+        "n": 5
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 62,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": -150.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 63,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": -5.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 64,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "util": 150.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 65,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 400.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 5.0,
+        "tv": "book",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal"
+    }
   }
 ]

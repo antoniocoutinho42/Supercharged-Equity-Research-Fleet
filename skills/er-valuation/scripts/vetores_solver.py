@@ -106,6 +106,14 @@ finally:
 from reversa import alvo_de_mercado  # noqa: E402
 from sensibilidades import grade_1d, grade_2d  # noqa: E402
 
+# [item 4, fatia C, task 1] `avaliar.precificar_rampa` e `motor.MotorFalhou` — mesma razao de
+# reversa/sensibilidades acima: modulos IRMAOS (skills/er-valuation/scripts/), ja alcancaveis pelo
+# mesmo sys.path.insert que os dois harnesses de teste fazem, e que so chamam o motor congelado por
+# SUBPROCESSO (avaliar.precificar_rampa -> motor.rodar -> subprocess), nunca por import — nenhuma
+# dança de bytecode aqui tambem.
+from avaliar import precificar_rampa  # noqa: E402
+from motor import MotorFalhou  # noqa: E402
+
 SEMENTE_SOLVER = 20260826
 
 _DESPACHO = {"ev_nopat": ev_nopat, "ev_ebitda": ev_ebitda, "pe": pe}
@@ -117,6 +125,15 @@ _DESPACHO = {"ev_nopat": ev_nopat, "ev_ebitda": ev_ebitda, "pe": pe}
 # precisa de outro valor, e inventar o campo só para nunca variá-lo seria
 # complexidade sem uso (calibragem do brief).
 _TOL_IDENTIFICACAO = 0.01
+
+# [item 4, fatia C, task 1] Mesma lista/ordem de `CAMPOS_RAMPA`/`AVISOS_RAMPA` em
+# motor_espelho.js e em tests/test_paridade_wrapper_js.py — os tres lados tem de concordar,
+# porque os harnesses comparam os dois primeiros contra o terceiro (ver o comentario junto de
+# `CAMPOS_RAMPA` em motor_espelho.js). `rir_fase1_%` sai SEM a chave 'nota' (texto estatico) —
+# ver `_avaliar_rampa` abaixo.
+CAMPOS_RAMPA: tuple = ("g1_%", "d_trajetoria_fase1_%", "d2_fase2_%", "rir_fase1_%", "alfa", "beta",
+                       "rir2_%", "roic2_%", "vp_fase1", "valor_fase2_no_ano_T", "capacidade_receita")
+AVISOS_RAMPA: tuple = ("aviso_colheita", "aviso_delator")
 
 
 def _problema(resolver: str, fn: str, args: dict, alvo: float, lo: float, hi: float,
@@ -491,6 +508,108 @@ def _bloco_wrapper() -> list[dict]:
     return v
 
 
+# ---------------------------------------------------------------------------
+# Bloco 4 (item 4, fatia C, task 1): problemas de RAMPA — composição bifásica
+# (`avaliar.precificar_rampa`, que por sua vez roda o subcomando `rampa` do motor congelado via
+# subprocesso). Hand-escrito, mesma disciplina de `_bloco_patologico`/`_bloco_wrapper`: cada caso
+# foi desenhado para exercitar UMA propriedade nomeada do plano da fatia e conferido por chamada
+# direta a `precificar_rampa` antes de entrar aqui (ver task-4c-1-report.md). `premissas` está em
+# PONTOS PERCENTUAIS (convenção de caso.json) — EXCETO receita0/ebitda0/da_parque/t_rampa/n/tv
+# (CHAVES_NAO_PERCENTUAIS, motor_espelho.js): monetário/contagem/ano/enum, não taxa.
+# ---------------------------------------------------------------------------
+
+
+def _problema_rampa(premissas: dict, nd_efetivo: float | None, acoes: float | None,
+                    moeda: str = "BRL-nominal") -> dict:
+    return {"id": 0, "tipo": "rampa",
+            "args": {"premissas": premissas, "nd_efetivo": nd_efetivo, "acoes": acoes, "moeda": moeda}}
+
+
+def _bloco_rampa() -> list[dict]:
+    v: list[dict] = []
+
+    # Vetor central reaproveitado por quase todo problema abaixo — cada caso sobrescreve só a(s)
+    # chave(s) que a propriedade dele exige (`{**_base, "chave": valor}`), mesma convenção de
+    # `_bloco_wrapper` acima (premissas_firm_ebitda etc.).
+    base = dict(receita0=1000.0, ebitda0=300.0, da_parque=60.0, wk=15.0, kappa=20.0,
+                g2=4.0, wacc=10.0, tax=25.0, t_rampa=3)
+
+    # --- A. g1 DIRETO, tv='book' (sem --roic-book: o TV usa o marginal como se fosse médio — a
+    # "conflação" que diag_firm comenta, fora do escopo desta task). 'n' AUSENTE da premissa —
+    # PREMISSAS_OBRIGATORIAS_RAMPA (caso.py) não inclui 'n' (detalhe 2 do brief: "n não é
+    # obrigatório no caso"), então este é o caso que exercita o default 10 do argparse do
+    # subparser 'rampa' (justos.py:1749) — nenhum outro problema abaixo omite 'n'. Com ponte.
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book"}, nd_efetivo=400.0, acoes=120.0))
+
+    # --- B. g1 DERIVADO de util (g1 ausente) -> capacidade_receita sai na saída (detalhe 3 do
+    # brief: "com g1 ausente, util deriva g1 e capacidade_receita sai"); tv='convergencia'. Com
+    # ponte.
+    v.append(_problema_rampa({**base, "util": 55.0, "tv": "convergencia", "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # --- C. tv='gordon', roic_tv/gp válidos (roic_tv > 0, gp < wacc — nenhum dos dois viola o
+    # domínio de ev_nopat na fase 2). Com ponte.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "gordon", "roic_tv": 12.0, "gp": 2.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0))
+
+    # --- D. g1 < 0 (colheita) -> aviso_colheita; SEM ponte (nd_efetivo/acoes nulos -> valor só
+    # tem "EV") — combina os dois itens do brief num problema só, de propósito.
+    v.append(_problema_rampa({**base, "g1": -5.0, "tv": "book", "n": 10},
+                             nd_efetivo=None, acoes=None))
+
+    # --- E. rir2 >= 100% (delator) -> aviso_delator: kappa dominante (capex fixo de expansão
+    # bem acima do giro) + g2 alto empurram a taxa de reinvestimento da fase 2 acima do
+    # autofinanciável — medido por chamada direta antes de fixar os números (rir2 ≈ 106,8%).
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "book", "wk": 10.0, "kappa": 90.0, "g2": 25.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0))
+
+    # --- F. wk = kappa = 0 -> den_cap <= 1e-15 -> roic2_% vira a STRING do motor, não um número
+    # (detalhe 5 do brief).
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "book", "wk": 0.0, "kappa": 0.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0))
+
+    # --- G. g1 = wacc (mesmo ponto percentual) -> r1 = (1+g1)/(1+w) = 1 EXATO -> soma_r1 usa o
+    # ramo fechado T em vez de r1*(1-r1**T)/(1-r1) (detalhe 5 do brief).
+    v.append(_problema_rampa({**base, "g1": 7.0, "wacc": 7.0, "tv": "convergencia", "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # --- H. wacc = 0 -> ann_beta usa o ramo fechado T em vez de (1-(1+w)**-T)/w (detalhe 5 do
+    # brief); tv='book' — 'convergencia' exige w > 0 em ev_nopat e refutaria este caso por
+    # engano, mascarando o que ele testa.
+    v.append(_problema_rampa({**base, "g1": 5.0, "wacc": 0.0, "tv": "book", "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # --- I..M: uma recusa de CADA família do item 6 do brief (5 problemas) — os outros parâmetros
+    # ficam no domínio válido em cada um, para que a recusa seja atribuível à família testada, não
+    # a uma interação acidental com outra guarda.
+
+    # I. "t_rampa < 1 ou n <= t_rampa" — aqui n <= t_rampa (t_rampa=5, n=5).
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "t_rampa": 5, "n": 5},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # J. "w <= -1 ou g2 <= -1" — aqui w <= -1 (wacc=-150.0%, fração -1.5).
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "wacc": -150.0, "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # K. "wk < 0 ou kappa < 0" — aqui wk < 0.
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "wk": -5.0, "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # L. "util fora de (0,1) sem g1" — g1 ausente, util=150.0% (fração 1.5, fora do domínio).
+    v.append(_problema_rampa({**base, "util": 150.0, "tv": "book", "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # M. "margem NOPAT da fase 2 <= 0" — da_parque bem acima do EBITDA do ano T (d2 >= 1, medido
+    # por chamada direta: d2 ≈ 115,2% com este vetor).
+    v.append(_problema_rampa({**base, "g1": 5.0, "tv": "book", "da_parque": 400.0, "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    return v
+
+
 def gerar() -> list[dict]:
     """A lista completa de problemas, determinística — mesma disciplina de
     `vetores_paridade.gerar()`: `random.Random(SEMENTE_SOLVER)` nasce AQUI
@@ -498,14 +617,14 @@ def gerar() -> list[dict]:
     `gerar() == gerar()` valha trivialmente e o CLI (processo novo)
     reproduza a fixture commitada byte a byte.
 
-    Os problemas de wrapper (`_bloco_wrapper`, task 3) vêm SEMPRE por último,
-    depois dos 41 de solver — nunca intercalados. Isso não é regra da
-    metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2,
-    imutável por regra desta task) alinhado por posição com os IDs que ele já
-    conhece; a fixture inteira permanece uma lista única, um gerador único,
-    como o brief da task 3 pede."""
+    Os problemas de wrapper (`_bloco_wrapper`, task 3) e de rampa (`_bloco_rampa`, fatia C task 1)
+    vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
+    regra da metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2, imutável por
+    regra da fatia B) alinhado por posição com os IDs que ele já conhece; a fixture inteira
+    permanece uma lista única, um gerador único, como o brief da task 3 pediu e esta task
+    preserva."""
     rng = random.Random(SEMENTE_SOLVER)
-    problemas = _bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper()
+    problemas = _bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -652,22 +771,62 @@ def _avaliar_grade2d(problema: dict) -> dict:
     return {"id": problema["id"], "celulas": celulas, **_CAMPOS_SOLVER_VAZIOS}
 
 
+def _avaliar_rampa(problema: dict) -> dict:
+    """Um problema `tipo: "rampa"` (item 4, fatia C, task 1) — chama
+    `avaliar.precificar_rampa` de verdade (o lado Python da paridade é o WRAPPER, não o motor
+    direto — mesma razão de `_avaliar_alvo`/`_avaliar_grade1d`/`_avaliar_grade2d`, e mesma razão
+    pela qual esta fatia não reaproveita `rampa_bifasica`/`justos.py` diretamente).
+
+    `MotorFalhou` — subprocesso do motor saindo com código != 0 (inclui um `ValueError` cru
+    dentro de `rampa_bifasica`, sem captura nenhuma no `main()` do motor) OU um campo não-finito
+    virando `null` no JSON e recusado por `_exigir_valor` (ex.: `EV/EBITDA0` quando a fase 2, sob
+    'gordon', devolve NaN) — vira `{"recusado": True}`, SEM `multiplo`/`valor`/`saida`/`avisos`: o
+    mesmo shape que `motor_espelho.js:precificarRampa` promete devolver.
+
+    `saida` filtra a saída CRUA do motor (primeiro retorno de `precificar_rampa`) para só os
+    campos de `CAMPOS_RAMPA` presentes, com `rir_fase1_%` sem a chave 'nota' (texto estático, fora
+    do escopo desta fatia — ver Fora do escopo do plano). `avisos` é a lista, EM ORDEM, dos nomes
+    de `AVISOS_RAMPA` presentes na saída crua — não a prosa (mesma fora-do-escopo)."""
+    args = problema["args"]
+    try:
+        saida_motor, valor, _algebra, multiplo = precificar_rampa(
+            args["premissas"], args["nd_efetivo"], args["acoes"], args["moeda"])
+    except MotorFalhou:
+        return {"id": problema["id"], "recusado": True, **_CAMPOS_SOLVER_VAZIOS}
+
+    saida = {}
+    for campo in CAMPOS_RAMPA:
+        if campo not in saida_motor:
+            continue
+        if campo == "rir_fase1_%":
+            saida[campo] = {k: v for k, v in saida_motor[campo].items() if k != "nota"}
+        else:
+            saida[campo] = saida_motor[campo]
+    avisos = [a for a in AVISOS_RAMPA if a in saida_motor]
+
+    return {"id": problema["id"], "recusado": False, "multiplo": multiplo, "valor": valor,
+            "saida": saida, "avisos": avisos, **_CAMPOS_SOLVER_VAZIOS}
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
     "grade1d": _avaliar_grade1d,
     "grade2d": _avaliar_grade2d,
+    "rampa": _avaliar_rampa,
 }
 
 
 def avaliar_python(problemas: list[dict]) -> list[dict]:
-    """Avalia cada problema, despachando por `problema["tipo"]` — quatro
-    ramos, dois lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
+    """Avalia cada problema, despachando por `problema["tipo"]` — cinco
+    ramos, três lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
     direto (`_avaliar_solver`, task 2); `"alvo"`/`"grade1d"`/`"grade2d"`
     rodam o WRAPPER de verdade — `reversa.alvo_de_mercado`/
-    `sensibilidades.grade_1d`/`grade_2d` (task 3), nunca uma reimplementação
-    da conta. `tipo` desconhecido levanta `KeyError` nomeando o tipo — falha
-    fechada, mesma disciplina do despacho por `tipo` do espelho JS.
+    `sensibilidades.grade_1d`/`grade_2d` (task 3); `"rampa"` (fatia C, task 1)
+    roda `avaliar.precificar_rampa`, TAMBÉM o WRAPPER, nunca uma
+    reimplementação da conta. `tipo` desconhecido levanta `KeyError` nomeando
+    o tipo — falha fechada, mesma disciplina do despacho por `tipo` do
+    espelho JS.
 
     Não compara nada contra JS — isso é dos harnesses
     (`tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`).

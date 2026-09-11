@@ -20,6 +20,26 @@
 // isso a paridade desta secao vive num harness PROPRIO, tests/test_paridade_wrapper_js.py,
 // separado de tests/test_paridade_solver_js.py (que so' testa contra o motor).
 //
+// [item 4, fatia C, task 1] Ganhou a rota RAMPA: composicao bifasica (espelha
+// vendor/multiplos-justos/scripts/justos.py:rampa_bifasica, linhas 74-171) mais a ponte do
+// handler `elif a.cmd == 'rampa':` (mesmo arquivo, linhas 1946-1960), atras de
+// skills/er-valuation/scripts/avaliar.py:precificar_rampa — o lado Python da paridade, MESMO
+// harness (tests/test_paridade_wrapper_js.py) e MESMA fixture (tests/fixtures/vetores_solver.json)
+// da secao WRAPPER acima: paridade e' contra o WRAPPER, nao contra o motor direto (a rota rampa
+// nao tem consumidor 4A/solver — nasce direto nesta secao).
+//
+// Regra de risco: `rampa_bifasica` NAO devolve NaN para recusa de dominio (ao contrario de
+// ev_nopat/pe) — ela LANCA ValueError (t_rampa/n, w/g2, wk/kappa, util sem g1, margem da fase 2).
+// `rampaBifasica` abaixo espelha isso literalmente: lanca um Error da MESMA forma, no MESMO ponto
+// do algoritmo, e quem chama (precificarRampa) captura — o analogo local de como MotorFalhou
+// (avaliar.py) captura o subprocesso saindo com codigo != 0. Ha' ainda um SEGUNDO canal de recusa
+// que rampa_bifasica nao lanca: a fase 2 chama ev_nopat (que RETORNA NaN, nao lanca) para o TV —
+// um `gordon` com `gp >= w`, por exemplo, produz EV nao-finito sem nenhum ValueError. O motor de
+// verdade ainda assim recusa nesse caso: o serializador do JSON converte o EV nao-finito em `null`,
+// e `_exigir_valor` (motor.py/avaliar.py) recusa esse null como MotorFalhou. precificarRampa
+// espelha essa segunda camada com uma checagem de Number.isFinite explicita — ver o comentario
+// ali.
+//
 // Regras de espelho: a ordem das operacoes segue o Python termo a termo — inclusive o laco
 // explicito t = 1..n somado na mesma ordem — porque divergencia de ordem em ponto flutuante e a
 // causa mais provavel de erro na casa que importa. Cada guarda do Python (retorno NaN) vira uma
@@ -461,12 +481,32 @@ function avaliarProblemas(problemas) {
 // chamar ev_nopat/ev_ebitda/pe — que trabalham em fracao, como o resto deste arquivo (4A e o
 // solver chamam essas funcoes DIRETO, pulando a CLI, entao nunca precisaram desta conversao). So'
 // o WRAPPER (esta secao) atravessa a CLI, entao so' aqui essa conversao importa.
-const CHAVES_NAO_PERCENTUAIS = new Set(['n', 'tv', 'mid_year', 'politica_tv']);
+//
+// [item 4, fatia C, task 1] 'receita0'/'ebitda0'/'da_parque'/'t_rampa' entraram aqui quando a rota
+// rampa ganhou espelho: sao premissas EXCLUSIVAS do subparser 'rampa' (justos.py:1741-1743, 1748)
+// e NENHUMA delas passa por `pc()` no handler (`elif a.cmd == 'rampa':`, justos.py:1946) — sao
+// monetario/contagem/ano, nao taxa (detalhe 1 do brief da task: reaproveitar premissasParaNucleo
+// sem esta extensao divide EBITDA por 100). Nao colidem com o vocabulario de ev/pe
+// (PREMISSAS_FIRM/PREMISSAS_EQUITY, caso.py) — nomes exclusivos da rota rampa — entao estender o
+// conjunto COMPARTILHADO e' seguro: nao muda em nada o caminho firm/equity ja' coberto pela 4B.
+const CHAVES_NAO_PERCENTUAIS = new Set([
+  'n', 'tv', 'mid_year', 'politica_tv', 'receita0', 'ebitda0', 'da_parque', 't_rampa',
+]);
 
 // Renomeacao de chave que a CLI da rota firm faz (justos.py, cmd 'ev'): 'wacc' -> 'w' (parametro
 // de ev_nopat/ev_ebitda); 'da'/'tax' -> 'd'/'t' (escala EBITDA, `me = mn*(1-d)*(1-t)`). A rota
 // equity nao renomeia nada — pe() usa os MESMOS nomes que caso.json declara.
 const RENOMEIA_FIRM = { wacc: 'w', da: 'd', tax: 't' };
+
+// [item 4, fatia C, task 1] Renomeacao da rota rampa: SO' 'wacc' -> 'w' — rampa_bifasica
+// (justos.py linha 74) recebe o WACC pelo parametro posicional `w`, chamado como `pc(a.wacc)` no
+// handler (mesma razao de RENOMEIA_FIRM). 'tax'/'da_parque'/'t_rampa' NAO renomeiam aqui: ao
+// contrario da rota firm (onde 'tax' vira 't'), a assinatura de rampa_bifasica usa os MESMOS
+// nomes 'tax'/'da_parque'/'t_rampa' que o caso.json/CLI declaram —
+// `rampa_bifasica(receita0, ebitda0, da_parque, wk, w, tax, n, t_rampa, g2, kappa, ...)`.
+// Reusar RENOMEIA_FIRM aqui renomearia 'tax'->'t' por engano (rampaBifasica nao tem parametro
+// `t`), silenciosamente lendo `args.tax` como undefined.
+const RENOMEIA_RAMPA = { wacc: 'w' };
 
 function pct(valor) {
   return (valor === null || valor === undefined) ? null : valor / 100.0;
@@ -629,6 +669,246 @@ function grade2D({ rota, premissas, metrica, ndEfetivo, acoes, premissaX, pontos
   }));
 }
 
+// ============================================================================
+// RAMPA (item 4, fatia C, task 1) — espelha vendor/multiplos-justos/scripts/justos.py:
+// rampa_bifasica (linhas 74-171) mais a ponte do handler `elif a.cmd == 'rampa':` (linhas
+// 1946-1960). Ver o comentario no topo do arquivo para a natureza dos dois canais de recusa.
+// ============================================================================
+
+// Subconjunto da saida do motor que entra em `saida` (contrato do brief) — mesma lista, mesma
+// ordem, em skills/er-valuation/scripts/vetores_solver.py (_avaliar_rampa) e em
+// tests/test_paridade_wrapper_js.py: os tres lados tem de concordar, porque os harnesses comparam
+// os dois primeiros contra o terceiro. `rir_fase1_%` sai SEM a chave 'nota' (texto estatico, nunca
+// varia) — rampaBifasica abaixo simplesmente nunca a escreve, entao o filtro por CAMPOS_RAMPA nao
+// precisa de um caso especial para tirá-la.
+const CAMPOS_RAMPA = [
+  'g1_%', 'd_trajetoria_fase1_%', 'd2_fase2_%', 'rir_fase1_%', 'alfa', 'beta',
+  'rir2_%', 'roic2_%', 'vp_fase1', 'valor_fase2_no_ano_T', 'capacidade_receita',
+];
+
+// Chaves que o motor ACRESCENTA condicionalmente ao dict de saida (`out['aviso_colheita'] = ...`,
+// `out['aviso_delator'] = ...`) — 'avisos' e' a lista, EM ORDEM, das que estao presentes. O TEXTO
+// de cada aviso e' prosa fora do escopo desta fatia (ver cabecalho do arquivo e a nota da secao
+// WRAPPER sobre alvoDeMercado); so' a PRESENCA importa, por isso rampaBifasica abaixo escreve
+// `true` em vez de reproduzir a frase do motor.
+const AVISOS_RAMPA = ['aviso_colheita', 'aviso_delator'];
+
+// rampaBifasica espelha SOMENTE a funcao nucleo `rampa_bifasica` — mesma assinatura (em FRACAO,
+// como o resto deste arquivo), mesmos defaults (g1/util/roic_tv/roic_book = null, gp = 0.0,
+// tv = 'convergencia'; 'n' NAO tem default aqui, porque rampa_bifasica tambem nao tem — o default
+// 10 e' do ARGPARSE do subcomando, aplicado por precificarRampa antes de chamar esta funcao, do
+// jeito exato que o handler ja' teria `a.n == 10` antes de chamar rampa_bifasica). Calcula so' o
+// que CAMPOS_RAMPA + a ponte (EV, EV/EBITDA0) precisam — bloco/checks_internos/travas/T_rampa/
+// n_total/g2_% ficam de fora (Fora do escopo do plano: "Asserts internos de rampa_bifasica — nao
+// espelhar"; nenhum consumidor le esses campos). fcff1/pv1_exp/p1 (so' existem no motor para o
+// assert P1/P1b) tambem ficam de fora pela mesma razao — pv1 usa direto a forma fechada
+// alfa*soma_r1 + beta*ann_beta, que e' o MESMO valor que o motor usa a jusante.
+function rampaBifasica(args) {
+  const receita0 = args.receita0;
+  const ebitda0 = args.ebitda0;
+  const daParque = args.da_parque;
+  const wk = args.wk;
+  const w = args.w;
+  const tax = args.tax;
+  const n = args.n;
+  const tRampa = args.t_rampa;
+  const g2 = args.g2;
+  const kappa = args.kappa;
+  let g1 = args.g1 ?? null;
+  const util = args.util ?? null;
+  const tv = 'tv' in args ? args.tv : 'convergencia';
+  const roicTv = args.roic_tv ?? null;
+  const gp = 'gp' in args ? args.gp : 0.0;
+  const roicBook = args.roic_book ?? null;
+
+  if (tRampa < 1 || n <= tRampa) {
+    throw new Error('composição exige 1 <= t_rampa < n (a fase 2 precisa de >= 1 ano explícito)');
+  }
+  if (w <= -1 || g2 <= -1) {
+    throw new Error('domínio inválido: requer WACC > -100% e g2 > -100%');
+  }
+  if (wk < 0 || kappa < 0) {
+    throw new Error('domínio inválido: wk e kappa devem ser >= 0');
+  }
+  let capacidade = null;
+  if (g1 === null) {
+    if (util === null || !(util > 0.0 && util < 1.0)) {
+      throw new Error('informe --g1 diretamente OU --util em (0,100) com --t-rampa');
+    }
+    g1 = (1.0 / util) ** (1.0 / tRampa) - 1.0;
+    capacidade = receita0 / util;
+  }
+  const m = ebitda0 / receita0;
+  const T = tRampa;
+
+  const rev = [];
+  for (let t = 0; t <= T; t++) rev.push(receita0 * (1 + g1) ** t);
+
+  // rir1/dpath: fcff1 (a terceira serie que o motor acumula aqui) fica de fora — so' alimenta o
+  // assert P1, fora do escopo (ver comentario acima da funcao).
+  const rir1 = [];
+  const dpath = [];
+  for (let t = 1; t <= T; t++) {
+    const eb = m * rev[t];
+    const nop = (eb - daParque) * (1 - tax);
+    const dwk = wk * (rev[t] - rev[t - 1]);
+    // Python: `dwk/nop if nop else float('nan')` — truthiness sobre FLOAT, falsy so' em 0.0/-0.0.
+    // `nop !== 0` reproduz isso (== trata -0 e 0 como iguais, tanto em Python quanto em JS) — ver
+    // o aviso de truthiness NaN-vs-JS no cabecalho do arquivo (secao SOLVER, identificacao).
+    rir1.push(nop !== 0 ? dwk / nop : NaN);
+    dpath.push(daParque / eb);
+  }
+
+  const alfa = (1 - tax) * ebitda0 - (wk * g1 * receita0) / (1 + g1);
+  const beta = -(1 - tax) * daParque;
+  const r1 = (1 + g1) / (1 + w);
+  const somaR1 = Math.abs(r1 - 1.0) < 1e-12 ? T : (r1 * (1 - r1 ** T)) / (1 - r1);
+  const annBeta = Math.abs(w) < 1e-14 ? T : (1 - (1 + w) ** -T) / w;
+  const pv1 = alfa * somaR1 + beta * annBeta;
+
+  const ebT = m * rev[T];
+  const d2 = daParque / ebT;
+  const m2n = m * (1 - d2) * (1 - tax);
+  if (m2n <= 0) {
+    throw new Error('fase 2 inválida: margem NOPAT deve ser positiva para mapear capital incremental');
+  }
+  const denCap = wk + kappa;
+  let rir2;
+  let roic2;
+  let roic2Limite;
+  if (denCap <= 1e-15) {
+    rir2 = 0.0;
+    roic2 = 1e12;
+    roic2Limite = true;
+  } else {
+    rir2 = (denCap * g2) / ((1 + g2) * m2n);
+    roic2 = ((1 + g2) * m2n) / denCap;
+    roic2Limite = false;
+  }
+  const nopT = ebT * (1 - d2) * (1 - tax);
+  // Detalhe 8 do brief: a fase 2 chama ev_nopat do PROPRIO motor — reusa a funcao ja' espelhada
+  // (4A) em vez de reescrever a logica de TV. Sem mid_year (rampa_bifasica nao tem esse
+  // parametro) — evNopat aplica o default False dela mesma quando a chave esta' ausente.
+  const mn2 = evNopat({
+    g: g2, roic: roic2, w, n: n - T, tv, roic_tv: roicTv, gp, roic_book: roicBook,
+  });
+  const evT = mn2 * nopT;
+  const ev = pv1 + evT / (1 + w) ** T;
+
+  // Detalhe 4 do brief, primeira metade: EV e EV/EBITDA0 arredondam INDEPENDENTEMENTE sobre o
+  // MESMO `ev` cru — EV/EBITDA0 nao deriva do EV ja' arredondado (a segunda metade do detalhe,
+  // sobre a ponte Equity/Preco_acao, vive em precificarRampa abaixo).
+  const rirFase1 = {};
+  rirFase1.ano_1 = arredondarPy(rir1[0] * 100, 3);
+  rirFase1[`ano_${T}`] = arredondarPy(rir1[rir1.length - 1] * 100, 3);
+  const dTrajetoria = {};
+  dTrajetoria.ano_1 = arredondarPy(dpath[0] * 100, 3);
+  dTrajetoria[`ano_${T}`] = arredondarPy(dpath[dpath.length - 1] * 100, 3);
+
+  const out = {
+    'g1_%': arredondarPy(g1 * 100, 4),
+    'd_trajetoria_fase1_%': dTrajetoria,
+    'd2_fase2_%': arredondarPy(d2 * 100, 3),
+    'rir_fase1_%': rirFase1,
+    alfa: arredondarPy(alfa, 6),
+    beta: arredondarPy(beta, 6),
+    'rir2_%': arredondarPy(rir2 * 100, 3),
+    // Detalhe 5 do brief: capital incremental zero (wk=kappa=0, ate' 1e-15) vira a STRING do
+    // motor, nao um numero — comparada por igualdade exata do mesmo jeito que os campos numericos.
+    'roic2_%': roic2Limite ? 'infinito — capital incremental zero' : arredondarPy(roic2 * 100, 3),
+    vp_fase1: arredondarPy(pv1, 4),
+    valor_fase2_no_ano_T: arredondarPy(evT, 4),
+    EV: arredondarPy(ev, 4),
+    'EV/EBITDA0': arredondarPy(ev / ebitda0, 4),
+  };
+  if (capacidade !== null) {
+    out.capacidade_receita = arredondarPy(capacidade, 4);
+  }
+  if (g1 < 0) {
+    out.aviso_colheita = true;
+  }
+  if (rir2 >= 1.0) {
+    out.aviso_delator = true;
+  }
+  return out;
+}
+
+// precificarRampa espelha avaliar.py:precificar_rampa — irma' de precificarCelula (rotas
+// firm/equity), mas para rampa: o motor recebe --nd/--acoes e faz a composicao bifasica inteira
+// internamente, EV/Equity/Preco_acao saem prontos, do mesmo jeito que o ramo EBITDA da rota firm
+// ja' usa o motor para fazer a ponte inteira (ver precificarCelula acima). Tres guardas de recusa:
+//  1) Gate 1 (tv: null) — precificarCelula ja' faz o mesmo para ev/pe; 'tv' tambem nao tem default
+//     no subparser 'rampa' (--tv required=True, justos.py:1752).
+//  2) rampaBifasica pode LANCAR (ValueError no motor — dominio de t_rampa/n/w/g2/wk/kappa/util/
+//     margem da fase 2) — capturado aqui, o analogo local de MotorFalhou quando o subprocesso do
+//     motor de verdade sai com codigo != 0.
+//  3) Mesmo com rampaBifasica retornando normalmente, a fase 2 (ev_nopat) pode devolver NaN — ex.:
+//     'gordon' com gp >= w. rampa_bifasica NAO tem guarda para isso (nao e' um ValueError do
+//     motor); mas o SERIALIZADOR do motor converte o EV/EV-EBITDA0 nao-finitos resultantes em
+//     `null` no JSON, e _exigir_valor (motor.py/avaliar.py) recusa esse null como MotorFalhou —
+//     _exigir_valor(saida, "EV/EBITDA0") e' a PRIMEIRA leitura que precificar_rampa faz, entao e'
+//     ela quem dispara primeiro. Espelhado pela checagem de Number.isFinite abaixo, sobre o MESMO
+//     campo.
+function precificarRampa({
+  premissas, ndEfetivo, acoes, moeda,
+}) {
+  if (premissas.tv === null) {
+    return { recusado: true };
+  }
+  const nucleo = premissasParaNucleo(premissas, RENOMEIA_RAMPA);
+  // 'n' tem default 10 no argparse do subparser 'rampa' (justos.py:1749) — AO CONTRARIO de ev/pe,
+  // onde 'n' e' premissa OBRIGATORIA do caso (PREMISSAS_OBRIGATORIAS_EQUITY/FIRM, caso.py) e por
+  // isso o espelho de ev/pe nunca precisou deste default. PREMISSAS_OBRIGATORIAS_RAMPA (caso.py)
+  // NAO inclui 'n' (detalhe 2 do brief) — reposto aqui, depois do colapso null->ausencia de
+  // premissasParaNucleo.
+  if (!('n' in nucleo)) nucleo.n = 10;
+
+  let saidaMotor;
+  try {
+    saidaMotor = rampaBifasica(nucleo);
+  } catch (erro) {
+    return { recusado: true };
+  }
+  if (!Number.isFinite(saidaMotor['EV/EBITDA0'])) {
+    return { recusado: true };
+  }
+  const multiplo = saidaMotor['EV/EBITDA0'];
+
+  let valor;
+  if (ndEfetivo === null) {
+    valor = { EV: saidaMotor.EV };
+  } else {
+    // Detalhe 4 do brief, segunda metade: Equity usa o EV JA' ARREDONDADO (saidaMotor.EV, nao um
+    // `ev` cru — este espelho nem expõe um `ev` cru fora de rampaBifasica) — mesma ordem do
+    // handler (`eq = res['EV'] - a.nd`, justos.py:1958).
+    const eq = saidaMotor.EV - ndEfetivo;
+    if (!acoes) {
+      // O handler so' escreve 'Preco_acao' quando `a.acoes` e' truthy (`if a.acoes:`,
+      // justos.py:1959); se nao, o wrapper (_exigir_valor sobre "Preco_acao") recusa por campo
+      // ausente — mesmo vocabulario de recusa que os outros dois canais acima. Nenhum problema
+      // desta fixture exercita `acoes` falsy com ponte (nao faz parte do plano), mas a guarda
+      // fecha o caso mesmo assim: silenciar 'preco_acao' com recusado:false divergiria do
+      // wrapper de verdade.
+      return { recusado: true };
+    }
+    valor = {
+      EV: saidaMotor.EV,
+      Equity: arredondarPy(eq, 2),
+      preco_acao: arredondarPy(eq / acoes, 2),
+    };
+  }
+
+  const saida = {};
+  for (const campo of CAMPOS_RAMPA) {
+    if (campo in saidaMotor) saida[campo] = saidaMotor[campo];
+  }
+  const avisos = AVISOS_RAMPA.filter((chave) => chave in saidaMotor);
+
+  return {
+    recusado: false, multiplo, valor, saida, avisos,
+  };
+}
+
 // ---------------- problemas de wrapper (contrato do brief task-4b-3) ----------------
 // Campos do shape do SOLVER que todo resultado de "alvo"/"grade1d"/"grade2d" tambem carrega,
 // vazios — nao e' o shape natural desses tres tipos (que so' tem "alvo" ou "celulas"), e'
@@ -671,13 +951,27 @@ function resolverGrade2D(item) {
   return { id: item.id, celulas, ...CAMPOS_SOLVER_VAZIOS };
 }
 
+// [item 4, fatia C, task 1] `args` de um problema de rampa esta' no MESMO shape do contrato
+// (`premissas`/`nd_efetivo`/`acoes`/`moeda`) — precificarRampa ja' usa esses nomes, entao este
+// adaptador so' espalha `item.args` nos parametros nomeados; ainda carrega CAMPOS_SOLVER_VAZIOS
+// pela MESMA razao de resolverAlvo/resolverGrade1D/resolverGrade2D acima (test_paridade_solver_js.py
+// le a fixture inteira sem filtrar por tipo).
+function resolverRampa(item) {
+  const a = item.args;
+  const resultado = precificarRampa({
+    premissas: a.premissas, ndEfetivo: a.nd_efetivo, acoes: a.acoes, moeda: a.moeda,
+  });
+  return { id: item.id, ...resultado, ...CAMPOS_SOLVER_VAZIOS };
+}
+
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
 // Sem `tipo`: item da fixture de VALOR da 4A (fn/args -> valor) — despachado
 // por `avaliarVetores`, o MESMO caminho de sempre, sem nenhuma linha
 // alterada nele: o harness da 4A continua verde sem mudanca. `tipo:
 // 'solver'`: problema de solver (task 2), despachado por `resolverProblema`.
 // `tipo: 'alvo'|'grade1d'|'grade2d'`: problema de wrapper (task 3),
-// despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`.
+// despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`. `tipo:
+// 'rampa'` (fatia C, task 1): despachado por `resolverRampa`.
 // Qualquer outro `tipo` LANCA — falha fechada, a mesma disciplina do resto
 // deste arquivo.
 function avaliarItem(item) {
@@ -695,6 +989,9 @@ function avaliarItem(item) {
   }
   if (item.tipo === 'grade2d') {
     return resolverGrade2D(item);
+  }
+  if (item.tipo === 'rampa') {
+    return resolverRampa(item);
   }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
@@ -717,6 +1014,7 @@ const superficiePublica = {
   dedupeRaizes, resolver, resolverCompleto, identificacao, resolverProblema, avaliarProblemas,
   alvoDeMercado, grade1D, grade2D, precificarCelula,
   resolverAlvo, resolverGrade1D, resolverGrade2D,
+  rampaBifasica, precificarRampa, resolverRampa,
   avaliarItem, avaliarItens,
 };
 

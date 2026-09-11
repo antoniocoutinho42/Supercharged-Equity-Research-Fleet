@@ -108,3 +108,53 @@ def test_celula_central_reproduz_o_caso_base():
         assert _rel(a["celulas"][k]["valor"], js[p["id"]]["celulas"][k]["valor"]) <= TAU
         checados += 1
     assert checados >= 1, "nenhuma grade inclui o ponto central — a regra nao foi exercitada"
+
+
+# ---------------------------------------------------------------------------
+# Rota RAMPA (item 4, fatia C, task 1). Mesmo harness, mesma fixture — a paridade e' contra o
+# WRAPPER (avaliar.precificar_rampa), nao contra o motor direto: ver o comentario no topo deste
+# arquivo e o cabecalho da secao RAMPA em motor_espelho.js.
+# ---------------------------------------------------------------------------
+
+CAMPOS_RAMPA = ("g1_%", "d_trajetoria_fase1_%", "d2_fase2_%", "rir_fase1_%", "alfa", "beta",
+                "rir2_%", "roic2_%", "vp_fase1", "valor_fase2_no_ano_T", "capacidade_receita")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_rampa_recusa_onde_o_motor_recusa():
+    probs = _problemas({"rampa"})
+    assert probs, "fixture sem problemas de rampa"
+    py, js = avaliar_python(probs), _lado_js()
+    fora = [(p["id"], a["recusado"], js[p["id"]]["recusado"])
+            for p, a in zip(probs, py) if a["recusado"] != js[p["id"]]["recusado"]]
+    assert not fora, f"recusa divergente (id, py, js): {fora}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_rampa_bate_campo_a_campo():
+    """O que o motor arredonda compara EXATAMENTE — o arredondamento e contrato."""
+    probs = _problemas({"rampa"})
+    py, js = avaliar_python(probs), _lado_js()
+    fora = []
+    for p, a in zip(probs, py):
+        if a["recusado"]:
+            continue
+        b = js[p["id"]]
+        for campo in ("multiplo", "valor", "saida", "avisos"):
+            if a[campo] != b[campo]:
+                fora.append((p["id"], campo, a[campo], b[campo]))
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_fixture_de_rampa_cobre_o_que_discrimina():
+    probs = _problemas({"rampa"})
+    py = avaliar_python(probs)
+    ok = [a for a in py if not a["recusado"]]
+    assert sum(a["recusado"] for a in py) >= 4, "poucas recusas de dominio"
+    assert any("capacidade_receita" in a["saida"] for a in ok), "g1 derivado de util nunca exercitado"
+    assert any("aviso_colheita" in a["avisos"] for a in ok), "colheita nunca exercitada"
+    assert any("aviso_delator" in a["avisos"] for a in ok), "rir2 >= 100% nunca exercitado"
+    assert any(isinstance(a["saida"]["roic2_%"], str) for a in ok), "capital incremental zero nunca exercitado"
+    assert any("Equity" not in a["valor"] for a in ok), "rampa sem ponte nunca exercitada"
+    assert {p["args"]["premissas"]["tv"] for p in probs} >= {"book", "convergencia", "gordon"}
