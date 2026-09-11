@@ -494,6 +494,7 @@ Nenhum motor de valuation novo é construído sem metodologia canônica e suíte
 | 23 | Golden case | Sintético offline no CI (com caso que deve falhar) + real fora do CI |
 | E1 | Preço | Sem TTL: último preço disponível, com data e fonte; data-base explícita ancora a análise inteira, inclusive o spot dos drivers |
 | E2 | Contrato do builder | Um artefato estruturado validado por schema, composição canônica, entrada determinística; formato não herdado por inércia |
+| E3 | Separação de camadas | O relatório **não duplica nem reimplementa metodologia**: consome contratos estáveis e versionados da camada de integração — `resultados.json`, catálogo de apresentação e fachada do espelho. Skill/motor = metodologia e cálculo; wrapper/espelho = integração e paridade; relatório = interpretação, composição, UX e apresentação. Trocar a versão da `multiplos-justos` (v10, v11…) concentra o trabalho nas camadas metodológica e de integração, sem reescrever o relatório; diante de acoplamento entre relatório e detalhe interno da metodologia, vence a interface estável (dono, 11/09/2026) |
 
 ## 16. Premissas declaradas
 
@@ -546,5 +547,5 @@ Cada item termina verificável. O legado só sai no fim.
 
 ---
 
-*Documento gerado a partir do `/grill-me` de redesenho de 2026-08-21: 23 decisões e 2 emendas,
+*Documento gerado a partir do `/grill-me` de redesenho de 2026-08-21: 23 decisões e 3 emendas,
 todas registradas na Seção 15. Nenhuma linha de código foi escrita antes desta aprovação.*
