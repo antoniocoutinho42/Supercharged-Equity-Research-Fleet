@@ -54,6 +54,18 @@
 // executam pelo caminho do wrapper — confirmado rodando o motor.rodar real (nao suposto por
 // leitura), ver o relatorio desta task para a evidencia.
 //
+// [Fatia D, Task 2] Ganhou o DEGRAU (Gate 3 — capacidade ociosa de balanco) — espelha fator_h/
+// rentab_pos_degrau/desconto_transicao/valor_transicionado (justos.py:792-830) e o calculo por
+// nivel do handler `elif a.cmd == 'degrau':` (justos.py ~2531-2587), atras de
+// skills/er-valuation/scripts/avaliar.py:precificar_degrau + _aplicar_degrau_ao_cenario — AINDA o
+// WRAPPER (mesmo harness/fixture da secao WRAPPER acima): a forma que este espelho reproduz e' a
+// de `resultados.json` (cenarios.<nome>.{valor,sem_degrau,vs_preco,degrau}), nao a saida crua do
+// subcomando `degrau`. So' a rota equity tem degrau (D2, plano da fatia); o ramo firm do MESMO
+// handler (roic/wacc) nunca e' alcancado pelo caminho do wrapper e fica de fora, por decisao de
+// desenho, nao por descuido. Ver a secao DEGRAU abaixo para as duas correcoes ao plano
+// (ALERTA_CONVENCAO_BOOK inalcancavel pelo Gate 3 da Task 1; dominioCliRecusa aplicado na entrada)
+// e para a razao de ALERTA/ALERTA_RiR virarem `true`, nao a prosa do motor.
+//
 // Regras de espelho: a ordem das operacoes segue o Python termo a termo — inclusive o laco
 // explicito t = 1..n somado na mesma ordem — porque divergencia de ordem em ponto flutuante e a
 // causa mais provavel de erro na casa que importa. Cada guarda do Python (retorno NaN) vira uma
@@ -1404,6 +1416,264 @@ function resolverDiag(item) {
   return { id: item.id, chaves, ...CAMPOS_SOLVER_VAZIOS };
 }
 
+// ============================================================================
+// DEGRAU (Fatia D, Task 2) — espelha fator_h/rentab_pos_degrau/desconto_transicao/
+// valor_transicionado (justos.py:792-830) e o calculo por nivel do handler `elif a.cmd ==
+// 'degrau':` (justos.py ~2531-2587), atras de avaliar.py:precificar_degrau +
+// _aplicar_degrau_ao_cenario. Paridade contra o WRAPPER (mesmo harness/fixture da secao WRAPPER
+// acima) — a forma que este espelho reproduz e' a de `resultados.json`
+// (cenarios.<nome>.{valor,sem_degrau,vs_preco,degrau}), NUNCA a saida crua do subcomando
+// `degrau`: `precificarDegrau` abaixo roda as DUAS pernas que o wrapper roda por cenario (a rota
+// P/L via `pe()` direto — precificarCelula nao serve aqui porque nao expoe Equity/PL_fwd, so'
+// preco_acao/PL_curr — e o handler `degrau`, via `nivelDegrau`) sobre o MESMO `premissas` de
+// cenario, D2 (so' a rota equity tem degrau: o motor fecha o preco sozinho via --vpa/--fx).
+//
+// Duas correcoes ao plano desta task (ver o relatorio para o texto completo):
+// 1) ALERTA_CONVENCAO_BOOK NAO e' espelhado. O Gate 3 da Task 1 (D6, caso.py:_validar_degrau)
+//    recusa 'tv'='book' sem 'roe_book' sempre que 'degrau' esta' no caso — o mesmo alerta que o
+//    handler emitiria fica inalcancavel pelo caminho do wrapper (mesma logica de
+//    `coerencia_vetor` so' contribuir uma chave na rota firm, secao DIAGNOSTICOS acima: o
+//    vocabulario do CASO decide o que e' alcancavel, nao a assinatura mais ampla do motor).
+// 2) `dominioCliRecusa` roda no TOPO de `precificarDegrau` — mesma disciplina das outras quatro
+//    entradas de wrapper deste arquivo (precificarCelula, precificarRampa, diagnosticosFirm,
+//    diagnosticosEquity): o motor recusa por dominio ANTES de qualquer handler
+//    (avaliar_dominios_cli), e as DUAS pernas do degrau leem os MESMOS g/ke/gp/n de `premissas`
+//    — uma checagem no topo cobre as duas.
+//
+// ALERTA/ALERTA_RiR: o wrapper real copia a PROSA do motor verbatim para resultados.json
+// (avaliar.py: `degrau_cenario["ALERTA"] = nivel_alvo["ALERTA"]`) — mas, pela MESMA convencao que
+// aviso_colheita/aviso_delator/aviso_gp ja' usam na secao RAMPA acima (so' a PRESENCA importa, a
+// prosa fica fora do escopo — ver o comentario la'), `nivelDegrau` abaixo escreve `true`, nao a
+// frase do motor; o harness de paridade compara so' a presenca das duas chaves.
+// ============================================================================
+
+// fator_h (justos.py 793-799): h = indice_atual / indice_alvo — indice_alvo <= 0 devolve NaN
+// (guarda do nucleo; nunca alcancada pelo caminho do wrapper, que exige indice_alvo > 0 no gate).
+function fatorH(indiceAtual, indiceAlvo) {
+  if (indiceAlvo <= 0) return NaN;
+  return indiceAtual / indiceAlvo;
+}
+
+// rentab_pos_degrau (justos.py 801-804): degrau ENTRA COMO RENTABILIDADE — g nunca aparece aqui.
+function rentabPosDegrau(rentab, h, m = 1.0) {
+  return rentab * (1 + (h - 1) * m);
+}
+
+// desconto_transicao (justos.py 806-825). Detalhe 1 do brief desta task: T fracionario recebe
+// uma tranche PROPORCIONAL no ULTIMO periodo (nem uma soma inteira a mais, nem uma tranche
+// cheia) — `n_full = int(T)` trunca (T = max(anos,0) >= 0 aqui, entao `Math.trunc` == `int()` do
+// Python sobre um float nao-negativo: os dois cortam a parte fracionaria, sem arredondar). anos
+// <= 0 devolve 1.0 (degrau instantaneo, sem desconto de transicao nenhum).
+function descontoTransicao(custoCapital, anos, perfil = 'rampa') {
+  const T = Math.max(anos, 0);
+  if (T <= 0) return 1.0;
+  if (custoCapital <= -1) return NaN;
+  if (perfil === 'pontual') {
+    return 1.0 / (1.0 + custoCapital) ** T;
+  }
+  const nFull = Math.trunc(T);
+  const frac = T - nFull;
+  let numer = 0;
+  for (let t = 1; t <= nFull; t++) {
+    numer += 1.0 / (1.0 + custoCapital) ** t;
+  }
+  if (frac > 1e-12) {
+    numer += frac / (1.0 + custoCapital) ** T;
+  }
+  return numer / T;
+}
+
+// valor_transicionado (justos.py 827-829): o desconto incide SO' sobre o incremento
+// (valorDegrau - valorBase) — a base nunca e' descontada. E' esta a linha que a prova de
+// falseabilidade desta task muta (fator de captura sobre o valor INTEIRO, nao so' o incremento).
+function valorTransicionado(valorBase, valorDegrau, custoCapital, anos, perfil = 'rampa') {
+  const f = descontoTransicao(custoCapital, anos, perfil);
+  return { valor: valorBase + (valorDegrau - valorBase) * f, f };
+}
+
+// nivelDegrau: UMA linha do laco `for alvo in alvos` do handler (justos.py ~2569-2587) — os
+// argumentos ja' resolvidos (rent/custo/g/gde/nde/tv/roeTvKw/gp/roeBook/politicaTv/mm/baseV/
+// anos/perfilTransicao/vpa/fx) vem de `precificarDegrau`, que os calcula UMA vez por chamada — o
+// handler real tambem os calcula uma vez, fora do laco `for alvo`, nunca dentro dele.
+function nivelDegrau({
+  indiceAtual, alvo, rent, custo, g, n, gde, nde, tv, roeTvKw, gp, roeBook, politicaTv, mm,
+  baseV, anos, perfilTransicao, vpa, fx,
+}) {
+  const h = fatorH(indiceAtual, alvo);
+  const r2 = rentabPosDegrau(rent, h, mm);
+  const m2 = pe({
+    g, roe: r2, ke: custo, n, gde, nde, tv, roe_tv: roeTvKw, gp, roe_book: roeBook,
+    politica_tv: politicaTv,
+  });
+  const v2 = m2 * r2;
+  const { valor: vTr, f: fTr } = valorTransicionado(baseV, v2, custo, anos, perfilTransicao);
+
+  const linha = {
+    h: arredondarPy(h, 4),
+    'rentabilidade_pos_%': arredondarPy(r2 * 100, 2),
+    multiplo: arredondarPy(m2, 4),
+    multiplo_x_rentab: arredondarPy(v2, 4),
+    com_transicao: arredondarPy(vTr, 4),
+    fator_transicao: arredondarPy(fTr, 4),
+    perfil_transicao: perfilTransicao,
+  };
+  // `if a.vpa:` do Python e' um teste de VERDADE, nao "is not None" — 0/None ficam SEM
+  // 'preco_acao' na linha, do mesmo jeito que o handler real nunca escreve a chave nesse caso.
+  if (vpa) {
+    linha.preco_acao = arredondarPy((vTr * vpa) / (fx || 1.0), 2);
+  }
+  if (r2 > Math.max(2.0 * custo, 0.30)) {
+    linha.ALERTA = true;
+  }
+  if (g !== null && g / r2 > 1) {
+    linha.ALERTA_RiR = true;
+  }
+  return linha;
+}
+
+// precificarDegrau espelha avaliar.py:precificar_degrau + _aplicar_degrau_ao_cenario — as DUAS
+// pernas (P/L via `pe()` direto; e o handler `degrau`, via nivelDegrau acima) sobre o MESMO
+// `premissas` de cenario. `blocoDegrau` chega em valores CRUS (indice_atual/indice_alvo/anos/
+// vpa/fx sao razao/moeda/ano, NUNCA passam por pc() — detalhe 3 do brief); `mValor` chega em %,
+// como o resto de `caso.json`.
+function precificarDegrau({
+  premissas, metricaValor, acoes, precoValor, blocoDegrau, mValor,
+}) {
+  // Correcao 2 ao plano (ver cabecalho da secao): mesma guarda das outras quatro entradas de
+  // wrapper deste arquivo, aplicada aqui porque as duas pernas abaixo leem os MESMOS g/ke/gp/n.
+  if (dominioCliRecusa(premissas)) {
+    return { recusado: true };
+  }
+  // F3 (mesma razao de precificarCelula, secao WRAPPER acima): 'tv' null colapsaria para
+  // ausencia em premissasParaNucleo e pe() aplicaria o SEU default ('book'), inventando um preco
+  // onde o motor recusa — '--tv' e' obrigatorio no subparser 'degrau' tambem.
+  if (premissas.tv === null) {
+    return { recusado: true };
+  }
+
+  const nucleo = premissasParaNucleo(premissas, {});
+  // gde/nde: mesmo reparo de default (F1) que precificarCelula ja' aplica na rota equity — ver o
+  // comentario la'. 'degrau' e' rota equity sempre (D2), entao o mesmo reparo vale aqui.
+  if (!('gde' in nucleo)) nucleo.gde = 0;
+  if (!('nde' in nucleo)) nucleo.nde = 0;
+
+  // ---- perna SEM degrau (rota P/L: precificar_equity + _monta_cenario — "sem_degrau" intacto)
+  // Nao reusa precificarCelula: aquela funcao so' devolve {valor: preco_acao, multiplo: PL_curr}
+  // — nao expoe nem o `m` cru (necessario para PL_fwd) nem `Equity` (necessario aqui porque
+  // `cenario_montado["valor"]` da rota equity e' {"Equity":..., "preco_acao":...}, nao so' o
+  // preco — ao contrario da celula de sensibilidade, que so' precisa do preco).
+  const mSemDegrau = pe(nucleo);
+  if (!Number.isFinite(mSemDegrau)) {
+    return { recusado: true };
+  }
+  const plCurr = arredondarPy(mSemDegrau, 4);
+  // PL_fwd = round(m/(1+g), 4) sobre o `m` CRU (justos.py:1970) — nao sobre PL_curr arredondado.
+  const plFwd = arredondarPy(mSemDegrau / (1 + nucleo.g), 4);
+  const eqBrutoSemDegrau = mSemDegrau * metricaValor;
+  const equitySemDegrau = arredondarPy(eqBrutoSemDegrau, 2);
+  const precoSemDegrau = arredondarPy(eqBrutoSemDegrau / acoes, 2);
+
+  // ---- perna DEGRAU (handler `elif a.cmd == 'degrau':`, justos.py ~2531-2587) ----
+  const rent = nucleo.roe;
+  const custo = nucleo.ke;
+  const g = nucleo.g;
+  const n = nucleo.n;
+  const gde = nucleo.gde;
+  const nde = nucleo.nde;
+  const tv = 'tv' in nucleo ? nucleo.tv : 'book';
+  const roeBook = 'roe_book' in nucleo ? nucleo.roe_book : null;
+  const roeTvDeclarado = 'roe_tv' in nucleo ? nucleo.roe_tv : null;
+  // Detalhe 2 do brief desta task: roe_tv AUSENTE — ou declarado como 0 — vira a rentabilidade
+  // BASE (`pc(roe_tv) or rent`, justos.py:2537). `||` do JS reproduz esse `or` do Python
+  // EXATAMENTE aqui: as duas linguagens tratam 0/None(null) como falsy e qualquer outro numero
+  // (inclusive negativo) como truthy — NAO e' o mesmo risco de `??` que o cabecalho do arquivo
+  // descreve para tv/gp/politica_tv (aqueles distinguem ausencia de null explicito; aqui o
+  // PROPRIO Python usa `or`, entao colapsar os dois em falsy e' o comportamento CORRETO a
+  // espelhar, nao um desvio).
+  const roeTvKw = roeTvDeclarado || rent;
+  const gp = 'gp' in nucleo ? nucleo.gp : 0.0;
+  const politicaTv = 'politica_tv' in nucleo ? nucleo.politica_tv : 'continua';
+
+  const baseM = pe({
+    g, roe: rent, ke: custo, n, gde, nde, tv, roe_tv: roeTvKw, gp, roe_book: roeBook,
+    politica_tv: politicaTv,
+  });
+  const baseV = baseM * rent;
+
+  const indiceAtual = blocoDegrau.indice_atual;
+  const anos = blocoDegrau.anos;
+  const perfilTransicao = blocoDegrau.perfil_transicao || 'rampa';
+  const vpa = blocoDegrau.vpa;
+  const fx = blocoDegrau.fx;
+  // 'm' chega em % (detalhe 3 do brief) — SEMPRE presente pelo caminho do wrapper
+  // ('degrau.m' e' obrigatorio por cenario, caso.py), mas o handler real tem um `else 1.0` para
+  // uso direto da CLI sem '--m' (a.m tambem defaulta 100.0 no argparse — na pratica morto pelo
+  // caminho do wrapper, mas espelhado aqui por completude, sem custo nenhum).
+  const mm = (mValor === null || mValor === undefined) ? 1.0 : pct(mValor);
+
+  const argsNivel = {
+    indiceAtual, rent, custo, g, n, gde, nde, tv, roeTvKw, gp, roeBook, politicaTv, mm,
+    baseV, anos, perfilTransicao, vpa, fx,
+  };
+  const nivelAlvo = nivelDegrau({ ...argsNivel, alvo: blocoDegrau.indice_alvo });
+  const nivelBase = nivelDegrau({ ...argsNivel, alvo: indiceAtual }); // h=1 por construcao (D8)
+
+  // _exigir_valor (avaliar.py) recusa quando o motor devolve 'preco_acao' ausente/null para
+  // QUALQUER um dos dois niveis — 'preco_acao' e' o campo mais a jusante de cada nivel (depende
+  // de h/r2/m2/v2/v_tr), entao checar so' os dois 'preco_acao' cobre, por construcao, qualquer
+  // NaN nascido mais cedo na cadeia DESSE MESMO nivel (r2<=0, m2 NaN, etc.) — Number.isFinite
+  // sobre `undefined` (chave ausente, vpa falsy) tambem e' `false`, mesma recusa.
+  if (!Number.isFinite(nivelAlvo.preco_acao) || !Number.isFinite(nivelBase.preco_acao)) {
+    return { recusado: true };
+  }
+
+  const precoComDegrau = nivelAlvo.preco_acao;
+  const precoBaseH1 = nivelBase.preco_acao;
+
+  const degrauCenario = {
+    h: nivelAlvo.h,
+    'rentabilidade_pos_%': nivelAlvo['rentabilidade_pos_%'],
+    multiplo: nivelAlvo.multiplo,
+    multiplo_x_rentab: nivelAlvo.multiplo_x_rentab,
+    com_transicao: nivelAlvo.com_transicao,
+    fator_transicao: nivelAlvo.fator_transicao,
+    perfil_transicao: nivelAlvo.perfil_transicao,
+    m: mValor,
+    // D8: comparacao entre DOIS outputs do motor (aqui, dois outputs deste MESMO espelho) — NAO
+    // arredondada (detalhe do plano), sobre os dois precos JA' arredondados por nivel/pela perna
+    // sem-degrau (arredondarPy acima), nunca sobre um v_tr cru.
+    'divergencia_de_base_%': (precoBaseH1 / precoSemDegrau - 1) * 100,
+  };
+  if ('ALERTA' in nivelAlvo) degrauCenario.ALERTA = true;
+  if ('ALERTA_RiR' in nivelAlvo) degrauCenario.ALERTA_RiR = true;
+
+  return {
+    recusado: false,
+    valor: { preco_acao: precoComDegrau },
+    sem_degrau: {
+      valor: { Equity: equitySemDegrau, preco_acao: precoSemDegrau },
+      multiplos: { PL_curr: plCurr, PL_fwd: plFwd },
+    },
+    vs_preco: { upside: precoComDegrau / precoValor - 1 },
+    degrau: degrauCenario,
+  };
+}
+
+// `args` de um problema `tipo: "degrau"` esta' em snake_case (contrato do brief desta task):
+// {"premissas":{...}, "metrica_valor":float, "acoes":float, "preco_valor":float,
+//  "bloco_degrau":{"indice_atual":float,"indice_alvo":float,"anos":float,
+//                  "perfil_transicao":str,"vpa":float,"fx":float|null}, "m_valor":float}.
+// Carrega CAMPOS_SOLVER_VAZIOS pela MESMA razao de resolverAlvo/resolverRampa/resolverDiag acima
+// (test_paridade_solver_js.py le a fixture inteira sem filtrar por tipo).
+function resolverDegrau(item) {
+  const a = item.args;
+  const resultado = precificarDegrau({
+    premissas: a.premissas, metricaValor: a.metrica_valor, acoes: a.acoes,
+    precoValor: a.preco_valor, blocoDegrau: a.bloco_degrau, mValor: a.m_valor,
+  });
+  return { id: item.id, ...resultado, ...CAMPOS_SOLVER_VAZIOS };
+}
+
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
 // Sem `tipo`: item da fixture de VALOR da 4A (fn/args -> valor) — despachado
 // por `avaliarVetores`, o MESMO caminho de sempre, sem nenhuma linha
@@ -1412,7 +1682,8 @@ function resolverDiag(item) {
 // `tipo: 'alvo'|'grade1d'|'grade2d'`: problema de wrapper (task 3),
 // despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`. `tipo:
 // 'rampa'` (fatia C, task 1): despachado por `resolverRampa`. `tipo: 'diag'`
-// (fatia C, task 2): despachado por `resolverDiag`.
+// (fatia C, task 2): despachado por `resolverDiag`. `tipo: 'degrau'`
+// (fatia D, task 2): despachado por `resolverDegrau`.
 // Qualquer outro `tipo` LANCA — falha fechada, a mesma disciplina do resto
 // deste arquivo.
 function avaliarItem(item) {
@@ -1437,6 +1708,9 @@ function avaliarItem(item) {
   if (item.tipo === 'diag') {
     return resolverDiag(item);
   }
+  if (item.tipo === 'degrau') {
+    return resolverDegrau(item);
+  }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
 
@@ -1460,6 +1734,7 @@ const superficiePublica = {
   resolverAlvo, resolverGrade1D, resolverGrade2D,
   rampaBifasica, precificarRampa, resolverRampa,
   diagnosticosFirm, diagnosticosEquity, resolverDiag,
+  fatorH, rentabPosDegrau, descontoTransicao, valorTransicionado, precificarDegrau, resolverDegrau,
   avaliarItem, avaliarItens,
 };
 

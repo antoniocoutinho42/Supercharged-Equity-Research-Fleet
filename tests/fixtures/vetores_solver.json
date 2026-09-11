@@ -2323,5 +2323,301 @@
       "moeda": "BRL-nominal",
       "rf": null
     }
+  },
+  {
+    "id": 113,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 12.0,
+        "roe": 20.0,
+        "ke": 20.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 20.0,
+        "gp": 6.5
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 19.3,
+        "indice_alvo": 14.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 29.11,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 114,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 15.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 115,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 0.0
+    }
+  },
+  {
+    "id": 116,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 70.0
+    }
+  },
+  {
+    "id": 117,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 130.0
+    }
+  },
+  {
+    "id": 118,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 3.5,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 119,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "pontual",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 120,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 8.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "book",
+        "roe_book": 16.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 121,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 30.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 122,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": 14.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 8.0,
+        "indice_alvo": 20.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
+  },
+  {
+    "id": 123,
+    "tipo": "degrau",
+    "args": {
+      "premissas": {
+        "g": 10.0,
+        "roe": 18.0,
+        "ke": -150.0,
+        "n": 10,
+        "tv": "gordon",
+        "roe_tv": 15.0,
+        "gp": 5.0
+      },
+      "metrica_valor": 500.0,
+      "acoes": 100.0,
+      "preco_valor": 40.0,
+      "bloco_degrau": {
+        "indice_atual": 15.0,
+        "indice_alvo": 10.0,
+        "anos": 4,
+        "perfil_transicao": "rampa",
+        "vpa": 25.0,
+        "fx": 1.0
+      },
+      "m_valor": 100.0
+    }
   }
 ]

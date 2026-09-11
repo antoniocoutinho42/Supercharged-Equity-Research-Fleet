@@ -218,3 +218,95 @@ def test_fixture_de_diagnostico_cobre_os_alertas():
     alertas = {c["chave"] for c in CHAVES
                if c["prefixo"].startswith(("ALERTA", "SUB-ALERTA", "INCOERÊNCIA", "DOMÍNIO"))}
     assert alertas <= disparadas, f"alertas nunca exercitados: {sorted(alertas - disparadas)}"
+
+
+# ---------------------------------------------------------------------------
+# DEGRAU (Fatia D, Task 2). Mesmo harness, mesma fixture — a paridade e' contra o WRAPPER
+# (avaliar.avaliar sobre um caso mínimo com bloco 'degrau'), nao contra o motor direto: ver o
+# comentario no topo deste arquivo e o cabecalho da secao DEGRAU em motor_espelho.js.
+# ---------------------------------------------------------------------------
+
+# Campos de `degrau` comparados por IGUALDADE EXATA — todos arredondados pelo motor (`round`),
+# exceto ALERTA/ALERTA_RiR, que comparam por PRESENCA (True/ausente: `.get(campo)` devolve `None`
+# dos dois lados quando a chave nao existe) — nunca a prosa do motor, mesma convencao de
+# `avisos`/AVISOS_RAMPA acima. `divergencia_de_base_%` fica DE FORA desta lista de propósito: nao
+# e' arredondada pelo wrapper (D8) — compara por TAU em teste separado, abaixo.
+CAMPOS_DEGRAU_EXATOS = ("h", "rentabilidade_pos_%", "multiplo", "multiplo_x_rentab",
+                        "com_transicao", "fator_transicao", "perfil_transicao", "m",
+                        "ALERTA", "ALERTA_RiR")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_degrau_recusa_onde_o_motor_recusa():
+    probs = _problemas({"degrau"})
+    assert probs, "fixture sem problemas de degrau"
+    py, js = avaliar_python(probs), _lado_js()
+    fora = [(p["id"], a["recusado"], js[p["id"]]["recusado"])
+            for p, a in zip(probs, py) if a["recusado"] != js[p["id"]]["recusado"]]
+    assert not fora, f"recusa divergente (id, py, js): {fora}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_degrau_bate_campo_a_campo():
+    """O que o motor arredonda compara EXATAMENTE — o arredondamento e' contrato (mesma disciplina
+    de test_rampa_bate_campo_a_campo, acima). `valor`/`sem_degrau` sao dicts com todo campo
+    arredondado; `degrau` compara campo a campo via CAMPOS_DEGRAU_EXATOS."""
+    probs = _problemas({"degrau"})
+    py, js = avaliar_python(probs), _lado_js()
+    fora = []
+    for p, a in zip(probs, py):
+        if a["recusado"]:
+            continue
+        b = js[p["id"]]
+        for campo in ("valor", "sem_degrau"):
+            if a[campo] != b[campo]:
+                fora.append((p["id"], campo, a[campo], b[campo]))
+        da, db = a["degrau"], b["degrau"]
+        for campo in CAMPOS_DEGRAU_EXATOS:
+            if da.get(campo) != db.get(campo):
+                fora.append((p["id"], f"degrau.{campo}", da.get(campo), db.get(campo)))
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_degrau_divergencia_e_upside_dentro_de_tau():
+    """`divergencia_de_base_%` (D8) e `vs_preco.upside` NAO sao arredondados pelo wrapper —
+    comparados por TAU, como as outras contas encadeadas fora do motor neste harness (ex.:
+    test_alvo_de_mercado_bate_nas_duas_rotas, acima), nao por igualdade exata."""
+    probs = _problemas({"degrau"})
+    py, js = avaliar_python(probs), _lado_js()
+    piores = []
+    for p, a in zip(probs, py):
+        if a["recusado"]:
+            continue
+        b = js[p["id"]]
+        piores.append((_rel(a["degrau"]["divergencia_de_base_%"], b["degrau"]["divergencia_de_base_%"]),
+                       p["id"], "divergencia_de_base_%"))
+        piores.append((_rel(a["vs_preco"]["upside"], b["vs_preco"]["upside"]), p["id"], "upside"))
+    piores.sort(reverse=True)
+    fora = [x for x in piores if x[0] > TAU]
+    assert not fora, f"{len(fora)} fora de TAU; piores 3: {fora[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_fixture_de_degrau_cobre_o_que_discrimina():
+    probs = _problemas({"degrau"})
+    py = avaliar_python(probs)
+    ok = [a for a in py if not a["recusado"]]
+    assert sum(a["recusado"] for a in py) >= 1, "nenhuma recusa de dominio"
+    assert any(a["degrau"]["h"] == pytest.approx(1.0) for a in ok), "h=1 nunca exercitado"
+    assert {a["degrau"]["m"] for a in ok} >= {0.0, 70.0, 130.0}, "faltam variacoes de m"
+    assert any(p["args"]["bloco_degrau"]["anos"] % 1 != 0 for p in probs), "anos fracionario nunca exercitado"
+    assert any(a["degrau"]["perfil_transicao"] == "pontual" for a in ok), "perfil pontual nunca exercitado"
+    assert any(p["args"]["premissas"].get("tv") == "book"
+              and p["args"]["premissas"].get("roe_book") is not None
+              for p in probs), "tv=book com roe_book nunca exercitado"
+    assert any("ALERTA" in a["degrau"] for a in ok), "ALERTA nunca exercitado"
+    assert any("ALERTA_RiR" in a["degrau"] for a in ok), "ALERTA_RiR nunca exercitado"
+
+    # h=1 nao inventa valor sem capacidade ociosa real (test_2, tests/test_valuation_degrau.py) —
+    # sanidade da fixture: confirma que o problema de h=1 exibe a MESMA identidade que a Task 1 já
+    # discrimina no wrapper, agora tambem visível nesta paridade JS via test_degrau_bate_campo_a_campo.
+    h1 = next(a for a in ok if a["degrau"]["h"] == pytest.approx(1.0))
+    assert h1["degrau"]["com_transicao"] == pytest.approx(h1["degrau"]["multiplo_x_rentab"])
+    assert h1["degrau"]["multiplo"] == pytest.approx(h1["sem_degrau"]["multiplos"]["PL_curr"])

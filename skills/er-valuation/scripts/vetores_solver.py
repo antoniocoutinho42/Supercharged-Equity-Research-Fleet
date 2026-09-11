@@ -121,6 +121,16 @@ from motor import MotorFalhou, rodar  # noqa: E402
 # caminho do wrapper (mesmo argv_para, mesmo subprocesso, mesmo colapso null->ausencia), nunca
 # diag_firm/diag_eq importados direto — ver `_avaliar_diag` abaixo.
 
+# [Fatia D, Task 2] `avaliar` (a FUNCAO de topo, apelidada `avaliar_caso` para nao colidir com o
+# NOME deste modulo — `avaliar.py`, ja importado acima por simbolo) — os problemas "degrau" montam
+# um `caso` MINIMO (uma rota equity, um cenario, um bloco `degrau`) e chamam `avaliar_caso` de
+# verdade, o MESMO ponto de entrada que `tests/test_valuation_degrau.py` (Task 1) usa para o seu
+# proprio teste-ancora — nao uma chamada as pecas internas (`precificar_degrau`,
+# `_aplicar_degrau_ao_cenario`) isolada: e' o jeito mais fiel de obter, num so' lugar, as DUAS
+# pernas que o wrapper roda por cenario (a rota P/L — `sem_degrau` — e o handler `degrau`) sem
+# reimplementar a composicao que `avaliar()` ja faz. Ver `_avaliar_degrau` abaixo.
+from avaliar import avaliar as avaliar_caso  # noqa: E402
+
 SEMENTE_SOLVER = 20260826
 
 _DESPACHO = {"ev_nopat": ev_nopat, "ev_ebitda": ev_ebitda, "pe": pe}
@@ -933,6 +943,110 @@ def _bloco_diag() -> list[dict]:
     return v
 
 
+# ---------------------------------------------------------------------------
+# Bloco 6 (Fatia D, Task 2): problemas de DEGRAU (Gate 3 — capacidade ociosa de balanço) —
+# `avaliar_caso` (avaliar.avaliar) de verdade sobre um caso MÍNIMO (uma rota equity, um cenário
+# "c", um bloco `degrau`), alcançado pelo MESMO caminho do wrapper que os blocos 3/4/5 (motor
+# congelado via subprocesso, nunca reimplementação). Hand-escrito, mesma disciplina de
+# `_bloco_wrapper`/`_bloco_rampa`/`_bloco_diag`: cada caso foi desenhado para exercitar UMA
+# propriedade nomeada do plano da fatia e conferido por chamada direta ao motor
+# (`justos.py degrau`) antes de entrar aqui (ver task-d2-report.md). `premissas` está em PONTOS
+# PERCENTUAIS (convenção de caso.json, como os outros blocos); `bloco_degrau` está em valores
+# CRUS (indice_atual/indice_alvo/anos/vpa/fx são razão/ano/moeda, nunca taxa — não passam por
+# pc()); `m_valor` está em %, como o resto de caso.json.
+#
+# O vetor-base B ({g:10,roe:18,ke:14,tv:gordon,roe_tv:15,gp:5}) declara `roe_tv` DIFERENTE de
+# `roe` de propósito: a âncora do SKILL.md (roe=roe_tv=20%) não discrimina um mirror que ignore
+# `roe_tv` declarado e sempre substitua pela rentabilidade base — com roe_tv=15% ≠ roe=18%, um
+# espelho que cometesse esse erro leria roe_tv errado em toda variação abaixo (h=1, m∈{0,70,130},
+# anos fracionário, ALERTA, ALERTA_RiR). O fallback `pc(roe_tv) or rent` (detalhe 2 do brief, só
+# dispara quando roe_tv está AUSENTE ou é literalmente 0) não tem caso próprio aqui: qualquer
+# vetor que o exercitasse sob `tv=gordon` também derrubaria a perna sem-degrau (que usa roe_tv TAL
+# COMO declarado, sem o `or`) — as duas pernas refusariam juntas, e o problema cairia no mesmo
+# balde do problema 11 (recusa de domínio) sem discriminar nada de novo; verificado por conferência
+# direta antes de descartar a ideia (ver task-d2-report.md).
+_BASE_DEGRAU_B: dict = dict(g=10.0, roe=18.0, ke=14.0, n=10, tv="gordon", roe_tv=15.0, gp=5.0)
+
+
+def _problema_degrau(premissas: dict, bloco_degrau: dict, m_valor: float,
+                     metrica_valor: float = 500.0, acoes: float = 100.0,
+                     preco_valor: float = 40.0) -> dict:
+    return {"id": 0, "tipo": "degrau",
+            "args": {"premissas": premissas, "metrica_valor": metrica_valor, "acoes": acoes,
+                     "preco_valor": preco_valor, "bloco_degrau": bloco_degrau, "m_valor": m_valor}}
+
+
+def _bloco_degrau() -> list[dict]:
+    v: list[dict] = []
+    b = _BASE_DEGRAU_B
+
+    # 1. Âncora do SKILL.md do vendor (vendor/multiplos-justos/SKILL.md:265) — os MESMOS
+    # argumentos que tests/test_valuation_degrau.py:_ARGV_ANCORA_SKILL_MD usa como referência, com
+    # um único índice-alvo (14, D3: um preço por cenário). Cross-valida os dois lados desta fatia
+    # contra o MESMO exemplo documentado.
+    v.append(_problema_degrau(
+        {"g": 12.0, "roe": 20.0, "ke": 20.0, "n": 10, "tv": "gordon", "roe_tv": 20.0, "gp": 6.5},
+        {"indice_atual": 19.3, "indice_alvo": 14.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 29.11, "fx": 1.0},
+        m_valor=100.0))
+
+    # 2. h = 1 (indice_alvo == indice_atual) — o degrau não inventa valor sem capacidade ociosa
+    # real (test_2 da Task 1, mesma propriedade, agora discriminada na paridade JS: com_transicao
+    # == multiplo_x_rentab, e o multiplo bate com PL_curr de sem_degrau).
+    v.append(_problema_degrau(
+        b, {"indice_atual": 15.0, "indice_alvo": 15.0, "anos": 4, "perfil_transicao": "rampa",
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 3-5. m ∈ {0, 70, 130} — mesma capacidade ociosa (h=1.5), eficiência marginal variando; m=0
+    # mantém a rentabilidade pós = base (test_3 da Task 1), apesar de h != 1.
+    for m in (0.0, 70.0, 130.0):
+        v.append(_problema_degrau(
+            b, {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+                "vpa": 25.0, "fx": 1.0}, m_valor=m))
+
+    # 6. anos fracionário (3.5) — desconto_transicao recebe uma tranche PROPORCIONAL no último
+    # período (detalhe 1 do brief), não uma soma inteira a mais nem uma tranche cheia.
+    v.append(_problema_degrau(
+        b, {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 3.5, "perfil_transicao": "rampa",
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 7. perfil_transicao = pontual — mesmos índices/anos/m do problema 3-5 (m=100): só o perfil
+    # muda, e fator_transicao tem de divergir do rampa equivalente (problema 3-5, m=100).
+    v.append(_problema_degrau(
+        b, {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "pontual",
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 8. tv=book COM roe_book declarado (D6 — Task 1 recusaria sem ele) — vetor próprio, book não
+    # usa roe_tv/gp.
+    v.append(_problema_degrau(
+        {"g": 8.0, "roe": 18.0, "ke": 14.0, "n": 10, "tv": "book", "roe_book": 16.0},
+        {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 9. ALERTA — h=3 (indice_atual=30, indice_alvo=10) empurra a rentabilidade pós (54%) acima de
+    # max(2×ke, 30%) = 30% — "rentabilidade pós-degrau implausível como estado estacionário".
+    v.append(_problema_degrau(
+        b, {"indice_atual": 30.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 10. ALERTA_RiR — h=0.4 (indice_atual=8, indice_alvo=20: alvo ACIMA do atual, degrau
+    # negativo) derruba a rentabilidade pós (7.2%) abaixo de g (10%) — RiR = g/rentab > 100%.
+    v.append(_problema_degrau(
+        b, {"indice_atual": 8.0, "indice_alvo": 20.0, "anos": 4, "perfil_transicao": "rampa",
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 11. Recusa de domínio — ke = -150% (<= -100%): avaliar_dominios_cli recusa ANTES de
+    # qualquer handler (mesma família de recusa que _bloco_diag já exercita para firm/equity sem
+    # degrau); aqui cobre as DUAS pernas do degrau ao mesmo tempo (a perna P/L e o handler degrau
+    # leem o MESMO 'ke' de premissas).
+    v.append(_problema_degrau(
+        {"g": 10.0, "roe": 18.0, "ke": -150.0, "n": 10, "tv": "gordon", "roe_tv": 15.0, "gp": 5.0},
+        {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    return v
+
+
 def gerar() -> list[dict]:
     """A lista completa de problemas, determinística — mesma disciplina de
     `vetores_paridade.gerar()`: `random.Random(SEMENTE_SOLVER)` nasce AQUI
@@ -940,15 +1054,16 @@ def gerar() -> list[dict]:
     `gerar() == gerar()` valha trivialmente e o CLI (processo novo)
     reproduza a fixture commitada byte a byte.
 
-    Os problemas de wrapper (`_bloco_wrapper`, task 3), de rampa (`_bloco_rampa`, fatia C task 1)
-    e de diagnóstico (`_bloco_diag`, fatia C task 2) vêm SEMPRE por último, nessa ordem, depois
-    dos 41 de solver — nunca intercalados. Isso não é regra da metodologia, é o que mantém
-    `tests/test_paridade_solver_js.py` (task 2, imutável por regra da fatia B) alinhado por
-    posição com os IDs que ele já conhece; a fixture inteira permanece uma lista única, um gerador
-    único, como o brief da task 3 pediu e esta task preserva."""
+    Os problemas de wrapper (`_bloco_wrapper`, task 3), de rampa (`_bloco_rampa`, fatia C task 1),
+    de diagnóstico (`_bloco_diag`, fatia C task 2) e de degrau (`_bloco_degrau`, fatia D task 2)
+    vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
+    regra da metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2, imutável por
+    regra da fatia B) alinhado por posição com os IDs que ele já conhece; a fixture inteira
+    permanece uma lista única, um gerador único, como o brief da task 3 pediu e esta task
+    preserva."""
     rng = random.Random(SEMENTE_SOLVER)
     problemas = (_bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
-                + _bloco_diag())
+                + _bloco_diag() + _bloco_degrau())
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -1171,6 +1286,85 @@ def _avaliar_diag(problema: dict) -> dict:
             **_CAMPOS_SOLVER_VAZIOS}
 
 
+# Nome do único cenário do caso mínimo que `_avaliar_degrau` monta — irrelevante para o shape
+# comparado (nunca sai em `valor`/`sem_degrau`/`vs_preco`/`degrau`), só precisa bater entre a
+# chave de `caso["cenarios"]` e a de `caso["degrau"]["m"]` dentro da MESMA chamada.
+_NOME_CENARIO_DEGRAU = "c"
+
+
+def _avaliar_degrau(problema: dict) -> dict:
+    """Um problema `tipo: "degrau"` (Fatia D, Task 2) — chama `avaliar_caso` (avaliar.avaliar) de
+    verdade sobre um caso MÍNIMO (rota equity, um cenário só, bloco `degrau` declarado) — o MESMO
+    ponto de entrada que `tests/test_valuation_degrau.py` (Task 1) usa para o seu próprio
+    teste-âncora, não uma chamada isolada às peças internas (`precificar_degrau`,
+    `_aplicar_degrau_ao_cenario`): é o jeito mais fiel de obter, num só lugar, as DUAS pernas que
+    o wrapper roda por cenário (a rota P/L — `sem_degrau` — e o handler `degrau`) sem reimplementar
+    a composição que `avaliar()` já faz.
+
+    `MotorFalhou` (domínio inválido — `avaliar_dominios_cli`, a mesma família de recusa de
+    `_avaliar_rampa`/`_avaliar_diag` acima — ou qualquer campo do motor voltando `null`) vira
+    `{"recusado": True}`, sem os outros campos: mesmo shape que
+    `motor_espelho.js:precificarDegrau` promete devolver. Como a perna P/L (`precificar_equity`)
+    roda ANTES da perna degrau dentro de `avaliar()`, um domínio inválido em `g`/`ke`/`gp`/`n`
+    (compartilhados pelas duas pernas) já recusa ali, antes do handler `degrau` sequer rodar.
+
+    ALERTA/ALERTA_RiR: o wrapper real (`_aplicar_degrau_ao_cenario`) copia a PROSA do motor
+    verbatim para `resultados.json` — convertida aqui para `True`/ausência (mesma convenção de
+    `avisos`/`AVISOS_RAMPA` em `_avaliar_rampa`, acima: só a PRESENÇA importa para o laboratório,
+    a prosa é do vendor e fica fora do escopo desta fatia — ver o comentário na seção DEGRAU de
+    `motor_espelho.js`)."""
+    args = problema["args"]
+    nome = _NOME_CENARIO_DEGRAU
+    bloco_degrau_args = args["bloco_degrau"]
+    caso = {
+        "companhia": "fixture degrau", "ticker": None, "moeda": "BRL-nominal",
+        "data_analise": "2026-01-01",
+        "preco": {"valor": args["preco_valor"]},
+        "rota": "equity",
+        "metrica_base": {"tipo": "LL", "valor": args["metrica_valor"], "fonte": "fixture"},
+        "acoes_diluidas": args["acoes"],
+        "cenarios": {nome: {"ancora": "fixture", "triangulo": {}, "premissas": args["premissas"]}},
+        "degrau": {
+            "indice_atual": {"valor": bloco_degrau_args["indice_atual"]},
+            "indice_alvo": {"valor": bloco_degrau_args["indice_alvo"]},
+            "anos": bloco_degrau_args["anos"],
+            "perfil_transicao": bloco_degrau_args.get("perfil_transicao", "rampa"),
+            "vpa": {"valor": bloco_degrau_args["vpa"]},
+            "fx": bloco_degrau_args.get("fx"),
+            "m": {nome: {"valor": args["m_valor"]}},
+        },
+    }
+    try:
+        resultado = avaliar_caso(caso)
+    except MotorFalhou:
+        return {"id": problema["id"], "recusado": True, **_CAMPOS_SOLVER_VAZIOS}
+
+    cenario = resultado["cenarios"][nome]
+    degrau_bruto = cenario["degrau"]
+    degrau_saida = {
+        "h": degrau_bruto["h"],
+        "rentabilidade_pos_%": degrau_bruto["rentabilidade_pos_%"],
+        "multiplo": degrau_bruto["multiplo"],
+        "multiplo_x_rentab": degrau_bruto["multiplo_x_rentab"],
+        "com_transicao": degrau_bruto["com_transicao"],
+        "fator_transicao": degrau_bruto["fator_transicao"],
+        "perfil_transicao": degrau_bruto["perfil_transicao"],
+        "m": degrau_bruto["m"],
+        "divergencia_de_base_%": degrau_bruto["divergencia_de_base_%"],
+    }
+    for chave in ("ALERTA", "ALERTA_RiR"):
+        if chave in degrau_bruto:
+            degrau_saida[chave] = True
+
+    return {
+        "id": problema["id"], "recusado": False,
+        "valor": cenario["valor"], "sem_degrau": cenario["sem_degrau"],
+        "vs_preco": {"upside": cenario["vs_preco"]["upside"]},
+        "degrau": degrau_saida,
+        **_CAMPOS_SOLVER_VAZIOS,
+    }
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
@@ -1178,21 +1372,23 @@ _DESPACHO_POR_TIPO = {
     "grade2d": _avaliar_grade2d,
     "rampa": _avaliar_rampa,
     "diag": _avaliar_diag,
+    "degrau": _avaliar_degrau,
 }
 
 
 def avaliar_python(problemas: list[dict]) -> list[dict]:
-    """Avalia cada problema, despachando por `problema["tipo"]` — seis
-    ramos, quatro lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
+    """Avalia cada problema, despachando por `problema["tipo"]` — sete
+    ramos, cinco lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
     direto (`_avaliar_solver`, task 2); `"alvo"`/`"grade1d"`/`"grade2d"`
     rodam o WRAPPER de verdade — `reversa.alvo_de_mercado`/
     `sensibilidades.grade_1d`/`grade_2d` (task 3); `"rampa"` (fatia C, task 1)
     roda `avaliar.precificar_rampa`, TAMBÉM o WRAPPER; `"diag"` (fatia C,
     task 2) roda `motor.rodar` direto, ainda o WRAPPER (mesma CLI/subprocesso
-    que `precificar_firm`/`precificar_equity` usam por baixo), nunca uma
-    reimplementação da conta. `tipo` desconhecido levanta `KeyError` nomeando
-    o tipo — falha fechada, mesma disciplina do despacho por `tipo` do
-    espelho JS.
+    que `precificar_firm`/`precificar_equity` usam por baixo); `"degrau"`
+    (fatia D, task 2) roda `avaliar_caso` (avaliar.avaliar) de verdade sobre
+    um caso mínimo, TAMBÉM o WRAPPER — nunca uma reimplementação da conta.
+    `tipo` desconhecido levanta `KeyError` nomeando o tipo — falha fechada,
+    mesma disciplina do despacho por `tipo` do espelho JS.
 
     Não compara nada contra JS — isso é dos harnesses
     (`tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`).
