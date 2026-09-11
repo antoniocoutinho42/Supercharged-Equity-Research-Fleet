@@ -105,14 +105,16 @@ no resultado é `data_analise`, do próprio caso.
 """
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
 
+import diagnosticos
 from caso import CasoInvalido, carregar
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
-from reversa import reverter
+from reversa import alvo_de_mercado, reverter
 
 # `sensibilidades.calcular` NÃO entra aqui em cima: `sensibilidades.py` faz
 # `from avaliar import precificar_equity, precificar_firm` no topo dela — um
@@ -123,6 +125,191 @@ from reversa import reverter
 # initialized module". `reversa.py` não tem esse problema (não importa
 # `avaliar`), por isso `reverter` é import de topo normal. O import de
 # `calcular` é feito dentro de `avaliar()`, na hora de usar — ver ali.
+
+# --------------------------------------------------------------------------
+# Fatia 5A, item 5, Task 1: contrato `resultados/1` (E3, amendment do
+# desenho v4 §15) — `versao_contrato`, `origem` (regra 2), `manchete`
+# (regra 3/A4), `mercado_tela` (regra 4) e `diagnosticos_chaves` (regra 5,
+# aplicada dentro de `_monta_cenario`/`_monta_cenario_rampa` abaixo).
+# --------------------------------------------------------------------------
+
+# Versão do contrato publicado — acréscimos compatíveis (campo novo, nunca
+# removido nem com semântica trocada) não mudam este literal; uma mudança
+# incompatível vira "resultados/2". Fixo, não derivado de nada — é este
+# módulo que DECLARA a versão do contrato que produz.
+VERSAO_CONTRATO: str = "resultados/1"
+
+# `origem.metodologia` (regra 2): lido do manifesto do vendor, nunca
+# hardcoded — trocar o pacote e regenerar o manifesto (a única forma
+# suportada de evoluir a metodologia, `manifest_vendor.json:"regenerar"`)
+# already muda o que este módulo publica, sem precisar tocar aqui. Mesmo
+# padrão de `RAIZ_VENDOR` em `motor.py`: lido uma vez, no import.
+_CAMINHO_MANIFEST_VENDOR = (
+    Path(__file__).resolve().parents[3] / "skills" / "er-multiplos-justos" / "manifest_vendor.json"
+)
+_MANIFEST_VENDOR: dict = json.loads(_CAMINHO_MANIFEST_VENDOR.read_text(encoding="utf-8"))
+
+
+def _sha256_canonico(obj: dict) -> str:
+    """SHA-256 do JSON canônico de `obj` (A2, decisão do plano da fatia 5A).
+
+    Canonicalização: `sort_keys=True`, `separators=(",", ":")`,
+    `ensure_ascii=False`, utf-8 — reordenar chaves ou mudar espaçamento do
+    `caso.json` de origem não muda o hash. `er-relatorio` (fatia 5A, Task
+    3) recalcula esta MESMA receita sobre o caso que recebe, para provar
+    correspondência com `origem.caso_sha256` sem rodar nada — a
+    canonicalização é contrato documentado nos dois lados; duplicar estas
+    poucas linhas é o preço de o relatório nunca importar este módulo
+    (E3, `docs/desenho-arquitetura-v4.md` §15).
+    """
+    canonico = json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
+def _nome_cenario_base(caso: dict) -> str:
+    """Nome do cenário-base (A3): `caso['cenario_base']` quando declarado,
+    ou o único cenário do caso quando `caso.validar` já confirmou (no
+    gate, `_validar_cenario_base`) que só existe um. Esta função não
+    revalida nada disso — só lê a mesma decisão que o gate já travou.
+    """
+    declarado = caso.get("cenario_base")
+    if declarado is not None:
+        return declarado
+    (unico,) = caso["cenarios"]
+    return unico
+
+
+def _chave_e_base_do_multiplo(rota: str, tipo_metrica: str) -> tuple[str, str]:
+    """Chave (campo de `multiplos`) e `base` (rótulo curto, regra 3/4) do
+    múltiplo de referência da rota — usado por `manchete` e `mercado_tela`
+    para nomear qual múltiplo pareia com qual preço.
+
+    Espelha `motor._campo_do_multiplo`, generalizado para cobrir também a
+    rota `rampa` — que aquele helper não cobre porque nenhum call site
+    dele hoje o chama com `rota="rampa"` (`precificar_rampa` lê
+    'EV/EBITDA0' direto de `_exigir_valor`; a reversa recusa 'rampa' no
+    gate, então `reversa.teto_do_crescimento_gratuito`, o único outro
+    chamador de `_campo_do_multiplo`, nunca roda para essa rota). Vive
+    aqui, não em `motor.py`, para não mudar o contrato de um helper
+    compartilhado por um motivo que só a manchete/o múltiplo de tela têm.
+
+    Rota firm: `EV/EBITDA_curr`/`"ebitda"` quando `tipo_metrica ==
+    "EBITDA"`, `EV/NOPAT_curr`/`"nopat"` caso contrário — mesma dicotomia
+    de `precificar_firm`. Rota rampa: sempre `EV/EBITDA0`/`"ebitda0"` — o
+    headline da rota (`caso.METRICAS_POR_ROTA["rampa"] == {"EBITDA0"}`,
+    nunca uma escolha a fazer aqui). Rota equity: sempre `PL_curr`/`"pl"`.
+    Rota desconhecida levanta `ValueError` — mesma disciplina de
+    `reversa.alvo_de_mercado`, nunca alcançável por um caso validado.
+    """
+    if rota == "firm":
+        if tipo_metrica == "EBITDA":
+            return "EV/EBITDA_curr", "ebitda"
+        return "EV/NOPAT_curr", "nopat"
+    if rota == "rampa":
+        return "EV/EBITDA0", "ebitda0"
+    if rota == "equity":
+        return "PL_curr", "pl"
+    raise ValueError(f"rota desconhecida para múltiplo de referência: {rota!r}")
+
+
+def _montar_manchete(caso: dict, resultado: dict) -> dict:
+    """Monta o campo `manchete` (A4, regra 3): qual preço é "a resposta".
+
+    Com `sotp` declarado, a manchete é o preço do SOTP — soma de partes é
+    a composição mais completa que o caso oferece, e não carrega UM único
+    múltiplo de referência (cada parte tem o seu, em bases possivelmente
+    diferentes) — por isso não tem `multiplo`.
+
+    Sem `sotp`, a manchete é o preço do cenário-base (A3): `multiplo` é o
+    mesmo que o wrapper já devolve para aquele preço — nunca uma conta
+    nova, só um apontamento para um valor que já está em `resultado`.
+    Num cenário com degrau aplicado (`"degrau" in cenario_base` — só
+    possível na rota equity, `caso._validar_degrau`), o múltiplo é
+    `PVP_com_degrau`/`"pvp"`, o `com_transicao` que o próprio degrau já
+    calculou; sem degrau, é o múltiplo padrão da rota
+    (`_chave_e_base_do_multiplo`), lido de `multiplos`, onde
+    `_monta_cenario`/`_monta_cenario_rampa` já o deixaram validado.
+    """
+    preco_valor = caso["preco"]["valor"]
+
+    if "sotp" in caso:
+        sotp_resultado = resultado["sotp"]
+        preco_acao = sotp_resultado["preco_acao"]
+        return {
+            "fonte": "sotp",
+            "cenario": sotp_resultado["cenario"],
+            "preco_acao": preco_acao,
+            "upside": preco_acao / preco_valor - 1,
+        }
+
+    nome_base = _nome_cenario_base(caso)
+    cenario_base = resultado["cenarios"][nome_base]
+    preco_acao = cenario_base["valor"]["preco_acao"]
+
+    if "degrau" in cenario_base:
+        multiplo = {
+            "chave": "PVP_com_degrau",
+            "base": "pvp",
+            "valor": cenario_base["degrau"]["com_transicao"],
+        }
+    else:
+        chave, base = _chave_e_base_do_multiplo(caso["rota"], caso["metrica_base"]["tipo"])
+        multiplo = {"chave": chave, "base": base, "valor": cenario_base["multiplos"][chave]}
+
+    return {
+        "fonte": "cenarios",
+        "cenario": nome_base,
+        "preco_acao": preco_acao,
+        "upside": preco_acao / preco_valor - 1,
+        "multiplo": multiplo,
+    }
+
+
+# Chaves de aviso da rampa, na ordem canônica (regra 5) — mesma tupla e
+# mesma ordem que `vetores_solver.py`/`motor_espelho.js` já usam
+# (`AVISOS_RAMPA`) para o mesmo propósito (só a PRESENÇA importa).
+# Duplicada aqui, não importada de lá: `vetores_solver.py` é harness de
+# paridade (não é dependência de produção), e este módulo não depende dele.
+_AVISOS_RAMPA_ORDEM: tuple[str, ...] = ("aviso_colheita", "aviso_delator", "aviso_gp")
+
+
+def _montar_mercado_tela(caso: dict, resultado: dict, nd_efetivo: float) -> dict:
+    """Monta o campo `mercado_tela` (regra 4): o múltiplo de mercado
+    (screen), SEMPRE publicado — antes só existia dentro do bloco
+    `reversa`, condicionado à presença dele.
+
+    Mesma `base` da manchete, por construção (as duas derivam de
+    `caso["rota"]`/`caso["metrica_base"].tipo`, nunca do cenário
+    escolhido) — EXCETO no degrau, onde a manchete usa o P/VP JUSTO
+    (`PVP_com_degrau`, o `com_transicao` que o degrau calcula) e a tela
+    usa o P/VP OBSERVADO (`preco / vpa`, os dois números crus do caso, sem
+    passar pelo motor): o relatório pareia os dois pela `base` comum
+    (`"pvp"`), nunca pela `chave` — que é deliberadamente diferente nesse
+    caso (`"PVP"` de tela contra `"PVP_com_degrau"` justo).
+
+    Fora do degrau, `valor`/`algebra` vêm de `reversa.alvo_de_mercado` —
+    a MESMA função que o bloco opcional `reversa` já usa (regra inviolável
+    1: nenhuma aritmética de valuation fora do motor/das funções que já a
+    fazem); `chave` é só rótulo, resolvido por `_chave_e_base_do_multiplo`.
+    """
+    nome_base = _nome_cenario_base(caso)
+    cenario_base = resultado["cenarios"][nome_base]
+
+    if "degrau" in cenario_base:
+        preco = caso["preco"]["valor"]
+        vpa = caso["degrau"]["vpa"]["valor"]
+        valor = preco / vpa
+        return {
+            "chave": "PVP",
+            "base": "pvp",
+            "valor": valor,
+            "algebra": f"PVP_tela = preco {preco} / vpa {vpa} = {valor}",
+        }
+
+    chave, base = _chave_e_base_do_multiplo(caso["rota"], caso["metrica_base"]["tipo"])
+    alvo = alvo_de_mercado(caso, nome_base, nd_efetivo)
+    return {"chave": chave, "base": base, "valor": alvo["valor"], "algebra": alvo["algebra"]}
+
 
 # Subconjunto do que o motor devolve que vira o campo "multiplos" de cada
 # cenário — não é passthrough do dict inteiro do motor (que carrega chaves de
@@ -495,6 +682,7 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
         else:
             multiplos[chave] = _exigir_valor(saida_motor, chave)
     upside = valor["preco_acao"] / preco_valor - 1
+    diagnosticos_lista = saida_motor["diagnosticos"]
 
     return {
         "ancora": cenario["ancora"],
@@ -504,7 +692,13 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
         "valor": valor,
         "algebra_da_escala": algebra,
         "vs_preco": {"upside": upside},
-        "diagnosticos": saida_motor["diagnosticos"],
+        "diagnosticos": diagnosticos_lista,
+        # Fatia 5A, item 5, Task 1 (regra 5 do contrato): mesmo comprimento
+        # e mesma ordem de "diagnosticos" — a chave pública de cada
+        # mensagem, publicada ao lado da prosa do motor. `None` (mensagem
+        # sem chave única) não é filtrado aqui: o builder do relatório é
+        # quem trata `null` como HARD FAIL (A5) — este wrapper só classifica.
+        "diagnosticos_chaves": [diagnosticos.classificar(m) for m in diagnosticos_lista],
         "coerencia_vetor": saida_motor["coerencia_vetor"],
         "convencao_temporal": saida_motor["convencao_temporal"],
     }
@@ -568,6 +762,14 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
     três também o usam a jusante. Fonte única de verdade: um só
     `_exigir_valor(saida, "EV/EBITDA0")` no módulo inteiro, dentro de
     `precificar_rampa`.
+
+    Fatia 5A, item 5, Task 1 (regra 5 do contrato): esta rota não emite
+    `diagnosticos` (ver acima) — `diagnosticos_chaves` aqui é, em vez
+    disso, a lista das chaves de aviso da rampa (`_AVISOS_RAMPA_ORDEM`)
+    que de fato estão PRESENTES em `saida_motor`, na ordem canônica
+    `aviso_colheita`, `aviso_delator`, `aviso_gp` — nunca passadas pelo
+    classificador de prefixo (`diagnosticos.classificar`): o nome da chave
+    de aviso já É a chave, não uma mensagem livre a classificar.
     """
     upside = valor["preco_acao"] / preco_valor - 1
 
@@ -578,12 +780,14 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
         "valor": valor,
         "algebra_da_escala": algebra,
         "vs_preco": {"upside": upside},
+        "diagnosticos_chaves": [c for c in _AVISOS_RAMPA_ORDEM if c in saida_motor],
     }
     # FIX 6e (revisão final): além das quatro chaves já PROMOVIDAS acima
     # (consumidas dentro de `valor`/`multiplos`, nunca top-level), o loop
     # também pula qualquer chave que já exista em `resultado` — ancora,
-    # premissas, multiplos, valor, algebra_da_escala, vs_preco. Nenhuma
-    # colisão existe hoje (o motor não emite nenhum desses nomes), mas sem
+    # premissas, multiplos, valor, algebra_da_escala, vs_preco e, desde a
+    # fatia 5A, `diagnosticos_chaves`. Nenhuma colisão existe hoje (o motor
+    # não emite nenhum desses nomes), mas sem
     # esta guarda uma chave nova do motor que algum dia colidisse com um
     # campo autorado sobrescreveria esse campo em silêncio — `chave in
     # resultado` fecha essa fronteira de forma estrutural, sem precisar
@@ -630,6 +834,19 @@ def avaliar(caso: dict) -> dict:
     metrica_saida["fonte"] = metrica["fonte"]
 
     resultado: dict = {
+        # Fatia 5A, item 5, Task 1 (regras 1/2 do contrato): `versao_contrato`
+        # e `origem` são as primeiras chaves, de propósito — provam a versão
+        # do contrato e a correspondência com o caso ANTES de qualquer outro
+        # campo, mesmo que a ordem de chaves não seja parte do contrato (JSON
+        # é um objeto, não uma lista).
+        "versao_contrato": VERSAO_CONTRATO,
+        "origem": {
+            "caso_sha256": _sha256_canonico(caso),
+            "metodologia": {
+                "nome": _MANIFEST_VENDOR["metodologia"],
+                "versao": _MANIFEST_VENDOR["versao"],
+            },
+        },
         "companhia": caso["companhia"],
         "ticker": caso.get("ticker"),
         "moeda": moeda,
@@ -737,6 +954,17 @@ def avaliar(caso: dict) -> dict:
     if "sotp" in caso:
         from sotp import compor_partes
         resultado["sotp"] = compor_partes(caso, caso["sotp"]["cenario"])
+
+    # Fatia 5A, item 5, Task 1 (regras 3/4 do contrato): `manchete` e
+    # `mercado_tela` fecham a lista de campos novos. Rodam por ÚLTIMO, de
+    # propósito — dependem de `resultado["cenarios"]` (sempre) e de
+    # `resultado["sotp"]` (quando o caso declara 'sotp'), os dois já
+    # montados nos blocos acima. `nd_efetivo` é o mesmo usado por
+    # `reversa`/`sensibilidades` logo acima: `ponte["nd_efetivo"]` nas
+    # rotas firm/rampa, `0.0` na equity (ver os três ramos de rota, no
+    # início desta função).
+    resultado["manchete"] = _montar_manchete(caso, resultado)
+    resultado["mercado_tela"] = _montar_mercado_tela(caso, resultado, nd_efetivo)
 
     return resultado
 

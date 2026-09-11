@@ -17,6 +17,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 ESPELHO = RAIZ / "skills" / "er-valuation" / "assets" / "motor_espelho.js"
 FIXTURE = RAIZ / "tests" / "fixtures" / "vetores_solver.json"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
+import diagnosticos  # noqa: E402
 from vetores_solver import avaliar_python  # noqa: E402
 
 TAU = 1e-12
@@ -180,9 +181,13 @@ def test_fixture_de_rampa_cobre_o_que_discrimina():
 CHAVES = json.loads((RAIZ / "skills" / "er-valuation" / "assets" / "diagnosticos_chaves.json")
                     .read_text(encoding="utf-8"))
 
-
-def _classificar(msg):
-    return [c["chave"] for c in CHAVES if msg.startswith(c["prefixo"])]
+# A classificação em si (mensagem -> chave, por prefixo) foi promovida para
+# `diagnosticos.classificar` (fatia 5A, item 5, Task 1, decisão A5) — uma
+# fonte só, também usada por `avaliar.py`/`sensibilidades.py` para publicar
+# `diagnosticos_chaves`/`diagnosticos_unicos_chaves` em `resultados.json`.
+# `CHAVES` (a lista bruta {chave, prefixo}) continua aqui: este arquivo
+# ainda precisa do `prefixo` de cada entrada para filtrar "alertas", algo
+# que `diagnosticos.CHAVES` (só os nomes) não carrega.
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
@@ -192,8 +197,8 @@ def test_toda_mensagem_do_motor_casa_com_exatamente_uma_chave():
     probs = _problemas({"diag"})
     assert probs, "fixture sem problemas de diagnostico"
     py = avaliar_python(probs)
-    ruins = [(p["id"], m[:80], _classificar(m)) for p, a in zip(probs, py)
-             for m in a["mensagens"] if len(_classificar(m)) != 1]
+    ruins = [(p["id"], m[:80]) for p, a in zip(probs, py)
+             for m in a["mensagens"] if diagnosticos.classificar(m) is None]
     assert not ruins, f"{len(ruins)} mensagens sem chave unica; primeiras 3: {ruins[:3]}"
 
 
@@ -205,7 +210,7 @@ def test_chaves_de_diagnostico_batem_em_ordem():
     py, js = avaliar_python(probs), _lado_js()
     fora = []
     for p, a in zip(probs, py):
-        esperado = [_classificar(m)[0] for m in a["mensagens"]]
+        esperado = [diagnosticos.classificar(m) for m in a["mensagens"]]
         if esperado != js[p["id"]]["chaves"]:
             fora.append((p["id"], p["args"]["rota"], esperado, js[p["id"]]["chaves"]))
     assert not fora, f"{len(fora)} divergencias; primeiras 2: {fora[:2]}"
@@ -214,7 +219,7 @@ def test_chaves_de_diagnostico_batem_em_ordem():
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
 def test_fixture_de_diagnostico_cobre_os_alertas():
     py = avaliar_python(_problemas({"diag"}))
-    disparadas = {_classificar(m)[0] for a in py for m in a["mensagens"]}
+    disparadas = {diagnosticos.classificar(m) for a in py for m in a["mensagens"]}
     alertas = {c["chave"] for c in CHAVES
                if c["prefixo"].startswith(("ALERTA", "SUB-ALERTA", "INCOERÊNCIA", "DOMÍNIO"))}
     assert alertas <= disparadas, f"alertas nunca exercitados: {sorted(alertas - disparadas)}"

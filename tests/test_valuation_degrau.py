@@ -237,6 +237,11 @@ def _com_mid_year() -> dict:
 def _m_faltando_para_um_cenario() -> dict:
     caso = _caso_ancora()
     caso["cenarios"]["bull"] = copy.deepcopy(caso["cenarios"]["base"])
+    # Fatia 5A, item 5: com mais de um cenário, 'cenario_base' passou a ser
+    # obrigatório (`caso._validar_cenario_base`) — declarado aqui para que a
+    # recusa que este caso deve produzir continue sendo a de 'degrau.m'
+    # (o que este teste testa), não a de 'cenario_base' ausente.
+    caso["cenario_base"] = "base"
     return caso  # 'degrau.m' só tem 'base' -- 'bull' fica sem entrada
 
 

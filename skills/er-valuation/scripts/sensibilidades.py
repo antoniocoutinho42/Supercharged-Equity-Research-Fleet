@@ -62,6 +62,7 @@ por `caso.py`; nenhuma função aqui reabre essa checagem.
 
 from typing import Any
 
+import diagnosticos
 from avaliar import precificar_equity, precificar_firm
 
 Caso = dict[str, Any]
@@ -160,6 +161,11 @@ def grade_1d(caso: Caso, nome_cenario: str, spec: dict, nd_efetivo: float) -> di
         "metrica_de_referencia": {"tipo": metrica["tipo"], "valor": metrica["valor"]},
         "unidade": _UNIDADE,
         "diagnosticos_unicos": diagnosticos_unicos,
+        # Fatia 5A, item 5, Task 1 (regra 5 do contrato): paralela a
+        # `diagnosticos_unicos` — mesma chave pública que cada cenário
+        # publica em `diagnosticos_chaves` (`diagnosticos.classificar`),
+        # aqui uma vez por mensagem ÚNICA da grade, não por célula.
+        "diagnosticos_unicos_chaves": [diagnosticos.classificar(m) for m in diagnosticos_unicos],
         "pontos": pontos,
     }
 
@@ -205,6 +211,9 @@ def grade_2d(caso: Caso, nome_cenario: str, spec: dict, nd_efetivo: float) -> di
         "metrica_de_referencia": {"tipo": metrica["tipo"], "valor": metrica["valor"]},
         "unidade": _UNIDADE,
         "diagnosticos_unicos": diagnosticos_unicos,
+        # Fatia 5A, item 5, Task 1 (regra 5 do contrato): mesma disciplina
+        # de `grade_1d`, ver ali.
+        "diagnosticos_unicos_chaves": [diagnosticos.classificar(m) for m in diagnosticos_unicos],
         "pontos_x": spec["pontos_x"],
         "pontos_y": spec["pontos_y"],
         "celulas": celulas,

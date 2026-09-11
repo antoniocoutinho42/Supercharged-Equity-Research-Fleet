@@ -360,7 +360,7 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     "companhia", "moeda", "data_analise", "rota", "acoes_diluidas", "cenarios",
     # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
     "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
-    "sensibilidades", "sotp", "degrau",
+    "sensibilidades", "sotp", "degrau", "cenario_base",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -456,9 +456,10 @@ def validar(caso: Caso) -> None:
     desconhecidas -> rota -> moeda -> métrica x rota -> ponte x rota ->
     delimitador x rota -> ações diluídas -> preço -> cada cenário (âncora,
     triângulo quando a rota tiver um, premissas obrigatórias, premissas
-    desconhecidas) -> blocos opcionais 'mercado', 'reversa',
-    'sensibilidades' e 'sotp', só quando presentes. Não modifica `caso`; não
-    preenche nada — só confirma ou recusa.
+    desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
+    -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades' e
+    'sotp', só quando presentes. Não modifica `caso`; não preenche nada —
+    só confirma ou recusa.
 
     Revisão final (FIX 3): doze formatos malformados achados por sondagem
     manual escapavam desta função como AttributeError/TypeError cru — o
@@ -520,6 +521,8 @@ def validar(caso: Caso) -> None:
         )
     for nome, cenario in cenarios.items():
         _validar_cenario(nome, cenario, rota)
+
+    _validar_cenario_base(caso, cenarios)
 
     _validar_degrau(caso, cenarios, rota)
 
@@ -1558,6 +1561,39 @@ def _validar_cenario_alvo(prefixo: str, cenario_nome: Any, cenarios: dict) -> No
             f"{cenario_nome!r}. Tem de ser um dos cenários declarados em "
             "'cenarios'."
         )
+
+
+def _validar_cenario_base(caso: Caso, cenarios: dict) -> None:
+    """Valida o campo opcional-condicional 'cenario_base' (A3, fatia 5A item 5).
+
+    Nenhum cenário é "o base" por convenção implícita — o wrapper (e, a
+    jusante, o relatório) precisa de UM cenário declarado como resposta
+    para montar a manchete e o múltiplo de tela quando o caso tem mais de
+    um cenário. Com um único cenário, a declaração é dispensável — aquele
+    cenário só pode ser o base, e exigir o campo seria burocracia sem
+    escolha real por trás —, mas se declarado mesmo assim, tem de apontar
+    para um cenário que de fato existe, com a mesma disciplina de
+    'reversa.cenario'/'sensibilidades.cenario'/'sotp.cenario'
+    (`_validar_cenario_alvo`, reaproveitada aqui sem variante).
+
+    Com mais de um cenário, 'cenario_base' é OBRIGATÓRIO: um caso
+    multi-cenário sem essa declaração não tem como o wrapper escolher qual
+    preço é "a resposta" sem inventar uma convenção — mesma disciplina de
+    'tv' (convenção terminal) e da âncora por cenário: decisão do
+    analista, nunca default de fábrica.
+    """
+    declarado = "cenario_base" in caso
+    if len(cenarios) > 1 and not declarado:
+        raise CasoInvalido(
+            "campo 'cenario_base' ausente com mais de um cenário declarado "
+            f"({sorted(cenarios)!r}): sem essa declaração não há como saber "
+            "qual cenário é 'a resposta' para a manchete e o múltiplo de "
+            "tela — decisão do analista, nunca convenção implícita ('base' "
+            "por hábito, por exemplo)."
+        )
+    if not declarado:
+        return
+    _validar_cenario_alvo("cenario_base", caso.get("cenario_base"), cenarios)
 
 
 def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:

@@ -123,9 +123,30 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     nd_efetivo`, `valor = EV_mercado ÷ métrica-base`; `base` é `"ebitda"`
     ou `"nopat"` conforme o tipo declarado em `metrica_base`.
 
+    Rota rampa (fatia 5A, item 5, Task 1): MESMO lado EV do firm —
+    `EV_mercado = market_cap + nd_efetivo`, `valor = EV_mercado ÷
+    métrica-base`; `base` é sempre `"ebitda0"` (a única métrica que a rota
+    aceita — `caso.METRICAS_POR_ROTA["rampa"] == {"EBITDA0"}`, nunca uma
+    escolha a fazer aqui). Corrige um bug latente: até esta fatia, a rota
+    rampa caía no `else` (equity) abaixo — `valor = market_cap ÷ ebitda0`,
+    sem somar `nd_efetivo`, um número plausível mas ERRADO (P/L sobre
+    EBITDA0 em vez de EV/EBITDA0). Nunca foi alcançado por um caso real
+    porque `caso._validar_reversa` recusa 'reversa' na rota 'rampa' no
+    gate — mas a fatia 5A passa a publicar este múltiplo SEMPRE, como
+    `mercado_tela` em `resultados.json` (não mais só dentro do bloco
+    `reversa`), e publicar sempre transformaria esse bug em número errado
+    na tela do analista.
+
     Rota equity: `valor = market_cap ÷ lucro` (a própria métrica-base, que
     `caso.py` só aceita como `"LL"` nesta rota — não há ponte de dívida do
     lado equity); `base` é `"pl"`.
+
+    Rota desconhecida levanta `ValueError` — nunca alcançável por um caso
+    que passou por `caso.validar` (só firm/equity/rampa existem no
+    vocabulário de rota), mas esta função não presume isso: recusar por
+    nome, mesmo aqui, é mais seguro que deixar uma quarta rota cair no
+    ramo errado em silêncio, exatamente o defeito que esta mesma correção
+    fecha para a rampa.
 
     `algebra` é uma frase com os números da conta, para auditoria — não um
     resumo, os valores literais que entraram e saíram.
@@ -153,13 +174,29 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
             f"= {ev_mercado}; alvo = EV_mercado {ev_mercado} / "
             f"{metrica['tipo']} {metrica_valor} = {valor}"
         )
-    else:  # equity
+    elif rota == "rampa":
+        ev_mercado = market_cap + nd_efetivo
+        valor = ev_mercado / metrica_valor
+        base = "ebitda0"
+        algebra = (
+            f"market_cap = preco {preco} x acoes {acoes} = {market_cap}; "
+            f"EV_mercado = market_cap {market_cap} + nd_efetivo {nd_efetivo} "
+            f"= {ev_mercado}; alvo = EV_mercado {ev_mercado} / "
+            f"{metrica['tipo']} {metrica_valor} = {valor}"
+        )
+    elif rota == "equity":
         valor = market_cap / metrica_valor
         base = "pl"
         algebra = (
             f"market_cap = preco {preco} x acoes {acoes} = {market_cap}; "
             f"alvo = market_cap {market_cap} / {metrica['tipo']} "
             f"{metrica_valor} = {valor}"
+        )
+    else:
+        raise ValueError(
+            f"alvo_de_mercado: rota desconhecida {rota!r} — só 'firm', "
+            "'rampa' e 'equity' têm alvo de múltiplo de mercado definido "
+            "nesta fatia."
         )
 
     return {"valor": valor, "algebra": algebra, "base": base}

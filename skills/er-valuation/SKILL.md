@@ -79,6 +79,7 @@ normaliza saída.
 | `scripts/reversa.py` | Resolve o menu de reconciliação por eixo e o beta implícito |
 | `scripts/sensibilidades.py` | Constrói as grades 1D/2D célula a célula no motor |
 | `scripts/sotp.py` | Soma o EV das partes de uma SOTP e cruza a ponte única no topo |
+| `scripts/diagnosticos.py` | Classifica mensagem do motor -> chave pública de diagnóstico |
 | `scripts/avaliar.py` | Orquestra cenários × rota e escreve o `resultados.json` |
 
 ## Como rodar
@@ -128,8 +129,44 @@ teto padrão deliberadamente quando a rodada precisa de mais células, ou
 reduz — um limite abaixo do padrão também é uma escolha válida do
 analista, mais restritiva que o padrão de fábrica.
 
+Campo opcional-condicional `cenario_base`: nome de um cenário declarado em
+`cenarios`. Obrigatório quando o caso declara mais de um cenário — sem essa
+declaração não há como saber qual preço é "a resposta" (a `manchete`, ver
+abaixo); implícito (dispensável) quando há um só cenário.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
+
+## Contrato de saída (`resultados/1`)
+
+Além dos campos que `avaliar()` sempre produziu (`cenarios`, `ponte`, e os
+blocos aditivos `reversa`/`sensibilidades`/`sotp`/`degrau`), `resultados.json`
+publica, como contrato versionado, o que o relatório (`er-relatorio`) precisa
+para exibir sem reimplementar metodologia — emenda E3 do desenho
+(`docs/desenho-arquitetura-v4.md` §15: o relatório nunca duplica cálculo ou
+convenção que já mora aqui):
+
+- `versao_contrato` — `"resultados/1"` nesta fatia; acréscimos compatíveis
+  não mudam o literal, mudança incompatível vira `"resultados/2"`.
+- `origem.caso_sha256` — sha256 do JSON canônico do caso **como carregado**
+  (`sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False`, utf-8) —
+  prova de correspondência com o `caso.json` de origem, sem rodar nada.
+  `origem.metodologia` — nome e versão, lidos de
+  `skills/er-multiplos-justos/manifest_vendor.json`.
+- `manchete` — qual preço é "a resposta": o do SOTP quando o caso declara
+  `sotp`; senão o do cenário-base (`cenario_base`), com o múltiplo que o
+  wrapper já devolve para aquele preço.
+- `mercado_tela` — o múltiplo de mercado (tela), sempre publicado — antes só
+  existia dentro do bloco opcional `reversa`. Pareado com o múltiplo da
+  manchete pela mesma `base`.
+- `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
+  grade de sensibilidade) — a chave pública de cada mensagem do motor
+  (`diagnosticos.classificar`), paralela a `diagnosticos`/
+  `diagnosticos_unicos`; na rota rampa, que não emite `diagnosticos`, as
+  chaves de aviso presentes (`aviso_colheita`, `aviso_delator`, `aviso_gp`).
+
+Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
+`tests/fixtures/caso_*.json`.
 
 ## Escopo desta fatia
 
