@@ -1,0 +1,12 @@
+{
+  "qc": {
+    "resultados_nao_correspondem_ao_caso": "Os resultados não correspondem ao caso desta entrega: o hash canônico do caso ({hash_caso}) diverge de resultados.origem.caso_sha256 ({hash_resultados}). Rode novamente o valuation sobre este caso antes de montar a entrega.",
+    "placeholder_nao_resolvido": "Placeholder não resolvido em '{onde}': '{token}' — {razao}",
+    "numero_sem_proveniencia": "Número sem proveniência em '{onde}': todo dígito na prosa precisa vir de um placeholder de resultados ou caso, ou estar marcado como número livre — nenhum dígito solto é permitido fora dessas duas formas.",
+    "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': a mensagem do motor não corresponde a exatamente uma chave do vocabulário de diagnósticos — a correção é da camada de integração, nunca do relatório.",
+    "divergencia_de_base_degrau": "Divergência de base de {valor}% no cenário '{cenario}' (acima do limiar de {limiar}% do catálogo): parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau — declare isso ao leitor."
+  },
+  "moeda_simbolo": {
+    "BRL": "R$"
+  }
+}
