@@ -1243,3 +1243,31 @@ def test_parte_com_acoes_diluidas_recusa():
     c["sotp"]["partes"][0]["acoes_diluidas"] = 10.0
     with pytest.raises(CasoInvalido, match="acoes_diluidas"):
         validar(c)
+
+
+# --------------------------------------------------------------------------
+# Correção do rf no wrapper (f2844f3): 'mercado.rf' agora chega ao motor
+# mesmo SEM 'reversa' — alimenta a âncora macro do gp (Damodaran). Antes
+# daquela correção o rf sem reversa era inerte, e o gate só o validava com
+# 'reversa' presente. Agora um rf inválido vira alerta falso em silêncio:
+# 0.12 digitado como fração entraria no motor como 0,12% e a guarda
+# acusaria todo gp acima disso. Mesma régua do FIX 4 sempre que 'rf' for
+# declarado; 'erp' continua exigido só com reversa (sem ela não tem uso).
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("rf", [0.12, "12%", float("nan"), float("inf")])
+def test_mercado_rf_sem_reversa_e_validado_porque_agora_chega_ao_motor(rf):
+    c = _firm()
+    c["mercado"] = {"rf": rf}
+    with pytest.raises(CasoInvalido, match=r"mercado\.rf"):
+        validar(c)
+
+
+@pytest.mark.parametrize("rf", [12.0, 1.0, 0, -0.5, None])
+def test_mercado_rf_valido_ou_ausente_sem_reversa_passa(rf):
+    """Guarda contra recusar demais: pontos percentuais, 0, 1, rf negativo
+    (existe em moedas com juro nominal abaixo de zero) e rf nulo — que o
+    wrapper trata como ausente — continuam aceitos."""
+    c = _firm()
+    c["mercado"] = {"rf": rf}
+    validar(c)  # nao levanta

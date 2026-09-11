@@ -986,6 +986,31 @@ def _validar_mercado(caso: Caso, reversa_presente: bool) -> None:
                     "sinal do beta em silêncio (erp < 0)."
                 )
 
+    # Correção do rf no wrapper (f2844f3): 'mercado.rf' passou a chegar ao
+    # motor mesmo sem 'reversa' — é o que alimenta a âncora macro do gp
+    # (Damodaran). Antes daquela correção o rf sem reversa era inerte e podia
+    # passar sem validação; agora um rf inválido vira alerta falso em
+    # silêncio (0.12 digitado como fração entraria como 0,12%). Mesma régua
+    # do ramo com reversa, aplicada sempre que 'rf' é declarado. 'erp' fica
+    # como está: sem reversa ele não tem consumidor. 'rf' nulo é ausência —
+    # o wrapper não o repassa (motor.argv_para pula None).
+    rf = mercado.get("rf")
+    if not reversa_presente and rf is not None:
+        if not _numero_valido(rf) or not _finito(rf):
+            raise CasoInvalido(
+                f"'mercado.rf' inválido: {rf!r}. Declarado, ele vai ao motor "
+                "e ancora o gp perpétuo (Damodaran) — precisa ser um número "
+                "finito, em pontos percentuais (12.0 significa 12%)."
+            )
+        if 0 < rf < 1:
+            raise CasoInvalido(
+                f"'mercado.rf' parece fração, não ponto percentual: {rf!r}. "
+                "Taxas de mercado neste caso são declaradas em pontos "
+                "percentuais (12.0 significa 12%) — 0.12 entraria no motor "
+                "como 0,12% e a âncora macro acusaria qualquer gp acima "
+                "disso, sem aviso nenhum."
+            )
+
     beta_observado = mercado.get("beta_observado")
     if beta_observado is not None:
         invalido = (
