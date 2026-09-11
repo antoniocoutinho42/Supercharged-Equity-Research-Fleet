@@ -407,6 +407,194 @@ def test_null_em_diagnosticos_chaves_falha(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# B9 (achado S1 generalizado): presença e paralelismo de `diagnosticos_chaves`
+# em TODO `diagnosticos` de `resultados.json`, não só `cenarios`/grades.
+# --------------------------------------------------------------------------
+
+def test_sotp_sem_diagnosticos_chaves_falha(tmp_path):
+    """VERIFICADO pela revisão (achado S1): partes de SOTP publicavam
+    'diagnosticos' sem 'diagnosticos_chaves' e o QC não reclamava (só
+    olhava `null` DENTRO de uma lista que já existisse). 'Industrial' é a
+    primeira parte de `caso_sotp_segmento.json`, rota firm (publica
+    'diagnosticos')."""
+    entrega_dict = apoio.montar_entrega("caso_sotp_segmento.json")
+    parte = entrega_dict["resultados"]["sotp"]["partes"][0]
+    assert isinstance(parte.get("diagnosticos"), list) and parte["diagnosticos"]
+    del parte["diagnosticos_chaves"]
+    raiz = tmp_path / "sotp_sem_chaves"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "diagnostico_sem_chave")
+    assert achado["onde"] == "resultados.sotp.partes.0.diagnosticos_chaves"
+
+
+def test_sotp_com_diagnosticos_chaves_mais_curta_falha(tmp_path):
+    """Paralelismo: as duas listas existem, mas com comprimentos diferentes
+    -- o achado antigo (só `null` dentro de uma lista já existente) também
+    não cobria este caso."""
+    entrega_dict = apoio.montar_entrega("caso_sotp_segmento.json")
+    parte = entrega_dict["resultados"]["sotp"]["partes"][0]
+    assert len(parte["diagnosticos_chaves"]) == len(parte["diagnosticos"]) >= 2
+    parte["diagnosticos_chaves"].pop()
+    raiz = tmp_path / "sotp_chaves_curta"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    codigos = codigos_de(ler_qc(raiz))
+    assert "diagnostico_sem_chave" in codigos
+
+
+def test_reversa_teto_do_crescimento_sem_diagnosticos_chaves_falha(tmp_path):
+    """`reversa.teto_do_crescimento_gratuito` (A3) é o segundo lugar, fora de
+    `cenarios`/SOTP, onde `diagnosticos` aparece -- não estava na lista de
+    achados da revisão (só verificou SOTP), mas a checagem genérica de B9
+    (varredura recursiva) cobre qualquer lugar, sem precisar conhecer este
+    especificamente. Sintetizado aqui (o gatilho real -- rentabilidade ou
+    crescimento sem raiz -- não dispara em nenhuma fixture existente; a
+    forma é a mesma que `reversa.reverter` de fato produz, ver
+    `skills/er-valuation/scripts/reversa.py`)."""
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json")
+    entrega_dict["resultados"]["reversa"]["teto_do_crescimento_gratuito"] = {
+        "multiplo": 6.5,
+        "premissas_alteradas": {"tv": "gordon"},
+        "leitura": "teto sintético para teste",
+        "diagnosticos": ["mensagem sintética 1", "mensagem sintética 2"],
+        "diagnosticos_chaves": ["firm_rir"],  # comprimento errado de propósito
+    }
+    raiz = tmp_path / "reversa_teto_chaves_curta"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "diagnostico_sem_chave")
+    assert achado["onde"] == "resultados.reversa.teto_do_crescimento_gratuito.diagnosticos_chaves"
+
+
+# --------------------------------------------------------------------------
+# B10 (achado S2): degrau sem 'divergencia_de_base_%' numérico é HARD FAIL,
+# não mais um `continue` silencioso.
+# --------------------------------------------------------------------------
+
+def test_degrau_sem_divergencia_de_base_falha(tmp_path):
+    entrega_dict = apoio.montar_entrega("caso_degrau.json")
+    del entrega_dict["resultados"]["cenarios"]["base"]["degrau"]["divergencia_de_base_%"]
+    raiz = tmp_path / "degrau_sem_campo"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "degrau_sem_divergencia_de_base")
+    assert achado["nivel"] == "HARD_FAIL"
+    assert achado["params"]["cenario"] == "base"
+
+
+# --------------------------------------------------------------------------
+# B11 (achado S3): formato do placeholder tem de casar com a unidade.
+# --------------------------------------------------------------------------
+
+def test_formato_pct_em_premissa_pp_falha(tmp_path):
+    """VERIFICADO pela revisão: '{{caso:cenarios.base.premissas.wacc|pct1}}'
+    multiplicava por 100 um valor já em pontos percentuais -- "1.000,0%"
+    para um WACC de 10 (dez pontos percentuais), rc 0."""
+    texto = "WACC de {{caso:cenarios.base.premissas.wacc|pct1}} no cenário-base."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "formato_pct_em_pp"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "formato_incompativel_com_unidade")
+    assert achado["params"]["unidade"] == "pp"
+    assert achado["params"]["formato"] == "pct1"
+
+
+def test_formato_pp_em_premissa_pp_emite(tmp_path):
+    """Controle: o formato correto ('pp1') para a mesma premissa emite
+    normalmente -- a checagem não é falso positivo no caminho feliz."""
+    texto = "WACC de {{caso:cenarios.base.premissas.wacc|pp1}} no cenário-base."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "formato_pp_ok"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert ler_qc(raiz)["achados"] == []
+
+
+def test_formato_num_em_resultados_percentual_falha(tmp_path):
+    """Heurística pelo nome do caminho de `resultados`: um caminho que
+    termina em '_%' só aceita formato 'pp*'."""
+    texto = ("Divergência de base de "
+             "{{resultados:cenarios.base.degrau.divergencia_de_base_%|num1}} no degrau.")
+    entrega_dict = apoio.montar_entrega("caso_degrau.json", texto_conclusao=texto)
+    raiz = tmp_path / "formato_num_em_percentual"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "formato_incompativel_com_unidade")
+    assert achado["params"]["unidade"] == "pp"
+
+
+# --------------------------------------------------------------------------
+# B12 (achado S4): múltiplo justo e múltiplo de tela em bases diferentes é
+# contrato quebrado -- HARD FAIL, nunca lado a lado.
+# --------------------------------------------------------------------------
+
+def test_multiplos_com_bases_diferentes_falha(tmp_path):
+    """VERIFICADO pela revisão: um `mercado_tela` em base 'pl' ao lado de um
+    múltiplo justo em base 'ebitda' renderizava os dois lado a lado, rc 0."""
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json")
+    assert entrega_dict["resultados"]["manchete"]["multiplo"]["base"] == "ebitda"
+    entrega_dict["resultados"]["mercado_tela"]["base"] = "pl"
+    raiz = tmp_path / "bases_divergentes"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "multiplos_com_bases_diferentes")
+    assert achado["params"]["base_manchete"] == "ebitda"
+    assert achado["params"]["base_mercado_tela"] == "pl"
+
+
+# --------------------------------------------------------------------------
+# B14 (não-material): moeda sem símbolo no dicionário usa o código ISO como
+# prefixo, nunca um traceback cru.
+# --------------------------------------------------------------------------
+
+def test_moeda_sem_simbolo_usa_codigo_iso_sem_traceback(tmp_path):
+    """VERIFICADO pela revisão: uma `caso.moeda` não-BRL sem `|moeda` na
+    prosa (nada para `resolver()` capturar o erro) derrubava `render.compor`
+    com um `FormatoInvalido` não tratado -- rc 1, traceback cru no stderr,
+    em vez da recusa nomeada que todo o resto do relatório garante."""
+    def _usar_dolar(caso):
+        caso["moeda"] = "USD-nominal"
+
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", mutar_caso=_usar_dolar)
+    raiz = tmp_path / "moeda_sem_simbolo"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    html = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    assert "USD " in html
+
+
+# --------------------------------------------------------------------------
 # CLI: REQUIRED DISCLOSURE (código 0, mas visível em qc.json).
 # --------------------------------------------------------------------------
 

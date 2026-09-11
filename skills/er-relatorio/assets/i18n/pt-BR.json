@@ -3,10 +3,13 @@
     "resultados_nao_correspondem_ao_caso": "Os resultados não correspondem ao caso desta entrega: o hash canônico do caso ({hash_caso}) diverge de resultados.origem.caso_sha256 ({hash_resultados}). Rode novamente o valuation sobre este caso antes de montar a entrega.",
     "placeholder_nao_resolvido": "Placeholder não resolvido em '{onde}': '{token}' — {razao}",
     "numero_sem_proveniencia": "Número sem proveniência em '{onde}': todo dígito na prosa precisa vir de um placeholder de resultados ou caso, ou estar marcado como número livre — nenhum dígito solto é permitido fora dessas duas formas.",
-    "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': a mensagem do motor não corresponde a exatamente uma chave do vocabulário de diagnósticos — a correção é da camada de integração, nunca do relatório.",
+    "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': {razao} — a correção é da camada de integração, nunca do relatório.",
     "divergencia_de_base_degrau": "Divergência de base de {valor_fmt} no cenário '{cenario}' (acima do limiar de {limiar_fmt} do catálogo): {texto}",
     "relatorio_nao_autocontido": "Referência externa detectada em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — toda referência de src, href, srcset, data ou url()/@import tem de ser um '#fragmento' ou uma URI 'data:', nunca um recurso carregado de fora.",
-    "placeholder_malformado": "Placeholder malformado em '{onde}': '{trecho}' não é um placeholder reconhecido — fonte fora do vocabulário (resultados/caso/livre), maiúscula, sem '|formato', ou chaves duplas partidas. Use a sintaxe 'resultados:<caminho>|<formato>', 'caso:<caminho>|<formato>' ou 'livre:<texto>', sempre entre chaves duplas."
+    "placeholder_malformado": "Placeholder malformado em '{onde}': '{trecho}' não é um placeholder reconhecido — fonte fora do vocabulário (resultados/caso/livre), maiúscula, sem '|formato', ou chaves duplas partidas. Use a sintaxe 'resultados:<caminho>|<formato>', 'caso:<caminho>|<formato>' ou 'livre:<texto>', sempre entre chaves duplas.",
+    "degrau_sem_divergencia_de_base": "Cenário '{cenario}' tem degrau sem 'divergencia_de_base_%' numérico em '{onde}': o contrato exige esse campo ao lado de todo degrau — a correção é da camada de integração, nunca do relatório.",
+    "formato_incompativel_com_unidade": "Formato incompatível com a unidade em '{onde}': o placeholder para '{caminho}' usa o formato '{formato}', mas a unidade declarada ('{unidade}') exige outro formato.",
+    "multiplos_com_bases_diferentes": "Múltiplo justo e múltiplo de tela em bases diferentes em '{onde}': manchete.multiplo usa a base '{base_manchete}' e mercado_tela usa '{base_mercado_tela}' — os dois têm de comparar a mesma base para o par fazer sentido lado a lado."
   },
   "moeda_simbolo": {
     "BRL": "R$"

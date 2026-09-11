@@ -90,15 +90,33 @@
   }
   .disclosures {
     background: var(--cor-disclosure-fundo);
-    border-left: 4px solid var(--cor-disclosure-borda);
-    padding: 4px 16px;
+    border: 1px solid var(--cor-disclosure-borda);
+    border-radius: 6px;
+    padding: 14px 18px 18px;
+  }
+  .disclosures h2 {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cor-disclosure-borda);
+    border-bottom: none;
+    margin: 0 0 10px;
+    padding-bottom: 0;
   }
   .disclosures ul {
     padding-left: 20px;
+    margin: 0;
   }
   .disclosures-vazio {
     background: var(--cor-acento-suave);
-    border-left-color: var(--cor-borda);
+    border-color: var(--cor-borda);
+  }
+  .disclosures-vazio h2 {
+    color: var(--cor-texto-suave);
+  }
+  .disclosures-vazio p {
+    margin: 0;
   }
   .valuation-cabecalho {
     display: flex;

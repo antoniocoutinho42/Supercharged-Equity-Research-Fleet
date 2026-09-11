@@ -165,8 +165,11 @@ def test_nenhum_asset_do_relatorio_espelha_um_asset_da_integracao_ou_do_vendor()
 def test_scripts_do_relatorio_existem():
     """Guarda-corpo: se o diretório estiver vazio ou os testes acima
     varrerem zero arquivo, eles passam vacuamente e escondem uma regressão
-    grave (skill inteira apagada). Falha alto e nomeado nesse caso."""
+    grave (skill inteira apagada). Falha alto e nomeado nesse caso.
+
+    B16: `render.py` (Task 4) estava ausente desta lista -- a checagem
+    passava mesmo se o módulo das três abas fosse apagado."""
     arquivos = sorted(p.name for p in SCRIPTS.glob("*.py"))
-    esperados = {"entrega.py", "placeholders.py", "qc.py", "builder.py"}
+    esperados = {"entrega.py", "placeholders.py", "qc.py", "builder.py", "render.py"}
     faltando = esperados - set(arquivos)
     assert not faltando, f"scripts esperados ausentes em {SCRIPTS}: {faltando}"
