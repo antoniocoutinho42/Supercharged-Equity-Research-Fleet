@@ -9,7 +9,12 @@
     "placeholder_malformado": "Placeholder malformado em '{onde}': '{trecho}' não é um placeholder reconhecido — fonte fora do vocabulário (resultados/caso/livre), maiúscula, sem '|formato', ou chaves duplas partidas. Use a sintaxe 'resultados:<caminho>|<formato>', 'caso:<caminho>|<formato>' ou 'livre:<texto>', sempre entre chaves duplas.",
     "degrau_sem_divergencia_de_base": "Cenário '{cenario}' tem degrau sem 'divergencia_de_base_%' numérico em '{onde}': o contrato exige esse campo ao lado de todo degrau — a correção é da camada de integração, nunca do relatório.",
     "formato_incompativel_com_unidade": "Formato incompatível com a unidade em '{onde}': o placeholder para '{caminho}' usa o formato '{formato}', mas a unidade declarada ('{unidade}') exige outro formato.",
-    "multiplos_com_bases_diferentes": "Múltiplo justo e múltiplo de tela em bases diferentes em '{onde}': manchete.multiplo usa a base '{base_manchete}' e mercado_tela usa '{base_mercado_tela}' — os dois têm de comparar a mesma base para o par fazer sentido lado a lado."
+    "multiplos_com_bases_diferentes": "Múltiplo justo e múltiplo de tela em bases diferentes em '{onde}': manchete.multiplo usa a base '{base_manchete}' e mercado_tela usa '{base_mercado_tela}' — os dois têm de comparar a mesma base para o par fazer sentido lado a lado.",
+    "serie_nao_rastreavel": "Série não rastreável em '{onde}' (exhibit '{exhibit}', série {serie}): '{referencia}' não resolve — {razao} Um gráfico com dado não rastreável não pode ser emitido.",
+    "formula_invalida": "Fórmula inválida em '{onde}' (exhibit '{exhibit}', série {serie}): '{formula}' — {razao}",
+    "overlay_nao_resolvido": "Overlay não resolvido em '{onde}' (exhibit '{exhibit}', overlay {overlay}): '{chave}' não resolve — {razao}",
+    "serie_de_tamanho_incompativel": "Série de tamanho incompatível em '{onde}' (exhibit '{exhibit}', série {serie}): {tamanho_serie} ponto(s) contra {tamanho_x} ponto(s) do eixo x do dataset.",
+    "serie_curta_sem_nota_janela": "Série curta sem nota de janela em '{onde}' (exhibit '{exhibit}'): {tamanho} ponto(s) — menos de 10, sem 'nota_janela' explicando o recorte."
   },
   "moeda_simbolo": {
     "BRL": "R$"

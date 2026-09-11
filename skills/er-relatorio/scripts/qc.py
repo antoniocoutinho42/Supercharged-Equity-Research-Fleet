@@ -29,12 +29,23 @@ dicionário com os `params` substituídos é responsabilidade de quem monta
 `qc.json` (`builder.py`): só ali existe o idioma já resolvido de forma
 determinística, e a mesma lista de achados serve tanto para decidir o exit
 code quanto para o disclosure visível no HTML (Task 4).
+
+Fatia 5B, item 5, Task 1 (rastreabilidade de exhibits, G1-G4/G8):
+`serie_nao_rastreavel`, `formula_invalida`, `overlay_nao_resolvido` e
+`serie_de_tamanho_incompativel` (HARD FAIL) mais `serie_curta_sem_
+nota_janela` (QUALITY WARNING) -- ver `_achados_exhibits`. A resolução em
+si (fonte/fórmula/chave -> número) mora em `exhibits.py`
+(`resolver_serie`/`resolver_overlay`), reaproveitada tanto aqui (que
+captura `exhibits.SerieInvalida` por item, acumulando todo achado da
+entrega inteira) quanto por `exhibits.resolver` (caminho de produção da
+Task 2/3, que deixa a exceção propagar).
 """
 
 import re
 from typing import NamedTuple
 
 import entrega as contrato_entrega
+import exhibits
 import placeholders
 
 NIVEIS: tuple[str, ...] = ("HARD_FAIL", "REQUIRED_DISCLOSURE", "QUALITY_WARNING")
@@ -459,6 +470,60 @@ def _achado_bases_divergentes(resultados: dict) -> Achado | None:
     })
 
 
+def _achados_exhibits(entrega: dict) -> list[Achado]:
+    """As quatro regras HARD FAIL de rastreabilidade de exhibits (5B/G1-G4)
+    mais a QUALITY WARNING de série curta (5B, "Regras de QC") -- uma
+    passada por TODOS os exhibits/séries/overlays declarados em
+    `analise.exhibits`, acumulando todo achado encontrado (nunca para no
+    primeiro problema -- mesma disciplina de `_achados_diagnostico_sem_
+    chave`). A resolução propriamente dita (fonte/fórmula/chave -> número)
+    é feita por `exhibits.resolver_serie`/`exhibits.resolver_overlay`; este
+    módulo só captura `exhibits.SerieInvalida` por item e nomeia o achado.
+
+    `serie_de_tamanho_incompativel` (dentro de `resolver_serie`) e
+    `serie_curta_sem_nota_janela` (aqui, sobre os tamanhos das séries que
+    RESOLVERAM com sucesso) são as duas regras que olham o COMPRIMENTO da
+    série -- a segunda nunca impede emitir (QUALITY WARNING), a primeira
+    sempre impede (HARD FAIL).
+    """
+    achados: list[Achado] = []
+    exhibits_decl = ((entrega.get("analise") or {}).get("exhibits")) or []
+    dados = entrega.get("dados") or {}
+    resultados = entrega.get("resultados") or {}
+    caso = entrega.get("caso") or {}
+
+    for exhibit in exhibits_decl:
+        tamanhos_resolvidos: list[int] = []
+
+        for indice, serie in enumerate(exhibit.get("series", [])):
+            try:
+                valores, _origem = exhibits.resolver_serie(exhibit, indice, serie, dados, resultados)
+            except exhibits.SerieInvalida as erro:
+                if erro.codigo == "serie_nao_rastreavel":
+                    achados.append(Achado("HARD_FAIL", "serie_nao_rastreavel", erro.onde, erro.params))
+                elif erro.codigo == "formula_invalida":
+                    achados.append(Achado("HARD_FAIL", "formula_invalida", erro.onde, erro.params))
+                elif erro.codigo == "serie_de_tamanho_incompativel":
+                    achados.append(Achado("HARD_FAIL", "serie_de_tamanho_incompativel", erro.onde, erro.params))
+                continue
+            if isinstance(valores, list):
+                tamanhos_resolvidos.append(len(valores))
+
+        for indice, overlay in enumerate(exhibit.get("overlays") or []):
+            try:
+                exhibits.resolver_overlay(exhibit, indice, overlay, resultados, caso)
+            except exhibits.SerieInvalida as erro:
+                achados.append(Achado("HARD_FAIL", "overlay_nao_resolvido", erro.onde, erro.params))
+
+        if tamanhos_resolvidos and min(tamanhos_resolvidos) < 10 and not exhibit.get("nota_janela"):
+            exhibit_id = exhibit["id"]
+            achados.append(Achado("QUALITY_WARNING", "serie_curta_sem_nota_janela",
+                                  f"analise.exhibits.{exhibit_id}",
+                                  {"exhibit": exhibit_id, "tamanho": min(tamanhos_resolvidos)}))
+
+    return achados
+
+
 def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Achado]:
     """Roda as regras de QC; devolve os achados em ordem determinística
     (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
@@ -477,6 +542,7 @@ def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Acha
         achados.append(achado_hash)
 
     achados.extend(_achados_prosa(entrega, catalogo))
+    achados.extend(_achados_exhibits(entrega))
 
     resultados = entrega.get("resultados") or {}
     achados.extend(_achados_diagnostico_sem_chave(resultados))

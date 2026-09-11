@@ -31,7 +31,9 @@ TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}
 def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     ticker: str | None = None, idioma: str = IDIOMA_PADRAO,
                     texto_conclusao: str | None = None,
-                    mutar_caso: Callable[[dict], None] | None = None) -> dict:
+                    mutar_caso: Callable[[dict], None] | None = None,
+                    dados: dict | None = None,
+                    exhibits: list | None = None) -> dict:
     """Monta um `entrega.json` válido (dict) a partir de uma fixture de caso.
 
     Roda `avaliar()` pelo caminho de produção — o `resultados` embutido
@@ -51,13 +53,22 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     `caso_sha256` continua batendo; nenhum teste precisa forjar
     `resultados` à mão para exercer um caso que o gate aceita mas que usa
     vocabulário fora do canônico.
+
+    `dados`/`exhibits` (fatia 5B, item 5, Task 1, G1/G3): passados só pelos
+    testes que exercem a gramática de gráfico -- por padrão (`None`),
+    `dados` fica DE FORA da entrega (é o único campo de topo opcional, ver
+    `entrega.CHAVES_DE_TOPO_OBRIGATORIAS`) e `exhibits` vira `[]` (campo
+    obrigatório em `analise`, mas uma análise sem gráfico nenhum é válida —
+    G10 do desenho). Isto preserva TODO teste existente que chama
+    `montar_entrega` sem os dois argumentos novos: a entrega continua
+    idêntica à de antes desta fatia, byte a byte.
     """
     caso = carregar_caso(FIXTURES / nome_fixture)
     if mutar_caso is not None:
         mutar_caso(caso)
     resultados = avaliar(caso)
 
-    return {
+    entrega_dict = {
         "versao_contrato": "entrega/1",
         "execucao": {
             "id": id_execucao,
@@ -66,10 +77,16 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         },
         "caso": caso,
         "resultados": resultados,
-        "analise": {"conclusao": {"texto": texto_conclusao or TEXTO_CONCLUSAO_PADRAO}},
+        "analise": {
+            "conclusao": {"texto": texto_conclusao or TEXTO_CONCLUSAO_PADRAO},
+            "exhibits": exhibits if exhibits is not None else [],
+        },
         "ledger": [],
         "ficha_tecnica": {},
     }
+    if dados is not None:
+        entrega_dict["dados"] = dados
+    return entrega_dict
 
 
 def escrever_raiz(raiz: Path, entrega: dict) -> Path:

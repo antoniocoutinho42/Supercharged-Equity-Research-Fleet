@@ -1,4 +1,6 @@
-"""Contrato de `entrega.json` (fatia 5A, item 5, Task 3, decisão A1).
+"""Contrato de `entrega.json` (fatia 5A, item 5, Task 3, decisão A1;
+estendido na fatia 5B, item 5, Task 1, G1/G3: `dados` no topo, `exhibits`
+em `analise`).
 
 Este módulo NÃO importa nada de `er-valuation` nem do vendor (E3,
 `docs/desenho-arquitetura-v4.md` §15) — `caso` e `resultados` chegam aqui
@@ -11,6 +13,15 @@ aqui seria exatamente a duplicação que a emenda proíbe. `sha256_canonico`
 canonicalização que `avaliar.py` já usa (A2) — o preço de o relatório
 provar correspondência com `resultados.origem.caso_sha256` sem nunca
 importar o módulo que o calculou primeiro.
+
+`dados`/`exhibits`, ao contrário de `caso`/`resultados`, são vocabulário
+PRÓPRIO deste contrato (G1/G3 do plano da 5B) — o conteúdo profundo deles é
+validado por `exhibits.py` (`validar_dados`/`validar_exhibits`), nunca
+duplicado aqui; este módulo só chama e relança `exhibits.
+ContratoDeExhibitInvalido` como `EntregaInvalida`, para que a recusa
+continue tendo a mesma forma (código 1) que todo o resto do contrato. Ver
+o docstring de `exhibits.py` para o porquê de a dependência ir só nesta
+direção (`entrega.py` -> `exhibits.py`, nunca de volta).
 
 `carregar` é o único ponto de entrada deste módulo: lê `<raiz>/entrega.json`,
 confirma que o arquivo resolve DENTRO da raiz de execução (regra
@@ -25,6 +36,8 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+
+import exhibits
 
 Entrega = dict[str, Any]
 
@@ -46,17 +59,26 @@ class EntregaInvalida(Exception):
 # publicado por `er-valuation` (E3) — este módulo só confirma tipo e, para
 # `resultados`, a versão do sub-contrato. `ledger`/`ficha_tecnica` só têm o
 # tipo confirmado nesta fatia (a 5D detalha o conteúdo dos dois).
+#
+# `dados` (5B, G3) é NOVO e OPCIONAL na raiz — por isso fica de fora de
+# `CHAVES_DE_TOPO_OBRIGATORIAS` (uma entrega cujos exhibits são só `engine`
+# não precisa de `dados` nenhum: `engine` lê `resultados` direto, nunca um
+# dataset local). `exhibits` (5B, G1) é NOVO em `analise`, mas OBRIGATÓRIO
+# lá (mesma disciplina de `ledger`/`ficha_tecnica`: sempre presente, lista
+# vazia quando a análise não tem exhibit nenhum -- G10 do desenho, "não há
+# gráfico obrigatório").
 # --------------------------------------------------------------------------
 
 VERSAO_CONTRATO: str = "entrega/1"
 VERSAO_CONTRATO_RESULTADOS: str = "resultados/1"
 
 CHAVES_DE_TOPO: frozenset = frozenset({
-    "versao_contrato", "execucao", "caso", "resultados", "analise", "ledger", "ficha_tecnica",
+    "versao_contrato", "execucao", "caso", "resultados", "analise", "ledger", "ficha_tecnica", "dados",
 })
+CHAVES_DE_TOPO_OBRIGATORIAS: frozenset = CHAVES_DE_TOPO - {"dados"}
 
 CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma"})
-CHAVES_DE_ANALISE: frozenset = frozenset({"conclusao"})
+CHAVES_DE_ANALISE: frozenset = frozenset({"conclusao", "exhibits"})
 CHAVES_DE_CONCLUSAO: frozenset = frozenset({"texto"})
 
 # Dicionários de interface/QC deste skill: asset PRÓPRIO do er-relatorio,
@@ -134,12 +156,23 @@ def _validar_analise(analise: Any) -> None:
     _recusar_chave_desconhecida(analise, CHAVES_DE_ANALISE, "analise")
     if "conclusao" not in analise:
         raise EntregaInvalida("campo obrigatório ausente em 'analise': 'conclusao'.")
+    if "exhibits" not in analise:
+        raise EntregaInvalida("campo obrigatório ausente em 'analise': 'exhibits'.")
 
     conclusao = _exigir_objeto(analise["conclusao"], "analise.conclusao")
     _recusar_chave_desconhecida(conclusao, CHAVES_DE_CONCLUSAO, "analise.conclusao")
     if "texto" not in conclusao:
         raise EntregaInvalida("campo obrigatório ausente em 'analise.conclusao': 'texto'.")
     _exigir_texto_nao_vazio(conclusao["texto"], "analise.conclusao.texto")
+
+    # 5B/G1: vocabulário fechado por exhibit/série/overlay/dataset é
+    # responsabilidade de `exhibits.py` (ver o docstring do módulo, e o de
+    # `exhibits.py`, para o porquê da relançada em vez de duplicação ou
+    # import circular).
+    try:
+        exhibits.validar_exhibits(analise["exhibits"])
+    except exhibits.ContratoDeExhibitInvalido as erro:
+        raise EntregaInvalida(str(erro)) from erro
 
 
 def _validar(entrega: Any) -> None:
@@ -148,8 +181,10 @@ def _validar(entrega: Any) -> None:
     -> campos de topo obrigatórios -> versão da entrega -> `execucao`
     (vocabulário, campos, dicionário do idioma) -> `caso` (só tipo) ->
     identidade de ticker entre `caso`/`execucao` (B7, quando `caso` declara
-    um) -> `resultados` (tipo + versão do sub-contrato) -> `analise`
-    (vocabulário completo desta fatia) -> `ledger`/`ficha_tecnica` (só tipo).
+    um) -> `resultados` (tipo + versão do sub-contrato) -> `dados` (5B/G3,
+    só quando presente -- é o único campo de topo opcional) -> `analise`
+    (vocabulário completo desta fatia, incluindo `exhibits`, 5B/G1) ->
+    `ledger`/`ficha_tecnica` (só tipo).
     """
     if not isinstance(entrega, dict):
         raise EntregaInvalida(
@@ -160,7 +195,7 @@ def _validar(entrega: Any) -> None:
         )
 
     _recusar_chave_desconhecida(entrega, CHAVES_DE_TOPO, "entrega")
-    for campo in sorted(CHAVES_DE_TOPO):
+    for campo in sorted(CHAVES_DE_TOPO_OBRIGATORIAS):
         if campo not in entrega:
             raise EntregaInvalida(f"campo obrigatório ausente na entrega: '{campo}'.")
 
@@ -203,6 +238,14 @@ def _validar(entrega: Any) -> None:
             f"'resultados.versao_contrato' incompatível: {versao_resultados!r}. "
             f"Este builder só lê '{VERSAO_CONTRATO_RESULTADOS}'."
         )
+
+    # 5B/G3: `dados` é o único campo de topo OPCIONAL (comentário de
+    # `CHAVES_DE_TOPO_OBRIGATORIAS` acima) -- só validado quando presente.
+    if "dados" in entrega:
+        try:
+            exhibits.validar_dados(entrega["dados"])
+        except exhibits.ContratoDeExhibitInvalido as erro:
+            raise EntregaInvalida(str(erro)) from erro
 
     _validar_analise(entrega["analise"])
 
