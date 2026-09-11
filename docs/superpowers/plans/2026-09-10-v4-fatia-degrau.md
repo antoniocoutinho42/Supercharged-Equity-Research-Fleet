@@ -107,12 +107,16 @@ create `tests/test_valuation_degrau.py`.
 - `tv = book` em algum cenário sem `roe_book` nesse cenário → recusa (D6);
 - `mid_year` em algum cenário → recusa: o subparser `degrau` não aceita `--mid-year`;
 - `degrau` junto de `reversa`, `sensibilidades` ou `sotp` → recusa (D7).
+- `degrau` entra na lista de chaves de topo permitidas, criada na onda de correção da revisão da 4C
+  — sem isso o gate o recusaria como chave desconhecida.
 
 **Motor (`motor.py`):** o subparser `degrau` não aceita `--ni`, `--acoes` nem `--mid-year` — o argv
 do degrau não leva a escala da rota equity. Passe `--rf` e `--moeda` como nos outros subcomandos.
-`indice_alvo` vai como um único valor (a flag aceita lista separada por vírgula). Confira a
-tradução de nomes de flag (`indice_atual` → `--indice-atual`, `perfil_transicao` →
-`--perfil-transicao`) contra a definição do subparser.
+`indice_alvo` vai como um único valor (a flag aceita lista separada por vírgula). **`_flag` não
+traduz nomes de forma genérica:** consulta o mapa explícito `_FLAGS_COM_HIFEN` e, fora dele, emite
+`--{chave}` literal — `indice_atual` sairia `--indice_atual`, que o argparse recusa. Acrescente ao
+mapa `indice_atual` → `--indice-atual`, `indice_alvo` → `--indice-alvo` e `perfil_transicao` →
+`--perfil-transicao`; `m`, `anos`, `vpa`, `fx` e `n` passam como estão.
 
 **Avaliação (`avaliar.py`):** com `degrau` no caso, cada cenário roda `pe` como hoje **e** `degrau`
 com as premissas do cenário + o `m` do cenário. Shape de `resultados.json`:
