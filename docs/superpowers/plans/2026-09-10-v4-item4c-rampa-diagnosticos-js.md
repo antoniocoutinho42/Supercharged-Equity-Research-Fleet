@@ -28,8 +28,8 @@ esse caminho que o laboratório do item 5 consome.
 
 ## Fora do escopo — e por quê
 
-- **`degrau`**: nenhuma rota do wrapper o usa — espelhá-lo agora é construir para consumidor
-  inexistente. É lacuna do item 3 em relação ao desenho (§4.3, §8.4, §9). Decisão pendente com o dono.
+- **`degrau`**: nenhuma rota do wrapper o usa hoje. É lacuna do item 3 em relação ao desenho (§4.3,
+  §8.4). Decisão do dono (10/09): ligar — fatia D, plano próprio, depois desta.
 - **`_pe2_book`**: o plano da 4A disse que entrava aqui "junto com `rampa`". **Estava errado**: ele só
   é chamado por `iso_curva` (justos.py:1242/1254) e pelo selftest, e o desenho põe `iso` na camada
   precomputada.
@@ -43,14 +43,12 @@ esse caminho que o laboratório do item 5 consome.
   mesma grandeza, não recusa de domínio. Não espelhar.
 - **Grades e reversa sobre a rampa**: o wrapper recusa no gate. Não existem.
 
-## Decisões pendentes com o dono
+## Decisões do dono (10/09/2026)
 
-- **D-degrau** — ligar o `degrau` no wrapper (item 3) e depois espelhar, ou adiar até um caso real.
-- **D-rf** — o wrapper não passa `mercado.rf` ao motor (é campo de mercado; `argv_para` só emite
-  premissas, escala e `moeda`), então a guarda de Damodaran (`gp` perpétuo ≤ `rf` nominal) **nunca
-  roda**: todo `gordon` com `gp > 0` sai "PREMISSA NÃO ANCORADA", e um `gp` acima do `rf` nunca é
-  alertado. Se o dono aprovar a correção, ela entra **antes da Task 2**, e os ramos com `rf` entram nas
-  duas tasks. Até lá, trate `rf` como sempre ausente.
+- **D-degrau** — ligar: fatia D (`docs/superpowers/plans/2026-09-10-v4-fatia-degrau.md`), depois desta.
+- **D-rf** — **aprovada.** O wrapper passa `mercado.rf` ao motor e a guarda de Damodaran (`gp` perpétuo
+  ≤ `rf` nominal) volta a rodar. A correção entra **antes da Task 2**; a Task 1 segue tratando `rf` como
+  ausente.
 
 ---
 
@@ -99,8 +97,10 @@ AVISOS_RAMPA = ("aviso_colheita", "aviso_delator")
    `n <= t_rampa`; `w <= -1` ou `g2 <= -1`; `wk < 0` ou `kappa < 0`; `util` fora de (0,1) sem `g1`;
    margem NOPAT da fase 2 `<= 0`. O espelho recusa — nunca devolve número onde o motor recusa.
    `tv: null` também recusa (Gate 1), como `precificarCelula` já faz.
-7. **`aviso_gp` não entra**: exige `rf`, que o wrapper não passa (D-rf). Se o wrapper passar a mandar
-   `rf`, a comparação exata de `avisos` reprova sozinha e o espelho acompanha.
+7. **`aviso_gp` não entra nesta task**: exige `rf`, que o wrapper ainda não passa. A Task 2 o acrescenta
+   (ver o detalhe 3 dela). *Correção: a versão anterior deste item dizia que a comparação de `avisos`
+   reprovaria sozinha quando o `rf` chegasse — não reprovaria, porque `avisos` é filtrado por
+   `AVISOS_RAMPA`, que não inclui `aviso_gp`.*
 8. **A fase 2 chama `ev_nopat` do próprio motor**: use o `evNopat` já espelhado, não reescreva.
 
 **Fixture (~15 problemas):** `g1` direto; `g1` derivado de `util`; `g1 < 0` (colheita); `rir2 >= 1`
@@ -178,7 +178,8 @@ Suíte inteira · `git status --short vendor` vazio · fixture byte a byte · um
 **Interfaces:**
 - JS: `diagnosticosFirm(premissas, moeda)` e `diagnosticosEquity(premissas, moeda)` →
   `[chave, ...]` na ordem de emissão do motor; premissas em %, shape do caso, mesmo colapso de `null`.
-- Problema: `{"id", "tipo": "diag", "args": {"rota": "firm"|"equity", "premissas": {...}, "moeda": str}}`.
+- Problema: `{"id", "tipo": "diag", "args": {"rota": "firm"|"equity", "premissas": {...}, "moeda": str, "rf": float|null}}` —
+  `rf` em pontos percentuais, como `mercado.rf`; `null` quando o caso não declara `mercado`.
 - Resultado Python: `{"id", "mensagens": [str, ...]}` (a lista crua do motor); JS: `{"id", "chaves": [...]}`.
 - `diagnosticos_chaves.json`: `[{"chave": "...", "prefixo": "..."}, ...]` — **uma entrada por mensagem
   distinta que o motor consegue emitir pelo caminho do wrapper**. Prefixos mutuamente não-prefixos. É
@@ -194,9 +195,12 @@ Suíte inteira · `git status --short vendor` vazio · fixture byte a byte · um
    `rir_observado` e `ebitda_ic` não são expostos (decisão da 3A): os ramos que dependem deles são
    inalcançáveis — **não espelhe**. Se um dia forem expostos, a tripwire de classificação e a comparação
    exata de chaves reprovam sozinhas.
-3. **`rf`** não chega ao motor (D-rf): com `gordon` e `gp > 0`, `_guardas_damodaran` emite sempre
-   "PREMISSA NÃO ANCORADA". Espelhe só o que é alcançável; o ramo com `rf` entra junto com a correção,
-   se ela for aprovada.
+3. **`rf`** chega ao motor depois da correção aprovada (entra antes desta task). Espelhe os três ramos
+   de `_guardas_damodaran` — alerta de âncora macro, âncora OK e "PREMISSA NÃO ANCORADA" (sem
+   `mercado`) —, com `rf` em % e dividido por 100 só na chamada do diagnóstico, como o handler faz; a
+   fixture cobre os três. **E a rampa ganha `aviso_gp`:** acrescente a chave a `AVISOS_RAMPA` e espelhe a
+   condição do handler `rampa` — atenção, ali é `a.tv == 'gordon'` **sem** `tv_canon`: o alias `spread`
+   não dispara o aviso. Espelhe a peculiaridade, não a corrija.
 4. **`moeda`** sempre chega (o caso a exige) → "MOEDA/REGIME NÃO DECLARADOS" é inalcançável. Não espelhe.
 5. **Limiares são contrato** (`5e-4`, `1e-6`, `1e-9`, `tol = 5e-3`, `2*tol`): copie do vendor. Este plano
    não os transcreve de propósito.
