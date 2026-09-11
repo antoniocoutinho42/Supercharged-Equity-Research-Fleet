@@ -33,6 +33,23 @@
       }
     }
   },
+  "rotas": {
+    "firm": {
+      "rotulo": {
+        "pt-BR": "Firm (EV)"
+      }
+    },
+    "equity": {
+      "rotulo": {
+        "pt-BR": "Equity (P/L)"
+      }
+    },
+    "rampa": {
+      "rotulo": {
+        "pt-BR": "Rampa (EV, composição bifásica)"
+      }
+    }
+  },
   "premissas": {
     "firm": {
       "g": {
@@ -94,6 +111,17 @@
         ],
         "rotulo": {
           "pt-BR": "Convenção terminal"
+        },
+        "rotulos_opcoes": {
+          "book": {
+            "pt-BR": "Book — TV ancorado no capital investido (renda residual truncada)"
+          },
+          "convergencia": {
+            "pt-BR": "Convergência — retorno incremental converge ao custo de capital, rendas existentes preservadas"
+          },
+          "gordon": {
+            "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
+          }
         }
       },
       "roic_tv": {
@@ -189,6 +217,17 @@
         ],
         "rotulo": {
           "pt-BR": "Convenção terminal"
+        },
+        "rotulos_opcoes": {
+          "book": {
+            "pt-BR": "Book — TV ancorado no capital investido (renda residual truncada)"
+          },
+          "convergencia": {
+            "pt-BR": "Convergência — retorno incremental converge ao custo de capital, rendas existentes preservadas"
+          },
+          "gordon": {
+            "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
+          }
         }
       },
       "roe_tv": {
@@ -225,6 +264,14 @@
         ],
         "rotulo": {
           "pt-BR": "Política de caixa no terminal"
+        },
+        "rotulos_opcoes": {
+          "continua": {
+            "pt-BR": "Contínua — a proporção de caixa segue na perpetuidade (padrão)"
+          },
+          "encerra": {
+            "pt-BR": "Encerra — a política de caixa termina no ano do horizonte explícito"
+          }
         }
       },
       "mid_year": {
@@ -344,6 +391,17 @@
         ],
         "rotulo": {
           "pt-BR": "Convenção terminal"
+        },
+        "rotulos_opcoes": {
+          "book": {
+            "pt-BR": "Book — TV ancorado no capital investido (renda residual truncada)"
+          },
+          "convergencia": {
+            "pt-BR": "Convergência — retorno incremental converge ao custo de capital, rendas existentes preservadas"
+          },
+          "gordon": {
+            "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
+          }
         }
       },
       "roic_tv": {

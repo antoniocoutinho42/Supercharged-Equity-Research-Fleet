@@ -1,10 +1,13 @@
 """QC de três níveis (A8): HARD FAIL, REQUIRED DISCLOSURE, QUALITY WARNING.
 
-Regras desta fatia (5A, Task 3 — ver o plano, seção Task 3, "QC — regras
-desta fatia"): `resultados_nao_correspondem_ao_caso`, `placeholder_nao_
-resolvido`, `numero_sem_proveniencia` e `diagnostico_sem_chave` (todas HARD
-FAIL); `divergencia_de_base_degrau` (REQUIRED DISCLOSURE). A 5D completa a
-lista da §11.
+Regras da Task 3 (5A — ver o plano, seção Task 3, "QC — regras desta
+fatia"): `resultados_nao_correspondem_ao_caso`, `placeholder_nao_resolvido`,
+`numero_sem_proveniencia` e `diagnostico_sem_chave` (todas HARD FAIL);
+`divergencia_de_base_degrau` (REQUIRED DISCLOSURE). A Task 4 acrescenta
+`relatorio_nao_autocontido` (HARD FAIL, "Regras de render" do plano): nenhum
+recurso externo (`http://`, `https://` ou `//` protocol-relative em
+`src`/`href`/`url(`) é aceito no HTML — CSS e JS são sempre inline. A 5D
+completa a lista da §11.
 
 Este módulo NÃO importa nada de `er-valuation` nem do vendor (E3): recebe
 `entrega` (o dict que `entrega.carregar` já validou) e `catalogo` (o dict
@@ -38,6 +41,15 @@ class Achado(NamedTuple):
 
 _PADRAO_PLACEHOLDER_BRUTO = re.compile(r"\{\{.*?\}\}")
 _PADRAO_DIGITO = re.compile(r"\d")
+
+# `relatorio_nao_autocontido` (Task 4): recurso externo em src=/href=/url( —
+# com ou sem esquema (protocol-relative "//"). Ancorado no atributo/função
+# para não confundir um "//" qualquer (ex.: dentro de um comentário) com um
+# recurso de fato carregado pelo HTML.
+_PADRAO_RECURSO_EXTERNO = re.compile(
+    r'(?:\b(?:src|href)\s*=\s*["\']\s*(?:https?:)?//|url\(\s*["\']?\s*(?:https?:)?//)',
+    re.IGNORECASE,
+)
 
 
 def _achado_hash(entrega: dict) -> Achado | None:
@@ -143,14 +155,34 @@ def _achados_divergencia_de_base(resultados: dict, catalogo: dict) -> list[Achad
     return achados
 
 
-def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Achado]:
-    """Roda as regras de QC desta fatia; devolve os achados em ordem
-    determinística (mesma entrada, mesma lista de achados, sempre — nada
-    de relógio, nada de ordem de `set`).
+def _achado_autocontido(html: str | None) -> Achado | None:
+    """`relatorio_nao_autocontido` (HARD FAIL, Task 4): nenhum recurso
+    externo é aceito — CSS e JS são sempre inline (regras de render do
+    plano). `html` só existe DEPOIS que `render.compor` roda; `builder.py`
+    chama `avaliar()` duas vezes (A8/regra inviolável 2): primeiro com
+    `html=None` (as regras desta função nunca disparam — nada para
+    examinar ainda), depois com o HTML já composto EM MEMÓRIA, antes de
+    gravar `relatorio.html` no disco. Um HARD FAIL nesta segunda passada
+    descarta o HTML gerado; só `qc.json` sai.
+    """
+    if html is None:
+        return None
+    encontrado = _PADRAO_RECURSO_EXTERNO.search(html)
+    if encontrado is None:
+        return None
+    return Achado("HARD_FAIL", "relatorio_nao_autocontido", "relatorio.html",
+                  {"trecho": encontrado.group(0).strip()})
 
-    `html` existe na assinatura para a regra `relatorio_nao_autocontido`
-    (Task 4, `render.py` — recurso externo em `src`/`href`/`url(`); nenhuma
-    regra desta fatia o examina.
+
+def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Achado]:
+    """Roda as regras de QC; devolve os achados em ordem determinística
+    (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
+    de ordem de `set`).
+
+    `html`: `None` na primeira passada de `builder.py` (antes do render —
+    nenhuma regra desta fatia depende dele além de `relatorio_nao_
+    autocontido`, que simplesmente não dispara); o HTML já composto na
+    segunda passada, só para essa regra.
     """
     achados: list[Achado] = []
 
@@ -163,5 +195,9 @@ def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Acha
     resultados = entrega.get("resultados") or {}
     achados.extend(_achados_diagnostico_sem_chave(resultados))
     achados.extend(_achados_divergencia_de_base(resultados, catalogo))
+
+    achado_autocontido = _achado_autocontido(html)
+    if achado_autocontido is not None:
+        achados.append(achado_autocontido)
 
     return achados

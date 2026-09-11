@@ -86,6 +86,42 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
 
 def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
-        "versao_contrato", "metodologia", "idiomas", "blocos", "premissas",
+        "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "premissas",
         "multiplos", "diagnosticos", "limiares",
     }
+
+
+# --------------------------------------------------------------------------
+# Task 4 (fatia 5A, item 5): rótulos de rota e de opção de premissa de
+# escolha — sem eles o cabeçalho da Valuation exibiria código cru ("firm",
+# "gordon") em vez de rótulo. O relatório só lê; quem nomeia é o catálogo.
+# --------------------------------------------------------------------------
+
+def test_toda_rota_do_gate_tem_rotulo_em_todo_idioma():
+    """Mesma trava de upgrade de `test_premissas_do_catalogo_sao_exatamente_as_do_gate`,
+    agora para `CAT["rotas"]`: uma rota nova em `_PREMISSAS_POR_ROTA` sem entrada aqui
+    reprova na integração, nunca no relatório."""
+    assert set(CAT["rotas"]) == set(_PREMISSAS_POR_ROTA)
+    for rota, info in CAT["rotas"].items():
+        for idioma in CAT["idiomas"]:
+            assert info.get("rotulo", {}).get(idioma, "").strip(), (rota, idioma)
+
+
+def test_toda_opcao_de_premissa_de_escolha_tem_rotulo_em_todo_idioma():
+    """Toda premissa com `"entrada": "escolha"` declara `rotulos_opcoes` cobrindo
+    CADA entrada de `opcoes`, em todo idioma declarado — sem isso o relatório
+    exibiria o código interno da opção ('gordon', 'book', 'continua'...) cru."""
+    encontrou_alguma = False
+    for rota, premissas in CAT["premissas"].items():
+        for nome, info in premissas.items():
+            if info.get("entrada") != "escolha":
+                continue
+            encontrou_alguma = True
+            opcoes = set(info.get("opcoes", []))
+            rotulos_opcoes = info.get("rotulos_opcoes", {})
+            assert opcoes, (rota, nome, "premissa de escolha sem 'opcoes'")
+            assert set(rotulos_opcoes) == opcoes, (rota, nome, rotulos_opcoes.keys(), opcoes)
+            for opcao in opcoes:
+                for idioma in CAT["idiomas"]:
+                    assert rotulos_opcoes[opcao].get(idioma, "").strip(), (rota, nome, opcao, idioma)
+    assert encontrou_alguma, "nenhuma premissa de escolha encontrada — teste vacuamente verde?"

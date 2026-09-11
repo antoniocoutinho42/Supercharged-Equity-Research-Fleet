@@ -4,9 +4,49 @@
     "placeholder_nao_resolvido": "Placeholder não resolvido em '{onde}': '{token}' — {razao}",
     "numero_sem_proveniencia": "Número sem proveniência em '{onde}': todo dígito na prosa precisa vir de um placeholder de resultados ou caso, ou estar marcado como número livre — nenhum dígito solto é permitido fora dessas duas formas.",
     "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': a mensagem do motor não corresponde a exatamente uma chave do vocabulário de diagnósticos — a correção é da camada de integração, nunca do relatório.",
-    "divergencia_de_base_degrau": "Divergência de base de {valor}% no cenário '{cenario}' (acima do limiar de {limiar}% do catálogo): parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau — declare isso ao leitor."
+    "divergencia_de_base_degrau": "Divergência de base de {valor}% no cenário '{cenario}' (acima do limiar de {limiar}% do catálogo): parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau — declare isso ao leitor.",
+    "relatorio_nao_autocontido": "Recurso externo detectado em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — CSS e JS inline, nenhum http://, https:// ou // (protocol-relative) em src, href ou url()."
   },
   "moeda_simbolo": {
     "BRL": "R$"
+  },
+  "interface": {
+    "titulo_pagina": "{empresa} ({ticker})",
+    "abas": {
+      "tese": "Tese",
+      "valuation": "Valuation",
+      "evidencia": "Evidência"
+    },
+    "tese": {
+      "conclusao_titulo": "Conclusão",
+      "disclosures_titulo": "Avisos obrigatórios",
+      "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega."
+    },
+    "valuation": {
+      "preco_justo_titulo": "Preço justo",
+      "upside_titulo": "Upside sobre o preço de mercado",
+      "multiplo_justo_titulo": "Múltiplo justo",
+      "multiplo_tela_titulo": "Múltiplo de tela",
+      "rota_titulo": "Rota",
+      "convencao_terminal_titulo": "Convenção terminal",
+      "sotp_sem_multiplo": "Soma das partes (SOTP): preço consolidado sem múltiplo único.",
+      "cenarios_titulo": "Preço por cenário"
+    },
+    "evidencia": {
+      "metodologia_titulo": "Metodologia",
+      "metodologia_valor": "{nome} — versão {versao}",
+      "ficha_tecnica_titulo": "Ficha técnica",
+      "ficha_tecnica_vazia": "Nenhum dado técnico registrado.",
+      "log_titulo": "Log de resolução de placeholders",
+      "log_vazio": "Nenhum placeholder resolvido nesta entrega.",
+      "log_colunas": {
+        "onde": "Campo",
+        "tipo": "Fonte",
+        "caminho": "Caminho",
+        "formato": "Formato",
+        "bruto": "Valor bruto",
+        "resolvido": "Valor resolvido"
+      }
+    }
   }
 }
