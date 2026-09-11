@@ -106,7 +106,7 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
 def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
-        "premissas", "multiplos", "diagnosticos", "limiares", "disclosures",
+        "premissas", "multiplos", "diagnosticos", "disclosures",
     }
 
 
@@ -201,20 +201,27 @@ def test_opcoes_de_politica_tv_do_catalogo_batem_com_o_gate():
 
 
 # --------------------------------------------------------------------------
-# A4 (achado F7): a explicação de por que o limiar de divergência de base do
-# degrau existe (descasamento LL x ROE.VPA) mora no catálogo, ao lado do
-# limiar — antes desta onda, só o limiar (`limiares`) morava aqui; a
-# explicação vivia hardcoded no dicionário do relatório
+# A4/B8 (achado F7): a explicação de por que o limiar de divergência de base
+# do degrau existe (descasamento LL x ROE.VPA) mora no catálogo, ao lado do
+# limiar — antes da onda de correção, só o limiar (`limiares`) morava aqui;
+# a explicação vivia hardcoded no dicionário do relatório
 # (`skills/er-relatorio/assets/i18n/pt-BR.json`), fora do alcance de quem
-# muda metodologia. `limiares.divergencia_de_base_pct_disclosure` continua
-# intocado (o QC do relatório, fora do escopo desta parte, já lê esse
-# caminho) — `disclosures.divergencia_de_base_degrau.limiar_pct` é aditivo,
-# o mesmo valor visível por um segundo caminho até a parte B mudar o
-# relatório para ler só daqui.
+# muda metodologia. A Parte B consolidou: `qc.py` agora lê limiar E texto só
+# de `disclosures.divergencia_de_base_degrau` -- o caminho antigo
+# (`limiares.divergencia_de_base_pct_disclosure`, um número solto, sem
+# explicação, duplicando o mesmo valor por um segundo caminho) foi removido
+# do catálogo; `limiares` desapareceu inteiro por ter ficado vazio.
 # --------------------------------------------------------------------------
 
-def test_disclosure_de_divergencia_de_base_bate_o_limiar_e_tem_texto_em_todo_idioma():
+def test_disclosure_de_divergencia_de_base_tem_limiar_numerico_e_texto_em_todo_idioma():
     disclosure = CAT["disclosures"]["divergencia_de_base_degrau"]
-    assert disclosure["limiar_pct"] == CAT["limiares"]["divergencia_de_base_pct_disclosure"]
+    assert isinstance(disclosure["limiar_pct"], (int, float)) and disclosure["limiar_pct"] > 0
     for idioma in CAT["idiomas"]:
         assert disclosure["texto"].get(idioma, "").strip()
+
+
+def test_limiares_nao_existe_mais_no_catalogo():
+    """B8: o caminho antigo foi removido, não só esvaziado -- uma chave
+    'limiares' vazia (`{}`) ainda seria uma superfície de contrato morta;
+    o catálogo não a declara mais."""
+    assert "limiares" not in CAT

@@ -75,9 +75,51 @@ def _montar_qc_json(achados: list, dicionario: dict) -> dict:
     return {"versao_contrato": "qc/1", "achados": lista}
 
 
-def _escrever_json(caminho: Path, dados: dict) -> None:
+def _remover_saida_anterior(raiz: Path) -> None:
+    """B3 (regra inviolável 2) — no início de todo build, desfaz qualquer
+    'relatorio.html'/'qc.json' que já exista na raiz de uma rodada anterior
+    -- inclusive quando é um symlink: `Path.unlink()` desfaz o LINK, nunca
+    segue até o alvo (o alvo, se houver, não é tocado). Sem isto, uma
+    recusa (código 1 ou 2) nesta mesma raiz podia deixar o relatorio.html de
+    uma rodada ANTERIOR bem-sucedida no lugar -- código diferente de 0 tem
+    de significar "nada publicável aqui", nunca "o que já estava aqui
+    continua valendo". Roda incondicionalmente, antes até de tentar ler
+    'entrega.json' -- uma recusa código 1 (uso incorreto/entrega inválida)
+    tem exatamente a mesma obrigação. `OSError` (não só `FileNotFoundError`)
+    é engolido de propósito: se `raiz` nem existe, ou não é um diretório,
+    esta função não é o lugar que diagnostica isso -- `entrega.carregar`
+    (chamado logo em seguida) já dá o erro nomeado e código 1 corretos;
+    esta limpeza preliminar só não pode ser o que derruba o processo com um
+    traceback cru antes de chegar lá."""
+    for nome in ("relatorio.html", "qc.json"):
+        try:
+            (raiz / nome).unlink()
+        except OSError:
+            pass
+
+
+def _escrever_arquivo_da_raiz(raiz: Path, nome: str, conteudo: str) -> None:
+    """B4 (regra inviolável 6) — escreve `conteudo` em `raiz/nome`, nunca
+    através de um symlink: desfaz (unlink, nunca segue) o que já estiver
+    nesse caminho exato imediatamente antes de escrever, para que
+    `caminho.write_text` sempre crie um arquivo comum novo ali -- nunca
+    escreva através de um link para fora da raiz. `raiz/nome` é
+    estruturalmente interno à raiz por construção (`nome` é sempre um
+    literal fixo deste módulo, nunca dado externo); o unlink-antes-de-
+    escrever é o que impede a escrita de seguir um link que aponte para
+    fora, mesmo que algo tenha recriado um nesse caminho entre a limpeza de
+    `_remover_saida_anterior` e este ponto."""
+    caminho = raiz / nome
+    try:
+        caminho.unlink()
+    except FileNotFoundError:
+        pass
+    caminho.write_text(conteudo, encoding="utf-8", newline="\n")
+
+
+def _escrever_json(raiz: Path, nome: str, dados: dict) -> None:
     texto = json.dumps(dados, indent=2, ensure_ascii=False) + "\n"
-    caminho.write_text(texto, encoding="utf-8", newline="\n")
+    _escrever_arquivo_da_raiz(raiz, nome, texto)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -93,6 +135,11 @@ def main(argv: list[str] | None = None) -> int:
                     "e emite relatorio.html + qc.json -- ou recusa, nomeando a razao.")
     parser.add_argument("raiz", type=Path, help="raiz de execucao (contem entrega.json)")
     args = parser.parse_args(argv)
+
+    # B3: incondicional, antes de qualquer tentativa de ler 'entrega.json' --
+    # nenhuma saída deste processo, nenhum código de retorno, pode deixar a
+    # saída de uma rodada anterior no lugar.
+    _remover_saida_anterior(Path(args.raiz))
 
     try:
         entrega_dict = contrato_entrega.carregar(args.raiz)
@@ -123,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     if any(achado.nivel == "HARD_FAIL" for achado in achados):
         qc_json = _montar_qc_json(achados, dicionario)
         try:
-            _escrever_json(raiz / "qc.json", qc_json)
+            _escrever_json(raiz, "qc.json", qc_json)
         except OSError as erro:
             print(f"não foi possível gravar 'qc.json': {erro}.", file=sys.stderr)
             return 1
@@ -148,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 
     qc_json = _montar_qc_json(achados_finais, dicionario)
     try:
-        _escrever_json(raiz / "qc.json", qc_json)
+        _escrever_json(raiz, "qc.json", qc_json)
     except OSError as erro:
         print(f"não foi possível gravar 'qc.json': {erro}.", file=sys.stderr)
         return 1
@@ -159,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        (raiz / "relatorio.html").write_text(pagina, encoding="utf-8", newline="\n")
+        _escrever_arquivo_da_raiz(raiz, "relatorio.html", pagina)
     except OSError as erro:
         print(f"não foi possível gravar 'relatorio.html': {erro}.", file=sys.stderr)
         return 1

@@ -15,6 +15,7 @@ governa o PRODUTO, não a suíte que o exercita).
 import json
 import sys
 from pathlib import Path
+from typing import Callable
 
 RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
@@ -29,7 +30,8 @@ TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}
 
 def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     ticker: str | None = None, idioma: str = IDIOMA_PADRAO,
-                    texto_conclusao: str | None = None) -> dict:
+                    texto_conclusao: str | None = None,
+                    mutar_caso: Callable[[dict], None] | None = None) -> dict:
     """Monta um `entrega.json` válido (dict) a partir de uma fixture de caso.
 
     Roda `avaliar()` pelo caminho de produção — o `resultados` embutido
@@ -40,8 +42,19 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
 
     `texto_conclusao` default cita `manchete.preco_acao` em `moeda` — o
     único número na prosa, sempre com proveniência.
+
+    `mutar_caso` (onda de correção da revisão final, B2): quando dado, roda
+    ANTES de `avaliar()`, mutando o `caso` já carregado in-place (ex.:
+    trocar `tv` por um alias legado como 'spread'/'ic' num cenário) -- o
+    `resultados` embutido reflete essa mutação por construção (rodou
+    `avaliar()` de verdade sobre o caso já mutado), então o hash
+    `caso_sha256` continua batendo; nenhum teste precisa forjar
+    `resultados` à mão para exercer um caso que o gate aceita mas que usa
+    vocabulário fora do canônico.
     """
     caso = carregar_caso(FIXTURES / nome_fixture)
+    if mutar_caso is not None:
+        mutar_caso(caso)
     resultados = avaliar(caso)
 
     return {

@@ -828,9 +828,6 @@
       }
     }
   },
-  "limiares": {
-    "divergencia_de_base_pct_disclosure": 5.0
-  },
   "disclosures": {
     "divergencia_de_base_degrau": {
       "limiar_pct": 5.0,

@@ -147,8 +147,9 @@ def _validar(entrega: Any) -> None:
     na primeira violação. Ordem: raiz é objeto -> chaves de topo desconhecidas
     -> campos de topo obrigatórios -> versão da entrega -> `execucao`
     (vocabulário, campos, dicionário do idioma) -> `caso` (só tipo) ->
-    `resultados` (tipo + versão do sub-contrato) -> `analise` (vocabulário
-    completo desta fatia) -> `ledger`/`ficha_tecnica` (só tipo).
+    identidade de ticker entre `caso`/`execucao` (B7, quando `caso` declara
+    um) -> `resultados` (tipo + versão do sub-contrato) -> `analise`
+    (vocabulário completo desta fatia) -> `ledger`/`ficha_tecnica` (só tipo).
     """
     if not isinstance(entrega, dict):
         raise EntregaInvalida(
@@ -171,7 +172,29 @@ def _validar(entrega: Any) -> None:
         )
 
     _validar_execucao(entrega["execucao"])
-    _exigir_objeto(entrega["caso"], "caso")
+    caso = _exigir_objeto(entrega["caso"], "caso")
+
+    # B7 (onda de correção da revisão final, achado F6): identidade do
+    # ticker. `execucao.ticker` é o que o relatório de fato exibe
+    # (`render.compor` ecoa `execucao["ticker"]` no título da página);
+    # `caso.ticker`, quando o caso o declara, é o que a integração já
+    # amarrou ao hash (`resultados.origem.caso_sha256` cobre o caso
+    # inteiro, ticker incluso). Sem esta checagem, nada impedia uma
+    # `execucao.ticker` divergente do `caso.ticker` real -- o título da
+    # página nomeava uma empresa diferente da que o valuation avaliou,
+    # código 0, sem aviso nenhum (VERIFICADO na revisão: caso/resultados de
+    # 'SINT3', execucao.ticker='PETR4' -> título "Sintética S.A. (PETR4)").
+    # `caso` é opaco para este módulo (E3) -- só lê a chave 'ticker' quando
+    # ela é de fato uma string não vazia; um caso que não a declara (ou a
+    # declara de outro tipo) não aciona esta checagem.
+    caso_ticker = caso.get("ticker") if isinstance(caso, dict) else None
+    if isinstance(caso_ticker, str) and caso_ticker.strip():
+        execucao_ticker = entrega["execucao"]["ticker"]
+        if caso_ticker != execucao_ticker:
+            raise EntregaInvalida(
+                f"'execucao.ticker' ({execucao_ticker!r}) diverge de 'caso.ticker' "
+                f"({caso_ticker!r}) -- os dois têm de nomear a mesma empresa."
+            )
 
     resultados = _exigir_objeto(entrega["resultados"], "resultados")
     versao_resultados = resultados.get("versao_contrato")

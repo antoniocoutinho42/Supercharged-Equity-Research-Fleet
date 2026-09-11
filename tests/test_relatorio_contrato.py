@@ -34,6 +34,9 @@ import relatorio_apoio as apoio  # noqa: E402
 
 ENV_UTF8 = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
 
+CATALOGO = json.loads(
+    (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
+
 
 def rodar_builder(raiz: Path) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(BUILDER), str(raiz)],
@@ -176,6 +179,201 @@ def test_placeholder_nao_resolvido_falha(tmp_path):
     codigos = codigos_de(ler_qc(raiz))
     assert "placeholder_nao_resolvido" in codigos
     assert "numero_sem_proveniencia" not in codigos
+
+
+# --------------------------------------------------------------------------
+# B1 (achado F1, onda de correção da revisão final): só placeholder
+# RECONHECIDO é descontado antes da busca de dígito solto -- qualquer outro
+# '{{...}}' é HARD FAIL 'placeholder_malformado', e o dígito dentro dele
+# conta para 'numero_sem_proveniencia' também (nenhuma imunidade).
+# --------------------------------------------------------------------------
+
+def test_bloco_duplo_chave_sem_namespace_e_malformado_e_digito_conta(tmp_path):
+    """VERIFICADO pela revisão: '{{R$ 99,99}}' passava com rc 0 (o padrão
+    de desconto de qc.py era só '\\{\\{.*?\\}\\}', sem exigir namespace/
+    formato -- descontava ISSO também, escondendo o dígito da busca)."""
+    texto = "Valor justo de {{R$ 99,99}} por ação."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "placeholder_sem_namespace"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+    codigos = codigos_de(ler_qc(raiz))
+    assert "placeholder_malformado" in codigos
+    assert "numero_sem_proveniencia" in codigos
+    achado = next(a for a in ler_qc(raiz)["achados"] if a["codigo"] == "placeholder_malformado")
+    assert achado["params"]["trecho"] == "{{R$ 99,99}}"
+
+
+def test_namespace_no_singular_e_malformado(tmp_path):
+    """'resultado:' (singular) não é 'resultados'/'caso'/'livre' -- nunca
+    reconhecido por `placeholders.resolver`, então ficava literal na tela
+    com rc 0 antes desta correção (VERIFICADO pela revisão)."""
+    texto = "Valor justo de {{resultado:manchete.preco_acao|moeda}} por ação."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "namespace_singular"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+    assert "placeholder_malformado" in codigos_de(ler_qc(raiz))
+
+
+def test_namespace_capitalizado_e_malformado(tmp_path):
+    """'Resultados:' (maiúscula) -- mesma classe de fuga que o singular,
+    caso diferente (VERIFICADO pela revisão)."""
+    texto = "Valor justo de {{Resultados:manchete.preco_acao|moeda}} por ação."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "namespace_capitalizado"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+    assert "placeholder_malformado" in codigos_de(ler_qc(raiz))
+
+
+def test_placeholder_quebrado_por_quebra_de_linha_agora_resolve(tmp_path):
+    """Um placeholder válido partido por uma quebra de linha também ficava
+    literal na tela com rc 0 antes desta correção (nem `placeholders.
+    resolver` nem o desconto de qc.py usavam DOTALL). A correção do B1
+    (DOTALL em `placeholders._PADRAO_PLACEHOLDER`, a única fonte de verdade
+    de "placeholder reconhecido") faz este caso ser corretamente
+    RECONHECIDO E RESOLVIDO -- não mais um '{{...}}' cru na tela, e não um
+    'placeholder_malformado' (a forma É válida, só quebrada em duas linhas)."""
+    texto = "Valor justo de {{resultados:\nmanchete.preco_acao|moeda}} por ação."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "placeholder_multilinha"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    qc_json = ler_qc(raiz)
+    assert qc_json["achados"] == []
+    html = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    assert "{{" not in html and "}}" not in html
+    assert "R$ 61,91" in html
+
+
+def test_numero_solto_de_controle_continua_falhando(tmp_path):
+    """Controle da revisão: um dígito solto de verdade (sem chaves nenhuma)
+    continua HARD FAIL -- a correção do B1 não afrouxou a regra original."""
+    texto = "Valor justo acima dos R$ 50 negociados ontem."
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
+    raiz = tmp_path / "numero_solto_controle"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert "numero_sem_proveniencia" in codigos_de(ler_qc(raiz))
+
+
+# --------------------------------------------------------------------------
+# B2 (achado F2): o cabeçalho lê `manchete.convencao_terminal` (já
+# canônico), nunca `caso...premissas.tv` cru -- um alias legado ('spread'/
+# 'ic') passa pelo gate e pelo wrapper e tem de emitir normalmente.
+# --------------------------------------------------------------------------
+
+def test_alias_legado_de_tv_emite_com_rotulo_canonico(tmp_path):
+    """VERIFICADO pela revisão: com o relatório lendo `caso...premissas.tv`
+    cru, 'tv: spread' (alias de 'gordon' em `caso.TV_CANON`) passava a
+    integração inteira e só quebrava no builder do relatório
+    (RotuloDoCatalogoAusente: catálogo sem rótulo para a opção 'spread')."""
+    def _usar_alias_spread(caso):
+        caso["cenarios"]["base"]["premissas"]["tv"] = "spread"
+
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", mutar_caso=_usar_alias_spread)
+    assert entrega_dict["caso"]["cenarios"]["base"]["premissas"]["tv"] == "spread"
+    assert entrega_dict["resultados"]["manchete"]["convencao_terminal"] == "gordon"
+    raiz = tmp_path / "alias_tv"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert ler_qc(raiz)["achados"] == []
+    html = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    assert CATALOGO["convencoes_terminais"]["gordon"]["pt-BR"] in html
+    assert "spread" not in html
+
+
+# --------------------------------------------------------------------------
+# B3/B4 (regras invioláveis 2 e 6, achado F3): nada de uma rodada anterior
+# sobra na raiz depois de uma recusa nesta MESMA raiz.
+# --------------------------------------------------------------------------
+
+def test_recusa_na_mesma_raiz_nao_deixa_relatorio_de_rodada_anterior(tmp_path):
+    """VERIFICADO pela revisão: rodada 1 boa (rc 0, relatorio.html+qc.json);
+    rodada 2, MESMA raiz, com um HARD FAIL -> antes desta correção, rc 2
+    escrevia um qc.json novo mas deixava o relatorio.html da rodada 1 no
+    lugar. Uma rodada 3, MESMA raiz, com entrega.json inválido (rc 1) tem
+    de deixar a raiz completamente limpa (nem relatorio.html, nem qc.json)."""
+    raiz = tmp_path / "raiz_reusada"
+
+    entrega_boa = apoio.montar_entrega("caso_reversa_firm.json")
+    apoio.escrever_raiz(raiz, entrega_boa)
+    r1 = rodar_builder(raiz)
+    assert r1.returncode == 0, r1.stdout + r1.stderr
+    assert (raiz / "relatorio.html").exists()
+    conteudo_rodada_1 = (raiz / "relatorio.html").read_bytes()
+
+    texto_ruim = "Valor justo acima dos R$ 50 negociados ontem."
+    entrega_ruim = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto_ruim)
+    apoio.escrever_raiz(raiz, entrega_ruim)
+    r2 = rodar_builder(raiz)
+    assert r2.returncode == 2, r2.stdout + r2.stderr
+    assert not (raiz / "relatorio.html").exists(), "relatorio.html da rodada 1 sobrou depois do HARD FAIL"
+    assert ler_qc(raiz)["achados"], "qc.json da rodada 2 tem de descrever a rodada 2"
+
+    (raiz / "entrega.json").write_text("{ isto não é json", encoding="utf-8")
+    r3 = rodar_builder(raiz)
+    assert r3.returncode == 1, r3.stdout + r3.stderr
+    assert not (raiz / "relatorio.html").exists()
+    assert not (raiz / "qc.json").exists(), "qc.json da rodada 2 sobrou depois da recusa código 1"
+    del conteudo_rodada_1  # só provado que NÃO sobrevive; não há mais o que comparar
+
+
+# --------------------------------------------------------------------------
+# B7 (achado F6): identidade do ticker entre `caso` e `execucao`.
+# --------------------------------------------------------------------------
+
+def test_ticker_da_execucao_diferente_do_caso_falha(tmp_path):
+    """VERIFICADO pela revisão: `execucao.ticker='PETR4'` sobre caso/
+    resultados de outra empresa emitia rc 0, título "Sintética S.A.
+    (PETR4)" -- o título nomeava uma empresa diferente da que o valuation
+    avaliou."""
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", ticker="PETR4")
+    entrega_dict["caso"]["ticker"] = "SINT3"
+    raiz = tmp_path / "ticker_divergente"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 1, resultado.stdout + resultado.stderr
+    assert not (raiz / "qc.json").exists()
+    assert not (raiz / "relatorio.html").exists()
+    assert "PETR4" in resultado.stderr
+    assert "SINT3" in resultado.stderr
+
+
+def test_ticker_da_execucao_igual_ao_caso_emite(tmp_path):
+    """Controle: quando os dois batem (o caso normal, sem mutação), nada
+    muda -- a checagem de identidade não é falso positivo no caminho feliz."""
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json")
+    raiz = tmp_path / "ticker_igual"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
 
 
 def test_resultados_de_outro_caso_falha(tmp_path):

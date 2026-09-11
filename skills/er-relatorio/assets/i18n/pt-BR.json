@@ -4,8 +4,9 @@
     "placeholder_nao_resolvido": "Placeholder não resolvido em '{onde}': '{token}' — {razao}",
     "numero_sem_proveniencia": "Número sem proveniência em '{onde}': todo dígito na prosa precisa vir de um placeholder de resultados ou caso, ou estar marcado como número livre — nenhum dígito solto é permitido fora dessas duas formas.",
     "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': a mensagem do motor não corresponde a exatamente uma chave do vocabulário de diagnósticos — a correção é da camada de integração, nunca do relatório.",
-    "divergencia_de_base_degrau": "Divergência de base de {valor}% no cenário '{cenario}' (acima do limiar de {limiar}% do catálogo): parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau — declare isso ao leitor.",
-    "relatorio_nao_autocontido": "Recurso externo detectado em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — CSS e JS inline, nenhum http://, https:// ou // (protocol-relative) em src, href ou url()."
+    "divergencia_de_base_degrau": "Divergência de base de {valor_fmt} no cenário '{cenario}' (acima do limiar de {limiar_fmt} do catálogo): {texto}",
+    "relatorio_nao_autocontido": "Referência externa detectada em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — toda referência de src, href, srcset, data ou url()/@import tem de ser um '#fragmento' ou uma URI 'data:', nunca um recurso carregado de fora.",
+    "placeholder_malformado": "Placeholder malformado em '{onde}': '{trecho}' não é um placeholder reconhecido — fonte fora do vocabulário (resultados/caso/livre), maiúscula, sem '|formato', ou chaves duplas partidas. Use a sintaxe 'resultados:<caminho>|<formato>', 'caso:<caminho>|<formato>' ou 'livre:<texto>', sempre entre chaves duplas."
   },
   "moeda_simbolo": {
     "BRL": "R$"

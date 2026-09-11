@@ -88,13 +88,21 @@ def test_sotp_sem_multiplo_mostra_so_preco():
 
 
 def test_degrau_com_disclosure_visivel_na_tese():
+    """B8/B13 (achados F7/S5): o número vem de `placeholders.formatar(...,
+    'pp1', idioma)` -- vírgula decimal ('16,4%'), nunca ponto ('16.4%',
+    o bug de antes desta correção: `round()` cru interpolado por
+    `str.format`). O texto metodológico (`{texto}`) vem do catálogo
+    (`catalogo.disclosures.divergencia_de_base_degrau.texto`, A4), não mais
+    hardcoded no dicionário do relatório."""
     entrega_dict, achados, log = _preparar("caso_degrau.json")
     assert any(a.codigo == "divergencia_de_base_degrau" for a in achados)
 
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
-    assert "16.4%" in pagina  # {valor} do achado, format() puro (não é placeholders.formatar)
+    assert "16,4%" in pagina
+    assert "16.4%" not in pagina
     assert render.t(DICIONARIO, "tese.disclosures_titulo") in pagina
+    assert html.escape(CATALOGO["disclosures"]["divergencia_de_base_degrau"]["texto"]["pt-BR"]) in pagina
 
 
 # --------------------------------------------------------------------------
@@ -108,6 +116,42 @@ def test_saida_e_byte_identica_em_duas_composicoes():
     pagina2 = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
     assert pagina1.encode("utf-8") == pagina2.encode("utf-8")
+
+
+# --------------------------------------------------------------------------
+# B6 (achado F5, onda de correção da revisão final): "autocontido" é
+# invariante por whitelist (`#fragmento`/URI `data:`), não lista negra de
+# esquema -- cada uma destas formas passava direto (rc 0) com a lista negra
+# antiga (só `http(s)://`/`//` em `src=`/`href=`/`url(`, e só com aspas).
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("html_texto", [
+    '<link rel="stylesheet" href="https://cdn.example.com/x.css">',
+    '<script src="uplot.iife.min.js"></script>',      # caminho relativo -- a fuga provada pela revisão
+    '<script src=uplot.iife.min.js></script>',         # o mesmo, sem aspas
+    '<img srcset="foo.png 1x, bar.png 2x">',
+    '<object data="ficha.pdf"></object>',
+    '<style>@import "tema.css";</style>',
+    '<style>body { background: url(fundo.png); }</style>',
+    '<a href="file:///C:/segredo.txt">x</a>',
+    '<link href="//cdn.example.com/x.css">',
+])
+def test_referencia_nao_autocontida_e_hard_fail_em_qualquer_forma(html_texto):
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
+
+
+@pytest.mark.parametrize("html_texto", [
+    '<a href="#secao-2">pular</a>',
+    '<img src="data:image/png;base64,aGVsbG8=">',
+    '<style>@import url(data:text/css;base64,Zm9v);</style>',
+    '<style>body { background: url(#gradiente-svg); }</style>',
+])
+def test_referencia_autocontida_nao_dispara(html_texto):
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
 def test_nenhum_recurso_externo():

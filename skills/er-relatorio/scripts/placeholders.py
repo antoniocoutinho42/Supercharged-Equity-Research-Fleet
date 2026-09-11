@@ -59,7 +59,15 @@ _CASAS_X: dict[str, int] = {f"x{n}": n for n in (1, 2)}
 _FORMATOS_CONHECIDOS: frozenset = frozenset(
     set(_CASAS_NUM) | set(_CASAS_PCT) | set(_CASAS_PP) | set(_CASAS_X) | {"moeda"})
 
-_PADRAO_PLACEHOLDER = re.compile(r"\{\{\s*(resultados|caso|livre)\s*:(.*?)\}\}")
+# B1 (onda de correção da revisão final, achado F1): DOTALL -- um placeholder
+# quebrado por uma quebra de linha (ex.: '{{resultados:\nmanchete...|moeda}}')
+# passa a ser reconhecido e resolvido normalmente, em vez de ficar literal no
+# texto sem nenhum achado de QC (o bug que a revisão provou). Este é o ÚNICO
+# padrão que define "placeholder reconhecido" -- `qc.py` importa exatamente
+# este objeto (não uma cópia) para decidir o que descontar antes da busca de
+# dígito solto, e para nomear como `placeholder_malformado` qualquer `{{...}}`
+# que sobrar depois disso (fonte errada, maiúscula, sem '|formato', etc.).
+_PADRAO_PLACEHOLDER = re.compile(r"\{\{\s*(resultados|caso|livre)\s*:(.*?)\}\}", re.DOTALL)
 
 
 def carregar_dicionario(idioma: str) -> dict:
@@ -105,17 +113,27 @@ def _num_localizado(valor: float, casas: int, idioma: str) -> str:
 
 def _formatar_moeda(valor: float, idioma: str, moeda: str | None) -> str:
     """2 casas, símbolo do dicionário para o código antes do hífen de
-    `caso.moeda` (`"BRL-nominal"` -> código `"BRL"` -> símbolo `"R$"`)."""
+    `caso.moeda` (`"BRL-nominal"` -> código `"BRL"` -> símbolo `"R$"`).
+
+    B14 (não-material da revisão final): uma moeda sem símbolo declarado no
+    dicionário (o gate aceita qualquer código não vazio -- este módulo não
+    reduz esse vocabulário) usa o próprio CÓDIGO ISO como prefixo
+    ('USD 12,34'), nunca levanta `FormatoInvalido`. Antes desta correção,
+    essa recusa -- dentro de um placeholder de `resolver()` -- virava
+    `placeholder_nao_resolvido` (HARD FAIL tratado, comportamento correto),
+    mas as chamadas DIRETAS que `render.py` faz para montar o cabeçalho da
+    Valuation (preço/upside/múltiplos) não passam por `resolver()`, então a
+    mesma recusa propagava como exceção não tratada por `builder.py`
+    (`FormatoInvalido` não está entre as duas exceções que `main()` pega ao
+    redor de `render.compor`) -- traceback cru, código de saída do Python,
+    não o "recusa nomeada" que todo o resto deste projeto garante. Nunca
+    recusar aqui fecha as duas frentes de uma vez, sem precisar ensinar
+    `builder.py` sobre mais uma exceção.
+    """
     codigo = (moeda or "").split("-", 1)[0]
     dicionario = carregar_dicionario(idioma)
     simbolos = dicionario.get("moeda_simbolo", {})
-    simbolo = simbolos.get(codigo)
-    if simbolo is None:
-        raise FormatoInvalido(
-            f"símbolo de moeda desconhecido para o código '{codigo}' (de "
-            f"caso.moeda={moeda!r}). Símbolos declarados no dicionário: "
-            f"{', '.join(sorted(simbolos)) or '(nenhum)'}."
-        )
+    simbolo = simbolos.get(codigo) or codigo or "?"
     return f"{simbolo} {_num_localizado(valor, 2, idioma)}"
 
 

@@ -18,9 +18,12 @@ Duas regras cobrem TUDO que este módulo escreve:
   coluna) vem de `assets/i18n/<idioma>.json` via `t()`, nunca hardcoded no
   código (§16.1) — uma chave ausente levanta `ChaveDeInterfaceAusente`,
   nomeando o caminho completo, nunca um texto substituto silencioso. Rótulo
-  de rota/opção de premissa/múltiplo vem do catálogo de apresentação (A6)
-  via `_rotulo_rota`/`_rotulo_opcao_premissa`/`_rotulo_multiplo`, mesma
-  disciplina (`RotuloDoCatalogoAusente` nomeado).
+  de rota/convenção terminal/múltiplo vem do catálogo de apresentação (A6)
+  via `_rotulo_rota`/`_rotulo_convencao_terminal`/`_rotulo_multiplo`, mesma
+  disciplina (`RotuloDoCatalogoAusente` nomeado). B2 (onda de correção da
+  revisão final, achado F2): a convenção terminal é lida do CÓDIGO CANÔNICO
+  que a integração já publica (`resultados.manchete.convencao_terminal`),
+  nunca de `caso[...]["premissas"]["tv"]` cru.
 
 `assets/template.html` é a casca estática (CSS e JS inline, sem nenhum
 `src`/`href`/`url(` — a regra `relatorio_nao_autocontido` de `qc.py`
@@ -84,17 +87,22 @@ def _rotulo_rota(catalogo: dict, rota: str, idioma: str) -> str:
     return rotulo
 
 
-def _rotulo_opcao_premissa(catalogo: dict, rota: str, premissa: str, opcao: str, idioma: str) -> str:
-    info = catalogo.get("premissas", {}).get(rota, {}).get(premissa)
-    if info is None:
-        raise RotuloDoCatalogoAusente(
-            f"catálogo de apresentação sem a premissa '{premissa}' na rota '{rota}'."
-        )
-    rotulo = info.get("rotulos_opcoes", {}).get(opcao, {}).get(idioma)
+def _rotulo_convencao_terminal(catalogo: dict, codigo: str, idioma: str) -> str:
+    """B2 (achado F2): rótulo da convenção terminal CANÔNICA da manchete
+    (`resultados.manchete.convencao_terminal`, publicada pela integração --
+    A1/`avaliar._montar_manchete`), lido de `catalogo.convencoes_terminais`
+    -- a fonte única (Task 2/A1). Antes desta correção o relatório lia
+    `caso[...]["premissas"]["tv"]` CRU e rotulava pelo LITERAL declarado no
+    caso: um alias legado ('spread', 'ic') passava pelo gate e pelo wrapper
+    (que só exige a presença de 'tv', nunca um valor específico) e só
+    quebrava aqui, tarde demais (`RotuloDoCatalogoAusente`, sem rótulo para
+    'spread'/'ic'). Agora o relatório nunca lê nada de `caso` para montar
+    este rótulo -- só o código já canônico que a integração publicou."""
+    rotulo = catalogo.get("convencoes_terminais", {}).get(codigo, {}).get(idioma)
     if not rotulo:
         raise RotuloDoCatalogoAusente(
-            f"catálogo de apresentação sem rótulo em '{idioma}' para a opção '{opcao}' "
-            f"da premissa '{premissa}' (rota '{rota}')."
+            f"catálogo de apresentação sem rótulo em '{idioma}' para a convenção "
+            f"terminal '{codigo}' em 'convencoes_terminais'."
         )
     return rotulo
 
@@ -228,10 +236,16 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
             f'</div>'
         )
 
-        rota = caso["rota"]
-        tv = caso["cenarios"][manchete["cenario"]]["premissas"]["tv"]
+        # B2 (achado F2): rota e convenção terminal vêm de `resultados`
+        # (dados já canonicalizados pela integração), nunca de `caso` --
+        # `resultados.rota` e `manchete.convencao_terminal` (A1; sempre
+        # presente aqui, porque este ramo só executa quando
+        # "multiplo" in manchete, e `_montar_manchete` só publica
+        # 'multiplo' junto com 'convencao_terminal', nunca no ramo SOTP).
+        rota = resultados["rota"]
+        convencao = manchete["convencao_terminal"]
         rota_rotulo = html.escape(_rotulo_rota(catalogo, rota, idioma))
-        tv_rotulo = html.escape(_rotulo_opcao_premissa(catalogo, rota, "tv", tv, idioma))
+        tv_rotulo = html.escape(_rotulo_convencao_terminal(catalogo, convencao, idioma))
         bloco_rota = (
             f'<div class="metrica">'
             f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.rota_titulo"))}</span>'
