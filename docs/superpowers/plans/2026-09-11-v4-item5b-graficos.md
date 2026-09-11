@@ -76,7 +76,7 @@ com `str()` cru (5D); qualquer gráfico que exigisse conta de valuation nova (n�
 | `skills/er-relatorio/scripts/render.py` | Seção de exhibits na Tese; dados embutidos; linhas de rastreabilidade na Evidência |
 | `skills/er-relatorio/assets/template.html` | `$css_uplot`, `$js_uplot`, `$js_graficos`, `$js_svg`, `$dados_exhibits` |
 | `skills/er-relatorio/assets/graficos.js` (novo) | Adaptador sobre uPlot: spec resolvida → gráfico |
-| `skills/er-relatorio/assets/svg.js` (novo) | `waterfall`, `matriz`, `decomposicao` → string SVG |
+| `skills/er-relatorio/assets/svg.js` (novo) | `waterfall` e `matriz` → string SVG (funções puras) |
 | `skills/er-relatorio/assets/uPlot.*` (novos) | Vendor MIT, byte a byte do legado |
 | `tests/test_relatorio_exhibits.py`, `tests/test_relatorio_svg_js.py` (novos) | Contrato/QC e o módulo SVG em node |
 
