@@ -18,7 +18,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
-from caso import CasoInvalido, carregar, validar  # noqa: E402
+from caso import TV_CANON, CasoInvalido, carregar, validar  # noqa: E402
 import diagnosticos  # noqa: E402
 
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
@@ -67,6 +67,51 @@ def test_manchete_aponta_um_preco_que_existe(resultados):
             assert m["fonte"] == "cenarios"
             assert m["preco_acao"] == r["cenarios"][m["cenario"]]["valor"]["preco_acao"]
         assert m["upside"] == m["preco_acao"] / caso["preco"]["valor"] - 1, nome
+
+
+def test_manchete_convencao_terminal_e_canonica_ou_ausente_no_sotp(resultados):
+    """A1 (onda de correção da revisão final, achado F2): `manchete` publica
+    o código CANÔNICO da convenção terminal do cenário-base — nunca o
+    literal que o caso declarou — e fica ausente quando a manchete vem do
+    SOTP (as partes podem ter convenções diferentes entre si; ver
+    `caso_sotp_segmento.json`, que mistura 'convergencia' e 'gordon' — a
+    manchete nunca escolhe uma pelas partes)."""
+    for nome, (caso, r) in resultados.items():
+        m = r["manchete"]
+        if m["fonte"] == "sotp":
+            assert "convencao_terminal" not in m, nome
+            continue
+        tv_declarado = caso["cenarios"][m["cenario"]]["premissas"]["tv"]
+        assert m["convencao_terminal"] == TV_CANON.get(tv_declarado, tv_declarado), nome
+        # sempre um dos três canônicos hoje — nunca o literal cru quando o
+        # literal é um alias (nenhuma fixture usa alias, mas a igualdade
+        # acima já cobre isso; esta linha documenta a garantia adicional de
+        # que o campo nunca fica fora do vocabulário do catálogo).
+        assert m["convencao_terminal"] in {"book", "convergencia", "gordon"}, nome
+
+
+def test_manchete_convencao_terminal_canoniza_alias_legado():
+    """VERIFICAÇÃO end-to-end do achado F2 da revisão: um caso que declara
+    'tv' por um alias legado ('ic'/'spread' — o motor os aceita e os
+    canoniza antes de qualquer handler, `justos.py` tv_canon) publica o
+    código CANÔNICO na manchete, nunca o alias. Preços conferidos contra a
+    evidência VERIFICADA da revisão (review-5a-final.md, achado F2): 'ic' em
+    `caso_minimo_firm.json` -> R$ 55,31; 'spread' -> R$ 61,91."""
+    base = json.loads((FIXTURES / "caso_minimo_firm.json").read_text(encoding="utf-8"))
+
+    ic = json.loads(json.dumps(base))
+    ic["cenarios"]["base"]["premissas"]["tv"] = "ic"
+    validar(ic)
+    r_ic = avaliar(ic)
+    assert r_ic["manchete"]["convencao_terminal"] == "book"
+    assert r_ic["manchete"]["preco_acao"] == pytest.approx(55.31, abs=0.01)
+
+    spread = json.loads(json.dumps(base))
+    spread["cenarios"]["base"]["premissas"]["tv"] = "spread"
+    validar(spread)
+    r_spread = avaliar(spread)
+    assert r_spread["manchete"]["convencao_terminal"] == "gordon"
+    assert r_spread["manchete"]["preco_acao"] == pytest.approx(61.91, abs=0.01)
 
 
 def test_mercado_tela_da_rampa_e_do_lado_do_ev():

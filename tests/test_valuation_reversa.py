@@ -7,6 +7,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from caso import carregar  # noqa: E402
+import diagnosticos  # noqa: E402
 from reversa import alvo_de_mercado, reverter  # noqa: E402
 
 
@@ -138,6 +139,21 @@ def test_teto_do_crescimento_gratuito_nao_perde_rf():
     teto = reverter(c, "base", 500.0)["teto_do_crescimento_gratuito"]
     assert not any("PREMISSA NÃO ANCORADA" in d for d in teto["diagnosticos"])
     assert any("ÂNCORA MACRO OK" in d for d in teto["diagnosticos"])
+
+
+def test_teto_do_crescimento_gratuito_tem_diagnosticos_chaves_paralelas():
+    """A3 (onda de correção da revisão final, achado S1 generalizado): esta
+    é a segunda lista 'diagnosticos' de resultados.json fora de
+    `cenarios`/`sotp.partes` (achada ao mapear todo `diagnosticos` do
+    contrato, não só o que a revisão já tinha verificado em SOTP) — mesma
+    disciplina de paralelo, mesmo comprimento, mesma ordem, mesmo
+    classificador por prefixo."""
+    c = _caso()
+    c["preco"]["valor"] = 900.0  # alvo absurdo: nenhum eixo primario fecha
+    teto = reverter(c, "base", 500.0)["teto_do_crescimento_gratuito"]
+    assert teto["diagnosticos"], "fixture não produziu diagnosticos — teste vacuamente verde?"
+    assert len(teto["diagnosticos_chaves"]) == len(teto["diagnosticos"])
+    assert teto["diagnosticos_chaves"] == [diagnosticos.classificar(m) for m in teto["diagnosticos"]]
 
 
 def test_teto_e_insensivel_a_escolha_do_infinito():

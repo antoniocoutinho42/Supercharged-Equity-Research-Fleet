@@ -111,7 +111,7 @@ import sys
 from pathlib import Path
 
 import diagnosticos
-from caso import CasoInvalido, carregar
+from caso import CasoInvalido, _tv_canon, carregar
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
 from reversa import alvo_de_mercado, reverter
@@ -218,7 +218,11 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
     Com `sotp` declarado, a manchete é o preço do SOTP — soma de partes é
     a composição mais completa que o caso oferece, e não carrega UM único
     múltiplo de referência (cada parte tem o seu, em bases possivelmente
-    diferentes) — por isso não tem `multiplo`.
+    diferentes) — por isso não tem `multiplo`, nem `convencao_terminal`: as
+    partes podem divergir de convenção entre si (`caso_sotp_segmento.json`
+    mistura 'convergencia' e 'gordon' entre as duas partes — ver
+    `tests/test_valuation_sotp.py::test_cada_parte_e_avaliada_com_a_propria_convencao`),
+    então publicar UMA convenção aqui seria o wrapper escolhendo por elas.
 
     Sem `sotp`, a manchete é o preço do cenário-base (A3): `multiplo` é o
     mesmo que o wrapper já devolve para aquele preço — nunca uma conta
@@ -229,6 +233,19 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
     calculou; sem degrau, é o múltiplo padrão da rota
     (`_chave_e_base_do_multiplo`), lido de `multiplos`, onde
     `_monta_cenario`/`_monta_cenario_rampa` já o deixaram validado.
+
+    A1 (onda de correção da revisão final, achado F2): `convencao_terminal`
+    é o código CANÔNICO (`_tv_canon`, o mesmo mapeamento que o motor aplica
+    — 'ic'->'book', 'spread'->'gordon', identidade para as demais) da
+    premissa 'tv' do cenário-base — nunca o literal que o caso declarou.
+    Antes desta correção o relatório lia `caso...premissas.tv` cru e
+    rotulava pelo literal: um alias legado ('ic'/'spread') passava pelo
+    gate (que só exige a PRESENÇA de 'tv', nunca um valor específico — ver
+    `caso._validar_premissas`) e pelo wrapper, e só quebrava no builder do
+    relatório, tarde demais. Publicar o canônico aqui, uma vez, fecha o
+    mesmo buraco para qualquer alias futuro sem o relatório precisar saber
+    que alias existem — ele só lê um código já canônico e busca o rótulo em
+    `catalogo.convencoes_terminais` (fonte única, Task 2/A1).
     """
     preco_valor = caso["preco"]["valor"]
 
@@ -256,12 +273,15 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
         chave, base = _chave_e_base_do_multiplo(caso["rota"], caso["metrica_base"]["tipo"])
         multiplo = {"chave": chave, "base": base, "valor": cenario_base["multiplos"][chave]}
 
+    tv_declarado = caso["cenarios"][nome_base]["premissas"]["tv"]
+
     return {
         "fonte": "cenarios",
         "cenario": nome_base,
         "preco_acao": preco_acao,
         "upside": preco_acao / preco_valor - 1,
         "multiplo": multiplo,
+        "convencao_terminal": _tv_canon(tv_declarado),
     }
 
 

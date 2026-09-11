@@ -50,6 +50,7 @@ quando o gatilho dispara).
 
 from typing import Any
 
+import diagnosticos
 from caso import EIXOS_DE_REVERSA
 from motor import _campo_do_multiplo, _exigir_valor, rodar
 
@@ -425,11 +426,23 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
         "consome capital."
     )
 
+    diagnosticos_lista = saida.get("diagnosticos") or []
+
     return {
         "multiplo": _exigir_valor(saida, campo_multiplo),
         "premissas_alteradas": premissas_alteradas,
         "leitura": leitura,
-        "diagnosticos": saida.get("diagnosticos") or [],
+        "diagnosticos": diagnosticos_lista,
+        # A3 (onda de correção da revisão final, achado S1 generalizado —
+        # "todo `diagnosticos` do resultados.json, onde quer que apareça,
+        # ganha o paralelo"): este é o segundo lugar fora de
+        # `avaliar._monta_cenario` onde uma lista `diagnosticos` do motor
+        # chega a `resultados.json` (o primeiro é `sotp.partes[*]`, ver
+        # `sotp._compor_parte`) — `reverter()` embute este dict sob
+        # `resultado["reversa"]["teto_do_crescimento_gratuito"]` quando o
+        # gatilho dispara (ver docstring do módulo). Mesma classificação por
+        # prefixo, mesmo comprimento e ordem, `None` não filtrado.
+        "diagnosticos_chaves": [diagnosticos.classificar(m) for m in diagnosticos_lista],
     }
 
 

@@ -1054,6 +1054,24 @@ def _tv_canon(tv: Any) -> Any:
     return TV_CANON.get(tv, tv)
 
 
+# A2 (onda de correção da revisão final): vocabulário que o gate reconhece
+# para a premissa de escolha 'politica_tv' — sem aliases legados (ao
+# contrário de 'tv', não há um segundo nome histórico para "contínua" nem
+# para "encerra"), por isso um frozenset simples, não um dict de
+# canonicalização. Existe para o catálogo de apresentação amarrar
+# `premissas.equity.politica_tv.opcoes` contra ALGO fora do próprio
+# catálogo — mesma disciplina de `TV_CANON` acima: sem esta fonte no gate,
+# uma opção nova em `politica_tv.opcoes` (ou uma removida) só seria notada
+# quando o relatório (fatia 5B) tentasse rotulá-la, nunca aqui na
+# integração. Não é usado para VALIDAR o valor de `politica_tv` no gate —
+# `_PREMISSAS_NAO_NUMERICAS` já trata 'politica_tv' como string opaca (ver
+# comentário acima) e o motor aceita qualquer string, tratando tudo que não
+# é 'continua' como 'encerra' (ternário em justos.py); fechar essa validação
+# no gate seria mudança de comportamento fora do escopo desta onda (A2 pede
+# só a trava do catálogo contra o vocabulário, não uma recusa nova).
+POLITICA_TV_OPCOES: frozenset = frozenset({"continua", "encerra"})
+
+
 # F3 (onda de correção da revisão final): mesma classe do F6 da fatia 4C
 # (chave desconhecida ignorada em silêncio) — mas ali fechou só o nível de
 # TOPO do caso (`CHAVES_DE_TOPO_PERMITIDAS`/`_validar_sem_chaves_de_topo_

@@ -155,23 +155,30 @@ convenção que já mora aqui):
   `skills/er-multiplos-justos/manifest_vendor.json`.
 - `manchete` — qual preço é "a resposta": o do SOTP quando o caso declara
   `sotp`; senão o do cenário-base (`cenario_base`), com o múltiplo que o
-  wrapper já devolve para aquele preço.
+  wrapper já devolve para aquele preço e `convencao_terminal` — o código
+  CANÔNICO da convenção 'tv' do cenário-base (`caso._tv_canon`, nunca o
+  literal/alias declarado), rotulado pelo catálogo (`convencoes_terminais`);
+  ausente quando a manchete vem do SOTP.
 - `mercado_tela` — o múltiplo de mercado (tela), sempre publicado — antes só
   existia dentro do bloco opcional `reversa`. Pareado com o múltiplo da
   manchete pela mesma `base`.
 - `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
   grade de sensibilidade) — a chave pública de cada mensagem do motor
   (`diagnosticos.classificar`), paralela a `diagnosticos`/
-  `diagnosticos_unicos`; na rota rampa, que não emite `diagnosticos`, as
-  chaves de aviso presentes (`aviso_colheita`, `aviso_delator`, `aviso_gp`).
+  `diagnosticos_unicos` onde quer que a lista apareça (cenários,
+  `sotp.partes[*]`, `reversa.teto_do_crescimento_gratuito`); na rota rampa,
+  que não emite `diagnosticos`, as chaves de aviso presentes
+  (`aviso_colheita`, `aviso_delator`, `aviso_gp`).
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
 
 Conhecimento metodológico que o relatório precisa exibir mas não calcula
-(bloco/unidade/rótulo de cada premissa, rótulo e base de cada múltiplo,
-severidade e rótulo de cada diagnóstico, limiar de disclosure da divergência
-de base) é publicado à parte, como o catálogo de apresentação (A6):
+(bloco/unidade/rótulo de cada premissa, rótulo por convenção terminal
+canônica — `convencoes_terminais`, fonte única, nunca duplicado por rota —,
+rótulo e base de cada múltiplo, severidade e rótulo de cada diagnóstico,
+limiar e texto do disclosure de divergência de base) é publicado à parte,
+como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
 `tests/test_catalogo_apresentacao.py`.
 

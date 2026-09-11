@@ -50,6 +50,17 @@
       }
     }
   },
+  "convencoes_terminais": {
+    "book": {
+      "pt-BR": "Book — TV ancorado no capital investido (renda residual truncada)"
+    },
+    "convergencia": {
+      "pt-BR": "Convergência — retorno incremental converge ao custo de capital, rendas existentes preservadas"
+    },
+    "gordon": {
+      "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
+    }
+  },
   "premissas": {
     "firm": {
       "g": {
@@ -799,14 +810,14 @@
       "severidade": "atencao",
       "bloco": "crescimento_reinvestimento",
       "rotulo": {
-        "pt-BR": "Bloco de colheita: liberação de giro supera o NOPAT na fase 1"
+        "pt-BR": "Bloco de colheita: liberação de giro faz o FCFF superar o NOPAT na fase 1"
       }
     },
     "aviso_delator": {
       "severidade": "alerta",
       "bloco": "crescimento_reinvestimento",
       "rotulo": {
-        "pt-BR": "RiR da fase 2 acima de 100%: crescimento não autofinanciável"
+        "pt-BR": "RiR da fase 2 igual ou acima de 100%: crescimento não autofinanciável"
       }
     },
     "aviso_gp": {
@@ -819,5 +830,13 @@
   },
   "limiares": {
     "divergencia_de_base_pct_disclosure": 5.0
+  },
+  "disclosures": {
+    "divergencia_de_base_degrau": {
+      "limiar_pct": 5.0,
+      "texto": {
+        "pt-BR": "Parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau."
+      }
+    }
   }
 }

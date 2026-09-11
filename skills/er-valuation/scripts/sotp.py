@@ -62,6 +62,7 @@ abaixo, para a leitura do sinal.
 
 from typing import Any
 
+import diagnosticos
 from avaliar import precificar_firm, precificar_rampa
 from caso import CasoInvalido
 from ponte import compor
@@ -147,6 +148,21 @@ def _compor_parte(parte: dict, moeda: str | None, rf: float | None = None) -> di
         if chave in resultado or chave in _CHAVES_PROMOVIDAS_PARTE:
             continue
         resultado[chave] = valor_do_motor
+
+    # A3 (onda de correção da revisão final, achado S1): mesma disciplina de
+    # `avaliar._monta_cenario` (regra 5 do contrato) — todo `diagnosticos`
+    # ganha o paralelo `diagnosticos_chaves`, mesmo comprimento e mesma
+    # ordem, aqui também. Antes desta correção, uma parte de SOTP na rota
+    # firm (a única que emite 'diagnosticos' — a rota rampa, via
+    # `precificar_rampa`, não tem essa chave na saída do motor, ver
+    # `avaliar._monta_cenario_rampa`) publicava a prosa do motor sem a chave
+    # pública ao lado; o relatório (5B) não tinha como classificar
+    # severidade/bloco desses diagnósticos sem reimplementar o classificador
+    # — exatamente o que a regra 5 existe para impedir. `None` (mensagem sem
+    # chave única) não é filtrado aqui, mesma disciplina de `_monta_cenario`.
+    if "diagnosticos" in resultado:
+        resultado["diagnosticos_chaves"] = [
+            diagnosticos.classificar(m) for m in resultado["diagnosticos"]]
 
     return resultado
 

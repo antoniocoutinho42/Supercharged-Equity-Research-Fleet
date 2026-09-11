@@ -8,6 +8,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from caso import CasoInvalido, carregar, validar  # noqa: E402
+import diagnosticos  # noqa: E402
 from sotp import compor_partes  # noqa: E402
 
 
@@ -95,6 +96,36 @@ def test_nomes_de_parte_repetidos_recusam():
 def test_diagnosticos_de_cada_parte_chegam():
     r = compor_partes(_sotp(), "base")
     assert all(p["diagnosticos"] for p in r["partes"])
+
+
+def test_diagnosticos_chaves_paralelas_em_cada_parte():
+    """A3 (onda de correção da revisão final, achado S1): toda parte de SOTP
+    que publica 'diagnosticos' ganha o paralelo 'diagnosticos_chaves' — mesmo
+    comprimento, mesma ordem, mesmo classificador por prefixo que
+    `avaliar._monta_cenario` já usa para os cenários. Antes desta correção,
+    `caso_sotp_segmento` (VERIFICADO pela revisão) publicava a prosa do
+    motor sem a chave pública ao lado."""
+    r = compor_partes(_sotp(), "base")
+    for p in r["partes"]:
+        assert "diagnosticos" in p, p["nome"]
+        assert len(p["diagnosticos_chaves"]) == len(p["diagnosticos"]), p["nome"]
+        assert p["diagnosticos_chaves"] == [diagnosticos.classificar(m) for m in p["diagnosticos"]], p["nome"]
+        assert None not in p["diagnosticos_chaves"], p["nome"]
+
+
+def test_diagnosticos_chaves_so_aparece_onde_diagnosticos_aparece():
+    """`caso_sotp_safra.json` mistura rota: uma parte 'rampa' (o motor não
+    emite 'diagnosticos' para essa rota — só 'ev'/'pe' emitem, ver
+    `avaliar._monta_cenario_rampa`) e uma parte 'firm' (emite). A parte
+    rampa não ganha 'diagnosticos_chaves' inventada do nada; a parte firm
+    ganha o paralelo, como no teste acima."""
+    r = compor_partes(_safra(), "base")
+    partes = {p["nome"]: p for p in r["partes"]}
+    rampa = partes["Base instalada"]
+    firm = partes["Expansão"]
+    assert "diagnosticos" not in rampa and "diagnosticos_chaves" not in rampa
+    assert "diagnosticos" in firm
+    assert firm["diagnosticos_chaves"] == [diagnosticos.classificar(m) for m in firm["diagnosticos"]]
 
 
 # --------------------------------------------------------------------------
