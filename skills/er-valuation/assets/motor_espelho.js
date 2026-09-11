@@ -40,6 +40,20 @@
 // espelha essa segunda camada com uma checagem de Number.isFinite explicita — ver o comentario
 // ali.
 //
+// [item 4, fatia C, task 2] Ganhou os PREDICADOS de diagnostico das rotas firm/equity — espelha
+// diag_firm (justos.py:513-602), diag_eq (604-731) e _guardas_damodaran (348-379), mais a
+// composicao dos handlers `ev`/`pe` (`diagnosticos = diag_* + coerencia_vetor(...)[0]`). So' as
+// CHAVES ESTAVEIS entram aqui — a prosa do motor (numeros interpolados, frases inteiras) fica de
+// fora de proposito (ver diagnosticos_chaves.json, o vocabulario que classifica cada mensagem do
+// motor pelo PREFIXO): o relatorio (item 5) chaveia um dicionario estatico de prosa por essas
+// mesmas chaves, nunca reproduz o texto do motor. Ver a secao DIAGNOSTICOS abaixo para o
+// contrato completo, inclusive a razao pela qual `coerencia_vetor` so' contribui UMA chave
+// (identidade 4) e NENHUMA na rota equity — achado empirico, nao suposicao: PREMISSAS_FIRM/
+// PREMISSAS_EQUITY (caso.py) nunca expoe as chaves cruzadas (roe/gde/nde/kd na rota firm;
+// roic/wacc/kd/tax/da na equity) que as outras tres identidades exigem, entao elas nunca
+// executam pelo caminho do wrapper — confirmado rodando o motor.rodar real (nao suposto por
+// leitura), ver o relatorio desta task para a evidencia.
+//
 // Regras de espelho: a ordem das operacoes segue o Python termo a termo — inclusive o laco
 // explicito t = 1..n somado na mesma ordem — porque divergencia de ordem em ponto flutuante e a
 // causa mais provavel de erro na casa que importa. Cada guarda do Python (retorno NaN) vira uma
@@ -691,7 +705,16 @@ const CAMPOS_RAMPA = [
 // de cada aviso e' prosa fora do escopo desta fatia (ver cabecalho do arquivo e a nota da secao
 // WRAPPER sobre alvoDeMercado); so' a PRESENCA importa, por isso rampaBifasica abaixo escreve
 // `true` em vez de reproduzir a frase do motor.
-const AVISOS_RAMPA = ['aviso_colheita', 'aviso_delator'];
+//
+// [item 4, fatia C, task 2] 'aviso_gp' acrescentado ao final da lista — DIFERENTE dos dois
+// irmaos: aviso_colheita/aviso_delator sao decididos DENTRO de rampa_bifasica (o nucleo, sobre
+// g1/rir2), mas aviso_gp e' decidido no HANDLER `elif a.cmd == 'rampa':` (justos.py ~1954), sobre
+// `a.rf`/`a.tv`/`a.gp' — dados que rampa_bifasica nunca recebe (ela nao tem parametro `rf`). Por
+// isso aviso_gp e' calculado em precificarRampa abaixo, nao em rampaBifasica — ver o comentario
+// ali. A ORDEM dentro deste array so' precisa concordar entre os dois lados (o filtro
+// `AVISOS_RAMPA.filter(chave => chave in saidaMotor)` usa a ordem do ARRAY, nao a de insercao no
+// dict) — nao ha' semantica de "quem roda primeiro" sendo espelhada aqui.
+const AVISOS_RAMPA = ['aviso_colheita', 'aviso_delator', 'aviso_gp'];
 
 // rampaBifasica espelha SOMENTE a funcao nucleo `rampa_bifasica` — mesma assinatura (em FRACAO,
 // como o resto deste arquivo), mesmos defaults (g1/util/roic_tv/roic_book = null, gp = 0.0,
@@ -849,8 +872,24 @@ function rampaBifasica(args) {
 //     _exigir_valor(saida, "EV/EBITDA0") e' a PRIMEIRA leitura que precificar_rampa faz, entao e'
 //     ela quem dispara primeiro. Espelhado pela checagem de Number.isFinite abaixo, sobre o MESMO
 //     campo.
+//
+// [item 4, fatia C, task 2] `rf` (novo parametro, default null) ativa 'aviso_gp' — espelha a
+// condicao INLINE do handler `elif a.cmd == 'rampa':` (justos.py ~1954):
+//     if getattr(a, 'rf', None) is not None and a.tv == 'gordon' and pc(a.gp) and pc(a.gp) > pc(a.rf):
+//         res['aviso_gp'] = ...
+// ACHADO (nao suposicao — verificado por chamada direta ao motor real, duas vezes, com e sem
+// avaliar.py no meio): o plano desta fatia dizia que a comparacao e' `a.tv == 'gordon'` SEM
+// tv_canon, e que por isso o alias 'spread' nao dispararia o aviso. Isso NAO reproduz o motor
+// congelado: a substituicao de alias (`a.tv = tv_canon(a.tv)`, justos.py ~1888-1894) roda uma
+// UNICA vez, ANTES de QUALQUER `if a.cmd == ...`, para TODO subcomando — entao, no momento em que
+// o handler rampa le `a.tv`, 'ic'/'spread' JA' viraram 'book'/'gordon'. `--tv spread --gp 8 --rf
+// 5` no motor real dispara aviso_gp identico a `--tv gordon` com os mesmos numeros (mesma
+// mensagem, byte a byte) — `--tv ic` (que canonicaliza para 'book', nao 'gordon') e' quem
+// genuinamente NUNCA dispara. Por isso tvCanon(...) entra aqui: a paridade desta fatia inteira e'
+// contra o COMPORTAMENTO do motor, nao contra uma leitura textual isolada do handler — reportado
+// como discrepancia do plano no relatorio desta task, com os dois comandos que provam o achado.
 function precificarRampa({
-  premissas, ndEfetivo, acoes, moeda,
+  premissas, ndEfetivo, acoes, moeda, rf = null,
 }) {
   if (premissas.tv === null) {
     return { recusado: true };
@@ -869,6 +908,17 @@ function precificarRampa({
   } catch (erro) {
     return { recusado: true };
   }
+
+  // aviso_gp: ver o comentario grande acima da funcao. `nucleo.gp` reproduz o mesmo default 0.0
+  // que rampaBifasica aplica internamente (`'gp' in args ? args.gp : 0.0`) — precisa do MESMO
+  // valor aqui porque o handler real le `pc(a.gp)`, que tambem ja' passou pelo default 0.0 do
+  // argparse do subparser 'rampa' (justos.py:1753: `add_argument('--gp', ..., default=0.0)`).
+  const rfFracao = pct(rf);
+  const gpNucleo = 'gp' in nucleo ? nucleo.gp : 0.0;
+  if (rfFracao !== null && tvCanon(nucleo.tv) === 'gordon' && gpNucleo && gpNucleo > rfFracao) {
+    saidaMotor.aviso_gp = true;
+  }
+
   if (!Number.isFinite(saidaMotor['EV/EBITDA0'])) {
     return { recusado: true };
   }
@@ -956,12 +1006,341 @@ function resolverGrade2D(item) {
 // adaptador so' espalha `item.args` nos parametros nomeados; ainda carrega CAMPOS_SOLVER_VAZIOS
 // pela MESMA razao de resolverAlvo/resolverGrade1D/resolverGrade2D acima (test_paridade_solver_js.py
 // le a fixture inteira sem filtrar por tipo).
+// [item 4, fatia C, task 2] `rf` entra no adaptador com o mesmo `?? null` que os problemas de
+// rampa anteriores a esta task (sem `rf` declarado) ja' esperam — `a.rf` ausente do JSON vira
+// `undefined` em JS, nao `null`; `?? null` normaliza os dois para o mesmo "sem taxa livre de
+// risco" que precificarRampa's default (`rf = null`) tambem entende.
 function resolverRampa(item) {
   const a = item.args;
   const resultado = precificarRampa({
-    premissas: a.premissas, ndEfetivo: a.nd_efetivo, acoes: a.acoes, moeda: a.moeda,
+    premissas: a.premissas, ndEfetivo: a.nd_efetivo, acoes: a.acoes, moeda: a.moeda, rf: a.rf ?? null,
   });
   return { id: item.id, ...resultado, ...CAMPOS_SOLVER_VAZIOS };
+}
+
+// ============================================================================
+// DIAGNOSTICOS (item 4, fatia C, task 2) — espelha diag_firm (justos.py:513-602), diag_eq
+// (604-731) e _guardas_damodaran (348-379), mais a composicao dos handlers `ev`/`pe` no main()
+// (`diagnosticos = diag_* + coerencia_vetor(...)[0]`). Ver o comentario no topo do arquivo para o
+// porque de so' as CHAVES entrarem aqui, nunca a prosa.
+//
+// Paridade e' contra o WRAPPER (mesmo harness/fixture da secao WRAPPER acima), NUNCA contra
+// diag_firm/diag_eq direto: e' o vocabulario de premissas do CASO (PREMISSAS_FIRM/
+// PREMISSAS_EQUITY, caso.py) que decide quais ramos de coerencia_vetor sao alcancaveis — nao a
+// assinatura de diag_firm/diag_eq, que aceita mais parametros do que o caso jamais declara (a
+// rota 'ev' tambem tem --roe/--ke/--gde/--nde/--kd/--cash-yield/--rir-observado/--ebitda-ic na
+// CLI, para uso direto fora do wrapper — `flags_coerencia`, justos.py:1710-1719/1728 — mas
+// PREMISSAS_FIRM nunca inclui essas chaves, entao o wrapper nunca as emite). Por isso
+// `diagnosticosFirm`/`diagnosticosEquity` abaixo leem SOMENTE premissas que
+// `premissasParaNucleo` ja' resolve a partir do vetor do caso — nunca um vetor cruzado que so'
+// existiria chamando o motor fora do wrapper.
+// ============================================================================
+
+// Limiares (contrato — copiados do vendor, nao escolhidos aqui):
+// - 5e-4: "quase igual" para roic/wacc, roic_tv/wacc, roic_book/roic, roic_book/wacc (e os
+//   quatro espelhos do lado equity) — diag_firm/diag_eq usam o MESMO literal em todo teste de
+//   neutralidade/regime.
+// - 1e-6: "g praticamente zero" no bloco NEUTRALIDADE (g=0) — LIMIAR DIFERENTE do 1e-9 abaixo,
+//   nao e' o mesmo numero reusado com nomes diferentes (conferido linha a linha no vendor).
+// - 1e-9: aparece em TRES lugares com o MESMO valor literal (nao o mesmo lugar): a margem do
+//   teto de Damodaran (`gp > teto + 1e-9`), a guarda "g genuinamente != 0" antes do ECO de
+//   deriva do medio (`abs(g) > 1e-9`, diag_firm/diag_eq — DIFERENTE do 1e-6 do paragrafo
+//   anterior), e o teste de caixa~0 em diag_eq (`abs(caixa) > 1e-9` / `caixa < -1e-9`).
+const TOL_NEUTRALIDADE = 5e-4;
+const TOL_G_ZERO = 1e-6;
+const TOL_EPS = 1e-9;
+const FAIXA_SENSIBILIDADE_KE_GP = 0.02; // diag_eq: 0 < (ke - gp) < 0.02 (2 p.p., hardcoded no vendor)
+
+// Chaves de diagnosticosFirm/diagnosticosEquity/_guardasDamodaranChaves — os valores tem de
+// concordar, byte a byte, com o campo "chave" de diagnosticos_chaves.json (o harness classifica
+// cada mensagem do motor por PREFIXO e compara a lista de chaves resultante contra esta lista).
+const CHAVE = {
+  FIRM_CONVENCAO_BOOK: 'firm_convencao_book',
+  FIRM_CONFLACAO_SEM_ROIC_BOOK: 'firm_conflacao_sem_roic_book',
+  FIRM_REGIME_DECLARADO_ROIC_TV: 'firm_regime_declarado_roic_tv',
+  FIRM_NOTA_COLAPSO_GORDON: 'firm_nota_colapso_gordon',
+  FIRM_RIR: 'firm_rir',
+  FIRM_ALERTA_RIR_EXCEDE_100: 'firm_alerta_rir_excede_100',
+  FIRM_ALERTA_ROIC_ABAIXO_WACC: 'firm_alerta_roic_abaixo_wacc',
+  FIRM_ALERTA_CONFLACAO_B01: 'firm_alerta_conflacao_b01',
+  FIRM_CONVENCAO_CONDICIONADA_B01: 'firm_convencao_condicionada_b01',
+  FIRM_SUB_ALERTA_B01_MEDIO: 'firm_sub_alerta_b01_medio',
+  FIRM_ECO_DERIVA_MEDIO: 'firm_eco_deriva_medio',
+  FIRM_ATENCAO_ROIC_WACC_BOOK_DIVERGE: 'firm_atencao_roic_wacc_book_diverge',
+  FIRM_NEUTRALIDADE_IDENTIDADE: 'firm_neutralidade_identidade',
+  FIRM_NEUTRALIDADE_G0_GORDON: 'firm_neutralidade_g0_gordon',
+  FIRM_NEUTRALIDADE_G0_CONVERGENCIA: 'firm_neutralidade_g0_convergencia',
+  FIRM_ATENCAO_G0_BOOK: 'firm_atencao_g0_book',
+  EQ_CONVENCAO_BOOK: 'eq_convencao_book',
+  EQ_CONFLACAO_SEM_ROE_BOOK: 'eq_conflacao_sem_roe_book',
+  EQ_ECO_DERIVA_MEDIO: 'eq_eco_deriva_medio',
+  EQ_POLITICA_CAIXA_CONTINUA: 'eq_politica_caixa_continua',
+  EQ_POLITICA_CAIXA_ENCERRA: 'eq_politica_caixa_encerra',
+  EQ_REGIME_DECLARADO_ROE_TV: 'eq_regime_declarado_roe_tv',
+  EQ_NOTA_COLAPSO_GORDON: 'eq_nota_colapso_gordon',
+  EQ_RETENCAO: 'eq_retencao',
+  EQ_PAYOUT_ZERO_NAO_INFORMATIVO: 'eq_payout_zero_nao_informativo',
+  EQ_LIMITACAO_C2_KE_FIXO: 'eq_limitacao_c2_ke_fixo',
+  EQ_ALERTA_SENSIBILIDADE_KE_GP: 'eq_alerta_sensibilidade_ke_gp',
+  EQ_DOMINIO_NDE_MAIOR_GDE: 'eq_dominio_nde_maior_gde',
+  EQ_ALERTA_GROE_EXCEDE_100: 'eq_alerta_groe_excede_100',
+  EQ_ALERTA_ROE_ABAIXO_KE: 'eq_alerta_roe_abaixo_ke',
+  EQ_ALERTA_CONFLACAO_B01: 'eq_alerta_conflacao_b01',
+  EQ_CONVENCAO_CONDICIONADA_B01: 'eq_convencao_condicionada_b01',
+  EQ_SUB_ALERTA_B01_MEDIO: 'eq_sub_alerta_b01_medio',
+  EQ_ATENCAO_ROE_KE_BOOK_DIVERGE: 'eq_atencao_roe_ke_book_diverge',
+  EQ_NEUTRALIDADE_BOOK_CLEAN_SURPLUS: 'eq_neutralidade_book_clean_surplus',
+  EQ_NEUTRALIDADE_IDENTIDADE_CAIXA0: 'eq_neutralidade_identidade_caixa0',
+  EQ_ATENCAO_FCFE_NAO_BOOK: 'eq_atencao_fcfe_nao_book',
+  EQ_NEUTRALIDADE_G0_GORDON: 'eq_neutralidade_g0_gordon',
+  EQ_NEUTRALIDADE_G0_CONVERGENCIA: 'eq_neutralidade_g0_convergencia',
+  EQ_ATENCAO_G0_BOOK: 'eq_atencao_g0_book',
+  DAMODARAN_ALERTA_ANCORA_MACRO: 'damodaran_alerta_ancora_macro',
+  DAMODARAN_ANCORA_OK: 'damodaran_ancora_ok',
+  DAMODARAN_PREMISSA_NAO_ANCORADA: 'damodaran_premissa_nao_ancorada',
+  COERENCIA_ECO_INTENSIDADE_CAPITAL: 'coerencia_eco_intensidade_capital',
+};
+
+// _guardasDamodaranChaves espelha _guardas_damodaran (justos.py:348-379) — SO' a Guarda 1
+// (ancora macro do gp). A Guarda 2 ("MOEDA/REGIME NAO DECLARADOS", `if not moeda:`) e'
+// inalcancavel pelo wrapper — `caso["moeda"]` e' campo obrigatorio de todo caso.json
+// (`_RAZOES_CAMPOS_DE_TOPO`, caso.py) e `avaliar()` sempre repassa `caso["moeda"]` ao motor —
+// entao `moeda` nunca chega vazia por este caminho (detalhe 4 do brief da task); "nao espelhe".
+// `gp`/`rf` ja' chegam em FRACAO (rf convertido por `pct()` no chamador, como o handler faz:
+// `rf=None if getattr(a,'rf',None) is None else a.rf/100`).
+function _guardasDamodaranChaves(tv, gp, rfFracao, moeda) {
+  const chaves = [];
+  const tvC = tvCanon(tv);
+  const regimeReal = !!moeda && moeda.toLowerCase().endsWith('-real');
+  if (tvC === 'gordon' && gp && gp > 0) {
+    let teto;
+    if (rfFracao !== null) {
+      teto = regimeReal ? Math.min(rfFracao, 0.03) : rfFracao;
+    } else if (regimeReal) {
+      teto = 0.03;
+    } else {
+      teto = null;
+    }
+    if (teto !== null) {
+      if (gp > teto + TOL_EPS) {
+        chaves.push(CHAVE.DAMODARAN_ALERTA_ANCORA_MACRO);
+      } else {
+        chaves.push(CHAVE.DAMODARAN_ANCORA_OK);
+      }
+    } else {
+      chaves.push(CHAVE.DAMODARAN_PREMISSA_NAO_ANCORADA);
+    }
+  }
+  return chaves;
+}
+
+// diagnosticosFirm espelha diag_firm (justos.py:513-602) + a identidade 4 de coerencia_vetor
+// (382-510, "d×intensidade de capital" — a UNICA alcancavel pelo wrapper nesta rota; ver o
+// comentario da secao acima) + _guardasDamodaranChaves — na MESMA ordem de concatenacao que o
+// handler `ev` usa (`diagnosticos = diag_firm(...) + coerencia_vetor(...)[0]`, e diag_firm
+// termina retornando _guardas_damodaran): diag_firm, DEPOIS guardas, DEPOIS coerencia.
+//
+// `premissas` chega em PONTOS PERCENTUAIS (convencao do caso, como precificarCelula) — reusa
+// premissasParaNucleo/RENOMEIA_FIRM (secao WRAPPER acima) para o MESMO colapso null->ausencia e
+// a MESMA conversao percentual->fracao que o resto do wrapper ja' usa. `rf` chega em PONTOS
+// PERCENTUAIS tambem (convencao de `mercado.rf`), convertido aqui com `pct()`.
+function diagnosticosFirm(premissas, moeda, rf) {
+  const nucleo = premissasParaNucleo(premissas, RENOMEIA_FIRM);
+  const g = nucleo.g;
+  const roic = nucleo.roic;
+  const w = nucleo.w;
+  const n = nucleo.n;
+  const tv = tvCanon('tv' in nucleo ? nucleo.tv : 'book');
+  const roicBook = 'roic_book' in nucleo ? nucleo.roic_book : null;
+  const roicTv = 'roic_tv' in nucleo ? nucleo.roic_tv : null;
+  const gp = 'gp' in nucleo ? nucleo.gp : 0.0;
+  const rfFracao = pct(rf);
+
+  const chaves = [];
+  if (tv === 'book') {
+    chaves.push(CHAVE.FIRM_CONVENCAO_BOOK);
+    if (roicBook === null) {
+      chaves.push(CHAVE.FIRM_CONFLACAO_SEM_ROIC_BOOK);
+    }
+  }
+  if (tv === 'gordon' && roicTv !== null) {
+    if (roicTv < w - TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.FIRM_REGIME_DECLARADO_ROIC_TV);
+    } else if (Math.abs(roicTv - w) < TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.FIRM_NOTA_COLAPSO_GORDON);
+    }
+  }
+  const rir = g / roic;
+  chaves.push(CHAVE.FIRM_RIR);
+  if (rir > 1) {
+    chaves.push(CHAVE.FIRM_ALERTA_RIR_EXCEDE_100);
+  }
+  if (roic < w && g > 0) {
+    chaves.push(CHAVE.FIRM_ALERTA_ROIC_ABAIXO_WACC);
+  }
+  if (roic < w && tv === 'book') {
+    if (roicBook === null) {
+      chaves.push(CHAVE.FIRM_ALERTA_CONFLACAO_B01);
+    } else {
+      chaves.push(CHAVE.FIRM_CONVENCAO_CONDICIONADA_B01);
+      if (roicBook < w) {
+        chaves.push(CHAVE.FIRM_SUB_ALERTA_B01_MEDIO);
+      }
+    }
+  }
+  if (tv === 'book' && roicBook !== null && Math.abs(roicBook - roic) >= TOL_NEUTRALIDADE
+      && Math.abs(g) > TOL_EPS) {
+    const icN = (1 + g) * (1.0 / roicBook - 1.0 / roic) + (1 + g) ** (n + 1) / roic;
+    if (icN > 0) {
+      chaves.push(CHAVE.FIRM_ECO_DERIVA_MEDIO);
+    }
+  }
+  if (Math.abs(roic - w) < TOL_NEUTRALIDADE) {
+    if (tv === 'book' && roicBook !== null && Math.abs(roicBook - w) >= TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.FIRM_ATENCAO_ROIC_WACC_BOOK_DIVERGE);
+    } else {
+      chaves.push(CHAVE.FIRM_NEUTRALIDADE_IDENTIDADE);
+    }
+  }
+  if (Math.abs(g) < TOL_G_ZERO) {
+    if (tv === 'gordon') {
+      chaves.push(CHAVE.FIRM_NEUTRALIDADE_G0_GORDON);
+    } else if (tv === 'convergencia') {
+      chaves.push(CHAVE.FIRM_NEUTRALIDADE_G0_CONVERGENCIA);
+    } else {
+      chaves.push(CHAVE.FIRM_ATENCAO_G0_BOOK);
+    }
+  }
+  chaves.push(..._guardasDamodaranChaves(tv, gp, rfFracao, moeda));
+
+  // coerencia_vetor, identidade 4 ("d×intensidade de capital", justos.py:486-503): precisa de
+  // roic/d/tax, os TRES sempre presentes na rota firm (PREMISSAS_OBRIGATORIAS_FIRM inclui roic/
+  // da/tax). `ebitda_ic` (o unico input que ramificaria para a mensagem INCOERENCIA em vez do
+  // ECO) nunca e' exposto pelo wrapper (decisao da 3A) — por isso so' o ramo ECO existe aqui; o
+  // ramo INCOERENCIA nao tem chave em diagnosticos_chaves.json de proposito (inalcancavel).
+  const d = nucleo.d;
+  const tax = nucleo.t;
+  if ((1 - d) * (1 - tax) > 0) {
+    chaves.push(CHAVE.COERENCIA_ECO_INTENSIDADE_CAPITAL);
+  }
+
+  return chaves;
+}
+
+// diagnosticosEquity espelha diag_eq (justos.py:604-731) + _guardasDamodaranChaves, na mesma
+// ordem de concatenacao do handler `pe`. coerencia_vetor NAO contribui nenhuma chave nesta rota:
+// as quatro identidades exigem, cada uma, pelo menos um de {roic, w, kd, tax} ou
+// `rir_observado` — nenhum desses nomes esta em PREMISSAS_EQUITY (caso.py), e nenhum vira flag
+// pelo caminho do wrapper; confirmado rodando o motor.rodar real com o vetor equity completo
+// (nenhuma mensagem "[vetor]" jamais aparece — ver o relatorio desta task).
+//
+// `gde`/`nde`: resolvidos com o MESMO default 0.0 que o handler `pe` aplica ANTES de chamar
+// diag_eq (`gde, nde = pc(a.gde) or 0, pc(a.nde) or 0` — nao o default proprio de diag_eq, que
+// nunca roda porque o handler ja' preencheu as duas variaveis antes da chamada).
+function diagnosticosEquity(premissas, moeda, rf) {
+  const nucleo = premissasParaNucleo(premissas, {});
+  const g = nucleo.g;
+  const roe = nucleo.roe;
+  const ke = nucleo.ke;
+  const gde = 'gde' in nucleo ? nucleo.gde : 0;
+  const nde = 'nde' in nucleo ? nucleo.nde : 0;
+  const n = nucleo.n;
+  const tv = tvCanon('tv' in nucleo ? nucleo.tv : 'book');
+  const roeBook = 'roe_book' in nucleo ? nucleo.roe_book : null;
+  const roeTv = 'roe_tv' in nucleo ? nucleo.roe_tv : null;
+  const politicaTv = 'politica_tv' in nucleo ? nucleo.politica_tv : 'continua';
+  const gp = 'gp' in nucleo ? nucleo.gp : 0.0;
+  const rfFracao = pct(rf);
+  const caixa = gde - nde;
+
+  const chaves = [];
+  if (tv === 'book') {
+    chaves.push(CHAVE.EQ_CONVENCAO_BOOK);
+    if (roeBook === null) {
+      chaves.push(CHAVE.EQ_CONFLACAO_SEM_ROE_BOOK);
+    } else if (Math.abs(roeBook - roe) >= TOL_NEUTRALIDADE && Math.abs(g) > TOL_EPS) {
+      const eN = (1 + g) * (1.0 / roeBook - 1.0 / roe) + (1 + g) ** (n + 1) / roe;
+      if (eN > 0) {
+        chaves.push(CHAVE.EQ_ECO_DERIVA_MEDIO);
+      }
+    }
+  }
+  if (tv === 'gordon' && roeTv !== null) {
+    if (Math.abs(caixa) > TOL_EPS && gp > 0) {
+      chaves.push(politicaTv === 'continua' ? CHAVE.EQ_POLITICA_CAIXA_CONTINUA : CHAVE.EQ_POLITICA_CAIXA_ENCERRA);
+    }
+    if (roeTv < ke - TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.EQ_REGIME_DECLARADO_ROE_TV);
+    } else if (Math.abs(roeTv - ke) < TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.EQ_NOTA_COLAPSO_GORDON);
+    }
+  }
+  const ret = g / roe;
+  chaves.push(CHAVE.EQ_RETENCAO);
+  if (ret >= 0.95 && ret <= 1.0 + TOL_EPS) {
+    chaves.push(CHAVE.EQ_PAYOUT_ZERO_NAO_INFORMATIVO);
+  }
+  if (Math.abs(caixa) > TOL_EPS) {
+    chaves.push(CHAVE.EQ_LIMITACAO_C2_KE_FIXO);
+  }
+  if (tv === 'gordon' && roeTv !== null && (ke - gp) > 0 && (ke - gp) < FAIXA_SENSIBILIDADE_KE_GP) {
+    chaves.push(CHAVE.EQ_ALERTA_SENSIBILIDADE_KE_GP);
+  }
+  if (caixa < -TOL_EPS) {
+    chaves.push(CHAVE.EQ_DOMINIO_NDE_MAIOR_GDE);
+  }
+  if (ret > 1) {
+    chaves.push(CHAVE.EQ_ALERTA_GROE_EXCEDE_100);
+  }
+  if (roe < ke && g > 0) {
+    chaves.push(CHAVE.EQ_ALERTA_ROE_ABAIXO_KE);
+  }
+  if (roe < ke && tv === 'book') {
+    if (roeBook === null) {
+      chaves.push(CHAVE.EQ_ALERTA_CONFLACAO_B01);
+    } else {
+      chaves.push(CHAVE.EQ_CONVENCAO_CONDICIONADA_B01);
+      if (roeBook < ke) {
+        chaves.push(CHAVE.EQ_SUB_ALERTA_B01_MEDIO);
+      }
+    }
+  }
+  if (Math.abs(roe - ke) < TOL_NEUTRALIDADE) {
+    if (tv === 'book' && roeBook !== null && Math.abs(roeBook - ke) >= TOL_NEUTRALIDADE) {
+      chaves.push(CHAVE.EQ_ATENCAO_ROE_KE_BOOK_DIVERGE);
+    } else if (tv === 'book') {
+      chaves.push(CHAVE.EQ_NEUTRALIDADE_BOOK_CLEAN_SURPLUS);
+    } else if (Math.abs(caixa) < TOL_EPS) {
+      chaves.push(CHAVE.EQ_NEUTRALIDADE_IDENTIDADE_CAIXA0);
+    } else {
+      chaves.push(CHAVE.EQ_ATENCAO_FCFE_NAO_BOOK);
+    }
+  }
+  if (Math.abs(g) < TOL_G_ZERO) {
+    if (tv === 'gordon') {
+      chaves.push(CHAVE.EQ_NEUTRALIDADE_G0_GORDON);
+    } else if (tv === 'convergencia') {
+      chaves.push(CHAVE.EQ_NEUTRALIDADE_G0_CONVERGENCIA);
+    } else {
+      chaves.push(CHAVE.EQ_ATENCAO_G0_BOOK);
+    }
+  }
+  chaves.push(..._guardasDamodaranChaves(tv, gp, rfFracao, moeda));
+
+  return chaves;
+}
+
+// `args` de um problema `tipo: "diag"` esta' em snake_case (contrato do brief task-4c-2):
+// `{"rota": "firm"|"equity", "premissas": {...}, "moeda": str, "rf": float|null}`. Sem os campos
+// de compatibilidade do SOLVER, `resolverDiag` nao teria como conviver na mesma fixture que
+// test_paridade_solver_js.py le sem filtrar por tipo — mesma razao de resolverAlvo/resolverRampa
+// acima.
+function resolverDiag(item) {
+  const a = item.args;
+  const chaves = a.rota === 'firm'
+    ? diagnosticosFirm(a.premissas, a.moeda, a.rf ?? null)
+    : diagnosticosEquity(a.premissas, a.moeda, a.rf ?? null);
+  return { id: item.id, chaves, ...CAMPOS_SOLVER_VAZIOS };
 }
 
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
@@ -971,7 +1350,8 @@ function resolverRampa(item) {
 // 'solver'`: problema de solver (task 2), despachado por `resolverProblema`.
 // `tipo: 'alvo'|'grade1d'|'grade2d'`: problema de wrapper (task 3),
 // despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`. `tipo:
-// 'rampa'` (fatia C, task 1): despachado por `resolverRampa`.
+// 'rampa'` (fatia C, task 1): despachado por `resolverRampa`. `tipo: 'diag'`
+// (fatia C, task 2): despachado por `resolverDiag`.
 // Qualquer outro `tipo` LANCA — falha fechada, a mesma disciplina do resto
 // deste arquivo.
 function avaliarItem(item) {
@@ -992,6 +1372,9 @@ function avaliarItem(item) {
   }
   if (item.tipo === 'rampa') {
     return resolverRampa(item);
+  }
+  if (item.tipo === 'diag') {
+    return resolverDiag(item);
   }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
@@ -1015,6 +1398,7 @@ const superficiePublica = {
   alvoDeMercado, grade1D, grade2D, precificarCelula,
   resolverAlvo, resolverGrade1D, resolverGrade2D,
   rampaBifasica, precificarRampa, resolverRampa,
+  diagnosticosFirm, diagnosticosEquity, resolverDiag,
   avaliarItem, avaliarItens,
 };
 

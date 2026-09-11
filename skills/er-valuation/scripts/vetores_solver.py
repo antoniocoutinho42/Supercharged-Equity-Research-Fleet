@@ -112,7 +112,14 @@ from sensibilidades import grade_1d, grade_2d  # noqa: E402
 # SUBPROCESSO (avaliar.precificar_rampa -> motor.rodar -> subprocess), nunca por import — nenhuma
 # dança de bytecode aqui tambem.
 from avaliar import precificar_rampa  # noqa: E402
-from motor import MotorFalhou  # noqa: E402
+from motor import MotorFalhou, rodar  # noqa: E402
+
+# [item 4, fatia C, task 2] `rodar` (motor.py) e' o MESMO import que precificar_firm/
+# precificar_equity usam por baixo dos panos (avaliar.py: `from motor import ... rodar`) — os
+# problemas "diag" chamam `rodar` DIRETO (sem escala, so' para ler `diagnosticos`) porque nao ha'
+# ponte de preco para testar aqui, so' a lista de mensagens que o motor devolve; e' AINDA o
+# caminho do wrapper (mesmo argv_para, mesmo subprocesso, mesmo colapso null->ausencia), nunca
+# diag_firm/diag_eq importados direto — ver `_avaliar_diag` abaixo.
 
 SEMENTE_SOLVER = 20260826
 
@@ -133,7 +140,11 @@ _TOL_IDENTIFICACAO = 0.01
 # ver `_avaliar_rampa` abaixo.
 CAMPOS_RAMPA: tuple = ("g1_%", "d_trajetoria_fase1_%", "d2_fase2_%", "rir_fase1_%", "alfa", "beta",
                        "rir2_%", "roic2_%", "vp_fase1", "valor_fase2_no_ano_T", "capacidade_receita")
-AVISOS_RAMPA: tuple = ("aviso_colheita", "aviso_delator")
+# [item 4, fatia C, task 2] 'aviso_gp' acrescentado ao final — decidido no HANDLER `rampa`
+# (justos.py ~1954), nao em rampa_bifasica; ver o comentario em motor_espelho.js junto do mesmo
+# array para a razao e para o achado sobre o alias 'spread' (discrepancia do plano, reportada na
+# task).
+AVISOS_RAMPA: tuple = ("aviso_colheita", "aviso_delator", "aviso_gp")
 
 
 def _problema(resolver: str, fn: str, args: dict, alvo: float, lo: float, hi: float,
@@ -520,9 +531,14 @@ def _bloco_wrapper() -> list[dict]:
 
 
 def _problema_rampa(premissas: dict, nd_efetivo: float | None, acoes: float | None,
-                    moeda: str = "BRL-nominal") -> dict:
+                    moeda: str = "BRL-nominal", rf: float | None = None) -> dict:
+    """`rf` (item 4, fatia C, task 2): optional, default `None` — mesmo comportamento de todo
+    problema anterior a esta task (que nunca declarava a chave). Em PONTOS PERCENTUAIS, como
+    `mercado.rf` — `_avaliar_rampa` repassa direto a `precificar_rampa(..., rf=...)`, e
+    `resolverRampa` (motor_espelho.js) le a MESMA chave (`a.rf ?? null`)."""
     return {"id": 0, "tipo": "rampa",
-            "args": {"premissas": premissas, "nd_efetivo": nd_efetivo, "acoes": acoes, "moeda": moeda}}
+            "args": {"premissas": premissas, "nd_efetivo": nd_efetivo, "acoes": acoes,
+                     "moeda": moeda, "rf": rf}}
 
 
 def _bloco_rampa() -> list[dict]:
@@ -607,6 +623,231 @@ def _bloco_rampa() -> list[dict]:
     v.append(_problema_rampa({**base, "g1": 5.0, "tv": "book", "da_parque": 400.0, "n": 10},
                              nd_efetivo=400.0, acoes=120.0))
 
+    # --- N/O/P (item 4, fatia C, task 2): aviso_gp — condição do handler `rampa`
+    # (`getattr(a,'rf',None) is not None and a.tv == 'gordon' and pc(a.gp) and pc(a.gp) >
+    # pc(a.rf)`), verificada por chamada direta ao motor congelado (não pela leitura isolada do
+    # handler — ver task-4c-2-report.md para os dois comandos que produziram a evidência).
+    #
+    # N. tv='gordon', gp (8%) > rf (5%) -> aviso_gp DISPARA. roic_tv=20% fica bem acima de wacc
+    # (10%) e de gp para não confundir esta propriedade com ROIC_TV < WACC (REGIME DECLARADO,
+    # não testado por esta fatia na rota rampa).
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "gordon", "roic_tv": 20.0, "gp": 8.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0, rf=5.0))
+
+    # O. tv='ic' (alias legado de 'book', NÃO da família gordon) com o MESMO gp (8%) > rf (5%) que
+    # N -> aviso_gp NÃO dispara: o próprio _guardas_damodaran só considera a âncora quando
+    # tv_canon(tv) == 'gordon', e 'ic' canonicaliza para 'book'. Fronteira genuína do domínio
+    # gordon — não confundir com a peculiaridade de P abaixo.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "ic", "n": 10, "gp": 8.0},
+        nd_efetivo=400.0, acoes=120.0, rf=5.0))
+
+    # P. tv='spread' (alias legado de 'gordon'), MESMOS roic_tv/gp/rf de N.
+    #
+    # ACHADO (não suposição do plano — verificado empiricamente, duas vezes, contra o motor
+    # congelado de verdade): a versão anterior deste item dizia que a comparação do handler
+    # (`a.tv == 'gordon'`) é feita SEM tv_canon, e que por isso o alias 'spread' NÃO dispararia
+    # aviso_gp. Isso não é o que o motor faz. A substituição de alias
+    # (`a.tv = tv_canon(a.tv)`, justos.py ~1888-1894) roda ANTES de QUALQUER `if a.cmd == ...`,
+    # para TODO subcomando — quando o handler `rampa` lê `a.tv`, 'spread' JÁ virou 'gordon'.
+    # `--tv spread --gp 8 --rf 5` no motor real dispara aviso_gp byte a byte IGUAL a `--tv gordon`
+    # com os mesmos números; só `--tv ic` (problema O acima, que canonicaliza para 'book') não
+    # dispara. Comandos que provam isso (rodados direto, sem avaliar.py no meio):
+    #   python vendor/multiplos-justos/scripts/justos.py rampa ... --tv spread --gp 8 --rf 5 ...
+    #   python vendor/multiplos-justos/scripts/justos.py rampa ... --tv gordon --gp 8 --rf 5 ...
+    # — os dois devolvem o MESMO 'aviso_gp'. Por isso este problema espera DISPARAR (paridade é
+    # contra o COMPORTAMENTO do motor, não contra uma leitura textual isolada do handler) — o
+    # oposto do que o plano original previa. Discrepância registrada no relatório desta task.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "spread", "roic_tv": 20.0, "gp": 8.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0, rf=5.0))
+
+    return v
+
+
+# ---------------------------------------------------------------------------
+# Bloco 5 (item 4, fatia C, task 2): problemas de DIAGNOSTICO — predicados de diag_firm/diag_eq/
+# _guardas_damodaran/coerencia_vetor, alcançados pelo mesmo caminho do wrapper que os blocos 3/4
+# (`motor.rodar` direto, sem escala — só a lista `diagnosticos` importa aqui, não preço nem
+# múltiplo). Hand-escrito, mesma disciplina de `_bloco_wrapper`/`_bloco_rampa`: cada caso foi
+# desenhado para exercitar UMA chave NOVA de `diagnosticos_chaves.json` e conferido por chamada
+# direta a `motor.rodar` antes de entrar aqui (ver task-4c-2-report.md). `premissas` está em
+# PONTOS PERCENTUAIS (convenção de caso.json), como os outros blocos de wrapper.
+#
+# Reachability (achado da task, não suposição): `coerencia_vetor` só contribui UMA chave —
+# `coerencia_eco_intensidade_capital` (identidade 4, "d×intensidade de capital") — e SÓ na rota
+# firm. As outras três identidades (1: ROE×ROIC×alavancagem — a fonte de "CAIXA REMUNERADO
+# [vetor]"; 2: WACC×Ke×Kd×alavancagem; 3: RiR observado×g/ROIC) exigem, juntas, {roe, gde, nde,
+# kd} na rota firm ou {roic, wacc, kd, tax} na rota equity — nenhum desses nomes está em
+# PREMISSAS_FIRM/PREMISSAS_EQUITY (caso.py), então nenhuma delas jamais executa pelo caminho do
+# wrapper, nas duas rotas. Confirmado rodando `motor.rodar` com um varredura de ~1300 vetores
+# firm/equity (nenhuma mensagem "[vetor]" fora da identidade 4 apareceu nenhuma vez) — por isso
+# `diagnosticos_chaves.json` não tem entrada "INCOERÊNCIA"/"CAIXA REMUNERADO"/"DIVERGÊNCIA
+# DECLARADA [vetor]" nenhuma: são inalcançáveis, "não espelhe" (detalhe 2 do plano).
+_BASE_DIAG_FIRM: dict = dict(g=5.0, roic=15.0, wacc=9.0, n=10, da=20.0, tax=25.0, tv="book")
+_BASE_DIAG_EQ: dict = dict(g=4.0, roe=16.0, ke=10.0, n=10, gde=25.0, nde=10.0, tv="book")
+
+
+def _problema_diag(rota: str, premissas: dict, moeda: str = "BRL-nominal",
+                   rf: float | None = None) -> dict:
+    return {"id": 0, "tipo": "diag",
+            "args": {"rota": rota, "premissas": premissas, "moeda": moeda, "rf": rf}}
+
+
+def _bloco_diag() -> list[dict]:
+    v: list[dict] = []
+    bf, be = _BASE_DIAG_FIRM, _BASE_DIAG_EQ
+
+    # ===== rota firm (diag_firm + guardas de Damodaran + coerência identidade 4) =====
+
+    # 1. book, SEM --roic-book -> convenção 'book' + conflação (chaves novas: firm_convencao_book,
+    # firm_conflacao_sem_roic_book, firm_rir, coerencia_eco_intensidade_capital).
+    v.append(_problema_diag("firm", {**bf}))
+
+    # 2. RiR > 100% (g=20% >> roic=15%) -> firm_alerta_rir_excede_100.
+    v.append(_problema_diag("firm", {**bf, "g": 20.0, "roic": 15.0}))
+
+    # 3. roic < wacc, g > 0, book SEM roic_book -> firm_alerta_roic_abaixo_wacc,
+    # firm_alerta_conflacao_b01.
+    v.append(_problema_diag("firm", {**bf, "roic": 6.0, "wacc": 9.0, "g": 3.0}))
+
+    # 4. roic < wacc, book COM roic_book >= wacc (sem sub-alerta) -> firm_convencao_condicionada_b01,
+    # firm_eco_deriva_medio.
+    v.append(_problema_diag(
+        "firm", {**bf, "roic": 6.0, "wacc": 9.0, "g": 3.0, "roic_book": 10.0}))
+
+    # 5. roic < wacc, book COM roic_book < wacc (com sub-alerta) -> firm_sub_alerta_b01_medio.
+    v.append(_problema_diag(
+        "firm", {**bf, "roic": 6.0, "wacc": 9.0, "g": 3.0, "roic_book": 5.0}))
+
+    # 6. roic ≈ wacc (9% = 9%) mas roic_book diverge (15%) -> firm_atencao_roic_wacc_book_diverge.
+    v.append(_problema_diag(
+        "firm", {**bf, "roic": 9.0, "wacc": 9.0, "roic_book": 15.0}))
+
+    # 7. roic = wacc, tv='convergencia' (sem book) -> firm_neutralidade_identidade.
+    v.append(_problema_diag(
+        "firm", {**bf, "roic": 9.0, "wacc": 9.0, "tv": "convergencia"}))
+
+    # 7b. QUASE-empate: roic (9,20%) − wacc (9,00%) = 0,20 p.p. = 2e-3 — ACIMA do limiar real de
+    # neutralidade (5e-4 = 0,05 p.p.), então NENHUMA chave de neutralidade dispara aqui (só
+    # firm_rir + coerencia_eco). Este problema é o alvo da prova de falseabilidade desta task: um
+    # limiar mutado para 5e-3 (0,5 p.p.) tornaria 0,20 p.p. "neutro" e faria
+    # firm_neutralidade_identidade disparar só no espelho — RED nomeando este id. Verificado por
+    # chamada direta ao motor antes de fixar os números (só RiR + ECO aparecem).
+    v.append(_problema_diag(
+        "firm", {**bf, "roic": 9.20, "wacc": 9.00, "tv": "convergencia"}))
+
+    # 8. g ≈ 0, tv='gordon' (roic_tv/gp válidos, sem --rf) -> firm_neutralidade_g0_gordon,
+    # damodaran_premissa_nao_ancorada.
+    v.append(_problema_diag(
+        "firm", {**bf, "g": 0.0, "tv": "gordon", "roic_tv": 10.0, "gp": 2.0}))
+
+    # 9. g ≈ 0, tv='convergencia' -> firm_neutralidade_g0_convergencia.
+    v.append(_problema_diag("firm", {**bf, "g": 0.0, "tv": "convergencia"}))
+
+    # 10. g ≈ 0, tv='book' -> firm_atencao_g0_book.
+    v.append(_problema_diag("firm", {**bf, "g": 0.0, "tv": "book"}))
+
+    # 11. tv='gordon', ROIC_TV (5%) < WACC (9%), sem --rf -> firm_regime_declarado_roic_tv.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 5.0, "gp": 2.0, "wacc": 9.0}))
+
+    # 12. tv='gordon', ROIC_TV ≈ WACC (9% = 9%), sem --rf -> firm_nota_colapso_gordon.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 9.0, "gp": 2.0, "wacc": 9.0}))
+
+    # 13. Damodaran ALERTA: gp (8%) > teto (rf=5%) -> damodaran_alerta_ancora_macro.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 8.0, "wacc": 9.0}, rf=5.0))
+
+    # 14. Damodaran ÂNCORA OK: gp (3%) <= teto (rf=5%) -> damodaran_ancora_ok.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 3.0, "wacc": 9.0}, rf=5.0))
+
+    # 15. Damodaran regime real, SEM --rf (moeda 'BRL-real' -> teto = PIB real 3%) — mesma chave
+    # de 13 (damodaran_alerta_ancora_macro), mas exercita o ramo `elif regime_real:` de
+    # _guardasDamodaranChaves que nenhum outro problema toca (13/14 sempre declaram rf).
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 4.0, "wacc": 9.0},
+        moeda="BRL-real", rf=None))
+
+    # ===== rota equity (diag_eq + guardas de Damodaran; coerência NUNCA contribui aqui) =====
+
+    # 16. book, SEM --roe-book -> eq_convencao_book, eq_conflacao_sem_roe_book, eq_retencao,
+    # eq_limitacao_c2_ke_fixo (gde=25% != nde=10% na base -> caixa != 0).
+    v.append(_problema_diag("equity", {**be}))
+
+    # 17. book, COM roe_book (13%) que diverge do roe marginal (16%) -> eq_eco_deriva_medio.
+    v.append(_problema_diag("equity", {**be, "roe_book": 13.0}))
+
+    # 18. payout ≈ 0 (g=15,5% quase = roe=16%) -> eq_payout_zero_nao_informativo.
+    v.append(_problema_diag("equity", {**be, "g": 15.5, "roe": 16.0}))
+
+    # 19. tv='gordon', roe_tv (12%) válido, gp (9%) > 0, caixa != 0, política default 'continua',
+    # Ke(10%)-gp(9%)=1 p.p. dentro de (0, 2 p.p.) -> eq_politica_caixa_continua,
+    # eq_alerta_sensibilidade_ke_gp. Sem --rf -> também exercita damodaran_premissa_nao_ancorada
+    # (já coberta pela rota firm, mas nesta rota confirma que o MESMO guarda compartilhado roda
+    # igual dos dois lados).
+    v.append(_problema_diag(
+        "equity", {**be, "tv": "gordon", "roe_tv": 12.0, "gp": 9.0, "ke": 10.0}))
+
+    # 20. ND/E (20%) > GD/E (5%) -> caixa negativo -> eq_dominio_nde_maior_gde.
+    v.append(_problema_diag("equity", {**be, "gde": 5.0, "nde": 20.0}))
+
+    # 21. g/ROE > 100% (g=20% > roe=16%) -> eq_alerta_groe_excede_100.
+    v.append(_problema_diag("equity", {**be, "g": 20.0, "roe": 16.0}))
+
+    # 22. roe < ke, g > 0, book SEM roe_book -> eq_alerta_roe_abaixo_ke, eq_alerta_conflacao_b01.
+    v.append(_problema_diag("equity", {**be, "roe": 6.0, "ke": 10.0, "g": 3.0}))
+
+    # 23. roe < ke, book COM roe_book >= ke (sem sub-alerta) -> eq_convencao_condicionada_b01.
+    v.append(_problema_diag(
+        "equity", {**be, "roe": 6.0, "ke": 10.0, "g": 3.0, "roe_book": 11.0}))
+
+    # 24. roe < ke, book COM roe_book < ke (com sub-alerta) -> eq_sub_alerta_b01_medio.
+    v.append(_problema_diag(
+        "equity", {**be, "roe": 6.0, "ke": 10.0, "g": 3.0, "roe_book": 5.0}))
+
+    # 25. roe ≈ ke (10% = 10%) mas roe_book diverge (15%) -> eq_atencao_roe_ke_book_diverge.
+    v.append(_problema_diag("equity", {**be, "roe": 10.0, "ke": 10.0, "roe_book": 15.0}))
+
+    # 26. roe ≈ ke, tv='book', SEM roe_book -> eq_neutralidade_book_clean_surplus.
+    v.append(_problema_diag("equity", {**be, "roe": 10.0, "ke": 10.0}))
+
+    # 27. roe ≈ ke, tv='convergencia', caixa = 0 (gde=nde=10%) -> eq_neutralidade_identidade_caixa0.
+    v.append(_problema_diag(
+        "equity", {**be, "roe": 10.0, "ke": 10.0, "tv": "convergencia", "gde": 10.0, "nde": 10.0}))
+
+    # 28. roe ≈ ke, tv='convergencia', caixa != 0 -> eq_atencao_fcfe_nao_book.
+    v.append(_problema_diag(
+        "equity", {**be, "roe": 10.0, "ke": 10.0, "tv": "convergencia"}))
+
+    # 29. g ≈ 0, tv='gordon' -> eq_neutralidade_g0_gordon (+ eq_politica_caixa_continua, sem --rf).
+    v.append(_problema_diag(
+        "equity", {**be, "g": 0.0, "tv": "gordon", "roe_tv": 12.0, "gp": 2.0}))
+
+    # 30. g ≈ 0, tv='convergencia' -> eq_neutralidade_g0_convergencia.
+    v.append(_problema_diag("equity", {**be, "g": 0.0, "tv": "convergencia"}))
+
+    # 31. g ≈ 0, tv='book' -> eq_atencao_g0_book.
+    v.append(_problema_diag("equity", {**be, "g": 0.0, "tv": "book"}))
+
+    # 32. tv='gordon', ROE_TV (5%) < Ke (10%), política 'encerra' explícita, sem --rf ->
+    # eq_politica_caixa_encerra, eq_regime_declarado_roe_tv.
+    v.append(_problema_diag(
+        "equity", {**be, "tv": "gordon", "roe_tv": 5.0, "gp": 3.0, "ke": 10.0,
+                  "politica_tv": "encerra"}))
+
+    # 33. tv='gordon', ROE_TV ≈ Ke (10% = 10%), sem --rf -> eq_nota_colapso_gordon.
+    v.append(_problema_diag(
+        "equity", {**be, "tv": "gordon", "roe_tv": 10.0, "gp": 3.0, "ke": 10.0}))
+
+    # 34. Damodaran ALERTA visto pela rota equity (gp=8% > rf=5%) — mesma chave de 13, mas
+    # confirma que o guarda compartilhado dispara igual quando chamado por diag_eq.
+    v.append(_problema_diag(
+        "equity", {**be, "tv": "gordon", "roe_tv": 20.0, "gp": 8.0, "ke": 9.0}, rf=5.0))
+
     return v
 
 
@@ -617,14 +858,15 @@ def gerar() -> list[dict]:
     `gerar() == gerar()` valha trivialmente e o CLI (processo novo)
     reproduza a fixture commitada byte a byte.
 
-    Os problemas de wrapper (`_bloco_wrapper`, task 3) e de rampa (`_bloco_rampa`, fatia C task 1)
-    vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
-    regra da metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2, imutável por
-    regra da fatia B) alinhado por posição com os IDs que ele já conhece; a fixture inteira
-    permanece uma lista única, um gerador único, como o brief da task 3 pediu e esta task
-    preserva."""
+    Os problemas de wrapper (`_bloco_wrapper`, task 3), de rampa (`_bloco_rampa`, fatia C task 1)
+    e de diagnóstico (`_bloco_diag`, fatia C task 2) vêm SEMPRE por último, nessa ordem, depois
+    dos 41 de solver — nunca intercalados. Isso não é regra da metodologia, é o que mantém
+    `tests/test_paridade_solver_js.py` (task 2, imutável por regra da fatia B) alinhado por
+    posição com os IDs que ele já conhece; a fixture inteira permanece uma lista única, um gerador
+    único, como o brief da task 3 pediu e esta task preserva."""
     rng = random.Random(SEMENTE_SOLVER)
-    problemas = _bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
+    problemas = (_bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
+                + _bloco_diag())
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -786,11 +1028,18 @@ def _avaliar_rampa(problema: dict) -> dict:
     `saida` filtra a saída CRUA do motor (primeiro retorno de `precificar_rampa`) para só os
     campos de `CAMPOS_RAMPA` presentes, com `rir_fase1_%` sem a chave 'nota' (texto estático, fora
     do escopo desta fatia — ver Fora do escopo do plano). `avisos` é a lista, EM ORDEM, dos nomes
-    de `AVISOS_RAMPA` presentes na saída crua — não a prosa (mesma fora-do-escopo)."""
+    de `AVISOS_RAMPA` presentes na saída crua — não a prosa (mesma fora-do-escopo).
+
+    `rf` (item 4, fatia C, task 2): `args.get("rf")` — `None` para todo problema anterior a esta
+    task (que nunca declarava a chave) e para os que declaram `"rf": None` explícito; um valor
+    ativa `aviso_gp` dentro de `precificar_rampa` -> `motor.rodar` -> handler `rampa` do motor
+    congelado, na MESMA condição que `motor_espelho.js:precificarRampa` espelha (ver o comentário
+    lá para o achado sobre o alias 'spread')."""
     args = problema["args"]
     try:
         saida_motor, valor, _algebra, multiplo = precificar_rampa(
-            args["premissas"], args["nd_efetivo"], args["acoes"], args["moeda"])
+            args["premissas"], args["nd_efetivo"], args["acoes"], args["moeda"],
+            rf=args.get("rf"))
     except MotorFalhou:
         return {"id": problema["id"], "recusado": True, **_CAMPOS_SOLVER_VAZIOS}
 
@@ -808,22 +1057,45 @@ def _avaliar_rampa(problema: dict) -> dict:
             "saida": saida, "avisos": avisos, **_CAMPOS_SOLVER_VAZIOS}
 
 
+def _avaliar_diag(problema: dict) -> dict:
+    """Um problema `tipo: "diag"` (item 4, fatia C, task 2) — chama `motor.rodar` de verdade,
+    SEM escala (só a lista `diagnosticos` importa; não há preço nem múltiplo para ler aqui). É
+    AINDA o caminho do wrapper — mesmo `argv_para`, mesmo subprocesso do motor congelado, mesmo
+    colapso null->ausência — nunca `diag_firm`/`diag_eq` importados direto: é o vocabulário de
+    premissas do CASO (`PREMISSAS_FIRM`/`PREMISSAS_EQUITY`, `caso.py`) que decide quais entradas
+    de `coerencia_vetor` são alcançáveis, não a assinatura mais ampla de `diag_firm`/`diag_eq`
+    (que aceita `--roe`/`--kd`/etc. na CLI, fora do vetor que o wrapper jamais declara — ver
+    `flags_coerencia`, justos.py:1710-1728, e o comentário de `_bloco_diag` acima).
+
+    `mensagens` é a lista CRUA que o motor devolve em `saida["diagnosticos"]` — a comparação por
+    prefixo (`_classificar`, tests/test_paridade_wrapper_js.py) é dos harnesses, não deste
+    módulo, que não sabe que `diagnosticos_chaves.json` existe (mesma disciplina de
+    `avaliar_python` como um todo: não compara nada contra JS)."""
+    args = problema["args"]
+    saida = rodar(args["rota"], args["premissas"], None, args["moeda"], rf=args.get("rf"))
+    return {"id": problema["id"], "mensagens": saida.get("diagnosticos", []),
+            **_CAMPOS_SOLVER_VAZIOS}
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
     "grade1d": _avaliar_grade1d,
     "grade2d": _avaliar_grade2d,
     "rampa": _avaliar_rampa,
+    "diag": _avaliar_diag,
 }
 
 
 def avaliar_python(problemas: list[dict]) -> list[dict]:
-    """Avalia cada problema, despachando por `problema["tipo"]` — cinco
-    ramos, três lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
+    """Avalia cada problema, despachando por `problema["tipo"]` — seis
+    ramos, quatro lados Python DIFERENTES: `"solver"` roda o motor CONGELADO
     direto (`_avaliar_solver`, task 2); `"alvo"`/`"grade1d"`/`"grade2d"`
     rodam o WRAPPER de verdade — `reversa.alvo_de_mercado`/
     `sensibilidades.grade_1d`/`grade_2d` (task 3); `"rampa"` (fatia C, task 1)
-    roda `avaliar.precificar_rampa`, TAMBÉM o WRAPPER, nunca uma
+    roda `avaliar.precificar_rampa`, TAMBÉM o WRAPPER; `"diag"` (fatia C,
+    task 2) roda `motor.rodar` direto, ainda o WRAPPER (mesma CLI/subprocesso
+    que `precificar_firm`/`precificar_equity` usam por baixo), nunca uma
     reimplementação da conta. `tipo` desconhecido levanta `KeyError` nomeando
     o tipo — falha fechada, mesma disciplina do despacho por `tipo` do
     espelho JS.

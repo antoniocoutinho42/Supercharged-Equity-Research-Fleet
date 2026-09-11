@@ -158,3 +158,63 @@ def test_fixture_de_rampa_cobre_o_que_discrimina():
     assert any(isinstance(a["saida"]["roic2_%"], str) for a in ok), "capital incremental zero nunca exercitado"
     assert any("Equity" not in a["valor"] for a in ok), "rampa sem ponte nunca exercitada"
     assert {p["args"]["premissas"]["tv"] for p in probs} >= {"book", "convergencia", "gordon"}
+    # [item 4, fatia C, task 2] aviso_gp: cobre disparo (tv='gordon'/'spread' com gp>rf) e
+    # nao-disparo genuino (tv nao-gordon, ex. 'ic', com o MESMO gp>rf) — ver os problemas
+    # N/O/P em _bloco_rampa (vetores_solver.py) e o achado sobre o alias 'spread' registrado la'
+    # e no relatorio desta task.
+    assert any("aviso_gp" in a["avisos"] for a in ok), "aviso_gp nunca exercitado"
+    assert {p["args"]["premissas"]["tv"] for p in probs
+            if p["args"].get("rf") is not None and p["args"]["premissas"].get("gp", 0) > 0} >= {
+        "gordon", "spread", "ic"}, "faltam as tres convencoes na fronteira de aviso_gp (gordon/spread disparam, ic nao)"
+
+
+# ---------------------------------------------------------------------------
+# Predicados de diagnostico (item 4, fatia C, task 2). Mesmo harness, mesma fixture — paridade
+# contra o WRAPPER (`motor.rodar`, nunca diag_firm/diag_eq direto). `diagnosticos_chaves.json` e'
+# o vocabulario que classifica cada mensagem do motor pelo PREFIXO; ver o comentario no topo de
+# `diagnosticosFirm`/`diagnosticosEquity` (motor_espelho.js) e de `_bloco_diag`
+# (vetores_solver.py) para o porque de so' UMA chave de `coerencia_vetor` ser alcancavel (rota
+# firm) e NENHUMA na rota equity.
+# ---------------------------------------------------------------------------
+
+CHAVES = json.loads((RAIZ / "skills" / "er-valuation" / "assets" / "diagnosticos_chaves.json")
+                    .read_text(encoding="utf-8"))
+
+
+def _classificar(msg):
+    return [c["chave"] for c in CHAVES if msg.startswith(c["prefixo"])]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_toda_mensagem_do_motor_casa_com_exatamente_uma_chave():
+    """Tripwire da troca de vendor: mensagem nova ou prefixo ambiguo reprova AQUI, nomeando a
+    mensagem, antes de o laboratorio mostrar um diagnostico sem chave."""
+    probs = _problemas({"diag"})
+    assert probs, "fixture sem problemas de diagnostico"
+    py = avaliar_python(probs)
+    ruins = [(p["id"], m[:80], _classificar(m)) for p, a in zip(probs, py)
+             for m in a["mensagens"] if len(_classificar(m)) != 1]
+    assert not ruins, f"{len(ruins)} mensagens sem chave unica; primeiras 3: {ruins[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_chaves_de_diagnostico_batem_em_ordem():
+    """O diagnostico se move junto com o numero (desenho, 8.4): QUAIS disparam e em que
+    ordem tem de bater exatamente — chave a mais ou a menos e alerta errado na tela."""
+    probs = _problemas({"diag"})
+    py, js = avaliar_python(probs), _lado_js()
+    fora = []
+    for p, a in zip(probs, py):
+        esperado = [_classificar(m)[0] for m in a["mensagens"]]
+        if esperado != js[p["id"]]["chaves"]:
+            fora.append((p["id"], p["args"]["rota"], esperado, js[p["id"]]["chaves"]))
+    assert not fora, f"{len(fora)} divergencias; primeiras 2: {fora[:2]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_fixture_de_diagnostico_cobre_os_alertas():
+    py = avaliar_python(_problemas({"diag"}))
+    disparadas = {_classificar(m)[0] for a in py for m in a["mensagens"]}
+    alertas = {c["chave"] for c in CHAVES
+               if c["prefixo"].startswith(("ALERTA", "SUB-ALERTA", "INCOERÊNCIA", "DOMÍNIO"))}
+    assert alertas <= disparadas, f"alertas nunca exercitados: {sorted(alertas - disparadas)}"
