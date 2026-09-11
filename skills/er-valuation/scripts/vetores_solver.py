@@ -1029,11 +1029,22 @@ def _bloco_degrau() -> list[dict]:
         b, {"indice_atual": 30.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
             "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
 
-    # 10. ALERTA_RiR — h=0.4 (indice_atual=8, indice_alvo=20: alvo ACIMA do atual, degrau
-    # negativo) derruba a rentabilidade pós (7.2%) abaixo de g (10%) — RiR = g/rentab > 100%.
+    # 10. ALERTA_RiR — F1 (onda de correção da revisão final) substituiu o vetor original deste
+    # problema: h=0.4 (indice_atual=8 < indice_alvo=20 — degrau NEGATIVO) disparava o mesmo alerta,
+    # mas o gate agora recusa `indice_atual < indice_alvo` (falta de capital, não capacidade
+    # ociosa — ver `_validar_degrau`, caso.py) — o vetor antigo virou ILEGAL pelo gate. A fixture
+    # tem de conter só problemas gate-legais (mesmo esta rota bypassando `validar()` via
+    # `avaliar_caso` direto — ver `_avaliar_degrau`, abaixo — um vetor que o gate recusaria é
+    # higiene ruim: alguém que copiasse este problema para um caso.json de verdade seria recusado).
+    # Substituto achado pelo revisor da fatia D: roe=10% < g=12% (retenção > 100%, payout negativo
+    # já na base — diagnóstico à parte, não recusa), indice_atual=15/indice_alvo=14 (h=1,0714,
+    # LEGAL: atual > alvo) -> rentabilidade pós = 10% x 1,0714 = 10,71% ainda abaixo de g=12% ->
+    # RiR = g/rentab = 112% > 100% -> MESMO alerta que o vetor antigo disparava. VERIFICADO por
+    # execução direta da CLI do motor (justos.py degrau) antes de entrar aqui.
     v.append(_problema_degrau(
-        b, {"indice_atual": 8.0, "indice_alvo": 20.0, "anos": 4, "perfil_transicao": "rampa",
-            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+        {"g": 12.0, "roe": 10.0, "ke": 14.0, "n": 10, "tv": "gordon", "roe_tv": 15.0, "gp": 5.0},
+        {"indice_atual": 15.0, "indice_alvo": 14.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
 
     # 11. Recusa de domínio — ke = -150% (<= -100%): avaliar_dominios_cli recusa ANTES de
     # qualquer handler (mesma família de recusa que _bloco_diag já exercita para firm/equity sem
@@ -1041,6 +1052,66 @@ def _bloco_degrau() -> list[dict]:
     # leem o MESMO 'ke' de premissas).
     v.append(_problema_degrau(
         {"g": 10.0, "roe": 18.0, "ke": -150.0, "n": 10, "tv": "gordon", "roe_tv": 15.0, "gp": 5.0},
+        {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # ---- F4 (onda de correção da revisão final): pinos das 11 mutações sobreviventes ----
+    # Nenhuma delas precisou mudar avaliar.py/motor_espelho.js — o código de produção já estava
+    # certo (a revisão MUTOU o código, testou, restaurou); faltava só o vetor que discrimina.
+
+    # 12. MW1/MJ1 (fx omitido) — TODA fixture/teste de degrau até aqui usa fx=1.0, onde omitir o fx
+    # na chamada (avaliar.py:391) ou aplicar o fx no espelho (motor_espelho.js:1523) é invariante
+    # (divide por 1.0 de qualquer jeito). Vetor com fx != 1 discrimina: o exemplo LITERAL do
+    # SKILL.md do vendor (`vendor/multiplos-justos/SKILL.md:265`), com `--fx 5.115` do colchete
+    # opcional que test_valuation_degrau.py (Task 1) deixou de fora de propósito — aqui entra.
+    v.append(_problema_degrau(
+        {"g": 12.0, "roe": 20.0, "ke": 20.0, "n": 10, "tv": "gordon", "roe_tv": 20.0, "gp": 6.5},
+        {"indice_atual": 19.3, "indice_alvo": 14.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 29.11, "fx": 5.115}, m_valor=100.0))
+
+    # 13. MW2/MJ2 (default do perfil de transição -> 'pontual') — TODA fixture até aqui declara
+    # 'perfil_transicao' explicitamente, e o próprio harness (`_avaliar_degrau`, abaixo) reinjetava
+    # '.get("perfil_transicao", "rampa")" ao montar o caso mínimo, mascarando a omissão: mesmo um
+    # problema sem a chave chegava em `precificar_degrau`/`precificarDegrau` com a chave JÁ presente
+    # (= 'rampa'), nunca exercitando o DEFAULT de verdade daquelas duas funções
+    # (`avaliar.py:389`/`motor_espelho.js:1605`). Corrigido: `_avaliar_degrau` agora só inclui
+    # 'perfil_transicao' no caso quando o problema declara — este vetor, de propósito, não declara.
+    v.append(_problema_degrau(
+        b, {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4,
+            "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 14. MJ11 (sem `dominioCliRecusa` na porta nova do espelho, `precificarDegrau`,
+    # motor_espelho.js:1544) — o problema 11/123 (ke=-150%) já recusa mesmo SEM aquela guarda,
+    # porque `pe()`/`ev_nopat()` (o NÚCLEO) já devolvem NaN para ke <= -100% independentemente —
+    # não discrimina a ausência da guarda. `gp` é INERTE sob tv='convergencia' (nenhuma fórmula do
+    # núcleo o lê — ver justos.py:248-251) — sem a guarda explícita (que espelha
+    # `avaliar_dominios_cli`, justos.py, rodando ANTES de qualquer handler), um gp=-150% (<=-100%)
+    # sob convergencia NÃO produziria NaN nenhum no espelho, e o "laboratório" mostraria um preço
+    # onde o motor de verdade recusa (rc=2, "--gp deve ser > -100%") — VERIFICADO por execução
+    # direta da CLI. Mesma classe do F2 da 4C.
+    v.append(_problema_degrau(
+        {"g": 10.0, "roe": 18.0, "ke": 14.0, "n": 10, "tv": "convergencia", "gp": -150.0},
+        {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 15. MJ4 (fronteira do ALERTA com `>=` em vez de `>`, motor_espelho.js:1525) — o motor compara
+    # `r2 > max(2*custo, 0.30)`. Vetor desenhado para bater EXATO na igualdade usando só frações
+    # binárias exatas (roe=25%=0.25, ke=25%=0.25, h=2.0 -> r2=0.5=2*0.25=max(...)), sem ruído de
+    # arredondamento de ponto flutuante — VERIFICADO por execução direta (r2 == thresh bit a bit,
+    # niveis[0] sem 'ALERTA'). g=10% fica bem abaixo de r2=50% para não also disparar ALERTA_RiR
+    # (isolando a fronteira que este problema testa).
+    v.append(_problema_degrau(
+        {"g": 10.0, "roe": 25.0, "ke": 25.0, "n": 10, "tv": "gordon", "roe_tv": 20.0, "gp": 5.0},
+        {"indice_atual": 20.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+         "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
+
+    # 16. MJ5 (fronteira do ALERTA_RiR com `>=` em vez de `>`, motor_espelho.js:1528) — o motor
+    # compara `g / r2 > 1`. Vetor com roe=8%, h=1.5 (indice_atual=15/indice_alvo=10) -> r2=12%
+    # EXATO igual a g=12% (VERIFICADO: g/r2 == 1.0 bit a bit) — niveis[0] sem 'ALERTA_RiR'. ke=14%
+    # mantém max(2*ke,0.30)=0.30 bem acima de r2=12%, isolando a fronteira (sem também disparar
+    # ALERTA).
+    v.append(_problema_degrau(
+        {"g": 12.0, "roe": 8.0, "ke": 14.0, "n": 10, "tv": "gordon", "roe_tv": 15.0, "gp": 5.0},
         {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
          "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
 
@@ -1312,7 +1383,18 @@ def _avaliar_degrau(problema: dict) -> dict:
     verbatim para `resultados.json` — convertida aqui para `True`/ausência (mesma convenção de
     `avisos`/`AVISOS_RAMPA` em `_avaliar_rampa`, acima: só a PRESENÇA importa para o laboratório,
     a prosa é do vendor e fica fora do escopo desta fatia — ver o comentário na seção DEGRAU de
-    `motor_espelho.js`)."""
+    `motor_espelho.js`).
+
+    F4 (onda de correção da revisão final): `perfil_transicao` só entra no `caso["degrau"]` montado
+    abaixo quando o PRÓPRIO problema o declara em `bloco_degrau_args` — antes, `.get(
+    "perfil_transicao", "rampa")` reinjetava 'rampa' aqui sempre que a chave estava ausente,
+    mascarando a omissão: mesmo um problema sem 'perfil_transicao' chegava em
+    `avaliar.precificar_degrau`/`motor_espelho.js:precificarDegrau` com a chave JÁ presente,
+    nunca exercitando o DEFAULT de verdade daquelas duas funções (é o mesmo default, 'rampa' —
+    mas aplicado por ESTE harness, não pelo wrapper/espelho que a fixture existe para testar).
+    Ausente aqui, a chave também fica ausente em `caso["degrau"]`, e o default de
+    `precificar_degrau`/`precificarDegrau` roda de verdade — mesma disciplina de 'fx' (linha
+    abaixo), que já era omitido corretamente quando ausente do problema."""
     args = problema["args"]
     nome = _NOME_CENARIO_DEGRAU
     bloco_degrau_args = args["bloco_degrau"]
@@ -1328,7 +1410,8 @@ def _avaliar_degrau(problema: dict) -> dict:
             "indice_atual": {"valor": bloco_degrau_args["indice_atual"]},
             "indice_alvo": {"valor": bloco_degrau_args["indice_alvo"]},
             "anos": bloco_degrau_args["anos"],
-            "perfil_transicao": bloco_degrau_args.get("perfil_transicao", "rampa"),
+            **({"perfil_transicao": bloco_degrau_args["perfil_transicao"]}
+               if "perfil_transicao" in bloco_degrau_args else {}),
             "vpa": {"valor": bloco_degrau_args["vpa"]},
             "fx": bloco_degrau_args.get("fx"),
             "m": {nome: {"valor": args["m_valor"]}},

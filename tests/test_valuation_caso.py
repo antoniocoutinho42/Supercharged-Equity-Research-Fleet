@@ -1072,6 +1072,20 @@ def test_limite_de_celulas_nao_numerico_recusa():
         validar(c)
 
 
+def test_sensibilidades_chave_desconhecida_recusa_em_vez_de_ignorar():
+    """F3 (onda de correção da revisão final, item 2): 'limite_de_celulas'
+    (o parâmetro NUMÉRICO de grade citado no brief da fatia D) era opcional
+    com default silencioso — um nome digitado errado (aqui, sem o 'de')
+    nunca era lido por `sensibilidades.get("limite_de_celulas")`, e o teto
+    que o analista quis declarar (mais apertado que o padrão, como no teste
+    acima) desaparecia sem aviso: o gate aplicava o padrão (2000) em vez do
+    que o caso de fato escreveu."""
+    c = _reversa()
+    c["sensibilidades"]["limite_celulas"] = 10  # falta o 'de'
+    with pytest.raises(CasoInvalido, match="limite_celulas"):
+        validar(c)
+
+
 @pytest.mark.parametrize("valor", [0, -5])
 def test_limite_de_celulas_nao_positivo_recusa(valor):
     c = _reversa()
@@ -1278,6 +1292,21 @@ def test_desconto_de_holding_dentro_do_dominio_e_aceito():
     c["sotp"]["topo"]["desconto_de_holding_pct"] = 15.0
     c["sotp"]["topo"]["razao_do_desconto"] = "controlador com histórico de não distribuir"
     validar(c)
+
+
+def test_sotp_topo_chave_desconhecida_recusa_em_vez_de_ignorar():
+    """F3 (onda de correção da revisão final, item 2): 'sotp.topo' não tinha
+    vocabulário fechado — 'desconto_de_holding_pct'/'razao_do_desconto' são
+    um PAR OPCIONAL com default silencioso (ausente, nenhum desconto de
+    holding é aplicado). Um nome digitado errado (aqui, sem o 'de') nunca é
+    lido por `topo.get("desconto_de_holding_pct")`: o desconto que o
+    analista declarou desaparece da soma do topo em silêncio, mudando o
+    equity do SOTP — mesma classe de 'degrau.perfil_transicao'/'degrau.fx'."""
+    c = _sotp()
+    c["sotp"]["topo"]["desconto_holding_pct"] = 15.0  # falta o 'de'
+    c["sotp"]["topo"]["razao_do_desconto"] = "controlador com histórico de não distribuir"
+    with pytest.raises(CasoInvalido, match="desconto_holding_pct"):
+        validar(c)
 
 
 # --------------------------------------------------------------------------

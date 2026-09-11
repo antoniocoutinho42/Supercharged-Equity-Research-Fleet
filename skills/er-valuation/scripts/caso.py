@@ -1024,19 +1024,106 @@ def _validar_util_xor_g1(prefixo: str, premissas: dict) -> None:
 # (D1-D9) e vendor/multiplos-justos/references/aplicacao.md §8.
 # --------------------------------------------------------------------------
 
-def _valor_numerico_degrau(degrau: dict, campo: str) -> float:
+# F2 (onda de correção da revisão final): mesmos aliases legados que o motor
+# canoniza ANTES de qualquer handler (`a.tv = tv_canon(a.tv)`, justos.py:26-27
+# e ~1888-1894 — roda no topo de `main()`, antes de despachar para 'pe'/'ev'/
+# 'degrau'). D6 (abaixo) comparava o literal "book": `tv: "ic"` — o alias
+# legado — escapava da recusa, precificava com a rentabilidade PÓS-degrau no
+# papel de MÉDIO do estoque (a conflação que D6 existe para impedir), e o
+# `ALERTA_CONVENCAO_BOOK` que o motor emite nesse caso é descartado pelo
+# wrapper (`avaliar.py` nunca lê essa chave da saída crua) — tornando falsa a
+# alegação de que esse alerta é "inalcançável". Duplicado aqui (em vez de
+# importado do motor congelado) porque este módulo, de propósito, não
+# depende do motor — é o gate que roda ANTES de qualquer chamada a ele; mesma
+# disciplina de `TV_CANON`/`tvCanon` em `motor_espelho.js:89-98`, que espelha
+# o mesmo dict pela mesma razão (processo JS separado, sem import Python).
+TV_CANON: dict = {
+    "ic": "book", "spread": "gordon", "book": "book",
+    "gordon": "gordon", "convergencia": "convergencia",
+}
+
+
+def _tv_canon(tv: Any) -> Any:
+    """Espelha `justos.py:tv_canon` — 'ic'->'book', 'spread'->'gordon',
+    identidade para as demais convenções e para qualquer valor fora do
+    dict (inclusive tipo não-string: `.get(tv, tv)` devolve `tv` intacto,
+    nunca levanta)."""
+    return TV_CANON.get(tv, tv)
+
+
+# F3 (onda de correção da revisão final): mesma classe do F6 da fatia 4C
+# (chave desconhecida ignorada em silêncio) — mas ali fechou só o nível de
+# TOPO do caso (`CHAVES_DE_TOPO_PERMITIDAS`/`_validar_sem_chaves_de_topo_
+# desconhecidas`, acima). O bloco 'degrau' não tinha vocabulário fechado
+# nenhum: duas chaves opcionais com default silencioso mudavam a manchete
+# quando o nome saía errado — "perfil-transicao" (a grafia da flag da CLI do
+# vendor; o SKILL.md do Fleet nunca lista os nomes das chaves deste bloco,
+# só o plano e o código, o que torna a grafia da CLI o erro natural) caía no
+# default 'rampa' (46,56 em vez dos 43,01 declarados); "cambio" em vez de
+# "fx" caía no default 1.0 (46,56 em vez de 9,10). Generalizado aqui num
+# helper único, reusado pelo bloco 'degrau' inteiro, por 'indice_atual'/
+# 'indice_alvo'/'vpa' (que já tinham checagem de TIPO via
+# `_valor_numerico_degrau`, mas não de VOCABULÁRIO) e por cada entrada de
+# 'degrau.m' — não uma cópia do helper de topo (mensagem e vocabulário
+# diferentes por definição; ver o comentário de
+# `_validar_sem_chaves_de_topo_desconhecidas` sobre por que aquele fica como
+# está).
+def _recusar_chave_desconhecida(dados: dict, permitidas: frozenset, rotulo: str) -> None:
+    """Recusa a primeira chave de `dados` fora de `permitidas`, nomeando-a
+    com sugestão por `difflib.get_close_matches` — mesma disciplina de
+    `_validar_sem_chaves_de_topo_desconhecidas` (primeira violação, nunca
+    todas de uma vez: cada chave desconhecida é um erro de digitação
+    independente, corrigido um de cada vez), generalizada para qualquer
+    bloco/objeto do caso com vocabulário fechado. `rotulo` entra na
+    mensagem para localizar ONDE a chave apareceu (ex.: "'degrau'",
+    "'degrau.indice_atual'", "'degrau.m.base'")."""
+    desconhecidas = sorted(set(dados) - permitidas)
+    if not desconhecidas:
+        return
+    chave = desconhecidas[0]
+    sugestao = difflib.get_close_matches(chave, permitidas, n=1)
+    dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+    raise CasoInvalido(
+        f"chave desconhecida em {rotulo}: '{chave}'.{dica}"
+        "Uma chave fora do vocabulário aceito é quase sempre um nome "
+        "digitado errado — sem esta recusa, o campo pretendido seria "
+        "aceito com o nome errado e IGNORADO em silêncio (o default do "
+        "campo correto se aplica sem aviso, podendo mudar o valuation). "
+        f"Chaves aceitas em {rotulo}: {', '.join(sorted(permitidas))}."
+    )
+
+
+# As 9 chaves do bloco 'degrau' (D1-D9) e o vocabulário de cada objeto
+# aninhado — ver `_caso_ancora()` em tests/test_valuation_degrau.py para o
+# exemplo canônico com todas as 9 declaradas. 'indice_atual.fonte'/'.data' e
+# 'indice_alvo.razao' são declaração pura (§11.4 pede "fonte, data" e "por
+# que o administrável é esse") — nunca lidos por nenhuma conta, mas
+# legítimos: ficam no vocabulário para não recusar o que o analista tem de
+# poder declarar, mesmo sem consumidor.
+_CHAVES_DEGRAU_PERMITIDAS: frozenset = frozenset({
+    "indice_atual", "piso_teorico", "indice_alvo", "anos", "perfil_transicao",
+    "razao_transicao", "vpa", "fx", "m",
+})
+_CHAVES_DEGRAU_INDICE_ATUAL_PERMITIDAS: frozenset = frozenset({"valor", "fonte", "data"})
+_CHAVES_DEGRAU_INDICE_ALVO_PERMITIDAS: frozenset = frozenset({"valor", "razao"})
+_CHAVES_DEGRAU_VPA_PERMITIDAS: frozenset = frozenset({"valor", "fonte", "data"})
+_CHAVES_DEGRAU_M_ENTRADA_PERMITIDAS: frozenset = frozenset({"valor", "razao"})
+
+
+def _valor_numerico_degrau(degrau: dict, campo: str, permitidas: frozenset) -> float:
     """Lê `degrau[campo]["valor"]` como número finito, recusando (nomeando
-    'degrau.{campo}') quando o subcampo não é objeto ou o valor não é
-    número finito. Não checa sinal nem outra restrição — isso é
-    responsabilidade de quem chama, com a mensagem tailorizada por campo
-    ('indice_atual'/'indice_alvo'/'vpa' têm razões de recusa diferentes
-    para um valor não positivo)."""
+    'degrau.{campo}') quando o subcampo não é objeto, tem chave fora de
+    `permitidas` (F3) ou o valor não é número finito. Não checa sinal nem
+    outra restrição — isso é responsabilidade de quem chama, com a
+    mensagem tailorizada por campo ('indice_atual'/'indice_alvo'/'vpa' têm
+    razões de recusa diferentes para um valor não positivo)."""
     sub = degrau.get(campo)
     if not isinstance(sub, dict):
         raise CasoInvalido(
             f"'degrau.{campo}' não é um objeto: {sub!r}. Declare ao menos "
             "'valor'."
         )
+    _recusar_chave_desconhecida(sub, permitidas, f"'degrau.{campo}'")
     valor = sub.get("valor")
     if not _numero_valido(valor) or not _finito(valor):
         raise CasoInvalido(
@@ -1104,8 +1191,10 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
             "'indice_atual', 'piso_teorico', 'indice_alvo', 'anos', "
             "'razao_transicao', 'vpa' e 'm' (um valor por cenário)."
         )
+    _recusar_chave_desconhecida(degrau, _CHAVES_DEGRAU_PERMITIDAS, "'degrau'")
 
-    indice_atual = _valor_numerico_degrau(degrau, "indice_atual")
+    indice_atual = _valor_numerico_degrau(
+        degrau, "indice_atual", _CHAVES_DEGRAU_INDICE_ATUAL_PERMITIDAS)
     if indice_atual <= 0:
         raise CasoInvalido(
             f"'degrau.indice_atual.valor' não é positivo: {indice_atual!r}. "
@@ -1124,7 +1213,8 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
             "administrável', aplicacao.md §8)."
         )
 
-    indice_alvo = _valor_numerico_degrau(degrau, "indice_alvo")
+    indice_alvo = _valor_numerico_degrau(
+        degrau, "indice_alvo", _CHAVES_DEGRAU_INDICE_ALVO_PERMITIDAS)
     if indice_alvo <= 0:
         raise CasoInvalido(
             f"'degrau.indice_alvo.valor' não é positivo: {indice_alvo!r}. "
@@ -1138,6 +1228,44 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
             "ADMINISTRÁVEL, que nunca fica abaixo do piso teórico (o "
             "limite matemático, sem buffer) — 'Piso teórico ≠ piso "
             "administrável', aplicacao.md §8."
+        )
+
+    # F1 (onda de correção da revisão final): índice ATUAL abaixo do ALVO
+    # administrável não é capacidade ociosa — é falta de capital, e a
+    # metodologia não admite h < 1 aqui. §8 generaliza o §7 para eventos que
+    # "elevam o lucro sem consumir capital novo" (aplicacao.md:883) e define
+    # h como "expansão máxima da base geradora" (:934); derivacao.md:255
+    # enuncia o degrau para um evento que eleve o lucro "por um fator h > 1".
+    # Abaixo do administrável os buffers já estão violados — regime de
+    # restrição a distribuição (aplicacao.md:964-966) —, e o vendor SKILL.md
+    # classifica isso como evento de CAPITAL, "não é taxa nem degrau de
+    # rentabilidade" (:219-221). Sem esta recusa, o índice 12 contra alvo 14
+    # precificava 27,34 e o índice 10 (abaixo do próprio piso TEÓRICO)
+    # precificava 22,07 — os dois em silêncio, sem alerta, e a rampa ainda
+    # SUAVIZAVA a deficiência (o fator de captura amacia um incremento
+    # negativo em vez de descontá-lo). O caso `indice_atual < piso_teorico`
+    # já fica coberto por construção (alvo >= piso, checado acima). h = 1
+    # (índice atual igual ao alvo) continua aceito — é a identidade
+    # degenerada que o teste 2 da Task 1 usa; ali a manchete só se move
+    # pela divergência de base (D8), nunca por um degrau inventado.
+    if indice_atual < indice_alvo:
+        raise CasoInvalido(
+            f"'degrau.indice_atual.valor' ({indice_atual!r}) menor que "
+            f"'degrau.indice_alvo.valor' ({indice_alvo!r}): índice atual "
+            "abaixo do alvo administrável não é capacidade ociosa — é "
+            "falta de capital (h < 1 não é degenerado, é erro de "
+            "classificação). A metodologia só admite o degrau para um "
+            "evento que eleve o lucro 'sem consumir capital novo' "
+            "(aplicacao.md §8, linha 883), com h definido como a 'expansão "
+            "máxima da base geradora' (linha 934) — sempre h >= 1 "
+            "(derivacao.md:255, a proposição do degrau é para h > 1). Um "
+            "índice atual abaixo do alvo é um evento de CAPITAL — o vendor "
+            "SKILL.md classifica isso como 'não é taxa nem degrau de "
+            "rentabilidade' (linhas 219-221). Modele-o como evento de "
+            "capital (ponte: evento de caixa único) ou re-base do índice "
+            "atual, nunca como degrau. Se 'degrau.indice_atual.valor' e "
+            "'degrau.indice_alvo.valor' são de fato iguais, declare-os "
+            "iguais (h = 1 é aceito — é a identidade degenerada)."
         )
 
     anos = degrau.get("anos")
@@ -1172,7 +1300,7 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
             "escolha de perfil é arbitrária."
         )
 
-    vpa = _valor_numerico_degrau(degrau, "vpa")
+    vpa = _valor_numerico_degrau(degrau, "vpa", _CHAVES_DEGRAU_VPA_PERMITIDAS)
     if vpa <= 0:
         raise CasoInvalido(
             f"'degrau.vpa.valor' não é positivo: {vpa!r}. É o valor "
@@ -1229,6 +1357,8 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
                 "Declare 'valor' (a eficiência marginal do capital "
                 "liberado, em %) e 'razao'."
             )
+        _recusar_chave_desconhecida(
+            entrada, _CHAVES_DEGRAU_M_ENTRADA_PERMITIDAS, f"'degrau.m.{nome_cenario}'")
         valor_m = entrada.get("valor")
         if not _numero_valido(valor_m) or not _finito(valor_m) or valor_m < 0:
             raise CasoInvalido(
@@ -1249,15 +1379,20 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
 
     for nome_cenario, cenario in cenarios.items():
         premissas = cenario["premissas"]
-        if premissas.get("tv") == "book" and premissas.get("roe_book") is None:
+        # F2: compara a convenção CANÔNICA (`_tv_canon`), não o literal —
+        # 'tv: "ic"' é o mesmo 'book' aos olhos do motor (ver o comentário
+        # de TV_CANON acima).
+        if _tv_canon(premissas.get("tv")) == "book" and premissas.get("roe_book") is None:
             raise CasoInvalido(
-                f"cenário '{nome_cenario}': 'tv' = 'book' com 'degrau' "
-                "presente e sem 'roe_book' declarado (D6, SKILL.md do "
-                "vendor: \"obrigatório de fato\" com --tv book). Sem ele, "
-                "o TV usaria a rentabilidade PÓS-degrau (marginal x h) no "
-                "papel de MÉDIO do estoque — conflação marginal x médio "
-                "AGRAVADA pelo degrau. Declare 'roe_book' nesse cenário, "
-                "ou use tv='gordon'/'convergencia'."
+                f"cenário '{nome_cenario}': 'tv' = 'book' (ou o alias "
+                f"legado 'ic', que o motor canoniza para 'book' antes de "
+                "qualquer handler) com 'degrau' presente e sem 'roe_book' "
+                "declarado (D6, SKILL.md do vendor: \"obrigatório de "
+                "fato\" com --tv book). Sem ele, o TV usaria a "
+                "rentabilidade PÓS-degrau (marginal x h) no papel de "
+                "MÉDIO do estoque — conflação marginal x médio AGRAVADA "
+                "pelo degrau. Declare 'roe_book' nesse cenário, ou use "
+                "tv='gordon'/'convergencia' (ou seus aliases)."
             )
         if "mid_year" in premissas:
             raise CasoInvalido(
@@ -1663,6 +1798,18 @@ CUSTO_POR_CELULA_SEGUNDOS: float = 0.15  # extremo conservador da faixa medida, 
 
 TETO_PADRAO_DE_CELULAS: int = 2000
 
+# F3 (onda de correção da revisão final, item 2): 'sensibilidades' silenciava
+# chave desconhecida — em particular 'limite_de_celulas' (o parâmetro
+# NUMÉRICO de grade citado no brief) é opcional com default silencioso
+# (ausente, vale `TETO_PADRAO_DE_CELULAS`): um nome digitado errado faz o
+# teto que o analista quis declarar (mais apertado OU mais largo que o
+# padrão) desaparecer sem aviso — `sensibilidades.get("limite_de_celulas")`
+# devolve `None` e o teto aplicado silenciosamente vira o padrão, não o que
+# foi escrito no caso. Mesma classe de 'degrau.perfil_transicao'/'degrau.fx'.
+_CHAVES_SENSIBILIDADES_PERMITIDAS: frozenset = frozenset({
+    "cenario", "grades_1d", "grades_2d", "limite_de_celulas",
+})
+
 
 def _validar_teto_de_celulas(sensibilidades: dict, total_celulas: int) -> None:
     """Recusa quando `total_celulas` (grades_1d + grades_2d já somadas,
@@ -1759,6 +1906,8 @@ def _validar_sensibilidades(caso: Caso, cenarios: dict, rota: str) -> None:
             f"campo 'sensibilidades' não é um objeto: {sensibilidades!r}. "
             "Declare 'cenario', 'grades_1d' e 'grades_2d'."
         )
+    _recusar_chave_desconhecida(
+        sensibilidades, _CHAVES_SENSIBILIDADES_PERMITIDAS, "'sensibilidades'")
 
     cenario_nome = sensibilidades.get("cenario")
     _validar_cenario_alvo("sensibilidades.cenario", cenario_nome, cenarios)
@@ -1867,6 +2016,18 @@ _ROTAS_DE_PARTE_SOTP: frozenset = frozenset({"firm", "rampa"})
 _CAMPOS_NUMERICOS_DO_TOPO: tuple = (
     "custos_corporativos_vp", "participacoes_nao_consolidadas",
 )
+
+# F3 (onda de correção da revisão final, item 2): 'sotp.topo' silenciava uma
+# chave desconhecida — em particular, 'desconto_de_holding_pct'/
+# 'razao_do_desconto' são um PAR OPCIONAL com default silencioso (ausente,
+# nenhum desconto de holding é aplicado): um nome digitado errado (ex.:
+# 'desconto_holding_pct', sem o 'de') cai fora de `_CAMPOS_NUMERICOS_DO_TOPO`
+# e nunca é lido por `topo.get("desconto_de_holding_pct")` — o desconto que o
+# analista declarou desaparece da soma do topo em silêncio, mudando o equity
+# do SOTP. Mesma classe do 'perfil_transicao'/'fx' do bloco 'degrau' —
+# fechado com o mesmo helper.
+_CHAVES_TOPO_SOTP_PERMITIDAS: frozenset = frozenset(
+    _CAMPOS_NUMERICOS_DO_TOPO + ("desconto_de_holding_pct", "razao_do_desconto"))
 
 
 def _validar_parte(prefixo: str, parte: dict) -> None:
@@ -1980,6 +2141,7 @@ def _validar_topo_sotp(topo: Any) -> None:
             "'desconto_de_holding_pct' e 'razao_do_desconto' — é onde a "
             "ponte única do SOTP cruza, e só ali (D3)."
         )
+    _recusar_chave_desconhecida(topo, _CHAVES_TOPO_SOTP_PERMITIDAS, "'sotp.topo'")
 
     for campo in _CAMPOS_NUMERICOS_DO_TOPO:
         valor = topo.get(campo)

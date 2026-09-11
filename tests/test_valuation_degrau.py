@@ -248,6 +248,87 @@ def _degrau_mais(bloco_conflitante: str):
     return _constroi
 
 
+# --------------------------------------------------------------------------
+# F1 (onda de correção da revisão final): índice atual abaixo do alvo
+# administrável não é capacidade ociosa — é falta de capital (h < 1). Ver
+# `_validar_degrau` (caso.py) para a metodologia citada na mensagem.
+# --------------------------------------------------------------------------
+
+def _indice_atual_abaixo_do_indice_alvo() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["indice_atual"]["valor"] = 12.0  # alvo (declarado) = 14.0
+    return caso
+
+
+# --------------------------------------------------------------------------
+# F2 (onda de correção da revisão final): D6 agora compara a convenção
+# CANÔNICA — o alias legado 'ic' (que o motor mapeia para 'book' antes de
+# qualquer handler, justos.py:26-27/1888-1894) tem de disparar a MESMA
+# recusa que 'book' literal já dispara.
+# --------------------------------------------------------------------------
+
+def _tv_ic_sem_roe_book() -> dict:
+    caso = _caso_ancora()
+    caso["cenarios"]["base"]["premissas"]["tv"] = "ic"
+    return caso
+
+
+# --------------------------------------------------------------------------
+# F3 (onda de correção da revisão final): vocabulário fechado do bloco
+# 'degrau' e de cada objeto aninhado — os dois typos que a revisão
+# verificou por execução (46,56 em vez de 43,01 / 9,10), mais dois
+# representantes da generalização estrutural (um objeto aninhado que
+# reusa `_valor_numerico_degrau`, e uma entrada de 'degrau.m', que tem seu
+# próprio laço).
+# --------------------------------------------------------------------------
+
+def _degrau_perfil_transicao_grafia_da_cli() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["perfil-transicao"] = "pontual"  # grafia da flag da CLI do vendor
+    return caso
+
+
+def _degrau_cambio_em_vez_de_fx() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["cambio"] = 5.115
+    return caso
+
+
+def _degrau_indice_atual_chave_desconhecida() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["indice_atual"]["fontee"] = "typo de 'fonte'"
+    return caso
+
+
+def _degrau_m_entrada_chave_desconhecida() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["m"]["base"]["pesoo"] = 1.0  # typo — não é vocabulário nenhum
+    return caso
+
+
+# --------------------------------------------------------------------------
+# F4 (onda de correção da revisão final): as três checagens do gate que já
+# existiam mas nunca tinham teste de recusa — MG1/MG2/MG3 da revisão.
+# --------------------------------------------------------------------------
+
+def _indice_alvo_abaixo_do_piso_teorico() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["piso_teorico"] = 100.0  # > indice_alvo.valor (14.0)
+    return caso
+
+
+def _m_negativo() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["m"]["base"]["valor"] = -1.0
+    return caso
+
+
+def _fx_nao_positivo() -> dict:
+    caso = _caso_ancora()
+    caso["degrau"]["fx"] = 0.0
+    return caso
+
+
 _CASOS_RECUSADOS = [
     pytest.param(_rota_firm_com_degrau, r"rota 'firm'", id="rota_firm"),
     pytest.param(_rota_rampa_com_degrau, r"rota 'rampa'", id="rota_rampa"),
@@ -259,6 +340,20 @@ _CASOS_RECUSADOS = [
     pytest.param(_degrau_mais("reversa"), "'reversa'", id="degrau_mais_reversa_D7"),
     pytest.param(_degrau_mais("sensibilidades"), "'sensibilidades'", id="degrau_mais_sensibilidades_D7"),
     pytest.param(_degrau_mais("sotp"), "'sotp'", id="degrau_mais_sotp_D7"),
+    pytest.param(_indice_atual_abaixo_do_indice_alvo, re.escape("degrau.indice_atual.valor"),
+                 id="F1_indice_atual_abaixo_do_alvo"),
+    pytest.param(_tv_ic_sem_roe_book, "roe_book", id="F2_tv_ic_sem_roe_book"),
+    pytest.param(_degrau_perfil_transicao_grafia_da_cli, re.escape("'perfil-transicao'"),
+                 id="F3_perfil_transicao_grafia_da_cli"),
+    pytest.param(_degrau_cambio_em_vez_de_fx, re.escape("'cambio'"), id="F3_cambio_em_vez_de_fx"),
+    pytest.param(_degrau_indice_atual_chave_desconhecida, re.escape("'fontee'"),
+                 id="F3_indice_atual_chave_desconhecida"),
+    pytest.param(_degrau_m_entrada_chave_desconhecida, re.escape("'pesoo'"),
+                 id="F3_m_entrada_chave_desconhecida"),
+    pytest.param(_indice_alvo_abaixo_do_piso_teorico, re.escape("degrau.indice_alvo.valor"),
+                 id="F4_MG1_alvo_abaixo_do_piso"),
+    pytest.param(_m_negativo, re.escape("degrau.m.base.valor"), id="F4_MG2_m_negativo"),
+    pytest.param(_fx_nao_positivo, re.escape("degrau.fx"), id="F4_MG3_fx_nao_positivo"),
 ]
 
 
@@ -266,3 +361,14 @@ _CASOS_RECUSADOS = [
 def test_5_recusas_nomeadas(constroi, regex):
     with pytest.raises(CasoInvalido, match=regex):
         validar(constroi())
+
+
+def test_6_validar_aceita_um_caso_de_degrau_legal_de_ponta_a_ponta():
+    """F4 (onda de correção da revisão final): a revisão notou que nenhum
+    teste chama `validar()` (o GATE) sobre um caso de degrau LEGAL — os
+    testes 1-4 chamam `avaliar()`/`precificar_degrau` direto, e os únicos
+    casos que passam por `validar()` na Task 1 são as três células da
+    matriz (D7), todas RECUSAS. `_caso_ancora()` é o mesmo exemplo do
+    SKILL.md do vendor que o teste 1 usa como referência — `validar()` não
+    pode levantar nada para ele."""
+    validar(_caso_ancora())  # não levanta — é a asserção inteira
