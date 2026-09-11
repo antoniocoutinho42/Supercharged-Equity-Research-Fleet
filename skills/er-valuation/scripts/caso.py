@@ -19,6 +19,7 @@ de reinvestimento que ele implica).
 definidos aqui; nenhum deles reabre esta validação.
 """
 
+import difflib
 import json
 import math
 from pathlib import Path
@@ -327,17 +328,135 @@ _CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE: frozenset = frozenset({
     "companhia", "moeda", "data_analise",
 })
 
+# --------------------------------------------------------------------------
+# F6 (revisão final, fatia 4C, achado do controlador): vocabulário COMPLETO de
+# chaves de topo que este módulo (`validar`) ou `avaliar.py` de fato consomem.
+# `_validar_campos_de_topo` só EXIGE as seis obrigatórias; cada bloco opcional
+# abaixo só é examinado quando presente pelo NOME EXATO ('metrica_base',
+# 'ponte', 'delimitador', 'preco', 'mercado', 'reversa', 'sensibilidades',
+# 'sotp' — cada um com validador dedicado). Sem uma lista FECHADA, uma chave
+# de topo com o nome errado ('stop' em vez de 'sotp', 'sensibilidade' em vez
+# de 'sensibilidades') não batia em NENHUM desses nomes exatos e passava por
+# `validar()` inteiro sem nunca ser examinada — o bloco pretendido era
+# IGNORADO em silêncio, e o valuation saía sem um item material que o
+# analista declarou (com 'sotp', a manchete muda).
+#
+# 'ticker' e 'data_base' são as duas únicas chaves SEM validador dedicado que
+# mesmo assim pertencem ao vocabulário: 'ticker' é lido por `avaliar.py`
+# (`caso.get("ticker")`) e ecoado em `resultados.json`; 'data_base' não é lido
+# em lugar nenhum do wrapper — é anotação do analista (a data-base dos dados,
+# distinta de 'data_analise') que este módulo já documenta como opcional de
+# verdade (`test_data_base_nula_e_permitida`, tests/test_valuation_caso.py)
+# sem nunca a consumir. As duas foram confirmadas rodando TODA fixture de
+# `tests/fixtures/` por este gate — nenhuma outra chave legítima apareceu.
+#
+# NÃO acrescentar 'degrau' aqui: a próxima fatia (D) o acrescenta; ver
+# docs/superpowers/plans/2026-09-10-v4-fatia-degrau.md.
+CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
+    # Obrigatórias — `_RAZOES_CAMPOS_DE_TOPO`, checadas por presença/não-nulo
+    # em `_validar_campos_de_topo`.
+    "companhia", "moeda", "data_analise", "rota", "acoes_diluidas", "cenarios",
+    # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
+    "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
+    "sensibilidades", "sotp",
+    # Informativas: sem validador dedicado, consumidas (ticker) ou só
+    # repassadas (data_base) legitimamente.
+    "ticker", "data_base",
+})
+
+
+def _validar_sem_chaves_de_topo_desconhecidas(caso: Caso) -> None:
+    """Recusa qualquer chave de topo fora de `CHAVES_DE_TOPO_PERMITIDAS`, nomeando-a.
+
+    Mesma disciplina que `_validar_premissas` já aplica a uma premissa de
+    cenário desconhecida (chave fora do vocabulário -> recusa nomeada, nunca
+    ignorada em silêncio) — agora no nível de topo do caso. Roda cedo, logo
+    depois de `_validar_campos_de_topo`: uma chave de topo desconhecida é
+    quase sempre a causa de um bloco "ausente" mais adiante (o analista
+    escreveu o bloco, só que com o nome errado) — nomear a chave errada aqui
+    é mais direto do que deixar o caso seguir e recusar por outro motivo bem
+    mais adiante, ou pior, validar normalmente com o bloco pretendido
+    silenciosamente fora do valuation.
+
+    `sorted(set(caso) - CHAVES_DE_TOPO_PERMITIDAS)` e o primeiro elemento
+    (não todas de uma vez): mesma disciplina de "recusa na primeira
+    violação" que `validar()` já documenta — múltiplas chaves desconhecidas
+    seriam múltiplos erros de digitação independentes, e o analista corrige
+    um de cada vez, como já faz para qualquer outra recusa deste módulo.
+    """
+    desconhecidas = sorted(set(caso) - CHAVES_DE_TOPO_PERMITIDAS)
+    if not desconhecidas:
+        return
+    chave = desconhecidas[0]
+    sugestao = difflib.get_close_matches(chave, CHAVES_DE_TOPO_PERMITIDAS, n=1)
+    dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+    raise CasoInvalido(
+        f"chave de topo desconhecida no caso: '{chave}'.{dica}"
+        "Uma chave fora do vocabulário aceito é quase sempre um nome de "
+        "bloco digitado errado ('stop' em vez de 'sotp', 'sensibilidade' em "
+        "vez de 'sensibilidades') — sem esta recusa, o bloco pretendido "
+        "seria aceito com o nome errado e IGNORADO em silêncio, e o "
+        "valuation sairia sem um item material que o analista declarou. "
+        f"Chaves aceitas: {', '.join(sorted(CHAVES_DE_TOPO_PERMITIDAS))}."
+    )
+
+
+def _validar_moeda(caso: Caso) -> None:
+    """Valida que 'moeda' é texto não vazio (F1, revisão final, fatia 4C).
+
+    Quinta aparição, neste módulo, da mesma classe de defeito que
+    `_exigir_texto` existe para fechar estruturalmente: um valor de tipo
+    errado alcançando uma fronteira que presume tipo. `_validar_campos_de_topo`
+    só confirma presença e não-nulo — nunca o TIPO nem o CONTEÚDO — então
+    `moeda: ""` e `moeda: 123` passavam por ela normalmente. Os dois têm
+    consequência real, não só teórica:
+
+    - `moeda: ""` sobrevive à checagem de presença mas é FALSY — `motor.py:
+      argv_para` só emite `--moeda` `if moeda:` (a mesma armadilha de
+      truthiness que a correção do rf, nesta mesma fatia, evitou de propósito
+      usando `is not None`), então o motor nunca recebe a flag e devolve a
+      Guarda 2 de Damodaran ("MOEDA/REGIME NÃO DECLARADOS") dentro de
+      `diagnosticos` — um alerta que `motor_espelho.js` declarava
+      inalcançável (a premissa era "moeda é campo obrigatório", mas
+      obrigatório aqui só quer dizer presente e não-nulo, nunca não-vazio) e
+      para o qual não existe chave em `diagnosticos_chaves.json`.
+    - `moeda: 123` sobrevive à mesma checagem e é TRUTHY — o motor recebe
+      `--moeda 123` e roda normalmente (o CLI trata moeda como texto livre,
+      não validado), mas `motor_espelho.js` chama `moeda.toLowerCase()` em
+      toda chamada de diagnóstico (firm e equity) e estoura `TypeError: moeda.
+      toLowerCase is not a function` — o laboratório quebra, não apenas
+      diverge.
+
+    Fechando aqui, no gate, `_exigir_texto` mais a checagem de branco (mesma
+    disciplina de 'preco.fonte'/'metrica_base.fonte'/'delimitador') tornam
+    verdadeira a premissa que o espelho já assumia — o espelho não muda, só o
+    comentário dele passa a nomear a razão certa (o gate agora garante o que
+    antes só parecia garantir).
+    """
+    moeda = caso["moeda"]
+    _exigir_texto(moeda, "moeda")
+    if not moeda.strip():
+        raise CasoInvalido(
+            f"'moeda' vazia ou em branco: {moeda!r}. Toda taxa do caso (g, "
+            "gp, custo de capital) tem de estar travada na mesma unidade "
+            "monetária — declarada em branco, o wrapper descarta o campo "
+            "por truthiness (`if moeda:` em motor.py:argv_para) e o motor "
+            "nunca recebe `--moeda`, emitindo a Guarda 2 de Damodaran "
+            "('MOEDA/REGIME NÃO DECLARADOS') sem chave equivalente no "
+            "espelho do relatório."
+        )
+
 
 def validar(caso: Caso) -> None:
     """Valida um caso já carregado; levanta `CasoInvalido` na primeira violação.
 
-    Ordem de verificação: o caso em si -> campos de topo -> rota -> métrica x
-    rota -> ponte x rota -> delimitador x rota -> ações diluídas -> preço ->
-    cada cenário (âncora, triângulo quando a rota tiver um, premissas
-    obrigatórias, premissas desconhecidas) -> blocos
-    opcionais 'mercado', 'reversa', 'sensibilidades' e 'sotp', só quando
-    presentes. Não modifica `caso`; não preenche nada — só confirma ou
-    recusa.
+    Ordem de verificação: o caso em si -> campos de topo -> chaves de topo
+    desconhecidas -> rota -> moeda -> métrica x rota -> ponte x rota ->
+    delimitador x rota -> ações diluídas -> preço -> cada cenário (âncora,
+    triângulo quando a rota tiver um, premissas obrigatórias, premissas
+    desconhecidas) -> blocos opcionais 'mercado', 'reversa',
+    'sensibilidades' e 'sotp', só quando presentes. Não modifica `caso`; não
+    preenche nada — só confirma ou recusa.
 
     Revisão final (FIX 3): doze formatos malformados achados por sondagem
     manual escapavam desta função como AttributeError/TypeError cru — o
@@ -369,9 +488,11 @@ def validar(caso: Caso) -> None:
         )
 
     _validar_campos_de_topo(caso)
+    _validar_sem_chaves_de_topo_desconhecidas(caso)
 
     rota = caso["rota"]
     _validar_rota(rota)
+    _validar_moeda(caso)
     _validar_metrica(caso, rota)
     _validar_ponte(caso, rota)
     _validar_delimitador(caso, rota)

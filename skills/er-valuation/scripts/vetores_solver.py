@@ -663,6 +663,47 @@ def _bloco_rampa() -> list[dict]:
         {**base, "g1": 6.0, "tv": "spread", "roic_tv": 20.0, "gp": 8.0, "n": 10},
         nd_efetivo=400.0, acoes=120.0, rf=5.0))
 
+    # --- Q/R (F2, revisão final): recusa de domínio pré-handler (`avaliar_dominios_cli`,
+    # justos.py:1608-1630) que NENHUM guarda interno de `rampa_bifasica`/`rampaBifasica` cobre por
+    # acidente — ao contrário de J (wacc=-150%, que a checagem `w <= -1` da própria função também
+    # capturaria) e de I/K/L/M (que violam OUTRA fronteira interna sempre presente), estes dois
+    # provam a lacuna de verdade: sem o guarda novo, o espelho computava um número, não recusava.
+
+    # Q. g1 = -150% (<= -100%): rampa_bifasica/rampaBifasica NÃO tem guarda de domínio nenhuma
+    # sobre g1 — vira receita negativa e um EV finito (mas sem sentido), em vez de recusa. O motor
+    # de verdade recusa no Gate de domínio, antes de sequer montar `rev`. Verificado por execução
+    # (fixes-4c-report.md): pré-correção, o espelho devolvia EV -359,30 aqui.
+    v.append(_problema_rampa(
+        {**base, "g1": -150.0, "tv": "convergencia", "n": 10}, nd_efetivo=400.0, acoes=120.0))
+
+    # R. gp = -150% (<= -100%) sob tv='book': gp é INERTE sob 'book' (nenhuma fórmula do núcleo o
+    # lê nessa convenção) — sem o guarda novo, o espelho ignorava o valor fora do domínio e
+    # devolvia o MESMO preço do caso válido, porque nunca chega a ler `gp`. O motor de verdade
+    # recusa mesmo assim: o Gate de domínio roda sobre o valor BRUTO da CLI, incondicional à
+    # convenção terminal declarada.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "book", "gp": -150.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0))
+
+    # --- S/T (F4, revisão final): fixture mínima que fecha duas das cinco fronteiras sem pino que
+    # a revisão provou (M2/M3) — cada uma, uma mutação plausível que a suíte não pegava.
+
+    # S. (M2) gordon, gp EXATAMENTE = rf (5% = 5%) -> SEM aviso_gp: gp não EXCEDE rf, só o alcança.
+    # A mutação `gpNucleo > rfFracao` -> `gpNucleo >= rfFracao` dispararia o aviso aqui, onde o
+    # motor de verdade não dispara.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "gordon", "roic_tv": 20.0, "gp": 5.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0, rf=5.0))
+
+    # T. (M3) gordon, gp (10%) = wacc (10%, o default de `base`): a fase 2 chama ev_nopat com
+    # `w - gp` no denominador do termo terminal -> zero -> EV/EBITDA0 não-finito -> o motor de
+    # verdade recusa (`_exigir_valor` sobre um `null` que o serializador produziu a partir de NaN).
+    # A mutação que remove a checagem `!Number.isFinite(saidaMotor['EV/EBITDA0'])` devolveria
+    # `recusado: false` com multiplo/valor/saida nulos em vez de recusar.
+    v.append(_problema_rampa(
+        {**base, "g1": 6.0, "tv": "gordon", "roic_tv": 20.0, "gp": 10.0, "n": 10},
+        nd_efetivo=400.0, acoes=120.0))
+
     return v
 
 
@@ -847,6 +888,47 @@ def _bloco_diag() -> list[dict]:
     # confirma que o guarda compartilhado dispara igual quando chamado por diag_eq.
     v.append(_problema_diag(
         "equity", {**be, "tv": "gordon", "roe_tv": 20.0, "gp": 8.0, "ke": 9.0}, rf=5.0))
+
+    # ===== F2 (revisão final, fatia 4C): recusa de domínio pré-handler nos DIAGNÓSTICOS =====
+    # `diag_firm`/`diag_eq` nunca chegam a rodar quando `avaliar_dominios_cli` já recusou — o
+    # motor sai no Gate de domínio, ANTES de calcular `diagnosticos`. Nenhuma das duas funções do
+    # espelho (`diagnosticosFirm`/`diagnosticosEquity`) tinha guarda nenhuma sobre isso: um wacc/
+    # ke/n fora do domínio produzia uma lista CHEIA de chaves — o diagnóstico não se movia com o
+    # número (o número já tinha sido recusado por `precificarCelula`/`precificarRampa`, mas o
+    # diagnóstico, chamado à parte no laboratório, não sabia disso).
+
+    # 35. wacc = -150% (<= -100%), rota firm -> o motor recusa no Gate de domínio; NENHUMA chave
+    # sai (`mensagens: []` — ver `_avaliar_diag`, que agora captura `MotorFalhou`).
+    v.append(_problema_diag("firm", {**bf, "wacc": -150.0}))
+
+    # 36. n = 0 (< 1), rota equity -> mesma recusa de domínio, família diferente (n, não uma taxa).
+    v.append(_problema_diag("equity", {**be, "n": 0}))
+
+    # ===== F4 (revisão final, fatia 4C): fixture mínima que fecha três das cinco fronteiras sem
+    # pino que a revisão provou (M1/M4/M5) — cada uma, uma mutação plausível que a suíte não
+    # pegava (ver `_bloco_rampa`, problemas S/T, para as outras duas, M2/M3). =====
+
+    # 37. (M1) Damodaran, gp EXATAMENTE no teto (gp = rf = 5%) -> "ÂNCORA MACRO OK": gp não EXCEDE
+    # o teto, só o alcança. A mutação `gp > teto + TOL_EPS` -> `gp >= teto` dispararia "ALERTA"
+    # aqui, onde o motor de verdade não dispara.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 5.0, "wacc": 9.0}, rf=5.0))
+
+    # 38. (M5) Damodaran, regime real com rf (6%) ACIMA do teto de 3%: o teto tem de ser
+    # min(rf, 3%) = 3%, e gp (4%) excede esse teto -> "ALERTA". A mutação que troca
+    # `Math.min(rfFracao, 0.03)` por `rfFracao` puro usaria 6% como teto e diria "ÂNCORA MACRO OK"
+    # (gp 4% < rf 6%) — errado; o teto em regime real nunca é o rf nominal cru.
+    v.append(_problema_diag(
+        "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 4.0, "wacc": 9.0},
+        moeda="BRL-real", rf=6.0))
+
+    # 39. (M4) equity SEM gde/nde (chaves ausentes do vetor — o argparse do motor aplica o default
+    # 0.0/0.0), roe = ke (10% = 10%), tv='convergencia' -> caixa = 0-0 = 0 ->
+    # "NEUTRALIDADE [identidade, caixa/E=0]". A mutação que lê `nucleo.gde`/`nucleo.nde` crus (sem
+    # o `'gde' in nucleo ? ... : 0` de presença) faria caixa = NaN — e `Math.abs(NaN) < TOL_EPS` é
+    # sempre falso — caindo no ramo "ATENÇÃO [FCFE não-book]" em vez da neutralidade.
+    v.append(_problema_diag(
+        "equity", {"g": 4.0, "roe": 10.0, "ke": 10.0, "n": 10, "tv": "convergencia"}))
 
     return v
 
@@ -1070,9 +1152,21 @@ def _avaliar_diag(problema: dict) -> dict:
     `mensagens` é a lista CRUA que o motor devolve em `saida["diagnosticos"]` — a comparação por
     prefixo (`_classificar`, tests/test_paridade_wrapper_js.py) é dos harnesses, não deste
     módulo, que não sabe que `diagnosticos_chaves.json` existe (mesma disciplina de
-    `avaliar_python` como um todo: não compara nada contra JS)."""
+    `avaliar_python` como um todo: não compara nada contra JS).
+
+    F2 (revisão final, fatia 4C): `motor.rodar` levanta `MotorFalhou` quando o motor recusa por
+    domínio (`avaliar_dominios_cli`, ANTES de qualquer handler — g/g1/g2/gp/gtv <= -100%, wacc/ke/
+    ku/kd <= -100%, n < 1) — um motor que recusa não chega a computar `diagnosticos` nenhum.
+    Captura aqui, devolvendo `mensagens: []`, é o mesmo vocabulário de recusa que `_avaliar_rampa`
+    já usa (ver acima) e o que `motor_espelho.js:diagnosticosFirm/diagnosticosEquity` agora também
+    devolvem (lista vazia) para o mesmo domínio — sem este catch, uma fixture com um valor de
+    diagnóstico fora do domínio derrubaria `avaliar_python` inteiro (exceção não capturada), não
+    só o item que a exercita."""
     args = problema["args"]
-    saida = rodar(args["rota"], args["premissas"], None, args["moeda"], rf=args.get("rf"))
+    try:
+        saida = rodar(args["rota"], args["premissas"], None, args["moeda"], rf=args.get("rf"))
+    except MotorFalhou:
+        return {"id": problema["id"], "mensagens": [], **_CAMPOS_SOLVER_VAZIOS}
     return {"id": problema["id"], "mensagens": saida.get("diagnosticos", []),
             **_CAMPOS_SOLVER_VAZIOS}
 

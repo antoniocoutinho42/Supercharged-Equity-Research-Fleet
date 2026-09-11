@@ -552,6 +552,141 @@ def test_nenhum_caminho_perde_rf_cenarios_grades_reversa_sotp():
 
 
 # --------------------------------------------------------------------------
+# F5 (revisão final, fatia 4C): o teste acima só cobre a rota FIRM — todos os
+# quatro casos que exercitam o threading do rf (`caso_minimo_firm.json` via
+# `caso_reversa_firm.json`) rodam pela rota firm, tanto no cenário principal
+# quanto nas grades/reversa/sotp. Achado da revisão: tirar `rf=rf` da rota
+# equity ou da rota rampa (em `avaliar.py`, em `sensibilidades.py` ou em
+# `sotp.py`) mantém os 135 testes do wrapper verdes — exatamente a classe de
+# "chamador esquecido" que o teste acima já cobra uma vez, com uma rota a
+# menos. Irmã do teste acima: mesma prova (ALERTA/ÂNCORA MACRO OK presente,
+# PREMISSA NÃO ANCORADA ausente), cobrindo os quatro pontos que faltavam:
+#
+#   W1 (avaliar.py, cenário principal da rota rampa)
+#   W2 (avaliar.py, cenário principal da rota equity)
+#   W3 (sensibilidades.py, célula de grade da rota equity)
+#   W4 (sotp.py, parte de SOTP na rota rampa)
+#
+# Dois casos bastam: um de rota equity (cenário + uma grade, cobre W2+W3) e
+# um de rota rampa com um bloco sotp cuja parte também é rampa (cenário +
+# parte, cobre W1+W4) — mesma disciplina do teste acima, "é o PRODUTO dos
+# caminhos que discrimina um caminho esquecido", com o mínimo de casos que
+# cobre os quatro pontos. `aviso_gp` (rampa) é uma chave BOOLEANA que
+# `_monta_cenario_rampa`/`_compor_parte` repassam verbatim — não a mesma
+# prosa Damodaran de firm/equity — por isso é checado por presença de
+# chave, não por substring.
+# --------------------------------------------------------------------------
+
+def _caso_equity_rf_com_grade() -> dict:
+    return {
+        "companhia": "RF Equity Sintética S.A.",
+        "moeda": "BRL-nominal",
+        "data_analise": "2026-09-10",
+        "rota": "equity",
+        "metrica_base": {"tipo": "LL", "valor": 500.0, "fonte": "fixture sintética"},
+        "acoes_diluidas": 100.0,
+        "preco": {"valor": 40.0, "fonte": "fixture sintética", "data": "2026-09-10"},
+        "mercado": {"rf": 5.0, "erp": 6.0},
+        "cenarios": {
+            "base": {
+                "ancora": "consenso t+1",
+                "triangulo": {"inputs": ["g", "roe"], "output": "rir"},
+                "premissas": {
+                    "g": 8.0, "roe": 18.0, "ke": 14.0, "n": 10,
+                    "gde": 30.0, "nde": 20.0,
+                    "tv": "gordon", "roe_tv": 20.0, "gp": 8.0,
+                },
+            },
+        },
+        "sensibilidades": {
+            "cenario": "base",
+            "grades_1d": [
+                {"premissa": "n", "pontos": [8, 10],
+                 "triangulo": {"inputs": ["g", "roe"], "output": "rir"}},
+            ],
+        },
+    }
+
+
+def _caso_rampa_rf_com_sotp() -> dict:
+    premissas_rampa_gordon = {
+        "receita0": 265.0, "ebitda0": 26.8, "da_parque": 6.8, "wk": 19.1,
+        "kappa": 17.9364, "util": 65.0, "t_rampa": 5, "g2": 8.0,
+        "wacc": 11.9, "tax": 35.0, "n": 10,
+        "tv": "gordon", "roic_tv": 20.0, "gp": 8.0,
+    }
+    return {
+        "companhia": "RF Rampa+SOTP Sintética S.A.",
+        "moeda": "BRL-nominal",
+        "data_analise": "2026-09-10",
+        "rota": "rampa",
+        "delimitador": "comissionamento datado no guidance de 4T25",
+        "metrica_base": {"tipo": "EBITDA0", "valor": 26.8, "fonte": "fixture sintética"},
+        "acoes_diluidas": 30.46,
+        "preco": {"valor": 9.0, "fonte": "fixture sintética", "data": "2026-09-10"},
+        "ponte": {"divida_bruta": 0.0, "caixa_e_equivalentes": 104.6,
+                  "outros_ativos": 0.0, "outros_passivos": 0.0, "minoritarios": 0.0},
+        "mercado": {"rf": 5.0, "erp": 6.0},
+        "cenarios": {
+            "base": {
+                "ancora": "utilização divulgada de 65% no 3T25",
+                "premissas": dict(premissas_rampa_gordon),
+            },
+        },
+        "sotp": {
+            "tipo": "segmento",
+            "cenario": "base",
+            "partes": [
+                {
+                    "nome": "Base instalada",
+                    "rota": "rampa",
+                    "delimitador": "comissionamento datado no guidance de 4T25",
+                    "metrica_base": {"tipo": "EBITDA0", "valor": 26.8, "fonte": "fixture sintética"},
+                    "ancora": "utilização divulgada de 65% no 3T25",
+                    "premissas": dict(premissas_rampa_gordon),
+                },
+                {
+                    "nome": "Expansão",
+                    "rota": "firm",
+                    "metrica_base": {"tipo": "EBITDA", "valor": 50.0, "fonte": "fixture sintética"},
+                    "ancora": "capex aprovado, cronograma interno",
+                    "triangulo": {"inputs": ["g", "roic"], "output": "rir"},
+                    "premissas": {
+                        "g": 7.0, "roic": 16.0, "wacc": 10.5, "n": 10,
+                        "da": 12.0, "tax": 25.0, "tv": "convergencia",
+                    },
+                },
+            ],
+            "topo": {
+                "custos_corporativos_vp": 0.0, "participacoes_nao_consolidadas": 0.0,
+                "desconto_de_holding_pct": None, "razao_do_desconto": None,
+            },
+        },
+    }
+
+
+def test_nenhum_caminho_perde_rf_equity_rampa_grade_e_sotp_rampa():
+    """Irmã de `test_nenhum_caminho_perde_rf_cenarios_grades_reversa_sotp` — cobre os quatro
+    pontos que aquele teste (só rota firm) não alcança: W1/W2 (cenário principal das rotas
+    rampa/equity, avaliar.py), W3 (célula de grade da rota equity, sensibilidades.py) e W4 (parte
+    de SOTP na rota rampa, sotp.py)."""
+    r_equity = avaliar(_caso_equity_rf_com_grade())
+    serializado_equity = json.dumps(r_equity, ensure_ascii=False)
+    assert "ALERTA (âncora macro" in serializado_equity  # W2: cenário principal, rota equity
+    assert "PREMISSA NÃO ANCORADA" not in serializado_equity
+
+    diagnosticos_da_grade = r_equity["sensibilidades"]["grades_1d"][0]["diagnosticos_unicos"]
+    assert any(m.startswith("ALERTA (âncora macro") for m in diagnosticos_da_grade)  # W3
+    assert not any(m.startswith("PREMISSA NÃO ANCORADA") for m in diagnosticos_da_grade)
+
+    r_rampa = avaliar(_caso_rampa_rf_com_sotp())
+    assert "aviso_gp" in r_rampa["cenarios"]["base"]  # W1: cenário principal, rota rampa
+
+    partes_por_nome = {p["nome"]: p for p in r_rampa["sotp"]["partes"]}
+    assert "aviso_gp" in partes_por_nome["Base instalada"]  # W4: parte de SOTP, rota rampa
+
+
+# --------------------------------------------------------------------------
 # Revisão final (task 3c), FIX 6d: `precificar_rampa` devolve `multiplo`,
 # mas todo call site descartava (`_multiplo`) e `_monta_cenario_rampa`
 # relia numa SEGUNDA leitura idêntica (`_exigir_valor(saida_motor,

@@ -78,6 +78,45 @@ def test_rota_desconhecida_recusa():
         validar(c)
 
 
+# --------------------------------------------------------------------------
+# F1 (revisão final, fatia 4C): 'moeda' vazia ou de tipo errado passava por
+# `_validar_campos_de_topo` (só presença/não-nulo, nunca tipo nem conteúdo)
+# sem nunca ser examinada — quinta aparição, neste módulo, da mesma classe
+# de defeito que `_exigir_texto` existe para fechar estruturalmente.
+# `moeda: ""` sobrevivia e era descartada por truthiness em
+# `motor.py:argv_para` (`if moeda:`), fazendo o motor emitir a Guarda 2 de
+# Damodaran ("MOEDA/REGIME NÃO DECLARADOS") sem chave equivalente no
+# espelho; `moeda: 123` sobrevivia e estourava `TypeError` no espelho
+# (`moeda.toLowerCase is not a function`) em toda chamada de diagnóstico.
+# Ver `caso._validar_moeda`.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("valor", ["", "   ", 123, []])
+def test_moeda_de_tipo_ou_valor_invalido_recusa_nomeando_moeda(valor):
+    c = _firm()
+    c["moeda"] = valor
+    with pytest.raises(CasoInvalido, match="moeda"):
+        validar(c)
+
+
+# --------------------------------------------------------------------------
+# F6 (revisão final, fatia 4C, achado do controlador): chave de topo
+# desconhecida era ignorada em silêncio — `_validar_campos_de_topo` só EXIGE
+# as seis obrigatórias, e cada bloco opcional só é examinado quando presente
+# pelo NOME EXATO. Um bloco com o nome errado passava por `validar()`
+# inteiro sem nunca ser examinado: o valuation saía sem um item material que
+# o analista declarou. Ver `caso._validar_sem_chaves_de_topo_desconhecidas`
+# e os testes com 'stop'/'sensibilidade' mais abaixo (perto de `_sotp`/
+# `_reversa`) para a prova com os dois nomes que a revisão citou.
+# --------------------------------------------------------------------------
+
+def test_chave_de_topo_desconhecida_recusa_nomeando_a_chave():
+    c = _firm()
+    c["xyz_nao_existe"] = True
+    with pytest.raises(CasoInvalido, match="xyz_nao_existe"):
+        validar(c)
+
+
 def test_metrica_incompativel_com_a_rota_recusa():
     c = _firm()
     c["metrica_base"]["tipo"] = "LL"
@@ -717,6 +756,16 @@ def test_caso_sem_blocos_novos_continua_valido():
     assert carregar(FIXTURES / "caso_minimo_firm.json")["rota"] == "firm"
 
 
+def test_bloco_sensibilidades_com_nome_errado_recusa_em_vez_de_ignorar():
+    """F6: 'sensibilidade' (sem o 's' final) não bate no nome exato que
+    `validar()` examina — antes desta correção, o bloco inteiro (cenário,
+    grades_1d, grades_2d) era aceito e IGNORADO em silêncio."""
+    c = _reversa()
+    c["sensibilidade"] = c.pop("sensibilidades")
+    with pytest.raises(CasoInvalido, match="sensibilidade"):
+        validar(c)
+
+
 def test_reversa_sem_custo_de_capital_recusa():
     """Eixo obrigatorio da metodologia em toda rodada — omitir nao e escolha."""
     c = _reversa()
@@ -1169,6 +1218,18 @@ def test_grade_1d_e_2d_nao_quebram_com_keyerror_para_rota_sem_triangulo():
 
 def _sotp() -> dict:
     return json.loads((FIXTURES / "caso_sotp_segmento.json").read_text(encoding="utf-8"))
+
+
+def test_bloco_sotp_com_nome_errado_recusa_em_vez_de_ignorar():
+    """F6 (achado do controlador, revisão final): 'stop' (typo de 'sotp')
+    não bate no nome exato que `validar()` examina — antes desta correção, o
+    caso inteiro validava normalmente com o bloco 'stop' aceito e IGNORADO
+    em silêncio: o valuation saía sem a composição SOTP que o analista
+    declarou, e a manchete (preço por ação) mudava."""
+    c = _sotp()
+    c["stop"] = c.pop("sotp")
+    with pytest.raises(CasoInvalido, match="stop"):
+        validar(c)
 
 
 def test_sotp_tipo_lista_recusa():

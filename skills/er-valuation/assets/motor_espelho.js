@@ -526,6 +526,39 @@ function pct(valor) {
   return (valor === null || valor === undefined) ? null : valor / 100.0;
 }
 
+// ---------------- avaliar_dominios_cli (justos.py:1608-1630) — F2, revisao final, fatia 4C ------
+// O motor roda avaliar_dominios_cli ANTES de QUALQUER handler (main(), justos.py:1881): para
+// g/g1/g2/gp/gtv <= -100%, wacc/ke/ku/kd <= -100% ou n < 1, ele imprime o erro e sai com codigo 2
+// (SystemExit) — nenhum handler roda, nenhum diagnostico e' computado. Ate' esta correcao, o
+// espelho so' recusava quando o NUCLEO (evNopat/pe/rampaBifasica) por acaso tambem lancava/
+// devolvia NaN para o MESMO valor — nao e' sempre o caso: 'gp' sob 'book'/'convergencia' e' inerte
+// (nenhuma formula do nucleo o le), e 'g1' na rampa nao tem guarda de dominio nenhuma (vira
+// receita negativa em vez de recusa). Verificado por execucao contra o wrapper real (ver
+// fixes-4c-report.md): rampa com g1=-150% mostrava EV -359,30 em vez de recusar; rampa com
+// gp=-150% sob 'book' mostrava o MESMO preco do caso valido (gp nunca e' lido).
+//
+// `premissas` chega em PONTOS PERCENTUAIS BRUTOS, com os MESMOS nomes que a CLI usa (g, g1, g2,
+// gp, wacc, ke, n...) — a checagem roda ANTES de premissasParaNucleo/RENOMEIA_* (que so' fariam
+// sentido depois de decidir que a entrada e' valida), exatamente como avaliar_dominios_cli roda
+// sobre o namespace CRU do argparse, antes de qualquer renomeacao de handler. Uma chave de fora
+// desta lista (roic, roe, da, tax, receita0...) e' ignorada, do mesmo jeito que a funcao Python
+// ignora tudo que nao esta' na lista dela — 'ku'/'kd'/'gtv'/'roe'(firm)/'roic'(equity) nunca
+// aparecem no vocabulario que o wrapper expoe (PREMISSAS_FIRM/PREMISSAS_EQUITY/PREMISSAS_RAMPA,
+// caso.py), entao checa-las aqui e' inofensivo (sempre `undefined`, nunca dispara) — mantido pela
+// MESMA razao que o resto deste arquivo prefere uma guarda estrutural unica a varias guardas
+// pontuais: fiel a` funcao real, nao só aos sintomas ja' observados.
+const CHAVES_DOMINIO_MAIOR_QUE_MENOS100 = ['g', 'g1', 'g2', 'gp', 'gtv', 'wacc', 'ke', 'ku', 'kd'];
+
+function dominioCliRecusa(premissas) {
+  for (const nome of CHAVES_DOMINIO_MAIOR_QUE_MENOS100) {
+    const v = premissas[nome];
+    if (v !== undefined && v !== null && v <= -100) return true;
+  }
+  const n = premissas.n;
+  if (n !== undefined && n !== null && n < 1) return true;
+  return false;
+}
+
 // ATENCAO — semantica de default OPOSTA a do nucleo (ver cabecalho do arquivo, linhas 28-40) —
 // revisao final da fatia 4B, achados F1/F2/F3: e' a armadilha central deste arquivo e ja' pegou
 // uma vez (esta funcao so' tratava 'gp' antes desta correcao).
@@ -605,6 +638,10 @@ function precificarCelula(rota, premissas, metrica, ndEfetivo, acoes) {
   // um preco onde o motor recusa. Recusamos aqui, ANTES de premissasParaNucleo sequer rodar, no
   // mesmo vocabulario null que todo outro guarda deste arquivo usa.
   if (premissas.tv === null) {
+    return { valor: null, multiplo: null };
+  }
+  // F2 (revisao final, fatia 4C) — ver o comentario de dominioCliRecusa, secao WRAPPER acima.
+  if (dominioCliRecusa(premissas)) {
     return { valor: null, multiplo: null };
   }
   if (rota === 'firm') {
@@ -894,6 +931,13 @@ function precificarRampa({
   if (premissas.tv === null) {
     return { recusado: true };
   }
+  // F2 (revisao final, fatia 4C) — ver o comentario de dominioCliRecusa, secao WRAPPER acima.
+  // Cobre, entre outras, 'g1' (sem guarda de dominio nenhuma dentro de rampaBifasica — viraria
+  // receita negativa em vez de recusa) e 'gp' sob 'book'/'convergencia' (nunca lido pelo nucleo
+  // sob essas convencoes, entao nunca produziria NaN por conta propria).
+  if (dominioCliRecusa(premissas)) {
+    return { recusado: true };
+  }
   const nucleo = premissasParaNucleo(premissas, RENOMEIA_RAMPA);
   // 'n' tem default 10 no argparse do subparser 'rampa' (justos.py:1749) — AO CONTRARIO de ev/pe,
   // onde 'n' e' premissa OBRIGATORIA do caso (PREMISSAS_OBRIGATORIAS_EQUITY/FIRM, caso.py) e por
@@ -1103,9 +1147,14 @@ const CHAVE = {
 
 // _guardasDamodaranChaves espelha _guardas_damodaran (justos.py:348-379) — SO' a Guarda 1
 // (ancora macro do gp). A Guarda 2 ("MOEDA/REGIME NAO DECLARADOS", `if not moeda:`) e'
-// inalcancavel pelo wrapper — `caso["moeda"]` e' campo obrigatorio de todo caso.json
-// (`_RAZOES_CAMPOS_DE_TOPO`, caso.py) e `avaliar()` sempre repassa `caso["moeda"]` ao motor —
-// entao `moeda` nunca chega vazia por este caminho (detalhe 4 do brief da task); "nao espelhe".
+// inalcancavel pelo wrapper — mas NAO porque `moeda` seja campo "obrigatorio" (obrigatorio, antes
+// do F1, so' queria dizer presente e nao-nulo: `moeda: ""` passava por `_validar_campos_de_topo`
+// normalmente e chegava vazia ao motor mesmo assim, porque `motor.py:argv_para` descarta o campo
+// por truthiness — `if moeda:` — e a Guarda 2 disparava de verdade; achado F1 da revisao final,
+// fatia 4C, verificado por execucao). Inalcancavel de fato porque `caso._validar_moeda` (F1) agora
+// GARANTE `moeda` como texto nao-vazio no gate, antes de qualquer chamada ao motor — e' esse
+// contrato, nao a mera presenca da chave, que torna `moeda` sempre truthy em `argv_para` e a
+// Guarda 2 sempre inalcancavel por este caminho. "nao espelhe".
 // `gp`/`rf` ja' chegam em FRACAO (rf convertido por `pct()` no chamador, como o handler faz:
 // `rf=None if getattr(a,'rf',None) is None else a.rf/100`).
 function _guardasDamodaranChaves(tv, gp, rfFracao, moeda) {
@@ -1145,6 +1194,14 @@ function _guardasDamodaranChaves(tv, gp, rfFracao, moeda) {
 // a MESMA conversao percentual->fracao que o resto do wrapper ja' usa. `rf` chega em PONTOS
 // PERCENTUAIS tambem (convencao de `mercado.rf`), convertido aqui com `pct()`.
 function diagnosticosFirm(premissas, moeda, rf) {
+  // F2 (revisao final, fatia 4C): um motor que recusa (avaliar_dominios_cli, ANTES de qualquer
+  // handler) nao emite diagnostico NENHUM — ver o comentario de dominioCliRecusa, secao WRAPPER
+  // acima. Sem esta guarda, um wacc/ke/n/g/gp/g1/g2 fora do dominio produzia uma lista CHEIA de
+  // chaves ao lado de um numero que precificarCelula/precificarRampa (acima) ja recusam — o
+  // laboratorio mostraria diagnostico junto de preco ausente.
+  if (dominioCliRecusa(premissas)) {
+    return [];
+  }
   const nucleo = premissasParaNucleo(premissas, RENOMEIA_FIRM);
   const g = nucleo.g;
   const roic = nucleo.roic;
@@ -1238,6 +1295,10 @@ function diagnosticosFirm(premissas, moeda, rf) {
 // diag_eq (`gde, nde = pc(a.gde) or 0, pc(a.nde) or 0` — nao o default proprio de diag_eq, que
 // nunca roda porque o handler ja' preencheu as duas variaveis antes da chamada).
 function diagnosticosEquity(premissas, moeda, rf) {
+  // F2 (revisao final, fatia 4C) — mesma razao de diagnosticosFirm acima.
+  if (dominioCliRecusa(premissas)) {
+    return [];
+  }
   const nucleo = premissasParaNucleo(premissas, {});
   const g = nucleo.g;
   const roe = nucleo.roe;

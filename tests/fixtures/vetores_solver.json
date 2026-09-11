@@ -1473,6 +1473,107 @@
   },
   {
     "id": 69,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": -150.0,
+        "tv": "convergencia",
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal",
+      "rf": null
+    }
+  },
+  {
+    "id": 70,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "book",
+        "gp": -150.0,
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal",
+      "rf": null
+    }
+  },
+  {
+    "id": 71,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "gordon",
+        "roic_tv": 20.0,
+        "gp": 5.0,
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal",
+      "rf": 5.0
+    }
+  },
+  {
+    "id": 72,
+    "tipo": "rampa",
+    "args": {
+      "premissas": {
+        "receita0": 1000.0,
+        "ebitda0": 300.0,
+        "da_parque": 60.0,
+        "wk": 15.0,
+        "kappa": 20.0,
+        "g2": 4.0,
+        "wacc": 10.0,
+        "tax": 25.0,
+        "t_rampa": 3,
+        "g1": 6.0,
+        "tv": "gordon",
+        "roic_tv": 20.0,
+        "gp": 10.0,
+        "n": 10
+      },
+      "nd_efetivo": 400.0,
+      "acoes": 120.0,
+      "moeda": "BRL-nominal",
+      "rf": null
+    }
+  },
+  {
+    "id": 73,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1490,7 +1591,7 @@
     }
   },
   {
-    "id": 70,
+    "id": 74,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1508,7 +1609,7 @@
     }
   },
   {
-    "id": 71,
+    "id": 75,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1526,7 +1627,7 @@
     }
   },
   {
-    "id": 72,
+    "id": 76,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1545,7 +1646,7 @@
     }
   },
   {
-    "id": 73,
+    "id": 77,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1564,7 +1665,7 @@
     }
   },
   {
-    "id": 74,
+    "id": 78,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1583,7 +1684,7 @@
     }
   },
   {
-    "id": 75,
+    "id": 79,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1601,7 +1702,7 @@
     }
   },
   {
-    "id": 76,
+    "id": 80,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1619,7 +1720,7 @@
     }
   },
   {
-    "id": 77,
+    "id": 81,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1639,7 +1740,7 @@
     }
   },
   {
-    "id": 78,
+    "id": 82,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1657,7 +1758,7 @@
     }
   },
   {
-    "id": 79,
+    "id": 83,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1675,7 +1776,7 @@
     }
   },
   {
-    "id": 80,
+    "id": 84,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1695,7 +1796,7 @@
     }
   },
   {
-    "id": 81,
+    "id": 85,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1715,7 +1816,7 @@
     }
   },
   {
-    "id": 82,
+    "id": 86,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1735,7 +1836,7 @@
     }
   },
   {
-    "id": 83,
+    "id": 87,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1755,7 +1856,7 @@
     }
   },
   {
-    "id": 84,
+    "id": 88,
     "tipo": "diag",
     "args": {
       "rota": "firm",
@@ -1775,7 +1876,7 @@
     }
   },
   {
-    "id": 85,
+    "id": 89,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1793,7 +1894,7 @@
     }
   },
   {
-    "id": 86,
+    "id": 90,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1812,7 +1913,7 @@
     }
   },
   {
-    "id": 87,
+    "id": 91,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1830,7 +1931,7 @@
     }
   },
   {
-    "id": 88,
+    "id": 92,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1850,7 +1951,7 @@
     }
   },
   {
-    "id": 89,
+    "id": 93,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1868,7 +1969,7 @@
     }
   },
   {
-    "id": 90,
+    "id": 94,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1886,7 +1987,7 @@
     }
   },
   {
-    "id": 91,
+    "id": 95,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1904,7 +2005,7 @@
     }
   },
   {
-    "id": 92,
+    "id": 96,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1923,7 +2024,7 @@
     }
   },
   {
-    "id": 93,
+    "id": 97,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1942,7 +2043,7 @@
     }
   },
   {
-    "id": 94,
+    "id": 98,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1961,7 +2062,7 @@
     }
   },
   {
-    "id": 95,
+    "id": 99,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1979,7 +2080,7 @@
     }
   },
   {
-    "id": 96,
+    "id": 100,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -1997,7 +2098,7 @@
     }
   },
   {
-    "id": 97,
+    "id": 101,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2015,7 +2116,7 @@
     }
   },
   {
-    "id": 98,
+    "id": 102,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2035,7 +2136,7 @@
     }
   },
   {
-    "id": 99,
+    "id": 103,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2053,7 +2154,7 @@
     }
   },
   {
-    "id": 100,
+    "id": 104,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2071,7 +2172,7 @@
     }
   },
   {
-    "id": 101,
+    "id": 105,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2092,7 +2193,7 @@
     }
   },
   {
-    "id": 102,
+    "id": 106,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2112,7 +2213,7 @@
     }
   },
   {
-    "id": 103,
+    "id": 107,
     "tipo": "diag",
     "args": {
       "rota": "equity",
@@ -2129,6 +2230,98 @@
       },
       "moeda": "BRL-nominal",
       "rf": 5.0
+    }
+  },
+  {
+    "id": 108,
+    "tipo": "diag",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 15.0,
+        "wacc": -150.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "book"
+      },
+      "moeda": "BRL-nominal",
+      "rf": null
+    }
+  },
+  {
+    "id": 109,
+    "tipo": "diag",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 16.0,
+        "ke": 10.0,
+        "n": 0,
+        "gde": 25.0,
+        "nde": 10.0,
+        "tv": "book"
+      },
+      "moeda": "BRL-nominal",
+      "rf": null
+    }
+  },
+  {
+    "id": 110,
+    "tipo": "diag",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 15.0,
+        "wacc": 9.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 20.0,
+        "gp": 5.0
+      },
+      "moeda": "BRL-nominal",
+      "rf": 5.0
+    }
+  },
+  {
+    "id": 111,
+    "tipo": "diag",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 15.0,
+        "wacc": 9.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 20.0,
+        "gp": 4.0
+      },
+      "moeda": "BRL-real",
+      "rf": 6.0
+    }
+  },
+  {
+    "id": 112,
+    "tipo": "diag",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 10.0,
+        "ke": 10.0,
+        "n": 10,
+        "tv": "convergencia"
+      },
+      "moeda": "BRL-nominal",
+      "rf": null
     }
   }
 ]
