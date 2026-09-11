@@ -48,9 +48,13 @@ guardou; a matriz lê `resultados.sensibilidades`; rótulos vêm do catálogo. O
 - **G3 — `entrega.dados` (novo, opcional, no topo).** `{<id>: {"ledger": [...], "x": [...], "campos": {<campo>: [...]}}}`.
   `ledger` lista os registros de onde os números vieram (o schema do ledger é do item 7; aqui só a referência).
   Série `direta`: `{"derivacao": "direta", "fonte": "<dataset>.<campo>"}`. Série `derivada`:
-  `{"derivacao": "derivada", "formula": "<expr>", "formula_nota": "<texto>"}` sobre campos do **mesmo** dataset,
-  recomputada por um avaliador fechado (só `+ - * / ( )`, números e nomes de campo — nada de `eval`). Série
-  `engine`: `{"derivacao": "engine", "chave": "resultados:<caminho>"}`.
+  `{"derivacao": "derivada", "fonte": "<dataset>", "formula": "<expr>", "formula_nota": "<texto>"}` — o dataset é
+  **declarado**, simétrico à `direta`, e a fórmula roda sobre os campos dele, recomputada por um avaliador fechado
+  (só `+ - * / ( )`, números e nomes de campo — nada de `eval`). *Correção da primeira versão deste plano, que dizia
+  só "campos do mesmo dataset" sem dizer qual: a implementação teve de inferir pelo `id` do exhibit, o que acopla a
+  identidade do gráfico à do dado e impede dois gráficos de compartilharem um dataset. Convenção implícita perde
+  para declaração explícita, como já foi decidido no `cenario_base`.* Série `engine`:
+  `{"derivacao": "engine", "chave": "resultados:<caminho>"}` — não usa dataset.
 - **G4 — Overlays sem número declarado.** `{"chave": "caso:<caminho>"|"resultados:<caminho>", "rotulo"?}` — o
   builder resolve o valor. O legado declarava `valor` e conferia contra a chave; aqui não há o que conferir.
 - **G5 — Cobertura por pergunta da tese fica para a 5D**, onde as perguntas nascem. Nesta fatia não existem
