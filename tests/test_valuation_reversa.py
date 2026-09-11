@@ -125,6 +125,21 @@ def test_teto_nao_roda_quando_todos_os_eixos_fecham():
     assert "teto_do_crescimento_gratuito" not in r
 
 
+def test_teto_do_crescimento_gratuito_nao_perde_rf():
+    """Correção do item 3: `teto_do_crescimento_gratuito` roda o motor por
+    conta própria (subcomando de avaliação direta, não 'rev') — um segundo
+    call site de `rodar()` dentro de reversa.py, distinto do de
+    `reverter()`, e sob 'tv=gordon' forçado (a única convenção terminal do
+    teto) com 'gp' igualado ao 'g' do cenário (3.0 > 0 na fixture). Sem
+    'rf' repassado aqui também, o teto sairia "PREMISSA NÃO ANCORADA"
+    mesmo quando `reverter()` já corrigiu os quatro eixos."""
+    c = _caso()
+    c["preco"]["valor"] = 900.0  # alvo absurdo: nenhum eixo primario fecha
+    teto = reverter(c, "base", 500.0)["teto_do_crescimento_gratuito"]
+    assert not any("PREMISSA NÃO ANCORADA" in d for d in teto["diagnosticos"])
+    assert any("ÂNCORA MACRO OK" in d for d in teto["diagnosticos"])
+
+
 def test_teto_e_insensivel_a_escolha_do_infinito():
     """A constante e uma aproximacao numerica; se o resultado depender dela, e invencao."""
     import reversa as mod
@@ -337,6 +352,11 @@ def _saida_direta_do_eixo(caso: dict, nome_eixo: str, nd_efetivo: float,
 
     rota = caso["rota"]
     moeda = caso["moeda"]
+    # Correção do item 3: reverter() agora também repassa mercado["rf"] a
+    # rodar() — esta reconstrução tem de fazer o mesmo, ou diverge do que
+    # reverter() de fato devolve (mesma disciplina que já vale para moeda
+    # acima).
+    rf = caso["mercado"]["rf"]
     cenario = caso["cenarios"][nome_cenario]
     variavel = RESOLVER_POR_EIXO[nome_eixo][rota]
     alvo = alvo_de_mercado(caso, nome_cenario, nd_efetivo)
@@ -347,7 +367,7 @@ def _saida_direta_do_eixo(caso: dict, nome_eixo: str, nd_efetivo: float,
     vetor["base"] = alvo["base"]
     vetor["alvo-base"] = _ALVO_BASE
 
-    return rodar_motor(rota, vetor, None, moeda, subcomando="rev")
+    return rodar_motor(rota, vetor, None, moeda, subcomando="rev", rf=rf)
 
 
 @pytest.mark.parametrize("cenario_de_teste", [

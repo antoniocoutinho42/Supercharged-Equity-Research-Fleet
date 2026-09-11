@@ -346,9 +346,22 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     plausível, não exótico. `diagnosticos` ganha a mesma guarda de chave
     ausente que `_exigir_valor` usa ao montar a própria mensagem de erro
     (`.get(...) or []`), em vez do índice raw `saida["diagnosticos"]`.
+
+    Correção do item 3: `rf` (`caso["mercado"]["rf"]`, quando o bloco
+    existe) também é repassado a `rodar` — este vetor força `tv="gordon"`
+    com `gp=g`, exatamente a combinação que `_guardas_damodaran` audita;
+    sem `rf` aqui, o teto saía "PREMISSA NÃO ANCORADA" mesmo quando
+    `reverter` já corrigia os quatro eixos, porque este é um SEGUNDO call
+    site de `rodar`, independente do de `reverter`.
     """
     rota = caso["rota"]
     moeda = caso["moeda"]
+    # Correção do item 3: mesma leitura condicional que avaliar.avaliar()
+    # faz — 'mercado' é bloco opcional (`caso.py`, `_validar_mercado`), e
+    # esta função é chamável direto, sem garantia de que 'reversa' (que
+    # torna 'mercado' obrigatório) esteja presente no caso recebido.
+    mercado = caso.get("mercado")
+    rf = mercado.get("rf") if mercado else None
     cenario = caso["cenarios"][nome_cenario]
     g = cenario["premissas"]["g"]
 
@@ -360,7 +373,7 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     }
     vetor = {**cenario["premissas"], **premissas_alteradas}
 
-    saida = rodar(rota, vetor, None, moeda)
+    saida = rodar(rota, vetor, None, moeda, rf=rf)
     campo_multiplo = _campo_do_multiplo(rota, caso["metrica_base"]["tipo"])
 
     leitura = (
@@ -417,10 +430,22 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     quem carregou o caso — `caso.carregar` —, nunca repetida aqui):
     `caso["reversa"]` e `caso["mercado"]` presentes, com o vocabulário de
     eixos e os campos obrigatórios (`rf`, `erp`) já confirmados.
+
+    Correção do item 3: `mercado["rf"]` também é repassado a `rodar` em
+    toda chamada por eixo, ao lado de `moeda` — sem ele, `_guardas_
+    damodaran` nunca via `rf` e um cenário `gordon` com `gp > 0` saía
+    "PREMISSA NÃO ANCORADA" em todo eixo, mesmo com `rf` declarado no
+    caso (o mesmo `mercado["rf"]` que `_beta_implicito`, logo abaixo, já
+    lia — só nunca alcançava o motor).
     """
     rota = caso["rota"]
     moeda = caso["moeda"]
     mercado = caso["mercado"]
+    # Correção do item 3: 'reversa' presente garante 'mercado' com 'rf'
+    # confirmado (docstring acima, mesma garantia que `_beta_implicito` já
+    # assume ao indexar `mercado["rf"]` direto, abaixo) — indexação direta,
+    # sem `.get`.
+    rf = mercado["rf"]
     cenario = caso["cenarios"][nome_cenario]
     eixos_declarados = caso["reversa"]["eixos"]
 
@@ -436,7 +461,7 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
         vetor["base"] = alvo["base"]
         vetor["alvo-base"] = _ALVO_BASE
 
-        saida = rodar(rota, vetor, None, moeda, subcomando="rev")
+        saida = rodar(rota, vetor, None, moeda, subcomando="rev", rf=rf)
 
         if nome_eixo == EIXO_DO_CUSTO_DE_CAPITAL:
             saida["beta_implicito"] = _beta_implicito(saida, variavel, mercado)

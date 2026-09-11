@@ -149,7 +149,8 @@ _MULTIPLOS_POR_ROTA: dict[str, tuple[str, ...]] = {
 
 def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
                      nd_efetivo: float | None = None, acoes: float | None = None,
-                     moeda: str | None = None) -> tuple[dict, dict, str, float]:
+                     moeda: str | None = None,
+                     rf: float | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota firm; devolve
     (saída, valor, álgebra, múltiplo de referência).
 
@@ -183,6 +184,16 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
     sempre passam `caso["moeda"]` (ver docstring do módulo e de
     `sensibilidades.py`).
 
+    `rf` (correção do item 3) segue a mesma disciplina de `moeda`, último
+    parâmetro para que toda chamada posicional existente continue
+    funcionando sem tocar: `None` por default, repassado direto a
+    `motor.rodar` nas duas chamadas abaixo. É `caso["mercado"]["rf"]`
+    quando o caso declara o bloco `mercado`, `None` quando não — quem
+    chama (`avaliar()`, `sensibilidades.py`, `sotp.py`) decide, do mesmo
+    jeito que já decide `moeda`. Não entra em nenhuma conta deste módulo:
+    só ativa a âncora macro do gp (Damodaran) nos `diagnosticos` que o
+    motor devolve.
+
     Fatia C, Task 2: `nd_efetivo`/`acoes` ganharam default `None` — sinal de
     que quem chama não quer cruzar a ponte (uma parte de SOTP, por exemplo:
     D3 do plano da fatia C proíbe ponte por parte — "é o erro que a trava
@@ -205,7 +216,7 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
         if not sem_ponte:
             escala["nd"] = nd_efetivo
             escala["acoes"] = acoes
-        saida = rodar("firm", premissas, escala, moeda)
+        saida = rodar("firm", premissas, escala, moeda, rf=rf)
         multiplo = _exigir_valor(saida, campo_multiplo)
         if sem_ponte:
             valor = {"EV": _exigir_valor(saida, "EV")}
@@ -220,7 +231,7 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
             }
             algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
-        saida = rodar("firm", premissas, None, moeda)
+        saida = rodar("firm", premissas, None, moeda, rf=rf)
         multiplo = _exigir_valor(saida, campo_multiplo)
         ev = multiplo * valor_metrica
         if sem_ponte:
@@ -242,7 +253,8 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
 
 
 def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
-                       moeda: str | None = None) -> tuple[dict, dict, str, float]:
+                       moeda: str | None = None,
+                       rf: float | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota equity; devolve
     (saída, valor, álgebra, múltiplo de referência).
 
@@ -251,11 +263,13 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
     chega em Equity diretamente (P/L x LL) — não há dívida líquida a
     subtrair. `multiplo` é `PL_curr`, resolvido por
     `_campo_do_multiplo("equity", None)` (FIX 2) e já validado por
-    `_exigir_valor`.
+    `_exigir_valor`. `rf` (correção do item 3): mesmo default, mesma
+    disciplina de último parâmetro e mesmo repasse direto de
+    `precificar_firm`, ver aquele docstring.
     """
     campo_multiplo = _campo_do_multiplo("equity", None)
     escala = {"ni": valor_metrica, "acoes": acoes}
-    saida = rodar("equity", premissas, escala, moeda)
+    saida = rodar("equity", premissas, escala, moeda, rf=rf)
     valor = {
         "Equity": _exigir_valor(saida, "Equity"),
         "preco_acao": _exigir_valor(saida, "Preco_acao"),
@@ -267,7 +281,8 @@ def precificar_equity(premissas: dict, valor_metrica: float, acoes: float,
 
 def precificar_rampa(premissas: dict, nd_efetivo: float | None = None,
                       acoes: float | None = None,
-                      moeda: str | None = None) -> tuple[dict, dict, str, float]:
+                      moeda: str | None = None,
+                      rf: float | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota rampa; devolve
     (saída, valor, álgebra, múltiplo de referência).
 
@@ -296,10 +311,17 @@ def precificar_rampa(premissas: dict, nd_efetivo: float | None = None,
     nd/acoes, e só `Equity`/`Preco_acao` saem ausentes) e `valor` só tem
     `"EV"`. Todo call site existente (`avaliar.py`) sempre passa
     `nd_efetivo`/`acoes` explícitos — comportamento antigo intacto.
+
+    `rf` (correção do item 3): mesmo default, mesma disciplina de último
+    parâmetro e mesmo repasse direto de `precificar_firm`, ver aquele
+    docstring — inclusive aqui, `vetores_solver.py` (parity harness da
+    rota rampa) chama esta função com quatro posicionais
+    (`premissas, nd_efetivo, acoes, moeda`); `rf` fica de fora dessa
+    chamada e cai no default `None`, comportamento inalterado.
     """
     sem_ponte = nd_efetivo is None
     escala = None if sem_ponte else {"nd": nd_efetivo, "acoes": acoes}
-    saida = rodar("rampa", premissas, escala, moeda)
+    saida = rodar("rampa", premissas, escala, moeda, rf=rf)
     multiplo = _exigir_valor(saida, "EV/EBITDA0")
     if sem_ponte:
         valor = {"EV": _exigir_valor(saida, "EV")}
@@ -464,6 +486,14 @@ def avaliar(caso: dict) -> dict:
     acoes = caso["acoes_diluidas"]
     preco_valor = caso["preco"]["valor"]
     moeda = caso["moeda"]
+    # Correção do item 3: 'mercado' é bloco opcional (`caso.py`,
+    # `_validar_mercado`) — diferente de 'moeda', que é sempre obrigatório
+    # e por isso indexado direto acima. `rf` vem de `caso["mercado"]["rf"]`
+    # quando o bloco existe; sem ele, `None` — o mesmo comportamento de
+    # hoje (`_guardas_damodaran` sem `rf` responde "PREMISSA NÃO ANCORADA")
+    # continua valendo para um caso que genuinamente não declara mercado.
+    mercado = caso.get("mercado")
+    rf = mercado.get("rf") if mercado else None
 
     # FIX 5 (revisão final): SKILL.md documenta metrica_base como (tipo,
     # valor, fonte) e caso.py agora valida 'fonte' com a mesma disciplina de
@@ -496,7 +526,7 @@ def avaliar(caso: dict) -> dict:
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_firm(
                 cenario["premissas"], metrica["tipo"], metrica["valor"],
-                nd_efetivo, acoes, moeda)
+                nd_efetivo, acoes, moeda, rf=rf)
             cenarios[nome] = _monta_cenario(
                 cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
     elif rota == "rampa":
@@ -514,7 +544,7 @@ def avaliar(caso: dict) -> dict:
         nd_efetivo = ponte["nd_efetivo"]
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, multiplo = precificar_rampa(
-                cenario["premissas"], nd_efetivo, acoes, moeda)
+                cenario["premissas"], nd_efetivo, acoes, moeda, rf=rf)
             cenarios[nome] = _monta_cenario_rampa(
                 cenario, saida, valor, algebra, preco_valor, multiplo)
     else:  # equity
@@ -526,7 +556,7 @@ def avaliar(caso: dict) -> dict:
         nd_efetivo = 0.0
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_equity(
-                cenario["premissas"], metrica["valor"], acoes, moeda)
+                cenario["premissas"], metrica["valor"], acoes, moeda, rf=rf)
             cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
 
     resultado["cenarios"] = cenarios

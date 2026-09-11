@@ -84,18 +84,26 @@ def _precificar_celula(caso: Caso, nd_efetivo: float, premissas: dict) -> tuple[
     Passa `caso["moeda"]` às duas funções de `avaliar.py` — mesma
     disciplina de `avaliar()` (ver docstring do módulo): sem isso, toda
     célula carregaria o alarme falso "MOEDA/REGIME NÃO DECLARADOS".
+
+    Correção do item 3: mesma disciplina para `caso["mercado"]["rf"]`,
+    quando o bloco existe — sem ele, toda célula de toda grade carregava
+    "PREMISSA NÃO ANCORADA" em vez da âncora macro do gp (Damodaran), num
+    cenário `gordon` com `gp > 0`. `mercado` é bloco opcional (`caso.py`),
+    diferente de `moeda`; leitura condicional, mesma de `avaliar.avaliar()`.
     """
     rota = caso["rota"]
     acoes = caso["acoes_diluidas"]
     metrica = caso["metrica_base"]
     moeda = caso["moeda"]
+    mercado = caso.get("mercado")
+    rf = mercado.get("rf") if mercado else None
 
     if rota == "firm":
         saida, valor, _algebra, multiplo = precificar_firm(
-            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda)
+            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda, rf=rf)
     else:  # equity
         saida, valor, _algebra, multiplo = precificar_equity(
-            premissas, metrica["valor"], acoes, moeda)
+            premissas, metrica["valor"], acoes, moeda, rf=rf)
 
     return saida, valor["preco_acao"], multiplo
 

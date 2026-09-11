@@ -50,11 +50,13 @@ def test_grade_declara_triangulo_e_metrica_de_referencia():
 def test_diagnosticos_deduplicados_reconstroem_a_execucao_direta():
     """Os indices tem de devolver exatamente o que o motor emitiu naquela celula.
 
-    A celula passa `caso["moeda"]` ao motor (ver sensibilidades.py); a
-    chamada direta usada aqui para comparacao precisa da mesma moeda, senao
-    as duas listas de diagnostico nunca batem (uma carregaria o alarme de
-    moeda nao declarada, a outra nao) — o teste deixaria de provar
-    reconstrucao por indice e passaria a provar duas execucoes divergentes.
+    A celula passa `caso["moeda"]` (e, correção do item 3,
+    `caso["mercado"]["rf"]`) ao motor (ver sensibilidades.py); a chamada
+    direta usada aqui para comparacao precisa dos mesmos dois, senao as
+    duas listas de diagnostico nunca batem (uma carregaria o alarme de
+    moeda nao declarada, ou "PREMISSA NÃO ANCORADA" em vez da ancora
+    macro do gp, a outra nao) — o teste deixaria de provar reconstrucao
+    por indice e passaria a provar duas execucoes divergentes.
 
     FIX 8 (revisão final): a versão anterior só reconstruía o PRIMEIRO
     ponto, onde a lista de índices é trivialmente 0,1,2... (nenhum índice
@@ -73,7 +75,7 @@ def test_diagnosticos_deduplicados_reconstroem_a_execucao_direta():
         premissas = dict(c["cenarios"]["base"]["premissas"])
         premissas[spec["premissa"]] = ponto["x"]
         direto = rodar("firm", premissas, {"ebitda": 1000.0, "nd": 500.0, "acoes": 100.0},
-                        moeda=c["moeda"])
+                        moeda=c["moeda"], rf=c["mercado"]["rf"])
         reconstruido = [g["diagnosticos_unicos"][i] for i in ponto["diag"]]
         assert reconstruido == direto["diagnosticos"]
 

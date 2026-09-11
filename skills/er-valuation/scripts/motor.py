@@ -174,7 +174,8 @@ def _campo_do_multiplo(rota: str, tipo_metrica: str | None) -> str:
 
 
 def argv_para(rota: str, premissas: dict, escala: dict | None,
-              moeda: str | None = None, subcomando: str | None = None) -> list[str]:
+              moeda: str | None = None, subcomando: str | None = None,
+              rf: float | None = None) -> list[str]:
     """Monta `[subcomando, *flags]` para `rota` — sem executar nada.
 
     Não inclui o interpretador nem o caminho do script: só o subcomando
@@ -206,6 +207,23 @@ def argv_para(rota: str, premissas: dict, escala: dict | None,
     vocabulário de premissas certo) mas precisa do subcomando `rev`, que
     não é função só da rota. Aditivo: o caminho antigo nunca muda de
     comportamento, só ganha um caminho novo ao lado.
+
+    `rf` (correção do item 3): `caso["mercado"]["rf"]`, também de fora de
+    `premissas`/`escala` pelo mesmo motivo de `moeda` — não é variável do
+    vetor de precificação, é um dado de mercado que só ativa diagnóstico
+    (`_guardas_damodaran`, a âncora macro do gp de Damodaran) e nunca muda
+    número nenhum. `None` (default, último parâmetro para que toda chamada
+    posicional existente — `argv_para(rota, premissas, escala, moeda,
+    subcomando)` — continue funcionando sem tocar) não produz flag
+    nenhuma; um valor numérico produz `--rf <valor>`, aceito pelos quatro
+    subcomandos que este wrapper usa (`ev`, `pe`, `rampa`, `rev`), na MESMA
+    escala em pontos percentuais que `caso.py` já valida para `mercado.rf`
+    (12.0 = 12%) — o motor congelado divide por 100 internamente antes de
+    comparar com `gp`, este wrapper não faz conta nenhuma de escala.
+    Checagem por `is not None`, nunca por truthiness: `rf=0.0` (taxa livre
+    de risco nula) é um valor válido, e truthiness o descartaria em
+    silêncio — a mesma leitura que a checagem `valor is None` de
+    `premissas.items()`, acima, já aplica.
     """
     argv = [subcomando or SUBCOMANDO[rota]]
 
@@ -227,6 +245,10 @@ def argv_para(rota: str, premissas: dict, escala: dict | None,
     if moeda:
         argv.append("--moeda")
         argv.append(str(moeda))
+
+    if rf is not None:
+        argv.append("--rf")
+        argv.append(str(rf))
 
     return argv
 
@@ -286,11 +308,14 @@ def executar(argv: list[str], timeout: float = 120) -> dict:
 
 
 def rodar(rota: str, premissas: dict, escala: dict | None = None,
-          moeda: str | None = None, subcomando: str | None = None) -> dict:
+          moeda: str | None = None, subcomando: str | None = None,
+          rf: float | None = None) -> dict:
     """Compõe `argv_para` e `executar`: monta o argv da rota e roda o motor.
 
     `subcomando` só repassa para `argv_para` (ver o docstring de lá) —
     `None` preserva a derivação antiga (`SUBCOMANDO[rota]`); uma string
-    (`"rev"`) escolhe o subcomando explicitamente.
+    (`"rev"`) escolhe o subcomando explicitamente. `rf` (correção do item
+    3) também só repassa, último parâmetro pelo mesmo motivo — ver o
+    docstring de `argv_para` para a razão de existir e a escala.
     """
-    return executar(argv_para(rota, premissas, escala, moeda, subcomando))
+    return executar(argv_para(rota, premissas, escala, moeda, subcomando, rf))

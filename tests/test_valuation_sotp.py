@@ -346,7 +346,7 @@ def test_compor_partes_ecoa_o_nome_do_cenario():
 # --------------------------------------------------------------------------
 
 def test_parte_com_chave_do_motor_colidindo_com_campo_autorado_nao_sobrescreve(monkeypatch):
-    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None):
+    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None, rf=None):
         return {
             "EV": 999.0, "EV/EBITDA_curr": 6.0, "diagnosticos": [],
             "nome": "CLOBBERED-PELO-MOTOR",  # colisão manufaturada

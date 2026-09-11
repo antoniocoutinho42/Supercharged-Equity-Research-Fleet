@@ -99,7 +99,7 @@ def test_multiplo_copiado_null_recusa(monkeypatch):
     conta — vindo null do motor tem de recusar também, não só EV/Equity/
     Preco_acao. Motor mockado (sem subprocess) para isolar exatamente este
     campo, com todo o resto do vetor válido."""
-    def _saida_com_multiplo_nulo(rota, premissas, escala, moeda=None):
+    def _saida_com_multiplo_nulo(rota, premissas, escala, moeda=None, rf=None):
         return {
             "EV/NOPAT_curr": 11.151, "EV/NOPAT_fwd": None,
             "EV/EBITDA_curr": 6.6906, "EV/EBITDA_fwd": 6.372,
@@ -144,6 +144,66 @@ def test_moeda_do_caso_e_repassada_ao_motor_sem_mudar_numeros():
     v = r["cenarios"]["base"]["valor"]
     assert v["EV"] == pytest.approx(6690.59, abs=0.01)
     assert v["preco_acao"] == pytest.approx(61.91, abs=0.01)
+
+
+# --------------------------------------------------------------------------
+# Correção do item 3: 'mercado.rf' do caso nunca chegava ao motor, então
+# `_guardas_damodaran` (a âncora macro do gp, Damodaran) nunca via 'rf' —
+# todo terminal 'gordon' com gp > 0 saía "PREMISSA NÃO ANCORADA", mesmo com
+# rf declarado no caso, e um gp perpétuo acima do rf nominal (erro clássico
+# de sobrevalorização) nunca era alertado. 'rf' segue o mesmo trajeto que
+# 'moeda' já percorre (ver teste acima). caso_minimo_firm.json e
+# caso_reversa_firm.json compartilham a mesma companhia/preço/ponte/
+# métrica_base e o MESMO vetor central do cenário 'base' (mesmo g/roic/
+# wacc/gp/tv) — a única diferença declarada é caso_reversa_firm.json ter
+# 'mercado' (e 'reversa'/'sensibilidades', que não tocam o cenário
+# principal).
+# --------------------------------------------------------------------------
+
+def test_guarda_damodaran_reage_a_rf_nos_tres_ramos():
+    """A âncora macro do gp (Damodaran) tem três ramos para tv='gordon' com
+    gp > 0, e os três têm de continuar alcançáveis com 'rf' repassado:
+      (a) sem bloco 'mercado' no caso: 'PREMISSA NÃO ANCORADA' — o
+          comportamento de hoje, que tem de continuar valendo quando o
+          caso genuinamente não declara rf;
+      (b) com 'mercado.rf' e gp <= rf: 'ÂNCORA MACRO OK';
+      (c) com 'mercado.rf' e gp > rf: 'ALERTA (âncora macro, Damodaran)'.
+    """
+    sem_mercado = _res_firm()  # caso_minimo_firm.json: gordon, gp=3.0, sem mercado
+    assert any("PREMISSA NÃO ANCORADA" in d
+               for d in sem_mercado["cenarios"]["base"]["diagnosticos"])
+
+    c_ok = carregar(FIXTURES / "caso_minimo_firm.json")
+    c_ok["mercado"] = {"rf": 12.0, "erp": 5.5, "fonte": "teste", "data": "2026-08-21"}
+    r_ok = avaliar(c_ok)  # gp=3.0 <= rf=12.0
+    assert any("ÂNCORA MACRO OK" in d
+               for d in r_ok["cenarios"]["base"]["diagnosticos"])
+
+    c_alerta = carregar(FIXTURES / "caso_minimo_firm.json")
+    c_alerta["mercado"] = {"rf": 12.0, "erp": 5.5, "fonte": "teste", "data": "2026-08-21"}
+    # wacc sobe junto com gp só para o Gordon do cenário ficar bem definido
+    # (gp < wacc); o que este teste mede é o diagnóstico, não este número.
+    c_alerta["cenarios"]["base"]["premissas"]["wacc"] = 20.0
+    c_alerta["cenarios"]["base"]["premissas"]["gp"] = 15.0
+    r_alerta = avaliar(c_alerta)  # gp=15.0 > rf=12.0
+    assert any("ALERTA (âncora macro, Damodaran)" in d
+               for d in r_alerta["cenarios"]["base"]["diagnosticos"])
+
+
+def test_rf_do_caso_e_repassado_ao_motor_sem_mudar_numeros():
+    """Espelho de test_moeda_do_caso_e_repassada_ao_motor_sem_mudar_numeros
+    para 'rf': EV/Equity/preco_acao do cenário 'base' têm de sair idênticos
+    com e sem 'mercado' declarado — 'rf' só muda diagnóstico (a âncora
+    macro do gp), nunca entra na álgebra de precificação."""
+    sem_mercado = _res_firm()
+    com_mercado = avaliar(carregar(FIXTURES / "caso_reversa_firm.json"))
+
+    assert sem_mercado["cenarios"]["base"]["valor"] == com_mercado["cenarios"]["base"]["valor"]
+
+    assert any("PREMISSA NÃO ANCORADA" in d
+               for d in sem_mercado["cenarios"]["base"]["diagnosticos"])
+    assert any("ÂNCORA MACRO OK" in d
+               for d in com_mercado["cenarios"]["base"]["diagnosticos"])
 
 
 # --------------------------------------------------------------------------
@@ -461,6 +521,37 @@ def test_sotp_e_deterministico(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# Correção do item 3: o risco desta correção não é a conta, é esquecer um
+# chamador — exatamente a classe de bug que este repo já pagou com 'moeda'
+# (um chamador que o esquecia fazia toda célula de grade carregar um alarme
+# falso). Com 'rf', o sintoma seria pior: o cenário principal diz "ÂNCORA
+# MACRO OK" enquanto uma célula de grade, um eixo de reversa ou uma parte
+# de SOTP — que também rodam 'gordon' com gp > 0 — ainda dizem "PREMISSA
+# NÃO ANCORADA", cada um lido de um `rodar()` esquecido. Este teste combina
+# caso_reversa_firm.json (mercado+reversa+sensibilidades, gordon+gp=3.0 no
+# cenário 'base') com o bloco 'sotp' de caso_sotp_segmento.json (a parte
+# 'Serviços' também é gordon+gp=3.0) num caso só — os dois blocos já são
+# testados isoladamente alhures; é o PRODUTO dos quatro (cenário, grades,
+# reversa, sotp) que discrimina um caminho esquecido.
+# --------------------------------------------------------------------------
+
+def test_nenhum_caminho_perde_rf_cenarios_grades_reversa_sotp():
+    caso = carregar(FIXTURES / "caso_reversa_firm.json")
+    sotp = json.loads((FIXTURES / "caso_sotp_segmento.json").read_text(encoding="utf-8"))["sotp"]
+    caso["sotp"] = sotp
+
+    r = avaliar(caso)
+
+    serializado = json.dumps(r, ensure_ascii=False)
+    assert "PREMISSA NÃO ANCORADA" not in serializado
+    # As 8 pernas gordon+gp>0 deste caso combinado (cenário base, os 4
+    # eixos de reversa, as 2 grades de sensibilidade, a parte 'Serviços' do
+    # sotp) — confirmado por sondagem direta, pré-correção, que são
+    # exatamente estas 8 que hoje saem "PREMISSA NÃO ANCORADA".
+    assert serializado.count("ÂNCORA MACRO OK") == 8
+
+
+# --------------------------------------------------------------------------
 # Revisão final (task 3c), FIX 6d: `precificar_rampa` devolve `multiplo`,
 # mas todo call site descartava (`_multiplo`) e `_monta_cenario_rampa`
 # relia numa SEGUNDA leitura idêntica (`_exigir_valor(saida_motor,
@@ -504,7 +595,7 @@ def test_rota_rampa_multiplo_continua_batendo_o_motor_no_pipeline_completo():
 # --------------------------------------------------------------------------
 
 def test_rampa_engine_key_colidindo_com_campo_autorado_nao_sobrescreve(monkeypatch):
-    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None):
+    def _rodar_fake(rota, premissas, escala, moeda=None, subcomando=None, rf=None):
         return {
             "EV": 170.9304, "Equity": 100.0, "Preco_acao": 9.05,
             "EV/EBITDA0": 6.378,

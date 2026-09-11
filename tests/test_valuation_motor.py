@@ -102,6 +102,36 @@ def test_argv_equity_tambem_inclui_moeda_quando_informada():
     assert argv[argv.index("--moeda") + 1] == "BRL-nominal"
 
 
+# --------------------------------------------------------------------------
+# Correção do item 3: 'rf' (mercado.rf do caso) é, como 'moeda', campo de
+# fora de premissas/escala — nunca chegava ao motor, então
+# `_guardas_damodaran` nunca via `rf` e todo terminal 'gordon' com gp > 0
+# saía "PREMISSA NÃO ANCORADA", mesmo com rf declarado no caso. Mesmo
+# espelho dos testes de moeda logo acima (FIX 4), mesma trilha salto a
+# salto que o moeda já percorre.
+# --------------------------------------------------------------------------
+
+def test_argv_inclui_rf_quando_informado():
+    argv = argv_para("firm", PREMISSAS_FIRM, None, rf=12.0)
+    assert "--rf" in argv
+    assert argv[argv.index("--rf") + 1] == "12.0"
+
+
+def test_argv_omite_rf_quando_nao_informado():
+    argv = argv_para("firm", PREMISSAS_FIRM, None)
+    assert "--rf" not in argv
+
+
+def test_argv_inclui_rf_zero_mesmo_sendo_falsy():
+    """rf=0.0 (taxa livre de risco nula) é um valor válido — a checagem tem
+    de ser 'is not None', nunca truthiness, ou esse valor desapareceria da
+    chamada em silêncio, a mesma classe de erro que a checagem de None em
+    'premissas' (linha ~217 de motor.py) já evita para as premissas."""
+    argv = argv_para("firm", PREMISSAS_FIRM, None, rf=0.0)
+    assert "--rf" in argv
+    assert argv[argv.index("--rf") + 1] == "0.0"
+
+
 def test_rodar_aceita_moeda_e_repassa_ao_motor():
     """Prova de ponta a ponta (com subprocess real): passar moeda não muda
     nenhum número — só troca o aviso 'MOEDA/REGIME NÃO DECLARADOS' por

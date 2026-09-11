@@ -86,7 +86,7 @@ Caso = dict[str, Any]
 _CHAVES_PROMOVIDAS_PARTE: frozenset = frozenset({"EV"})
 
 
-def _compor_parte(parte: dict, moeda: str | None) -> dict:
+def _compor_parte(parte: dict, moeda: str | None, rf: float | None = None) -> dict:
     """Avalia uma parte de SOTP com a rota, métrica, âncora, triângulo e
     premissas dela — nunca cruza a ponte.
 
@@ -104,6 +104,11 @@ def _compor_parte(parte: dict, moeda: str | None) -> dict:
     por sondagem direta do motor (ver docstrings de `precificar_firm`/
     `precificar_rampa`) — por isso a parte resultante nunca carrega essas
     duas chaves, sem precisar filtrá-las à mão.
+
+    `rf` (correção do item 3): `caso["mercado"]["rf"]`, repassado por
+    `compor_partes` — mesma disciplina de `moeda`, último parâmetro com
+    default `None`. Sem ele, cada parte 'gordon' com `gp > 0` carregava
+    "PREMISSA NÃO ANCORADA" mesmo com `rf` declarado no caso.
     """
     rota = parte["rota"]
     metrica = parte["metrica_base"]
@@ -111,11 +116,11 @@ def _compor_parte(parte: dict, moeda: str | None) -> dict:
 
     if rota == "firm":
         saida, valor, algebra, _multiplo = precificar_firm(
-            premissas, metrica["tipo"], metrica["valor"], moeda=moeda)
+            premissas, metrica["tipo"], metrica["valor"], moeda=moeda, rf=rf)
     else:  # rampa — a única outra rota que `caso._validar_parte` aceita
         # para parte de SOTP (equity nunca emite 'EV', ver docstring do
         # módulo); `compor_partes` confia nisso, não revalida.
-        saida, valor, algebra, _multiplo = precificar_rampa(premissas, moeda=moeda)
+        saida, valor, algebra, _multiplo = precificar_rampa(premissas, moeda=moeda, rf=rf)
 
     resultado: dict = {
         "nome": parte["nome"],
@@ -194,15 +199,20 @@ def materialidade(caso: Caso, nome_cenario: str, ev_segmentado: float) -> dict |
 
     blended = bloco["blended"]
     moeda = caso["moeda"]
+    # Correção do item 3: mesma leitura condicional de `avaliar.avaliar()`
+    # — 'mercado' é opcional; sem 'rf', o vetor blended também saía
+    # "PREMISSA NÃO ANCORADA" quando 'gordon'+gp>0, mesmo com rf declarado.
+    mercado = caso.get("mercado")
+    rf = mercado.get("rf") if mercado else None
     rota = caso["rota"]
     metrica = blended["metrica_base"]
     premissas = blended["premissas"]
 
     if rota == "firm":
         _saida, valor, _algebra, _multiplo = precificar_firm(
-            premissas, metrica["tipo"], metrica["valor"], moeda=moeda)
+            premissas, metrica["tipo"], metrica["valor"], moeda=moeda, rf=rf)
     else:  # rampa — a outra rota que produz EV (D3, ver `caso.py`)
-        _saida, valor, _algebra, _multiplo = precificar_rampa(premissas, moeda=moeda)
+        _saida, valor, _algebra, _multiplo = precificar_rampa(premissas, moeda=moeda, rf=rf)
 
     ev_blended = valor["EV"]
     diferenca = ev_segmentado - ev_blended
@@ -279,9 +289,13 @@ def compor_partes(caso: Caso, nome_cenario: str) -> dict:
 
     sotp = caso["sotp"]
     moeda = caso["moeda"]
+    # Correção do item 3: mesma leitura condicional de `avaliar.avaliar()`
+    # — 'mercado' é opcional; repassado a cada parte, ao lado de 'moeda'.
+    mercado = caso.get("mercado")
+    rf = mercado.get("rf") if mercado else None
     topo_declarado = sotp["topo"]
 
-    partes = [_compor_parte(parte, moeda) for parte in sotp["partes"]]
+    partes = [_compor_parte(parte, moeda, rf) for parte in sotp["partes"]]
 
     ev_das_partes = sum(p["EV"] for p in partes)
 
