@@ -1,0 +1,765 @@
+{
+  "versao_contrato": "catalogo/1",
+  "metodologia": {
+    "nome": "multiplos-justos",
+    "versao": "v9.31"
+  },
+  "idiomas": [
+    "pt-BR"
+  ],
+  "blocos": {
+    "earning_power": {
+      "ordem": 1,
+      "rotulo": {
+        "pt-BR": "Earning power e base"
+      }
+    },
+    "crescimento_reinvestimento": {
+      "ordem": 2,
+      "rotulo": {
+        "pt-BR": "Crescimento e reinvestimento"
+      }
+    },
+    "custo_capital": {
+      "ordem": 3,
+      "rotulo": {
+        "pt-BR": "Custo de capital"
+      }
+    },
+    "duracao_terminal": {
+      "ordem": 4,
+      "rotulo": {
+        "pt-BR": "Duração e terminal"
+      }
+    }
+  },
+  "premissas": {
+    "firm": {
+      "g": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento (g)"
+        }
+      },
+      "roic": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROIC"
+        }
+      },
+      "wacc": {
+        "bloco": "custo_capital",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Custo de capital (WACC)"
+        }
+      },
+      "n": {
+        "bloco": "duracao_terminal",
+        "unidade": "anos",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Horizonte explícito (n)"
+        }
+      },
+      "da": {
+        "bloco": "earning_power",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "D&A sobre EBITDA (d)"
+        }
+      },
+      "tax": {
+        "bloco": "earning_power",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Alíquota efetiva de imposto"
+        }
+      },
+      "tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "escolha",
+        "entrada": "escolha",
+        "opcoes": [
+          "book",
+          "convergencia",
+          "gordon"
+        ],
+        "rotulo": {
+          "pt-BR": "Convenção terminal"
+        }
+      },
+      "roic_tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROIC terminal (regime declarado)"
+        }
+      },
+      "gp": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento perpétuo (gp)"
+        }
+      },
+      "roic_book": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROIC médio contábil (book)"
+        }
+      },
+      "mid_year": {
+        "bloco": "duracao_terminal",
+        "unidade": "booleano",
+        "entrada": "booleano",
+        "rotulo": {
+          "pt-BR": "Convenção de meio de ano"
+        }
+      }
+    },
+    "equity": {
+      "g": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento (g)"
+        }
+      },
+      "roe": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROE"
+        }
+      },
+      "ke": {
+        "bloco": "custo_capital",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Custo de capital próprio (Ke)"
+        }
+      },
+      "n": {
+        "bloco": "duracao_terminal",
+        "unidade": "anos",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Horizonte explícito (n)"
+        }
+      },
+      "gde": {
+        "bloco": "custo_capital",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Dívida bruta sobre patrimônio (GD/E)"
+        }
+      },
+      "nde": {
+        "bloco": "custo_capital",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Dívida líquida sobre patrimônio (ND/E)"
+        }
+      },
+      "tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "escolha",
+        "entrada": "escolha",
+        "opcoes": [
+          "book",
+          "convergencia",
+          "gordon"
+        ],
+        "rotulo": {
+          "pt-BR": "Convenção terminal"
+        }
+      },
+      "roe_tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROE terminal (regime declarado)"
+        }
+      },
+      "gp": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento perpétuo (gp)"
+        }
+      },
+      "roe_book": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROE médio contábil (book)"
+        }
+      },
+      "politica_tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "escolha",
+        "entrada": "escolha",
+        "opcoes": [
+          "continua",
+          "encerra"
+        ],
+        "rotulo": {
+          "pt-BR": "Política de caixa no terminal"
+        }
+      },
+      "mid_year": {
+        "bloco": "duracao_terminal",
+        "unidade": "booleano",
+        "entrada": "booleano",
+        "rotulo": {
+          "pt-BR": "Convenção de meio de ano"
+        }
+      }
+    },
+    "rampa": {
+      "receita0": {
+        "bloco": "earning_power",
+        "unidade": "moeda",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Receita do ano 0"
+        }
+      },
+      "ebitda0": {
+        "bloco": "earning_power",
+        "unidade": "moeda",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "EBITDA econômico do ano 0"
+        }
+      },
+      "da_parque": {
+        "bloco": "earning_power",
+        "unidade": "moeda",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "D&A do parque instalado"
+        }
+      },
+      "wk": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Intensidade de capital de giro líquido (wk)"
+        }
+      },
+      "kappa": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Capex fixo da expansão (kappa)"
+        }
+      },
+      "g2": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento da fase 2 (g2)"
+        }
+      },
+      "wacc": {
+        "bloco": "custo_capital",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Custo de capital (WACC)"
+        }
+      },
+      "tax": {
+        "bloco": "earning_power",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Alíquota efetiva de imposto"
+        }
+      },
+      "t_rampa": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "anos",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Prazo da rampa (T)"
+        }
+      },
+      "n": {
+        "bloco": "duracao_terminal",
+        "unidade": "anos",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Horizonte total (n)"
+        }
+      },
+      "util": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Utilização atual do parque"
+        }
+      },
+      "g1": {
+        "bloco": "crescimento_reinvestimento",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento da fase 1 (g1)"
+        }
+      },
+      "tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "escolha",
+        "entrada": "escolha",
+        "opcoes": [
+          "book",
+          "convergencia",
+          "gordon"
+        ],
+        "rotulo": {
+          "pt-BR": "Convenção terminal"
+        }
+      },
+      "roic_tv": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROIC terminal (regime declarado)"
+        }
+      },
+      "gp": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "Crescimento perpétuo (gp)"
+        }
+      },
+      "roic_book": {
+        "bloco": "duracao_terminal",
+        "unidade": "pp",
+        "entrada": "numero",
+        "rotulo": {
+          "pt-BR": "ROIC médio contábil (book)"
+        }
+      }
+    }
+  },
+  "multiplos": {
+    "EV/EBITDA_curr": {
+      "base": "ebitda",
+      "rotulo": {
+        "pt-BR": "EV/EBITDA corrente"
+      }
+    },
+    "EV/EBITDA_fwd": {
+      "base": "ebitda",
+      "rotulo": {
+        "pt-BR": "EV/EBITDA forward"
+      }
+    },
+    "EV/NOPAT_curr": {
+      "base": "nopat",
+      "rotulo": {
+        "pt-BR": "EV/NOPAT corrente"
+      }
+    },
+    "EV/NOPAT_fwd": {
+      "base": "nopat",
+      "rotulo": {
+        "pt-BR": "EV/NOPAT forward"
+      }
+    },
+    "PL_curr": {
+      "base": "pl",
+      "rotulo": {
+        "pt-BR": "P/L corrente"
+      }
+    },
+    "PL_fwd": {
+      "base": "pl",
+      "rotulo": {
+        "pt-BR": "P/L forward"
+      }
+    },
+    "EV/EBITDA0": {
+      "base": "ebitda0",
+      "rotulo": {
+        "pt-BR": "EV/EBITDA do ano 0"
+      }
+    },
+    "PVP": {
+      "base": "pvp",
+      "rotulo": {
+        "pt-BR": "P/VP de tela (observado)"
+      }
+    },
+    "PVP_com_degrau": {
+      "base": "pvp",
+      "rotulo": {
+        "pt-BR": "P/VP justo com degrau"
+      }
+    }
+  },
+  "diagnosticos": {
+    "firm_convencao_book": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Convenção 'book': renda residual truncada em n, TV = capital investido"
+      }
+    },
+    "firm_conflacao_sem_roic_book": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Conflação marginal×médio: ROIC book não informado"
+      }
+    },
+    "firm_regime_declarado_roic_tv": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROIC terminal abaixo do WACC: destruição persistente declarada"
+      }
+    },
+    "firm_nota_colapso_gordon": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROIC terminal igual ao WACC: gordon colapsa em convergência"
+      }
+    },
+    "firm_rir": {
+      "severidade": "eco",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Taxa de reinvestimento implícita (RiR) e spread ROIC−WACC"
+      }
+    },
+    "firm_alerta_rir_excede_100": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "RiR acima de 100%: crescimento não autofinanciável"
+      }
+    },
+    "firm_alerta_roic_abaixo_wacc": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "ROIC abaixo do WACC com crescimento: crescer destrói valor"
+      }
+    },
+    "firm_alerta_conflacao_b01": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Conflação B-01: ROIC abaixo do WACC sem ROIC book separado"
+      }
+    },
+    "firm_convencao_condicionada_b01": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Convenção condicionada B-01: book admissível sob tese de saída pelo capital investido"
+      }
+    },
+    "firm_sub_alerta_b01_medio": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Sub-alerta B-01: ROIC book também abaixo do WACC"
+      }
+    },
+    "firm_eco_deriva_medio": {
+      "severidade": "eco",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Deriva do ROIC médio do book até o marginal ao longo do horizonte"
+      }
+    },
+    "firm_atencao_roic_wacc_book_diverge": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROIC marginal no WACC mas ROIC book diverge: neutralidade incompleta"
+      }
+    },
+    "firm_neutralidade_identidade": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROIC igual ao WACC: múltiplo forward invariante ao crescimento"
+      }
+    },
+    "firm_neutralidade_g0_gordon": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero em gordon: múltiplo invariante ao ROIC explícito"
+      }
+    },
+    "firm_neutralidade_g0_convergencia": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero em convergência: múltiplo invariante ao ROIC"
+      }
+    },
+    "firm_atencao_g0_book": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero na convenção book: múltiplo ainda depende do ROIC"
+      }
+    },
+    "eq_convencao_book": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Convenção 'book': renda residual truncada, TV = equity contábil"
+      }
+    },
+    "eq_conflacao_sem_roe_book": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Conflação marginal×médio: ROE book não informado"
+      }
+    },
+    "eq_eco_deriva_medio": {
+      "severidade": "eco",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Deriva do ROE médio do book até o marginal ao longo do horizonte"
+      }
+    },
+    "eq_politica_caixa_continua": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Política de caixa 'contínua' no terminal (padrão)"
+      }
+    },
+    "eq_politica_caixa_encerra": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Política de caixa 'encerra' no terminal"
+      }
+    },
+    "eq_regime_declarado_roe_tv": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE terminal abaixo do Ke: destruição persistente declarada"
+      }
+    },
+    "eq_nota_colapso_gordon": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE terminal igual ao Ke: gordon colapsa em convergência"
+      }
+    },
+    "eq_retencao": {
+      "severidade": "eco",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Retenção implícita (g/ROE), payout e caixa sobre patrimônio"
+      }
+    },
+    "eq_payout_zero_nao_informativo": {
+      "severidade": "atencao",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Payout próximo de zero: retenção observada não informa o RiR requerido"
+      }
+    },
+    "eq_limitacao_c2_ke_fixo": {
+      "severidade": "nota",
+      "bloco": "custo_capital",
+      "rotulo": {
+        "pt-BR": "Limitação C2: Ke é input fixo, não responde à alavancagem"
+      }
+    },
+    "eq_alerta_sensibilidade_ke_gp": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Sensibilidade alta do terminal a pequenas variações de gp"
+      }
+    },
+    "eq_dominio_nde_maior_gde": {
+      "severidade": "alerta",
+      "bloco": "custo_capital",
+      "rotulo": {
+        "pt-BR": "Fora do domínio: dívida líquida maior que a bruta sobre patrimônio"
+      }
+    },
+    "eq_alerta_groe_excede_100": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "g/ROE acima de 100%: payout negativo (emissão implícita)"
+      }
+    },
+    "eq_alerta_roe_abaixo_ke": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "ROE abaixo do Ke com crescimento: reter lucro destrói valor"
+      }
+    },
+    "eq_alerta_conflacao_b01": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Conflação B-01: ROE abaixo do Ke sem ROE book separado"
+      }
+    },
+    "eq_convencao_condicionada_b01": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Convenção condicionada B-01: book admissível sob tese de saída pelo patrimônio"
+      }
+    },
+    "eq_sub_alerta_b01_medio": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Sub-alerta B-01: ROE book também abaixo do Ke"
+      }
+    },
+    "eq_atencao_roe_ke_book_diverge": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE marginal no Ke mas ROE book diverge: neutralidade incompleta"
+      }
+    },
+    "eq_neutralidade_book_clean_surplus": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE marginal e book no Ke: P/L forward invariante ao crescimento"
+      }
+    },
+    "eq_neutralidade_identidade_caixa0": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE igual ao Ke sem caixa: P/L forward invariante ao crescimento"
+      }
+    },
+    "eq_atencao_fcfe_nao_book": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "ROE no Ke não é neutralidade com caixa fora da convenção book"
+      }
+    },
+    "eq_neutralidade_g0_gordon": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero em gordon: P/L invariante ao ROE explícito"
+      }
+    },
+    "eq_neutralidade_g0_convergencia": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero em convergência: P/L invariante ao ROE"
+      }
+    },
+    "eq_atencao_g0_book": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento zero na convenção book: P/L ainda depende do ROE"
+      }
+    },
+    "damodaran_alerta_ancora_macro": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento perpétuo acima do teto macro (âncora Damodaran)"
+      }
+    },
+    "damodaran_ancora_ok": {
+      "severidade": "nota",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento perpétuo dentro do teto macro (âncora Damodaran)"
+      }
+    },
+    "damodaran_premissa_nao_ancorada": {
+      "severidade": "atencao",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento perpétuo sem âncora macro declarada"
+      }
+    },
+    "coerencia_eco_intensidade_capital": {
+      "severidade": "eco",
+      "bloco": null,
+      "rotulo": {
+        "pt-BR": "Intensidade de capital implícita pelo vetor (EBITDA/capital investido)"
+      }
+    },
+    "aviso_colheita": {
+      "severidade": "atencao",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Bloco de colheita: liberação de giro supera o NOPAT na fase 1"
+      }
+    },
+    "aviso_delator": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "RiR da fase 2 acima de 100%: crescimento não autofinanciável"
+      }
+    },
+    "aviso_gp": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Crescimento perpétuo da rampa acima do teto macro (âncora Damodaran)"
+      }
+    }
+  },
+  "limiares": {
+    "divergencia_de_base_pct_disclosure": 5.0
+  }
+}

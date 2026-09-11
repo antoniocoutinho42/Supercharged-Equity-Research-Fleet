@@ -168,6 +168,13 @@ convenção que já mora aqui):
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
 
+Conhecimento metodológico que o relatório precisa exibir mas não calcula
+(bloco/unidade/rótulo de cada premissa, rótulo e base de cada múltiplo,
+severidade e rótulo de cada diagnóstico, limiar de disclosure da divergência
+de base) é publicado à parte, como o catálogo de apresentação (A6):
+`skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
+`tests/test_catalogo_apresentacao.py`.
+
 ## Escopo desta fatia
 
 Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`
