@@ -43,6 +43,15 @@ normaliza saída.
 - **Rota rampa** — composição bifásica (rampa de utilização seguida de
   expansão), costurada num ano-delimitador que o caso declara; `EV`,
   `Equity` e preço por ação saem prontos do motor, como na rota `firm`.
+- **Degrau (Gate 3)** — bloco opcional `degrau`, só na rota `equity`:
+  aplica capacidade ociosa de balanço como rentabilidade × h (g inalterado,
+  rentabilidade terminal parada, fator de captura só sobre o incremento
+  via transição `rampa`/`pontual`). O preço do cenário passa a ser o COM
+  degrau; o SEM degrau fica ao lado em `sem_degrau`, e
+  `divergencia_de_base_%` compara os dois. Recusado junto de `reversa`,
+  `sensibilidades` ou `sotp` (limitação declarada desta fatia). Metodologia,
+  `m` (eficiência marginal) e as quatro travas obrigatórias:
+  `vendor/multiplos-justos/references/aplicacao.md` §8.
 
 ## O que NUNCA faz
 

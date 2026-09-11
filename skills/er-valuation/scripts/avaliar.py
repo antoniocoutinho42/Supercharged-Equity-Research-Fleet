@@ -342,6 +342,128 @@ def precificar_rampa(premissas: dict, nd_efetivo: float | None = None,
     return saida, valor, algebra, multiplo
 
 
+def precificar_degrau(premissas_cenario: dict, bloco_degrau: dict, m_valor: float,
+                       moeda: str | None = None, rf: float | None = None) -> dict:
+    """Roda o motor (subcomando `degrau`) para um cenário da rota equity;
+    devolve a saída do motor verbatim (shape diferente das irmãs
+    `precificar_firm`/`precificar_equity`/`precificar_rampa` — não há um
+    único `multiplo` de referência nem uma `valor`/`algebra` a montar aqui;
+    quem chama, `_aplicar_degrau_ao_cenario`, é quem lê `niveis`/
+    `travas_obrigatorias` da saída).
+
+    `premissas_cenario` é `cenario["premissas"]` do caso — já validado por
+    `caso.py` (`_validar_degrau`) como isento de `mid_year` sempre que
+    `degrau` está no caso, e cujas demais chaves (g, roe, ke, n, gde, nde,
+    tv, roe_tv, gp, roe_book, politica_tv) são TODAS vocabulário válido do
+    subparser `degrau` também — por isso a base do vetor é uma cópia direta
+    dessas premissas, sem filtro. `bloco_degrau` é `caso["degrau"]`, já
+    validado; `m_valor` é `bloco_degrau["m"][<nome do cenário>]["valor"]`,
+    escolhido por quem chama (esta função não conhece o nome do cenário).
+
+    `indice_alvo` vai como DOIS valores no mesmo `--indice-alvo` (a flag
+    aceita lista separada por vírgula): o alvo do cenário primeiro
+    (`niveis[0]`, D3 — o preço do cenário) e o próprio `indice_atual`
+    depois (`niveis[1]`, h=1 por construção — D8, `divergencia_de_base_%`).
+    Pedir os dois no MESMO subprocesso mantém "cada cenário roda `pe`... e
+    `degrau`" (Task 1) como uma chamada de degrau só, e os dois preços
+    (`niveis[0].preco_acao`, `niveis[1].preco_acao`) saem do MOTOR, prontos
+    — nunca de uma multiplicação por `vpa` refeita neste wrapper (regra
+    inviolável 1).
+
+    `perfil_transicao` aplica o default 'rampa' explicitamente aqui (em vez
+    de omitir a flag e confiar no default do subparser) — é o literal que a
+    prova de falseabilidade da Task 1 muta para 'pontual' e confirma o
+    teste da âncora ficar vermelho.
+
+    `fx` some da chamada quando o caso não declara (`bloco_degrau.get("fx")
+    is None`): o subparser `degrau` já defaulta `--fx` para 1.0, mesma
+    disciplina de `politica_tv`/`gp`/`gde`/`nde` nas outras rotas (chave
+    ausente do dict não vira flag; quem decide o default é o motor).
+    """
+    indice_atual = bloco_degrau["indice_atual"]["valor"]
+    indice_alvo = bloco_degrau["indice_alvo"]["valor"]
+    premissas = dict(premissas_cenario)
+    premissas["indice_atual"] = indice_atual
+    premissas["indice_alvo"] = f"{indice_alvo},{indice_atual}"
+    premissas["anos"] = bloco_degrau["anos"]
+    premissas["perfil_transicao"] = bloco_degrau.get("perfil_transicao") or "rampa"
+    premissas["vpa"] = bloco_degrau["vpa"]["valor"]
+    if bloco_degrau.get("fx") is not None:
+        premissas["fx"] = bloco_degrau["fx"]
+    premissas["m"] = m_valor
+    return rodar("equity", premissas, None, moeda, subcomando="degrau", rf=rf)
+
+
+def _aplicar_degrau_ao_cenario(cenario_montado: dict, cenario: dict, bloco_degrau: dict,
+                                m_valor: float, moeda: str | None, rf: float | None,
+                                preco_valor: float) -> tuple[dict, list]:
+    """Substitui o preço do cenário pelo COM degrau; move o SEM degrau para
+    `sem_degrau` ao lado (D3, Fatia D Task 1).
+
+    `cenario_montado` já é o resultado normal de `_monta_cenario` (rota
+    equity, sem degrau) — esta função só adiciona/substitui chaves por
+    cima; `ancora`/`triangulo`/`premissas`/`algebra_da_escala`/
+    `diagnosticos`/`coerencia_vetor`/`convencao_temporal` continuam vindo
+    da rota P/L, intocados, e o `multiplos` de topo (PL_curr/PL_fwd)
+    também — só o `sem_degrau` interno os duplica (plano: "sem_degrau ← o
+    valor e os multiplos da rota P/L, íntegros").
+
+    `divergencia_de_base_%` (D8) compara `niveis[1].preco_acao` (o nível
+    h=1, calculado pelo MOTOR via `--vpa`/`--fx` dentro de
+    `precificar_degrau`) contra `cenario_montado["valor"]["preco_acao"]`
+    (a rota P/L, também motor) — "comparação entre dois outputs do motor",
+    nunca a álgebra `base.multiplo_x_rentab x vpa / fx` refeita aqui: essa
+    é exatamente a conta que o motor já faz para popular `preco_acao` de
+    cada nível, e repeti-la sobre um `multiplo_x_rentab` arredondado a 4
+    casas divergiria (por arredondamento) do que o motor responderia se
+    perguntado diretamente — regra inviolável 1 (Global Constraints do
+    plano).
+
+    Devolve `(cenario_aumentado, travas_obrigatorias)` — o segundo elemento
+    é repassado por quem chama para montar `resultado["degrau"]` (D8/Task 1:
+    "o bloco declarado + as travas_obrigatorias do motor, verbatim"), uma
+    única vez, fora do loop de cenários.
+    """
+    saida_degrau = precificar_degrau(cenario["premissas"], bloco_degrau, m_valor, moeda, rf=rf)
+    niveis = saida_degrau.get("niveis") or []
+    if len(niveis) < 2:
+        raise MotorFalhou(
+            f"motor devolveu {len(niveis)} nível(is) de degrau, esperados 2 "
+            f"(alvo do cenário + indice_atual, D8): {saida_degrau!r}."
+        )
+    nivel_alvo, nivel_base = niveis[0], niveis[1]
+
+    preco_com_degrau = _exigir_valor(nivel_alvo, "preco_acao")
+    preco_base_h1 = _exigir_valor(nivel_base, "preco_acao")
+    preco_sem_degrau = cenario_montado["valor"]["preco_acao"]
+
+    degrau_cenario: dict = {
+        "h": _exigir_valor(nivel_alvo, "h"),
+        "rentabilidade_pos_%": _exigir_valor(nivel_alvo, "rentabilidade_pos_%"),
+        "multiplo": _exigir_valor(nivel_alvo, "multiplo"),
+        "multiplo_x_rentab": _exigir_valor(nivel_alvo, "multiplo_x_rentab"),
+        "com_transicao": _exigir_valor(nivel_alvo, "com_transicao"),
+        "fator_transicao": _exigir_valor(nivel_alvo, "fator_transicao"),
+        "perfil_transicao": nivel_alvo["perfil_transicao"],
+        "m": m_valor,
+        "divergencia_de_base_%": (preco_base_h1 / preco_sem_degrau - 1) * 100,
+    }
+    if "ALERTA" in nivel_alvo:
+        degrau_cenario["ALERTA"] = nivel_alvo["ALERTA"]
+    if "ALERTA_RiR" in nivel_alvo:
+        degrau_cenario["ALERTA_RiR"] = nivel_alvo["ALERTA_RiR"]
+
+    resultado = dict(cenario_montado)
+    resultado["sem_degrau"] = {
+        "valor": cenario_montado["valor"],
+        "multiplos": cenario_montado["multiplos"],
+    }
+    resultado["valor"] = {"preco_acao": preco_com_degrau}
+    resultado["vs_preco"] = {"upside": preco_com_degrau / preco_valor - 1}
+    resultado["degrau"] = degrau_cenario
+    return resultado, saida_degrau["travas_obrigatorias"]
+
+
 def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
                     algebra: str, preco_valor: float,
                     tipo_metrica: str | None = None) -> dict:
@@ -554,10 +676,25 @@ def avaliar(caso: dict) -> dict:
         # `reversa.alvo_de_mercado` usa para decidir a base do alvo
         # ("pl", sem somar dívida a um EV que este lado nunca calcula).
         nd_efetivo = 0.0
+        # Fatia D, Task 1: bloco opcional 'degrau' — mesma disciplina
+        # aditiva de 'reversa'/'sensibilidades'/'sotp' (só muda algo quando
+        # o caso declara). `caso.py` já garante, no gate, que 'degrau' só
+        # aparece na rota equity (D2) e que 'degrau.m' tem exatamente uma
+        # entrada por cenário do caso — por isso `bloco_degrau["m"][nome]`
+        # abaixo nunca levanta KeyError para um caso validado.
+        bloco_degrau = caso.get("degrau")
+        travas_obrigatorias_degrau: list | None = None
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_equity(
                 cenario["premissas"], metrica["valor"], acoes, moeda, rf=rf)
-            cenarios[nome] = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
+            cenario_montado = _monta_cenario(cenario, saida, rota, valor, algebra, preco_valor)
+            if bloco_degrau is not None:
+                m_valor = bloco_degrau["m"][nome]["valor"]
+                cenario_montado, travas_obrigatorias_degrau = _aplicar_degrau_ao_cenario(
+                    cenario_montado, cenario, bloco_degrau, m_valor, moeda, rf, preco_valor)
+            cenarios[nome] = cenario_montado
+        if bloco_degrau is not None:
+            resultado["degrau"] = {**bloco_degrau, "travas_obrigatorias": travas_obrigatorias_degrau}
 
     resultado["cenarios"] = cenarios
 

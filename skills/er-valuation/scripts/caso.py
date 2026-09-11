@@ -350,15 +350,17 @@ _CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE: frozenset = frozenset({
 # sem nunca a consumir. As duas foram confirmadas rodando TODA fixture de
 # `tests/fixtures/` por este gate — nenhuma outra chave legítima apareceu.
 #
-# NÃO acrescentar 'degrau' aqui: a próxima fatia (D) o acrescenta; ver
-# docs/superpowers/plans/2026-09-10-v4-fatia-degrau.md.
+# Fatia D, Task 1: 'degrau' entrou no vocabulário — bloco opcional, validado
+# por `_validar_degrau` (mais abaixo), mesma disciplina de 'reversa'/
+# 'sensibilidades'/'sotp': sem o nome aqui, o gate recusaria o bloco como
+# chave de topo desconhecida antes de examinar o conteúdo dele.
 CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Obrigatórias — `_RAZOES_CAMPOS_DE_TOPO`, checadas por presença/não-nulo
     # em `_validar_campos_de_topo`.
     "companhia", "moeda", "data_analise", "rota", "acoes_diluidas", "cenarios",
     # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
     "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
-    "sensibilidades", "sotp",
+    "sensibilidades", "sotp", "degrau",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -518,6 +520,8 @@ def validar(caso: Caso) -> None:
         )
     for nome, cenario in cenarios.items():
         _validar_cenario(nome, cenario, rota)
+
+    _validar_degrau(caso, cenarios, rota)
 
     reversa_presente = caso.get("reversa") is not None
     _validar_mercado(caso, reversa_presente)
@@ -1010,6 +1014,260 @@ def _validar_util_xor_g1(prefixo: str, premissas: dict) -> None:
             "('g1'; negativo é o bloco de colheita). Declare exatamente "
             "uma das duas."
         )
+
+
+# --------------------------------------------------------------------------
+# Fatia D, Task 1: bloco opcional 'degrau' (Gate 3 — capacidade ociosa de
+# balanço / re-precificação). Mesmo padrão de 'reversa'/'sotp': bloco de
+# caso, não rota nova (D1) — muda a rentabilidade de cada cenário, nunca o
+# vocabulário da rota. Ver docs/superpowers/plans/2026-09-10-v4-fatia-degrau.md
+# (D1-D9) e vendor/multiplos-justos/references/aplicacao.md §8.
+# --------------------------------------------------------------------------
+
+def _valor_numerico_degrau(degrau: dict, campo: str) -> float:
+    """Lê `degrau[campo]["valor"]` como número finito, recusando (nomeando
+    'degrau.{campo}') quando o subcampo não é objeto ou o valor não é
+    número finito. Não checa sinal nem outra restrição — isso é
+    responsabilidade de quem chama, com a mensagem tailorizada por campo
+    ('indice_atual'/'indice_alvo'/'vpa' têm razões de recusa diferentes
+    para um valor não positivo)."""
+    sub = degrau.get(campo)
+    if not isinstance(sub, dict):
+        raise CasoInvalido(
+            f"'degrau.{campo}' não é um objeto: {sub!r}. Declare ao menos "
+            "'valor'."
+        )
+    valor = sub.get("valor")
+    if not _numero_valido(valor) or not _finito(valor):
+        raise CasoInvalido(
+            f"'degrau.{campo}.valor' ausente, não numérico ou não finito: "
+            f"{valor!r}."
+        )
+    return valor
+
+
+def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
+    """Valida o bloco opcional 'degrau' (Gate 3 — capacidade ociosa de balanço).
+
+    `caso.get("degrau")` ausente ou `None` é um caso perfeitamente válido
+    sem degrau nenhum — exatamente tão válido quanto antes desta fatia
+    existir. Presente, o bloco muda a rentabilidade de CADA cenário do
+    caso (rentabilidade x h, g inalterado, rentabilidade terminal parada)
+    — nunca abre um cenário próprio (D1).
+
+    Ordem das checagens, cada uma nomeando o motivo: rota (D2) -> conflito
+    com 'reversa'/'sensibilidades'/'sotp' (D7 — checado ANTES do conteúdo
+    do bloco, para que a mensagem nomeie 'degrau', em vez de cair na
+    recusa genérica de 'sotp'/'reversa' que já existe por outro motivo)
+    -> tipo do bloco -> índices e piso -> transição (anos, perfil, razão)
+    -> ponte de preço (vpa, fx) -> 'm' por cenário -> por cenário, tv=book
+    sem roe_book (D6) e mid_year (o subparser `degrau` não aceita
+    `--mid-year`).
+
+    `cenarios` já chegou validado por `_validar_cenario` (ancora,
+    triângulo, premissas) antes desta função rodar dentro de `validar` —
+    cada `cenario["premissas"]` já é um dict de tipo conhecido; esta
+    função lê direto, sem revalidar tipo.
+    """
+    degrau = caso.get("degrau")
+    if degrau is None:
+        return
+
+    if rota != "equity":
+        raise CasoInvalido(
+            f"bloco 'degrau' presente na rota '{rota}': o degrau (D2) só é "
+            "suportado na rota equity, a única em que o motor fecha o "
+            "preço sozinho (--vpa/--fx). Na rota firm, transformar "
+            "EV/Capital em EV exigiria aritmética de valuation no "
+            "wrapper; a rota rampa é o domínio da capacidade "
+            "PRÉ-CONSTRUÍDA, que a metodologia proíbe tratar como degrau x "
+            "h (ignoraria o giro). Remova o bloco 'degrau', ou troque a "
+            "rota do caso."
+        )
+
+    for outro in ("reversa", "sensibilidades", "sotp"):
+        if caso.get(outro) is not None:
+            raise CasoInvalido(
+                f"bloco 'degrau' presente junto de '{outro}': esta "
+                "combinação não está implementada nesta fatia (D7) — as "
+                "grades de sensibilidade, a reversa e o SOTP hoje "
+                "precificam sem degrau, e misturar quebraria a regra da "
+                "célula central (a célula na premissa do caso-base bate "
+                "com a manchete). Limitação declarada, a reabrir quando "
+                f"um caso pedir. Remova o bloco '{outro}', ou remova "
+                "'degrau'."
+            )
+
+    if not isinstance(degrau, dict):
+        raise CasoInvalido(
+            f"campo 'degrau' não é um objeto: {degrau!r}. Declare "
+            "'indice_atual', 'piso_teorico', 'indice_alvo', 'anos', "
+            "'razao_transicao', 'vpa' e 'm' (um valor por cenário)."
+        )
+
+    indice_atual = _valor_numerico_degrau(degrau, "indice_atual")
+    if indice_atual <= 0:
+        raise CasoInvalido(
+            f"'degrau.indice_atual.valor' não é positivo: {indice_atual!r}. "
+            "É o índice OBSERVADO hoje (ex.: índice de Basileia, caixa "
+            "excedente em % do mínimo) — não numérico positivo não é um "
+            "índice válido."
+        )
+
+    piso_teorico = degrau.get("piso_teorico")
+    if not _numero_valido(piso_teorico) or not _finito(piso_teorico) or piso_teorico <= 0:
+        raise CasoInvalido(
+            f"'degrau.piso_teorico' ausente, não numérico ou não positivo: "
+            f"{piso_teorico!r}. É o limite matemático (mínimo regulatório, "
+            "sem buffer) — declarado ao lado do piso administrável para "
+            "que os dois nunca se confundam ('Piso teórico ≠ piso "
+            "administrável', aplicacao.md §8)."
+        )
+
+    indice_alvo = _valor_numerico_degrau(degrau, "indice_alvo")
+    if indice_alvo <= 0:
+        raise CasoInvalido(
+            f"'degrau.indice_alvo.valor' não é positivo: {indice_alvo!r}. "
+            "É o piso ADMINISTRÁVEL (mínimo regulatório + buffer) usado "
+            "como cenário — não numérico positivo não é um índice válido."
+        )
+    if indice_alvo < piso_teorico:
+        raise CasoInvalido(
+            f"'degrau.indice_alvo.valor' ({indice_alvo!r}) menor que "
+            f"'degrau.piso_teorico' ({piso_teorico!r}): o alvo é o piso "
+            "ADMINISTRÁVEL, que nunca fica abaixo do piso teórico (o "
+            "limite matemático, sem buffer) — 'Piso teórico ≠ piso "
+            "administrável', aplicacao.md §8."
+        )
+
+    anos = degrau.get("anos")
+    if "anos" not in degrau or not _numero_valido(anos) or not _finito(anos) or anos < 0:
+        raise CasoInvalido(
+            f"'degrau.anos' ausente, não numérico ou negativo: {anos!r}. "
+            "Não tem default (D5): o motor defaulta '--anos 0' (degrau "
+            "instantâneo), exatamente o que a trava 2 da metodologia "
+            "proíbe presumir — o analista declara os anos até completar o "
+            "deployment, mesmo quando a resposta é '0' explícito."
+        )
+
+    perfil_transicao = degrau.get("perfil_transicao", "rampa")
+    if "perfil_transicao" in degrau:
+        _exigir_texto(perfil_transicao, "degrau.perfil_transicao")
+    if perfil_transicao not in ("rampa", "pontual"):
+        raise CasoInvalido(
+            f"'degrau.perfil_transicao' inválido: {perfil_transicao!r}. "
+            "Tem de ser 'rampa' (deployment gradual, o default da própria "
+            "metodologia) ou 'pontual' (degrau datado num ano só, apenas "
+            "com evento datado declarado — licença, decisão regulatória, "
+            "fechamento de aquisição)."
+        )
+
+    razao_transicao = degrau.get("razao_transicao")
+    if not isinstance(razao_transicao, str) or not razao_transicao.strip():
+        raise CasoInvalido(
+            f"'degrau.razao_transicao' ausente ou vazia: "
+            f"{razao_transicao!r}. É onde o analista declara o evento por "
+            "trás do perfil de transição — com 'pontual', é ali que o "
+            "evento DATADO é declarado (D5); sem essa declaração, a "
+            "escolha de perfil é arbitrária."
+        )
+
+    vpa = _valor_numerico_degrau(degrau, "vpa")
+    if vpa <= 0:
+        raise CasoInvalido(
+            f"'degrau.vpa.valor' não é positivo: {vpa!r}. É o valor "
+            "patrimonial por ação que faz a ponte de preço do degrau "
+            "(preco_acao = P/VP x vpa / fx) — sem um número positivo aqui "
+            "não há como o motor fechar o preço do cenário."
+        )
+    fonte_vpa = degrau["vpa"].get("fonte")
+    if not isinstance(fonte_vpa, str) or not fonte_vpa.strip():
+        raise CasoInvalido(
+            f"'degrau.vpa.fonte' ausente ou vazia: {fonte_vpa!r}. Um valor "
+            "patrimonial por ação sem fonte não é auditável — a "
+            "metodologia exige rastrear de onde veio a ponte de preço do "
+            "degrau, do mesmo jeito que já exige para 'preco'."
+        )
+
+    if "fx" in degrau:
+        fx = degrau.get("fx")
+        if not _numero_valido(fx) or not _finito(fx) or fx <= 0:
+            raise CasoInvalido(
+                f"'degrau.fx' presente mas não é positivo: {fx!r}. Quando "
+                "declarado, é o câmbio que divide a ponte de preço "
+                "(preco_acao = P/VP x vpa / fx) — ausente, o motor "
+                "defaulta para 1.0."
+            )
+
+    m = degrau.get("m")
+    if not isinstance(m, dict):
+        raise CasoInvalido(
+            f"'degrau.m' não é um objeto: {m!r}. Declare exatamente uma "
+            "entrada por cenário do caso, cada uma com 'valor' (a "
+            "eficiência marginal, em %) e 'razao'."
+        )
+    nomes_cenarios = set(cenarios)
+    nomes_m = set(m)
+    if nomes_m != nomes_cenarios:
+        faltando = sorted(nomes_cenarios - nomes_m)
+        sobrando = sorted(nomes_m - nomes_cenarios)
+        detalhe = []
+        if faltando:
+            detalhe.append(f"faltando: {faltando}")
+        if sobrando:
+            detalhe.append(f"sobrando (não são cenário do caso): {sobrando}")
+        raise CasoInvalido(
+            "'degrau.m' não declara exatamente uma entrada por cenário do "
+            f"caso ({'; '.join(detalhe)}). Cenários do caso: "
+            f"{sorted(nomes_cenarios)!r}; cenários em 'degrau.m': "
+            f"{sorted(nomes_m)!r}."
+        )
+    for nome_cenario, entrada in m.items():
+        if not isinstance(entrada, dict):
+            raise CasoInvalido(
+                f"'degrau.m.{nome_cenario}' não é um objeto: {entrada!r}. "
+                "Declare 'valor' (a eficiência marginal do capital "
+                "liberado, em %) e 'razao'."
+            )
+        valor_m = entrada.get("valor")
+        if not _numero_valido(valor_m) or not _finito(valor_m) or valor_m < 0:
+            raise CasoInvalido(
+                f"'degrau.m.{nome_cenario}.valor' ausente, não numérico ou "
+                f"negativo: {valor_m!r}. É a eficiência marginal do "
+                "capital liberado (retorno marginal / retorno médio), em "
+                "pontos percentuais — não tem default (D4): declare o "
+                "valor e a razão por cenário (ex.: banda bear/base/bull "
+                "70/100/130)."
+            )
+        razao_m = entrada.get("razao")
+        if not isinstance(razao_m, str) or not razao_m.strip():
+            raise CasoInvalido(
+                f"'degrau.m.{nome_cenario}.razao' ausente ou vazia: "
+                f"{razao_m!r}. 'm' não tem default (D4) — declare por que "
+                "esse cenário usa essa eficiência marginal."
+            )
+
+    for nome_cenario, cenario in cenarios.items():
+        premissas = cenario["premissas"]
+        if premissas.get("tv") == "book" and premissas.get("roe_book") is None:
+            raise CasoInvalido(
+                f"cenário '{nome_cenario}': 'tv' = 'book' com 'degrau' "
+                "presente e sem 'roe_book' declarado (D6, SKILL.md do "
+                "vendor: \"obrigatório de fato\" com --tv book). Sem ele, "
+                "o TV usaria a rentabilidade PÓS-degrau (marginal x h) no "
+                "papel de MÉDIO do estoque — conflação marginal x médio "
+                "AGRAVADA pelo degrau. Declare 'roe_book' nesse cenário, "
+                "ou use tv='gordon'/'convergencia'."
+            )
+        if "mid_year" in premissas:
+            raise CasoInvalido(
+                f"cenário '{nome_cenario}': premissa 'mid_year' presente "
+                "com 'degrau' no caso — o subparser `degrau` do motor "
+                "congelado não aceita '--mid-year'; passar essa premissa "
+                "para a chamada do degrau quebraria o motor com um argv "
+                "que o argparse recusa. Remova 'mid_year' do cenário, ou "
+                "remova 'degrau' do caso."
+            )
 
 
 # --------------------------------------------------------------------------

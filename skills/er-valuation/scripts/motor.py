@@ -43,7 +43,7 @@ RAIZ_VENDOR = Path(__file__).resolve().parents[3] / "vendor" / "multiplos-justos
 # Rota declarada no caso -> subcomando do motor congelado.
 SUBCOMANDO: dict[str, str] = {"firm": "ev", "equity": "pe", "rampa": "rampa"}
 
-# Apenas estas oito chaves de premissa têm flag com hífen no motor; a chave do
+# Estas onze chaves de premissa têm flag com hífen no motor; a chave do
 # caso usa underscore (para ser identificador Python válido em caso.json),
 # a flag do motor usa hífen. Qualquer chave fora desta tabela vira `--chave`
 # direto — é a regra genérica que dispensa este módulo de conhecer o
@@ -51,7 +51,12 @@ SUBCOMANDO: dict[str, str] = {"firm": "ev", "equity": "pe", "rampa": "rampa"}
 # 'da_parque' e 't_rampa' (Fatia C, Task 1) são exclusivas da rota rampa; o
 # teste de invariante cross-module `test_todo_vocabulario_de_caso_tem_flag_
 # com_hifen_coberta` (test_valuation_motor.py) cobra as duas caso alguém as
-# esqueça aqui — é para isso que ele foi escrito.
+# esqueça aqui — é para isso que ele foi escrito. 'indice_atual',
+# 'indice_alvo' e 'perfil_transicao' (Fatia D, Task 1) são exclusivas do
+# subcomando `degrau` — fora do vocabulário de `caso.PREMISSAS_*` (o bloco
+# 'degrau' tem seu próprio validador em caso.py, não uma entrada em
+# `_PREMISSAS_POR_ROTA`), por isso o teste de invariante acima não as cobra;
+# `test_valuation_degrau.py` é quem cobra as três.
 _FLAGS_COM_HIFEN: dict[str, str] = {
     "roic_tv": "--roic-tv",
     "roe_tv": "--roe-tv",
@@ -61,6 +66,9 @@ _FLAGS_COM_HIFEN: dict[str, str] = {
     "mid_year": "--mid-year",
     "da_parque": "--da-parque",
     "t_rampa": "--t-rampa",
+    "indice_atual": "--indice-atual",
+    "indice_alvo": "--indice-alvo",
+    "perfil_transicao": "--perfil-transicao",
 }
 
 # 'mid_year' é a única premissa booleana do motor (store_true): a flag entra

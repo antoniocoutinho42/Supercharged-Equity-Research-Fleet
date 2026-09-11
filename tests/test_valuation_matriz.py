@@ -163,6 +163,48 @@ def _caso_rampa_com_sotp() -> dict:
 
 
 # --------------------------------------------------------------------------
+# Fatia D, Task 1: 'degrau' (Gate 3) x os três blocos opcionais já cobertos
+# acima (D7 do plano: "degrau junto de reversa, sensibilidades ou sotp
+# recusado no gate, por nome"). Só faz sentido na rota equity (D2 já recusa
+# 'degrau' nas outras duas rotas — não é célula desta matriz, é
+# `test_valuation_degrau.py`). Menor bloco 'degrau' válido, adaptado do
+# mesmo exemplo do SKILL.md do vendor usado na âncora de
+# `test_valuation_degrau.py`; 'm' tem só 'base' — o único cenário de
+# `caso_minimo_equity.json`.
+# --------------------------------------------------------------------------
+
+_DEGRAU_MINIMO = {
+    "indice_atual": {"valor": 19.3, "fonte": "fixture da matriz", "data": "2026-08-25"},
+    "piso_teorico": 11.0,
+    "indice_alvo": {"valor": 14.0, "razao": "fixture da matriz"},
+    "anos": 4,
+    "perfil_transicao": "rampa",
+    "razao_transicao": "fixture da matriz",
+    "vpa": {"valor": 29.11, "fonte": "fixture da matriz", "data": "2026-08-25"},
+    "fx": 1.0,
+    "m": {"base": {"valor": 100.0, "razao": "fixture da matriz"}},
+}
+
+
+def _com_degrau(caso: dict) -> dict:
+    c = copy.deepcopy(caso)
+    c["degrau"] = copy.deepcopy(_DEGRAU_MINIMO)
+    return c
+
+
+def _caso_equity_com_degrau_e_reversa() -> dict:
+    return _com_reversa(_com_degrau(_equity()))
+
+
+def _caso_equity_com_degrau_e_sensibilidades() -> dict:
+    return _com_sensibilidades(_com_degrau(_equity()), "ke", TRIANGULO_EQUITY)
+
+
+def _caso_equity_com_degrau_e_sotp() -> dict:
+    return _com_sotp_do_segmento(_com_degrau(_equity()), com_materialidade=False)
+
+
+# --------------------------------------------------------------------------
 # A matriz: 3 rotas x 3 blocos opcionais = 9 células. `constroi` monta o
 # caso minimamente válido da célula; `deve_passar` é o veredito de
 # `validar()` — `True` (aceita) ou `False` (`CasoInvalido` nomeado).
@@ -194,9 +236,17 @@ MATRIZ = {
     ("rampa", "mercado+reversa"): (_caso_rampa_com_reversa, False),
     ("rampa", "sensibilidades"): (_caso_rampa_com_sensibilidades, False),
     ("rampa", "sotp"): (_caso_rampa_com_sotp, True),
+    # Fatia D, Task 1 (D7): 'degrau' só existe na rota equity (D2); as três
+    # células abaixo cruzam 'degrau' com cada um dos três blocos já
+    # cobertos acima, todas recusadas por nome (D7) -- "as grades, a
+    # reversa e o SOTP hoje precificam sem degrau, e misturar quebraria a
+    # regra da célula central".
+    ("equity", "degrau+mercado+reversa"): (_caso_equity_com_degrau_e_reversa, False),
+    ("equity", "degrau+sensibilidades"): (_caso_equity_com_degrau_e_sensibilidades, False),
+    ("equity", "degrau+sotp"): (_caso_equity_com_degrau_e_sotp, False),
 }
 
-assert len(MATRIZ) == 9, "a matriz tem de cobrir as 3 rotas x 3 blocos exatamente uma vez cada"
+assert len(MATRIZ) == 12, "a matriz tem de cobrir as 3 rotas x 3 blocos, mais as 3 células degrau x bloco (D7, só na rota equity), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:
