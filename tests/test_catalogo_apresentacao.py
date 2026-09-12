@@ -106,8 +106,45 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
 def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
-        "ponte", "premissas", "multiplos", "diagnosticos", "disclosures",
+        "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures",
     }
+
+
+# --------------------------------------------------------------------------
+# A4 (onda de correção da revisão final, achado F7): `unidades` é o
+# vocabulário de UNIDADE da integração — o que o motor publica em cada grade
+# (`sensibilidades.unidade`) e o que o catálogo declara em cada premissa.
+# O relatório formata um número lendo a unidade dele, em vez de decorar
+# "célula de grade é número de 2 casas"; uma unidade fora deste vocabulário
+# é HARD FAIL nomeado, na camada certa.
+# --------------------------------------------------------------------------
+
+def test_toda_unidade_de_premissa_numerica_esta_no_vocabulario_de_unidades():
+    """Uma premissa nova com unidade nova (ou uma unidade renomeada) sem
+    entrada em `unidades` reprova AQUI — e não com um eixo de matriz
+    formatado ao acaso. Só premissa numérica: 'escolha'/'booleano' não são
+    número e nunca viram eixo de grade (`caso._PREMISSAS_NAO_NUMERICAS`)."""
+    for rota, premissas in CAT["premissas"].items():
+        for nome, info in premissas.items():
+            if info.get("entrada") != "numero":
+                continue
+            assert info["unidade"] in CAT["unidades"], (rota, nome, info.get("unidade"))
+
+
+def test_toda_unidade_publicada_pelas_grades_das_fixtures_esta_no_catalogo():
+    """Mesma trava de upgrade de `test_toda_chave_de_multiplo_emitida_pelas_
+    fixtures_esta_no_catalogo`, agora para a `unidade` que o motor publica em
+    cada grade de sensibilidade: um v10 que troque a métrica da grade reprova
+    aqui, na integração, antes de o relatório desenhar outro número."""
+    vistas = set()
+    for nome in CASOS:
+        r = avaliar(carregar(FIXTURES / nome))
+        sensibilidades = r.get("sensibilidades") or {}
+        for chave in ("grades_1d", "grades_2d"):
+            for grade in sensibilidades.get(chave) or []:
+                vistas.add(grade["unidade"])
+    assert vistas, "nenhuma grade de sensibilidade nas fixtures — teste vacuamente verde?"
+    assert vistas <= set(CAT["unidades"]), vistas - set(CAT["unidades"])
 
 
 # --------------------------------------------------------------------------

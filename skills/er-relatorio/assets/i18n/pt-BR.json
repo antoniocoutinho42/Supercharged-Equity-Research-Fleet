@@ -5,10 +5,11 @@
     "numero_sem_proveniencia": "Número sem proveniência em '{onde}': todo dígito na prosa precisa vir de um placeholder de resultados ou caso, ou estar marcado como número livre — nenhum dígito solto é permitido fora dessas duas formas.",
     "diagnostico_sem_chave": "Diagnóstico sem chave classificada em '{onde}': {razao} — a correção é da camada de integração, nunca do relatório.",
     "divergencia_de_base_degrau": "Divergência de base de {valor_fmt} no cenário '{cenario}' (acima do limiar de {limiar_fmt} do catálogo): {texto}",
-    "relatorio_nao_autocontido": "Referência externa detectada em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — toda referência de src, href, srcset, data ou url()/@import tem de ser um '#fragmento' ou uma URI 'data:', nunca um recurso carregado de fora.",
+    "relatorio_nao_autocontido": "Referência externa detectada em '{onde}' ('{trecho}'): o relatório precisa ser autocontido — toda referência de src, href, srcset, data ou url()/@import tem de ser um '#fragmento' ou uma URI 'data:', e nenhum JavaScript embutido pode buscar recurso de fora (fetch, XMLHttpRequest, WebSocket, Worker, importScripts, EventSource, sendBeacon, ou atribuição de src/href/srcset para um endereço externo). Aqui: '{valor}'.",
     "placeholder_malformado": "Placeholder malformado em '{onde}': '{trecho}' não é um placeholder reconhecido — fonte fora do vocabulário (resultados/caso/livre), maiúscula, sem '|formato', ou chaves duplas partidas. Use a sintaxe 'resultados:<caminho>|<formato>', 'caso:<caminho>|<formato>' ou 'livre:<texto>', sempre entre chaves duplas.",
     "degrau_sem_divergencia_de_base": "Cenário '{cenario}' tem degrau sem 'divergencia_de_base_%' numérico em '{onde}': o contrato exige esse campo ao lado de todo degrau — a correção é da camada de integração, nunca do relatório.",
     "formato_incompativel_com_unidade": "Formato incompatível com a unidade em '{onde}': o placeholder para '{caminho}' usa o formato '{formato}', mas a unidade declarada ('{unidade}') exige outro formato.",
+    "unidade_desconhecida": "Unidade desconhecida em '{onde}': o contrato declara a unidade '{unidade}', que o catálogo de apresentação não conhece em 'unidades' — o relatório não desenha um número cuja unidade não sabe ler (uma métrica nova do motor precisa entrar no catálogo antes, na camada de integração, nunca no relatório).",
     "multiplos_com_bases_diferentes": "Múltiplo justo e múltiplo de tela em bases diferentes em '{onde}': manchete.multiplo usa a base '{base_manchete}' e mercado_tela usa '{base_mercado_tela}' — os dois têm de comparar a mesma base para o par fazer sentido lado a lado.",
     "serie_nao_rastreavel": "Série não rastreável em '{onde}' (exhibit '{exhibit}', série {serie}): '{referencia}' não resolve — {razao} Um gráfico com dado não rastreável não pode ser emitido.",
     "formula_invalida": "Fórmula inválida em '{onde}' (exhibit '{exhibit}', série {serie}): '{formula}' — {razao}",
@@ -44,7 +45,7 @@
       "cenarios_titulo": "Preço por cenário",
       "ponte_titulo": "Ponte da dívida líquida",
       "ponte_total": "Dívida líquida efetiva",
-      "matriz_titulo": "Sensibilidade: {y} × {x}"
+      "matriz_titulo": "Sensibilidade no cenário '{cenario}': {y} × {x}"
     },
     "evidencia": {
       "metodologia_titulo": "Metodologia",

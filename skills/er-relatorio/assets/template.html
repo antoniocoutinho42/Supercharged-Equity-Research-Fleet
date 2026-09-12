@@ -289,7 +289,10 @@
   var paineis = dados.paineis_valuation || {};
   var hostPonte = document.querySelector('[data-painel="ponte"]');
   if (hostPonte && paineis.ponte) {
-    hostPonte.innerHTML = FleetSVG.waterfall(paineis.ponte.parcelas, { total: paineis.ponte.total });
+    hostPonte.innerHTML = FleetSVG.waterfall(paineis.ponte.parcelas, {
+      total: paineis.ponte.total,
+      formato: paineis.ponte.formato
+    });
   }
   var hostsMatriz = document.querySelectorAll('[data-painel="matriz"]');
   var matrizes = paineis.matrizes || [];
@@ -297,7 +300,10 @@
     hostsMatriz[m].innerHTML = FleetSVG.matriz(matrizes[m].grade, {
       base: matrizes[m].base,
       rotuloX: matrizes[m].rotuloX,
-      rotuloY: matrizes[m].rotuloY
+      rotuloY: matrizes[m].rotuloY,
+      formato: matrizes[m].formato,
+      formatoX: matrizes[m].formatoX,
+      formatoY: matrizes[m].formatoY
     });
   }
 })();

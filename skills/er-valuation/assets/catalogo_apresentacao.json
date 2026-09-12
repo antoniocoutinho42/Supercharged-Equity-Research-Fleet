@@ -61,6 +61,20 @@
       "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
     }
   },
+  "unidades": {
+    "pp": {
+      "formato": "pp2"
+    },
+    "moeda": {
+      "formato": "moeda"
+    },
+    "anos": {
+      "formato": "num0"
+    },
+    "preço por ação": {
+      "formato": "moeda"
+    }
+  },
   "ponte": {
     "divida_bruta": {
       "rotulo": {

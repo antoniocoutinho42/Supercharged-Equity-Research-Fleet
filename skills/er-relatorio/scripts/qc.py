@@ -405,6 +405,68 @@ def _sem_conteudo_de_script(html_texto: str) -> str:
     return _PADRAO_SCRIPT_BLOCO.sub(lambda m: m.group(1) + m.group(3), html_texto)
 
 
+# A2 (onda de correção da revisão final, achado F2): neutralizar o miolo do
+# <script> para a varredura de ATRIBUTO está certo (o falso positivo do uPlot
+# é real), mas deixou o miolo inteiro sem exame nenhum -- a revisão provou,
+# ponta a ponta, que `img.src` em runtime, `fetch(`, `XMLHttpRequest`,
+# `WebSocket`, `new Worker` e um `<link>` injetado por JS passavam com rc 0.
+# Um relatório é artefato OFFLINE que o analista abre e reenvia por e-mail:
+# referência viva é vazamento de dado, e é exatamente isso que
+# `relatorio_nao_autocontido` existe para mecanizar.
+#
+# Duas regras, ambas sobre o MIOLO de cada <script> (nunca sobre a tag, que
+# a varredura de atributo já cobre):
+#
+# 1. TOKEN DE CHAMADA de rede. VERIFICADO: contagem 0 para cada um dos sete
+#    no uPlot vendorizado, em `graficos.js`, em `svg.js` e nos scripts
+#    estáticos do template -- a regra estrita não custa nada hoje.
+# 2. ATRIBUIÇÃO de `src`/`srcset`/`href` a um LITERAL de texto, validado
+#    pela MESMA whitelist da varredura de atributo (`#fragmento`/URI
+#    `data:`) -- `brasao.src = "https://cdn..."` e `link.href = "https://..."`
+#    reprovam; `ancora.href = "#secao"` não. Só literal: `el.src = url`
+#    (variável) continua fora do alcance de uma varredura textual, e
+#    registrar isso é mais honesto do que fingir cobertura.
+#
+# O que NÃO entra (decisão registrada): uma cláusula sobre o LITERAL
+# 'http://'/'https://' solto no miolo. Ela exigiria remover comentário antes
+# (o bundle do uPlot tem um `https://` no banner de licença) e mesmo assim
+# daria falso positivo no nosso próprio código -- `svg.js` escreve
+# 'http://www.w3.org/2000/svg', o namespace XML de todo <svg>, que não é
+# referência carregada de lugar nenhum.
+_PADRAO_CHAMADA_DE_REDE = re.compile(
+    r"\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\s*\(|\bnew\s+Worker\b|"
+    r"\bimportScripts\s*\(|\bEventSource\s*\(|\bnavigator\s*\.\s*sendBeacon\b"
+)
+_PADRAO_ATRIBUICAO_DE_RECURSO = re.compile(
+    r"""\.\s*(src|srcset|href)\s*=(?!=)\s*(?:"([^"]*)"|'([^']*)')""",
+    re.IGNORECASE,
+)
+
+
+def _autocontido(valor: str) -> bool:
+    """A whitelist única de "referência autocontida" (B6): `#fragmento` ou
+    URI `data:`. Usada pelas duas varreduras -- atributo HTML e atribuição
+    dentro de <script> -- para que nunca divirjam."""
+    valor = valor.strip()
+    return valor.startswith("#") or valor.startswith("data:")
+
+
+def _chamada_de_rede_em_script(html_texto: str) -> tuple[str, str] | None:
+    """Devolve `(trecho, valor)` da primeira busca de recurso externo dentro
+    do MIOLO de um `<script>` — ou `None`. Ver o bloco acima para as duas
+    formas reconhecidas e para o que ficou deliberadamente de fora."""
+    for bloco in _PADRAO_SCRIPT_BLOCO.finditer(html_texto):
+        miolo = bloco.group(2)
+        chamada = _PADRAO_CHAMADA_DE_REDE.search(miolo)
+        if chamada is not None:
+            return chamada.group(0), chamada.group(0).strip()
+        for atribuicao in _PADRAO_ATRIBUICAO_DE_RECURSO.finditer(miolo):
+            valor = atribuicao.group(2) if atribuicao.group(2) is not None else atribuicao.group(3)
+            if not _autocontido(valor):
+                return atribuicao.group(0), valor
+    return None
+
+
 def _referencia_externa_invalida(html_texto: str) -> tuple[str, str] | None:
     """B6: devolve `(trecho, valor)` da primeira referência (`src=`/`href=`/
     `srcset=`/`data=`/`url(`/`@import`, com ou sem aspas) cujo valor não é
@@ -446,9 +508,8 @@ def _referencia_externa_invalida(html_texto: str) -> tuple[str, str] | None:
         candidatos.append((m.group(0), _primeiro_grupo(m, inicio=1)))
 
     for trecho, valor in candidatos:
-        valor = valor.strip()
-        if not (valor.startswith("#") or valor.startswith("data:")):
-            return trecho, valor
+        if not _autocontido(valor):
+            return trecho, valor.strip()
     return None
 
 
@@ -457,7 +518,11 @@ def _achado_autocontido(html: str | None) -> Achado | None:
     externa é aceita — CSS e JS são sempre inline, e toda referência de
     `src=`/`href=`/`srcset=`/`data=`/`url(`/`@import` tem de valer
     `#fragmento` ou URI `data:` (whitelist, ver `_referencia_externa_
-    invalida`). `html` só existe DEPOIS que `render.compor` roda;
+    invalida`). A2 (achado F2): o MIOLO de cada `<script>`, que a
+    neutralização tirou da varredura de atributo, é examinado pela SEGUNDA
+    regra (`_chamada_de_rede_em_script`) — mesmo código de achado, para que
+    toda asserção de "nenhum recurso externo" que já existe cubra as duas
+    formas de uma vez. `html` só existe DEPOIS que `render.compor` roda;
     `builder.py` chama `avaliar()` duas vezes (A8/regra inviolável 2):
     primeiro com `html=None` (as regras desta função nunca disparam — nada
     para examinar ainda), depois com o HTML já composto EM MEMÓRIA, antes de
@@ -466,7 +531,7 @@ def _achado_autocontido(html: str | None) -> Achado | None:
     """
     if html is None:
         return None
-    encontrado = _referencia_externa_invalida(html)
+    encontrado = _referencia_externa_invalida(html) or _chamada_de_rede_em_script(html)
     if encontrado is None:
         return None
     trecho, valor = encontrado
@@ -496,6 +561,46 @@ def _achado_bases_divergentes(resultados: dict) -> Achado | None:
     return Achado("HARD_FAIL", "multiplos_com_bases_diferentes", "resultados.manchete.multiplo.base", {
         "base_manchete": str(base_manchete), "base_mercado_tela": str(base_mercado_tela),
     })
+
+
+def _achados_unidade_desconhecida(resultados: dict, catalogo: dict) -> list[Achado]:
+    """`unidade_desconhecida` (HARD FAIL) -- A4 (achado F7): toda grade 2D
+    que o painel da Valuation desenha declara a `unidade` das suas células
+    (`sensibilidades.py` publica `unidade` de propósito, ao lado de
+    `metrica_de_referencia`); o relatório só sabe formatar as unidades que o
+    catálogo de apresentação declara em `unidades`.
+
+    É o tripwire que faltava: a revisão simulou um v10 que troca a métrica
+    da grade (células viram múltiplo, `unidade` passa a "múltiplo
+    EV/EBITDA") e o relatório desenhou **6,69 onde desenhava 61,91**, com o
+    mesmo título, a mesma formatação e rc 0 -- porque nunca lia o campo que
+    diz o que o número é. Agora a mesma troca reprova pelo NOME, antes de
+    renderizar, e o conserto é do catálogo (camada de integração), nunca do
+    relatório.
+
+    Só `grades_2d` é varrida: é exatamente o que esta fatia desenha. As
+    grades 1D (5C) entram aqui quando tiverem painel -- declarar a regra
+    sobre um número que ninguém desenha seria proibir o que o relatório nem
+    lê.
+    """
+    conhecidas = catalogo.get("unidades") or {}
+    sensibilidades = resultados.get("sensibilidades")
+    grades = sensibilidades.get("grades_2d") if isinstance(sensibilidades, dict) else None
+    if not isinstance(grades, list):
+        return []
+
+    achados: list[Achado] = []
+    for indice, grade in enumerate(grades):
+        if not isinstance(grade, dict):
+            continue
+        unidade = grade.get("unidade")
+        if not isinstance(unidade, str) or unidade not in conhecidas:
+            achados.append(Achado(
+                "HARD_FAIL", "unidade_desconhecida",
+                f"resultados.sensibilidades.grades_2d.{indice}.unidade",
+                {"unidade": str(unidade)},
+            ))
+    return achados
 
 
 def _achados_exhibits(entrega: dict) -> list[Achado]:
@@ -574,6 +679,7 @@ def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Acha
 
     resultados = entrega.get("resultados") or {}
     achados.extend(_achados_diagnostico_sem_chave(resultados))
+    achados.extend(_achados_unidade_desconhecida(resultados, catalogo))
     achados.extend(_achados_divergencia_de_base(resultados, catalogo, idioma))
 
     achado_bases = _achado_bases_divergentes(resultados)

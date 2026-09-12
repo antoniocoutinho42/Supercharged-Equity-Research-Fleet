@@ -42,8 +42,15 @@
  * propria, nao como dado injetado. Nao e uma copia de `graficos.js`: os dois
  * modulos sao embutidos INDEPENDENTEMENTE (o uPlot/adaptador so entra
  * quando a entrega declara exhibit; este so entra quando ha painel), entao
- * um nao pode depender do outro estar na pagina. `opcoes.formatar`, quando
- * dado, substitui a tabela -- e o gancho para o laboratorio da 5C.
+ * um nao pode depender do outro estar na pagina.
+ *
+ * UNIDADE (onda de correcao da revisao final, achado F7/A4): as CASAS, a
+ * escala, o prefixo e o sufixo de cada numero NAO moram aqui -- chegam como
+ * dado, em `opcoes.formato`/`formatoX`/`formatoY`, montados por `render.py`
+ * a partir da `unidade` que o contrato declara (a grade, pelo motor; a
+ * premissa de cada eixo, pelo catalogo de apresentacao). `opcoes.formatar`/
+ * `formatarX`/`formatarY` (funcao) tem precedencia sobre a receita -- e o
+ * gancho para o laboratorio da 5C.
  */
 (function (root) {
   "use strict";
@@ -116,18 +123,43 @@
     return formatado;
   }
 
+  // `espec`: a RECEITA de formatacao que `render.py` monta a partir da
+  // UNIDADE que o contrato declara (`placeholders.especificacao_de_formato`
+  // -- {casas, escala, prefixo, sufixo}) e embute no payload. Este modulo
+  // nao conhece unidade nenhuma: aplica a receita. Antes da onda de correcao
+  // da revisao final (achado F7/A4), "2 casas e nenhum sufixo" estava
+  // DECORADO aqui -- a mesma pagina escrevia a manchete "R$ 61,91" e a
+  // celula que vale esse mesmo numero "61,91", e uma troca de metrica no
+  // motor passava em silencio.
+  //
   // Valor nao numerico/nao finito (inclusive `null`, o jeito natural de uma
   // celula de grade marcar "sem resultado") devolve o travessao -- mesma
-  // convencao de `FleetGraficos.formatar`.
-  function formatarPadrao(valor) {
+  // convencao de `FleetGraficos.formatar`. `espec` ausente => 2 casas, sem
+  // prefixo/sufixo (o comportamento anterior, preservado para quem chama
+  // `FleetSVG.formatar(valor)` com um argumento so).
+  function formatar(valor, espec, idioma) {
     if (typeof valor !== "number" || !isFinite(valor)) {
       return "—";
     }
-    return numeroLocalizado(valor, 2, "pt-BR");
+    espec = espec || {};
+    var casas = typeof espec.casas === "number" ? espec.casas : 2;
+    var escala = typeof espec.escala === "number" ? espec.escala : 1;
+    var prefixo = typeof espec.prefixo === "string" ? espec.prefixo : "";
+    var sufixo = typeof espec.sufixo === "string" ? espec.sufixo : "";
+    return prefixo + numeroLocalizado(valor * escala, casas, idioma || "pt-BR") + sufixo;
   }
 
-  function formatadorDe(opcoes) {
-    return typeof opcoes.formatar === "function" ? opcoes.formatar : formatarPadrao;
+  // Tres formatadores independentes por painel (`sufixo` '', 'X' ou 'Y'):
+  // as celulas de uma matriz sao precos e os pontos dos eixos sao premissas
+  // em pontos percentuais/anos -- unidades DIFERENTES no mesmo desenho.
+  // `opcoes.formatar<sufixo>` (funcao) continua tendo precedencia: e o
+  // gancho do laboratorio da 5C, que substitui a receita inteira.
+  function formatadorPara(opcoes, sufixo) {
+    var funcao = opcoes["formatar" + sufixo];
+    if (typeof funcao === "function") { return funcao; }
+    var espec = opcoes["formato" + sufixo];
+    var idioma = opcoes.idioma || "pt-BR";
+    return function (valor) { return formatar(valor, espec, idioma); };
   }
 
   function texto(conteudo, x, y, classe, cor, ancora, tamanho) {
@@ -149,7 +181,8 @@
   // `parcelas`: [{rotulo, valor, sinal}] -- a forma EXATA de
   // `resultados.ponte.parcelas`, com o rotulo JA TRADUZIDO pelo chamador
   // (S2/S3: quem le o catalogo e `render.py`).
-  // `opcoes`: {largura, altura, total: {rotulo, valor}, formatar?}.
+  // `opcoes`: {largura, altura, total: {rotulo, valor}, formato?, formatar?,
+  // idioma?}.
   //
   // Uma barra por parcela, empilhando `valor * sinal` (cada barra vai do
   // acumulado anterior ao proprio), MAIS uma barra de fechamento desenhada
@@ -164,7 +197,7 @@
   function waterfall(parcelas, opcoes) {
     parcelas = Array.isArray(parcelas) ? parcelas : [];
     opcoes = opcoes || {};
-    var formatar = formatadorDe(opcoes);
+    var formatar = formatadorPara(opcoes, "");
     var largura = numero(opcoes.largura) > 0 ? opcoes.largura : LARGURA_PADRAO;
     var altura = numero(opcoes.altura) > 0 ? opcoes.altura : ALTURA_PADRAO;
     var total = opcoes.total || {};
@@ -253,7 +286,8 @@
   // `celula.valor` e lido; o resto da celula (multiplo, diag) e ignorado
   // aqui.
   // `opcoes`: {base: {x, y} | null, rotuloX, rotuloY, largura, altura,
-  // formatar?}.
+  // formato?/formatoX?/formatoY? (receita por unidade: celula, eixo x, eixo
+  // y), formatar?/formatarX?/formatarY? (funcao, tem precedencia), idioma?}.
   //
   // A celula-base e marcada por IGUALDADE EXATA contra `opcoes.base` (S4):
   // quem decide qual e o par (x, y) central e `render.py`, lendo as
@@ -283,7 +317,9 @@
   function matriz(grade, opcoes) {
     grade = grade || {};
     opcoes = opcoes || {};
-    var formatar = formatadorDe(opcoes);
+    var formatarCelula = formatadorPara(opcoes, "");
+    var formatarX = formatadorPara(opcoes, "X");
+    var formatarY = formatadorPara(opcoes, "Y");
     var pontosX = Array.isArray(grade.pontos_x) ? grade.pontos_x : [];
     var pontosY = Array.isArray(grade.pontos_y) ? grade.pontos_y : [];
     var linhas = Array.isArray(grade.celulas) ? grade.celulas : [];
@@ -327,7 +363,7 @@
 
     // Cabecalho de colunas (pontos do eixo x) e rotulo do eixo x.
     for (j = 0; j < pontosX.length; j++) {
-      pedacos.push(texto(formatar(pontosX[j]), x0Grade + larguraCelula * (j + 0.5),
+      pedacos.push(texto(formatarX(pontosX[j]), x0Grade + larguraCelula * (j + 0.5),
         MARGEM_MATRIZ.topo + alturaCelula * 0.65, "fleet-svg-eixo-x", COR_TEXTO, "middle", 11));
     }
     pedacos.push(texto(opcoes.rotuloX, x0Grade + (larguraCelula * pontosX.length) / 2,
@@ -343,7 +379,7 @@
 
     for (i = 0; i < pontosY.length; i++) {
       var yLinha = y0Grade + alturaCelula * i;
-      pedacos.push(texto(formatar(pontosY[i]), x0Grade - 8, yLinha + alturaCelula * 0.62,
+      pedacos.push(texto(formatarY(pontosY[i]), x0Grade - 8, yLinha + alturaCelula * 0.62,
         "fleet-svg-eixo-y", COR_TEXTO, "end", 11));
 
       var celulasDaLinha = Array.isArray(linhas[i]) ? linhas[i] : [];
@@ -363,7 +399,7 @@
           + ' stroke="' + (ehBase ? COR_MARCA_BASE : COR_BORDA) + '"'
           + ' stroke-width="' + (ehBase ? "2.5" : "1") + '" />');
 
-        pedacos.push(texto(formatar(valor), xCelula + larguraCelula / 2,
+        pedacos.push(texto(formatarCelula(valor), xCelula + larguraCelula / 2,
           yLinha + alturaCelula * 0.62, "fleet-svg-celula-valor",
           fracao > 0.6 ? "#ffffff" : COR_TEXTO, "middle", 11));
       }
@@ -373,5 +409,5 @@
     return pedacos.join("");
   }
 
-  root.FleetSVG = { waterfall: waterfall, matriz: matriz, formatar: formatarPadrao };
+  root.FleetSVG = { waterfall: waterfall, matriz: matriz, formatar: formatar };
 })(typeof self !== "undefined" ? self : this);

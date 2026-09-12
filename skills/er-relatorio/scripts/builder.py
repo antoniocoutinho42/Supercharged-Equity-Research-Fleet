@@ -193,7 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
                                 exhibits_resolvidos, log_exhibits)
-    except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente) as erro:
+    except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente,
+            render.CampoDeContratoAusente) as erro:
         print(str(erro), file=sys.stderr)
         return 1
 

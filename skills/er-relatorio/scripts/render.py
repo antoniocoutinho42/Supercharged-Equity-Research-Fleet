@@ -52,10 +52,23 @@ class ChaveDeInterfaceAusente(Exception):
     substituto silencioso."""
 
 
+class CampoDeContratoAusente(Exception):
+    """Um campo que os painéis da Valuation LEEM do contrato já validado
+    (`caso`/`resultados`) não está lá — recusa NOMEADA, com o caminho
+    completo, nunca um `KeyError` cru com traceback (o docstring de
+    `builder.py` promete, para o código 1, que "a razão sai em stderr,
+    nomeando o campo/chave"). `caso`/`resultados` são opacos para este
+    módulo (E3): ele não os revalida, só nomeia o que faltou quando de fato
+    precisou ler."""
+
+
 class RotuloDoCatalogoAusente(Exception):
-    """O catálogo de apresentação (A6) não tem rótulo para a rota, opção de
-    premissa ou múltiplo que esta entrega de fato usa — nunca um código cru
-    ('firm', 'gordon') aparece no relatório em lugar do rótulo."""
+    """O catálogo de apresentação (A6) não tem o que esta entrega de fato
+    usa — rótulo de rota, de opção de premissa, de múltiplo, de linha da
+    ponte, ou (A4/achado F7) o formato de uma `unidade` declarada pelo
+    contrato. Nunca um código cru ('firm', 'gordon') aparece no relatório em
+    lugar do rótulo, e nunca um número é formatado por convenção decorada
+    quando o catálogo não diz qual é a unidade."""
 
 
 def t(dicionario: dict, chave: str, **valores) -> str:
@@ -135,6 +148,38 @@ def _rotulo_linha_da_ponte(catalogo: dict, linha: str, idioma: str) -> str:
             f"catálogo de apresentação sem rótulo em '{idioma}' para a linha de ponte '{linha}'."
         )
     return rotulo
+
+
+def _espec_de_formato_da_unidade(catalogo: dict, unidade: Any, idioma: str, moeda: str | None) -> dict:
+    """A4 (onda de correção da revisão final, achado F7): como formatar um
+    número cuja UNIDADE o contrato declara -- `catalogo.unidades.<unidade>.
+    formato` traduz a unidade (vocabulário da integração: o motor publica
+    `unidade` em cada grade; o catálogo publica `unidade` em cada premissa)
+    no código de formato que `placeholders` já conhece, e a receita
+    (`especificacao_de_formato`) viaja no payload para o `svg.js` aplicar.
+
+    Antes desta correção o relatório DESCARTAVA `unidade` e o `svg.js`
+    imprimia tudo com 2 casas e nenhum sufixo: a mesma página escrevia a
+    manchete como "R$ 61,91" e a célula que vale esse mesmo número como
+    "61,91", e um v10 que trocasse a métrica da grade (células viram
+    múltiplo) desenhava 6,69 no lugar de 61,91 sem nenhum aviso. Uma unidade
+    que o catálogo não conhece é recusa NOMEADA -- em produção pelo QC
+    (`unidade_desconhecida`, HARD FAIL, antes de renderizar), e aqui como
+    defesa em profundidade, nunca um número formatado ao acaso."""
+    info = (catalogo.get("unidades") or {}).get(unidade)
+    formato = info.get("formato") if isinstance(info, dict) else None
+    if not formato:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a unidade '{unidade}' em 'unidades' — "
+            "o relatório não formata um número cuja unidade o contrato não declara."
+        )
+    try:
+        return placeholders.especificacao_de_formato(formato, idioma, moeda)
+    except placeholders.FormatoInvalido as erro:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação declara para a unidade '{unidade}' um formato "
+            f"que este relatório não conhece: {erro}"
+        ) from erro
 
 
 def _rotulo_premissa(catalogo: dict, rota: str, premissa: str, idioma: str) -> str:
@@ -456,10 +501,16 @@ def _grades_2d(resultados: dict) -> list:
     return grades if isinstance(grades, list) else []
 
 
-def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> dict | None:
+def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
+                      moeda: str | None) -> dict | None:
     """Payload do waterfall, ou `None` quando a entrega não tem ponte (rota
     equity) — S6: o painel simplesmente não aparece, nada de seção vazia com
-    texto de erro."""
+    texto de erro.
+
+    A4 (achado F7): `formato` viaja junto. As linhas da ponte são valores de
+    balanço na moeda do caso — a MESMA moeda que o cabeçalho da Valuation já
+    formata logo acima (`_valuation_html`), pelo mesmo `placeholders`. Sem
+    isto o waterfall imprimia "800,00" onde a manchete imprime "R$ 61,91"."""
     ponte = resultados.get("ponte")
     if not isinstance(ponte, dict) or not ponte.get("parcelas"):
         return None
@@ -473,6 +524,7 @@ def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: 
             for parcela in ponte["parcelas"]
         ],
         "total": {"rotulo": t(dicionario, "valuation.ponte_total"), "valor": ponte["nd_efetivo"]},
+        "formato": placeholders.especificacao_de_formato("moeda", idioma, moeda),
     }
 
 
@@ -498,10 +550,29 @@ def _base_da_grade(caso: dict, grade: dict) -> dict | None:
     return par
 
 
-def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str) -> list:
+def _unidade_da_premissa(catalogo: dict, rota: str, premissa: str) -> Any:
+    info = (catalogo.get("premissas") or {}).get(rota, {}).get(premissa)
+    if not isinstance(info, dict) or "unidade" not in info:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a unidade da premissa '{premissa}' "
+            f"da rota '{rota}' em 'premissas'."
+        )
+    return info["unidade"]
+
+
+def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+                         moeda: str | None) -> list:
     """Uma entrada por grade 2D, na ordem declarada (S6). `grade` carrega só
     o que o `svg.js` desenha; as células vão como estão em `resultados` —
-    números prontos, nunca recalculados."""
+    números prontos, nunca recalculados.
+
+    A4 (achado F7): três receitas de formato viajam junto, cada uma da
+    unidade que o contrato DECLARA para aquele número — `formato` das
+    células (`grade.unidade`, publicada pelo motor: "preço por ação" hoje) e
+    `formatoX`/`formatoY` dos pontos de cada eixo (a `unidade` da premissa
+    no catálogo: 'pp' para roic/g, 'anos' para n...). Antes desta correção
+    `unidade` era descartada aqui e o ROIC de 12 p.p. saía "12,00" ao lado
+    de uma célula em reais impressa do mesmo jeito."""
     rota = resultados["rota"]
     return [
         {
@@ -513,6 +584,11 @@ def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: st
             "base": _base_da_grade(caso, grade),
             "rotuloX": _rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
             "rotuloY": _rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
+            "formato": _espec_de_formato_da_unidade(catalogo, grade.get("unidade"), idioma, moeda),
+            "formatoX": _espec_de_formato_da_unidade(
+                catalogo, _unidade_da_premissa(catalogo, rota, grade["premissa_x"]), idioma, moeda),
+            "formatoY": _espec_de_formato_da_unidade(
+                catalogo, _unidade_da_premissa(catalogo, rota, grade["premissa_y"]), idioma, moeda),
         }
         for grade in _grades_2d(resultados)
     ]
@@ -520,10 +596,33 @@ def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: st
 
 def _paineis_valuation_para_json(caso: dict, resultados: dict, catalogo: dict,
                                   idioma: str, dicionario: dict) -> dict:
+    moeda = caso.get("moeda")
     return {
-        "ponte": _ponte_para_json(resultados, catalogo, idioma, dicionario),
-        "matrizes": _matrizes_para_json(caso, resultados, catalogo, idioma),
+        "ponte": _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda),
+        "matrizes": _matrizes_para_json(caso, resultados, catalogo, idioma, moeda),
     }
+
+
+def _cenario_da_grade(caso: dict) -> str:
+    """A3 (achado F4): o nome do cenário QUE AS GRADES PERTURBARAM
+    (`caso.sensibilidades.cenario`, o mesmo que `_base_da_grade` usa para
+    marcar a célula-base, S4) — dado do caso, nunca prosa do relatório.
+
+    Existe porque a página mostrava "R$ 61,91" (a manchete, do
+    `cenario_base`) no topo e, logo abaixo, uma matriz cuja célula
+    contornada em vermelho lia 69,54, sem nomear cenário nenhum: a marcação
+    estava certa e o leitor não tinha como saber de que cenário ela era.
+    Um `caso` com grade 2D sempre declara esse nome (o gate exige 'cenario'
+    junto de 'grades_2d'); a ausência aqui é contrato quebrado, recusa
+    nomeada, nunca um título sem cenário."""
+    sensibilidades = caso.get("sensibilidades")
+    nome = sensibilidades.get("cenario") if isinstance(sensibilidades, dict) else None
+    if not isinstance(nome, str) or not nome.strip():
+        raise CampoDeContratoAusente(
+            "'caso.sensibilidades.cenario' ausente ou não é texto, mas a entrega "
+            "traz grade 2D: o painel da matriz não pode nomear o cenário que a grade perturbou."
+        )
+    return nome
 
 
 def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
@@ -532,8 +631,9 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
     `svg.js` os preenche (bootstrap estático em `template.html`). Nenhum host
     quando não há o que desenhar (S6)."""
     rota = resultados["rota"]
+    moeda = caso.get("moeda")
     blocos = []
-    if _ponte_para_json(resultados, catalogo, idioma, dicionario) is not None:
+    if _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda) is not None:
         titulo = html.escape(t(dicionario, "valuation.ponte_titulo"))
         blocos.append(
             f'<section class="painel-svg">'
@@ -544,6 +644,7 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
     for indice, grade in enumerate(_grades_2d(resultados)):
         titulo = html.escape(t(
             dicionario, "valuation.matriz_titulo",
+            cenario=_cenario_da_grade(caso),
             x=_rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
             y=_rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
         ))

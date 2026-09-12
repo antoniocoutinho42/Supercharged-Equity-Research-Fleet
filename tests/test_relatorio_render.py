@@ -169,6 +169,46 @@ def test_atribuicao_data_dentro_de_script_nao_dispara_falso_positivo():
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 
+# --------------------------------------------------------------------------
+# A2 (achado F2): as oito sondas da revisão, agora como teste. Com a
+# neutralização do miolo do <script> (e nada no lugar dela), TODAS as seis
+# primeiras passavam com rc 0 -- uma referência VIVA num relatório que o
+# analista reenvia por e-mail é vazamento de dado.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("html_texto", [
+    '<script>var b = new Image(); b.src = "https://cdn.exemplo.com/logo.png";</script>',
+    '<script>fetch("https://telemetria.exemplo.com/ping");</script>',
+    '<script>var r = new XMLHttpRequest(); r.open("GET", "https://x.exemplo.com");</script>',
+    '<script>var s = new WebSocket("wss://x.exemplo.com");</script>',
+    '<script>var w = new Worker("worker.js");</script>',
+    '<script>importScripts("https://x.exemplo.com/w.js");</script>',
+    '<script>var e = new EventSource("https://x.exemplo.com/stream");</script>',
+    '<script>navigator.sendBeacon("https://x.exemplo.com/b", "d");</script>',
+    '<script>var l = document.createElement("link"); l.href = "https://cdn.exemplo.com/x.css";</script>',
+    '<script>img.srcset = "https://cdn.exemplo.com/x.png 2x";</script>',
+])
+def test_busca_de_recurso_no_miolo_de_script_e_hard_fail(html_texto):
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
+
+
+@pytest.mark.parametrize("html_texto", [
+    # Whitelist idêntica à da varredura de atributo: fragmento e URI data:.
+    '<script>ancora.href = "#secao-2";</script>',
+    '<script>img.src = "data:image/png;base64,aGVsbG8=";</script>',
+    # Comparação não é atribuição; nome de variável não é chamada de rede.
+    '<script>if (el.src === "x") { var fetchado = 1; }</script>',
+    # O namespace XML que o próprio `svg.js` escreve em toda tag <svg>.
+    '<script>var s = \'<svg xmlns="http://www.w3.org/2000/svg">\';</script>',
+])
+def test_miolo_de_script_sem_busca_de_recurso_nao_dispara(html_texto):
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
+
+
 def test_src_externo_na_propria_tag_script_ainda_dispara_mesmo_com_data_no_corpo():
     """Controle do teste acima: neutralizar o MIOLO do <script> não pode
     esconder um `src` de verdade na TAG -- só o conteúdo entre as tags é

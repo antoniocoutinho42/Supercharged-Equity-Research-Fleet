@@ -111,6 +111,16 @@ def _num_localizado(valor: float, casas: int, idioma: str) -> str:
     return formatado
 
 
+def _simbolo_de_moeda(moeda: str | None, idioma: str) -> str:
+    """Símbolo do dicionário para o código antes do hífen de `caso.moeda`
+    (`"BRL-nominal"` -> código `"BRL"` -> símbolo `"R$"`). Ver
+    `_formatar_moeda` para por que um código sem símbolo declarado nunca
+    recusa."""
+    codigo = (moeda or "").split("-", 1)[0]
+    simbolos = carregar_dicionario(idioma).get("moeda_simbolo", {})
+    return simbolos.get(codigo) or codigo or "?"
+
+
 def _formatar_moeda(valor: float, idioma: str, moeda: str | None) -> str:
     """2 casas, símbolo do dicionário para o código antes do hífen de
     `caso.moeda` (`"BRL-nominal"` -> código `"BRL"` -> símbolo `"R$"`).
@@ -130,11 +140,7 @@ def _formatar_moeda(valor: float, idioma: str, moeda: str | None) -> str:
     recusar aqui fecha as duas frentes de uma vez, sem precisar ensinar
     `builder.py` sobre mais uma exceção.
     """
-    codigo = (moeda or "").split("-", 1)[0]
-    dicionario = carregar_dicionario(idioma)
-    simbolos = dicionario.get("moeda_simbolo", {})
-    simbolo = simbolos.get(codigo) or codigo or "?"
-    return f"{simbolo} {_num_localizado(valor, 2, idioma)}"
+    return f"{_simbolo_de_moeda(moeda, idioma)} {_num_localizado(valor, 2, idioma)}"
 
 
 def formatar(valor: float, formato: str, idioma: str, moeda: str | None = None) -> str:
@@ -170,12 +176,49 @@ def formatar(valor: float, formato: str, idioma: str, moeda: str | None = None) 
     if formato == "moeda":
         return _formatar_moeda(float(valor), idioma, moeda)
 
-    sugestao = difflib.get_close_matches(formato, sorted(_FORMATOS_CONHECIDOS), n=1)
+    raise _formato_desconhecido(formato)
+
+
+def _formato_desconhecido(formato: str) -> FormatoInvalido:
+    sugestao = difflib.get_close_matches(str(formato), sorted(_FORMATOS_CONHECIDOS), n=1)
     dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
-    raise FormatoInvalido(
+    return FormatoInvalido(
         f"formato desconhecido: '{formato}'.{dica}"
         f"Formatos aceitos: {', '.join(sorted(_FORMATOS_CONHECIDOS))}."
     )
+
+
+def especificacao_de_formato(formato: str, idioma: str, moeda: str | None = None) -> dict:
+    """A RECEITA de `formatar`, decomposta em dados: `{"casas", "escala",
+    "prefixo", "sufixo"}` — aplicar `prefixo + localizar(valor * escala,
+    casas) + sufixo` no `idioma` dado produz exatamente o que `formatar`
+    produziria (`tests/test_relatorio_svg_js.py` amarra as duas, caso a
+    caso, pelo módulo SVG que roda em node).
+
+    Existe porque o número de um painel SVG é formatado no BROWSER, não
+    aqui (`svg.js` recebe os valores crus para poder desenhá-los; o texto é
+    escrito lá) -- sem esta função, o JS precisaria decorar "célula de grade
+    é número de 2 casas", que é exatamente o conhecimento que a onda de
+    correção da revisão final (achado F7, A4) tirou do relatório e devolveu
+    ao contrato. Nenhuma aritmética de valuation: só casas decimais, escala
+    de apresentação (pct = fração x 100), símbolo e sufixo.
+
+    `FormatoInvalido` (mesma mensagem, com sugestão, de `formatar`) para
+    formato desconhecido ou idioma sem separadores declarados.
+    """
+    if idioma not in _SEPARADORES:
+        raise FormatoInvalido(f"idioma sem formatação numérica definida: '{idioma}'.")
+    if formato in _CASAS_NUM:
+        return {"casas": _CASAS_NUM[formato], "escala": 1, "prefixo": "", "sufixo": ""}
+    if formato in _CASAS_PCT:
+        return {"casas": _CASAS_PCT[formato], "escala": 100, "prefixo": "", "sufixo": "%"}
+    if formato in _CASAS_PP:
+        return {"casas": _CASAS_PP[formato], "escala": 1, "prefixo": "", "sufixo": "%"}
+    if formato in _CASAS_X:
+        return {"casas": _CASAS_X[formato], "escala": 1, "prefixo": "", "sufixo": "x"}
+    if formato == "moeda":
+        return {"casas": 2, "escala": 1, "prefixo": f"{_simbolo_de_moeda(moeda, idioma)} ", "sufixo": ""}
+    raise _formato_desconhecido(formato)
 
 
 def _resolver_caminho(fonte: Any, caminho: str) -> Any:

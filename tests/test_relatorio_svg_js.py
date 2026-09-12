@@ -22,7 +22,9 @@ roda `avaliar()` de verdade sobre uma fixture de caso) -- nenhum
 `resultados.json` é forjado à mão neste arquivo.
 """
 
+import html
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -110,6 +112,20 @@ def _retangulos(svg_texto: str) -> list:
     return list(ET.fromstring(svg_texto).iter(NS_SVG + "rect"))
 
 
+def _textos(svg_texto: str, classe: str) -> list:
+    """O TEXTO que o analista de fato lê, por classe, em ordem de documento.
+
+    A1 (onda de correção da revisão final, achado F1): até esta onda, todos
+    os 27 testes deste arquivo liam ATRIBUTO (`data-valor`, `data-base`,
+    `data-linha`) e contavam `<rect>` -- nenhum lia o `<text>`. Quatro
+    mutações que trocam o número na tela (sinal fixo em 1, tudo x100, matriz
+    transposta, total recalculado) sobreviviam à superfície inteira do
+    relatório. Todo teste desta seção compara o `<text>` contra um oráculo
+    montado do `caso`/da `grade`, nunca contra o próprio desenho."""
+    return [e.text for e in ET.fromstring(svg_texto).iter(NS_SVG + "text")
+            if e.get("class") == classe]
+
+
 def _ponte_da_fixture(nome_fixture: str = FIXTURE) -> tuple[dict, dict]:
     entrega_dict = apoio.montar_entrega(nome_fixture)
     return entrega_dict["caso"], entrega_dict["resultados"]["ponte"]
@@ -161,6 +177,28 @@ def test_formatar_do_svg_bate_com_placeholders_formatar_pt_br(valor):
     assert _chamar_node(f"FleetSVG.formatar({valor!r})") == placeholders.formatar(valor, "num2", "pt-BR")
 
 
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+@pytest.mark.parametrize("formato", ["num0", "num2", "num4", "pct1", "pp0", "pp2", "x2", "moeda"])
+@pytest.mark.parametrize("valor", [61.906, -1234.56, 0.164, 0.0])
+def test_receita_de_formato_aplicada_no_js_bate_com_placeholders_formatar(formato, valor):
+    """A4 (achado F7): a UNIDADE vira uma receita de formatação
+    (`placeholders.especificacao_de_formato`) que viaja no payload, e o
+    `svg.js` a aplica. Duplicação só é honesta quando mecanizada: aplicar a
+    receita em JS tem de produzir, caractere a caractere, o que
+    `placeholders.formatar` produz em Python -- inclusive a escala de 'pct'
+    (fração x 100), o sufixo '%'/'x' e o símbolo da moeda.
+
+    Nenhum valor aqui cai EXATAMENTE no meio da casa arredondada: Python
+    (`format`, meio-para-o-par: '-1234.5' -> '-1234') e JS (`toFixed`,
+    meio-para-cima: '-1235') divergem nesse ponto único. É uma divergência
+    ANTERIOR a esta onda, comum aos dois módulos JS (`graficos.js` tem a
+    mesma tabela), registrada e deliberadamente não tocada aqui -- a onda é
+    de cobertura, e mudar o arredondamento mudaria número desenhado."""
+    espec = placeholders.especificacao_de_formato(formato, "pt-BR", "BRL-nominal")
+    assert _chamar_node("FleetSVG.formatar(valor, espec, 'pt-BR')", valor=valor, espec=espec) == \
+        placeholders.formatar(valor, formato, "pt-BR", "BRL-nominal")
+
+
 # --------------------------------------------------------------------------
 # Waterfall da ponte REAL da fixture.
 # --------------------------------------------------------------------------
@@ -198,6 +236,69 @@ def test_waterfall_fecha_na_divida_liquida_das_linhas_declaradas():
 
     esperado = sum(caso["ponte"][linha] * sinal for linha, sinal in SINAIS_ESPERADOS_DA_PONTE.items())
     assert desenhado == pytest.approx(esperado)
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_textos_das_barras_do_waterfall_sao_o_valor_com_o_sinal_de_cada_linha():
+    """A1 (achado F1): o NÚMERO IMPRESSO em cada barra, comparado contra o
+    oráculo independente (`caso["ponte"]` x `SINAIS_ESPERADOS_DA_PONTE`) e
+    formatado por `placeholders.formatar` -- não contra `data-valor`, que é o
+    mesmo número por outro caminho.
+
+    Discrimina duas mutações que sobreviviam à suíte inteira: `_ponte_para_
+    json` publicando `sinal: 1` sempre (o caixa sobe +300 em vez de descer
+    -300: uma ponte que visivelmente não fecha, emitida com rc 0) e `svg.js`
+    imprimindo tudo x100."""
+    caso, ponte = _ponte_da_fixture()
+    svg = _waterfall_da_ponte(ponte)
+
+    esperado = [
+        placeholders.formatar(caso["ponte"][linha] * sinal, "num2", "pt-BR")
+        for linha, sinal in ((p["rotulo"], SINAIS_ESPERADOS_DA_PONTE[p["rotulo"]])
+                             for p in ponte["parcelas"])
+    ]
+    esperado.append(placeholders.formatar(
+        sum(caso["ponte"][linha] * sinal for linha, sinal in SINAIS_ESPERADOS_DA_PONTE.items()),
+        "num2", "pt-BR"))
+
+    assert _textos(svg, "fleet-svg-valor") == esperado
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_barra_de_fechamento_desenha_o_total_do_motor_nunca_a_soma_das_parcelas():
+    """Regra inviolável 1: o total é o `nd_efetivo` que o wrapper somou; o
+    relatório não conserta número do motor. Um total DIVERGENTE das parcelas
+    (perturbado aqui de propósito) tem de aparecer divergente na figura --
+    é justamente o que a mutação "relatório recalcula o total" apagava, e
+    nenhuma asserção pegava, porque no caminho feliz os dois coincidem."""
+    _caso, ponte = _ponte_da_fixture()
+    divergente = ponte["nd_efetivo"] + 111.0
+
+    svg = _chamar_node(
+        "FleetSVG.waterfall(parcelas, opcoes)",
+        parcelas=ponte["parcelas"],
+        opcoes={"total": {"rotulo": "total", "valor": divergente}},
+    )
+
+    assert _textos(svg, "fleet-svg-valor")[-1] == placeholders.formatar(divergente, "num2", "pt-BR")
+    fechamento = [r for r in _retangulos(svg) if r.get("data-fechamento") == "1"]
+    assert float(fechamento[0].get("data-valor")) == pytest.approx(divergente)
+
+
+def test_payload_da_ponte_repassa_o_total_do_motor_sem_recalcular():
+    """O mesmo invariante do lado Python: `_ponte_para_json` LÊ
+    `resultados.ponte.nd_efetivo` -- nunca soma as parcelas. Com um
+    `nd_efetivo` perturbado (as parcelas intactas), o payload tem de
+    carregar o valor perturbado."""
+    entrega_dict = apoio.montar_entrega(FIXTURE)
+    resultados = json.loads(json.dumps(entrega_dict["resultados"]))
+    resultados["ponte"]["nd_efetivo"] = resultados["ponte"]["nd_efetivo"] + 111.0
+
+    payload = render._paineis_valuation_para_json(
+        entrega_dict["caso"], resultados, CATALOGO, "pt-BR", DICIONARIO)
+
+    assert payload["ponte"]["total"]["valor"] == pytest.approx(
+        entrega_dict["resultados"]["ponte"]["nd_efetivo"] + 111.0)
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
@@ -241,6 +342,26 @@ def test_matriz_marca_a_celula_do_cenario_que_a_grade_perturbou():
     assert (marcadas[0].get("data-linha"), marcadas[0].get("data-coluna")) == ("1", "1")
     assert grade["celulas"][1][1]["x"] == base["x"]
     assert grade["celulas"][1][1]["y"] == base["y"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_textos_das_celulas_da_matriz_sao_os_valores_da_grade_na_posicao_certa():
+    """A1 (achado F1): o número IMPRESSO na célula-base e o da célula de
+    CANTO (última linha, última coluna), contra `grade["celulas"][i][j]
+    ["valor"]`. A base sozinha não bastaria: transpor a grade deixa
+    `celulas[1][1]` no lugar (é a diagonal) e move todo o resto -- a célula
+    de canto é o que discrimina transposição. E qualquer escala errada
+    (x100) reprova nas duas."""
+    grade, base = _grade_2d_da_fixture()
+    svg = _chamar_node("FleetSVG.matriz(grade, opcoes)", grade=grade,
+                       opcoes={"base": base, "rotuloX": "x", "rotuloY": "y"})
+    textos = _textos(svg, "fleet-svg-celula-valor")
+
+    linhas, colunas = len(grade["pontos_y"]), len(grade["pontos_x"])
+    assert len(textos) == linhas * colunas
+    for i, j in ((1, 1), (linhas - 1, colunas - 1), (0, colunas - 1)):
+        esperado = placeholders.formatar(grade["celulas"][i][j]["valor"], "num2", "pt-BR")
+        assert textos[i * colunas + j] == esperado, (i, j)
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
@@ -295,7 +416,11 @@ def test_mesma_entrada_devolve_a_mesma_string():
 # --------------------------------------------------------------------------
 
 def _preparar(nome_fixture: str):
-    entrega_dict = apoio.montar_entrega(nome_fixture)
+    return _preparar_mutado(nome_fixture, None)
+
+
+def _preparar_mutado(nome_fixture: str, mutar_caso):
+    entrega_dict = apoio.montar_entrega(nome_fixture, mutar_caso=mutar_caso)
     fontes = {"resultados": entrega_dict["resultados"], "caso": entrega_dict["caso"]}
     _resolvido, log, _erros = placeholders.resolver(
         entrega_dict["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
@@ -354,6 +479,53 @@ def test_base_embutida_e_a_premissa_central_do_cenario_da_grade():
         entrega_dict["resultados"]["ponte"]["nd_efetivo"])
 
 
+def _com_cenario_da_grade_divergente(caso: dict) -> None:
+    """Um caso LEGÍTIMO pelo gate em que a grade perturba um cenário que
+    NÃO é o da manchete: dois cenários, `cenario_base = "base"` e
+    `sensibilidades.cenario = "bull"`. É a configuração do achado F4."""
+    bull = json.loads(json.dumps(caso["cenarios"]["base"]))
+    bull["premissas"]["g"] = 7.0
+    caso["cenarios"]["bull"] = bull
+    caso["cenario_base"] = "base"
+    caso["sensibilidades"]["cenario"] = "bull"
+
+
+def test_titulo_da_matriz_nomeia_o_cenario_que_a_grade_perturbou():
+    """A3 (achado F4): a aba mostrava "R$ 61,91" (a manchete, do
+    `cenario_base`) no topo e, abaixo, uma matriz cuja célula contornada em
+    vermelho lia 69,54 -- sem nomear cenário nenhum. A marcação estava
+    certa (S4: a grade perturbou 'bull'); faltava a página dizer isso.
+    O título passa a nomear o cenário DA GRADE, nunca o da manchete."""
+    entrega_dict, achados, log = _preparar_mutado(FIXTURE, _com_cenario_da_grade_divergente)
+    caso = entrega_dict["caso"]
+    grade = entrega_dict["resultados"]["sensibilidades"]["grades_2d"][0]
+    rota = entrega_dict["resultados"]["rota"]
+
+    pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
+
+    esperado = render.t(
+        DICIONARIO, "valuation.matriz_titulo",
+        cenario=caso["sensibilidades"]["cenario"],
+        x=CATALOGO["premissas"][rota][grade["premissa_x"]]["rotulo"]["pt-BR"],
+        y=CATALOGO["premissas"][rota][grade["premissa_y"]]["rotulo"]["pt-BR"],
+    )
+    titulo = next(t for t in re.findall(r"<h2>([^<]*)</h2>", pagina) if "Sensibilidade" in t)
+    assert titulo == html.escape(esperado)
+    assert html.escape(caso["sensibilidades"]["cenario"]) in titulo
+    assert caso["cenario_base"] not in titulo
+
+
+def test_grade_2d_sem_cenario_declarado_e_recusa_nomeada():
+    """A3, o outro lado: um `caso` com grade 2D sempre declara o cenário que
+    ela perturba (o gate exige). Se não declarar, o painel recusa PELO NOME
+    -- nunca um título sem cenário, nunca um `KeyError` cru."""
+    entrega_dict = apoio.montar_entrega(FIXTURE)
+    del entrega_dict["caso"]["sensibilidades"]["cenario"]
+
+    with pytest.raises(render.CampoDeContratoAusente, match="caso.sensibilidades.cenario"):
+        render.compor(entrega_dict, CATALOGO, [], [], "pt-BR")
+
+
 def test_fixture_com_ponte_e_sem_grade_traz_so_o_painel_da_ponte():
     pagina = _compor(FIXTURE_SO_PONTE)
 
@@ -390,6 +562,125 @@ def test_saida_e_byte_identica_em_duas_composicoes_com_paineis():
     pagina2 = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
     assert pagina1.encode("utf-8") == pagina2.encode("utf-8")
+
+
+# --------------------------------------------------------------------------
+# O caminho INTEIRO Python -> JS (A1, terceira asserção do achado F1): o
+# payload é composto por `render._paineis_valuation_para_json` -- o mesmo
+# objeto que o browser recebe -- e o SVG é desenhado A PARTIR DELE, com as
+# mesmas opções que o bootstrap de `template.html` monta. Os testes acima
+# alimentam o `svg.js` direto do `resultados`, então nada verificava o que
+# `render.py` de fato publica.
+# --------------------------------------------------------------------------
+
+def _payload_dos_paineis(nome_fixture: str = FIXTURE) -> tuple[dict, dict]:
+    entrega_dict = apoio.montar_entrega(nome_fixture)
+    payload = render._paineis_valuation_para_json(
+        entrega_dict["caso"], entrega_dict["resultados"], CATALOGO, "pt-BR", DICIONARIO)
+    return entrega_dict, payload
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_waterfall_desenhado_a_partir_do_payload_de_render_imprime_a_ponte_em_moeda():
+    """A1 + A4: o waterfall que o browser recebe, do payload real. Os textos
+    são a ponte do caso (oráculo independente, com os sinais da convenção
+    econômica) formatada na MOEDA do caso -- a mesma que a manchete usa
+    logo acima na página. Antes da A4 o payload descartava a unidade e a
+    figura imprimia "800,00" ao lado de uma manchete "R$ 61,91"."""
+    entrega_dict, payload = _payload_dos_paineis()
+    caso = entrega_dict["caso"]
+
+    svg = _chamar_node(
+        "FleetSVG.waterfall(ponte.parcelas, {total: ponte.total, formato: ponte.formato})",
+        ponte=payload["ponte"])
+
+    esperado = [
+        placeholders.formatar(caso["ponte"][p["rotulo"]] * SINAIS_ESPERADOS_DA_PONTE[p["rotulo"]],
+                              "moeda", "pt-BR", caso["moeda"])
+        for p in entrega_dict["resultados"]["ponte"]["parcelas"]
+    ]
+    esperado.append(placeholders.formatar(
+        sum(caso["ponte"][linha] * sinal for linha, sinal in SINAIS_ESPERADOS_DA_PONTE.items()),
+        "moeda", "pt-BR", caso["moeda"]))
+
+    assert _textos(svg, "fleet-svg-valor") == esperado
+    assert _textos(svg, "fleet-svg-rotulo") == [
+        CATALOGO["ponte"][p["rotulo"]]["rotulo"]["pt-BR"]
+        for p in entrega_dict["resultados"]["ponte"]["parcelas"]
+    ] + [render.t(DICIONARIO, "valuation.ponte_total")]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_matriz_desenhada_a_partir_do_payload_de_render_usa_a_unidade_de_cada_eixo():
+    """A1 + A4: a matriz que o browser recebe, do payload real.
+
+    Célula: `grade.unidade` é "preço por ação" e o catálogo mapeia essa
+    unidade para o formato de moeda -- a célula-base tem de ler exatamente o
+    que a manchete lê ("R$ 61,91"), não "61,91". Eixos: a `unidade` da
+    premissa no catálogo é 'pp', então um ROIC de 12 p.p. sai "12,00%", não
+    "12,00". Este é o teste que amarra UNIDADE CONHECIDA -> FORMATO
+    APLICADO (achado F7)."""
+    entrega_dict, payload = _payload_dos_paineis()
+    grade = entrega_dict["resultados"]["sensibilidades"]["grades_2d"][0]
+    matriz = payload["matrizes"][0]
+    moeda = entrega_dict["caso"]["moeda"]
+
+    svg = _chamar_node(
+        "FleetSVG.matriz(m.grade, {base: m.base, rotuloX: m.rotuloX, rotuloY: m.rotuloY, "
+        "formato: m.formato, formatoX: m.formatoX, formatoY: m.formatoY})",
+        m=matriz)
+
+    colunas = len(grade["pontos_x"])
+    celulas = _textos(svg, "fleet-svg-celula-valor")
+    for i, j in ((1, 1), (len(grade["pontos_y"]) - 1, colunas - 1)):
+        assert celulas[i * colunas + j] == placeholders.formatar(
+            grade["celulas"][i][j]["valor"], "moeda", "pt-BR", moeda), (i, j)
+
+    assert celulas[1 * colunas + 1] == placeholders.formatar(
+        entrega_dict["resultados"]["manchete"]["preco_acao"], "moeda", "pt-BR", moeda)
+    assert _textos(svg, "fleet-svg-eixo-x") == [
+        placeholders.formatar(x, "pp2", "pt-BR") for x in grade["pontos_x"]]
+    assert _textos(svg, "fleet-svg-eixo-y") == [
+        placeholders.formatar(y, "pp2", "pt-BR") for y in grade["pontos_y"]]
+
+
+def test_bootstrap_do_template_consome_toda_chave_do_payload_dos_paineis():
+    """Anti-deriva de F7 na direção oposta: `render.py` publicar um campo
+    novo que o bootstrap ignora é exatamente como a `unidade` do motor ficou
+    sem consumidor. Toda chave que o payload dos painéis carrega tem de
+    aparecer no bootstrap de `template.html`."""
+    _entrega, payload = _payload_dos_paineis()
+    bootstrap = (ASSETS / "template.html").read_text(encoding="utf-8")
+
+    chaves = set(payload["ponte"]) | set(payload["matrizes"][0])
+    faltando = {chave for chave in chaves if chave not in bootstrap}
+    assert not faltando, faltando
+
+
+def test_unidade_de_grade_fora_do_catalogo_e_hard_fail_nomeado():
+    """A4/F7, o outro lado do tripwire: um v10 que troque a métrica da grade
+    (células viram múltiplo, `unidade` passa a outra coisa) reprova PELO
+    NOME, antes de renderizar -- em vez de desenhar 6,69 onde desenhava
+    61,91 com rc 0 e QC limpo."""
+    entrega_dict = apoio.montar_entrega(FIXTURE)
+    entrega_dict["resultados"]["sensibilidades"]["grades_2d"][0]["unidade"] = "múltiplo EV/EBITDA"
+
+    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+
+    achado = next(a for a in achados if a.codigo == "unidade_desconhecida")
+    assert achado.nivel == "HARD_FAIL"
+    assert achado.onde == "resultados.sensibilidades.grades_2d.0.unidade"
+    assert achado.params["unidade"] == "múltiplo EV/EBITDA"
+
+
+def test_toda_unidade_do_catalogo_tem_formato_que_o_relatorio_conhece():
+    """O vocabulário de `catalogo.unidades` é da integração; os códigos de
+    formato são do relatório. Uma unidade nova apontando para um formato que
+    `placeholders` não conhece reprova aqui, não na tela."""
+    unidades = CATALOGO["unidades"]
+    assert unidades, "catálogo sem 'unidades' — vocabulário vazio?"
+    for unidade, info in unidades.items():
+        assert placeholders.especificacao_de_formato(info["formato"], "pt-BR", "BRL"), unidade
 
 
 def test_json_embutido_dos_paineis_nao_cria_chaves_duplas():
