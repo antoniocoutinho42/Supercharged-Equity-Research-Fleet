@@ -120,6 +120,44 @@ def _rotulo_multiplo(catalogo: dict, chave_multiplo: str, idioma: str) -> str:
     return rotulo
 
 
+def _rotulo_linha_da_ponte(catalogo: dict, linha: str, idioma: str) -> str:
+    """Rótulo de uma linha de balanço da ponte (`catalogo.ponte.<linha>`,
+    fatia 5B/Task 3, S2) — mesma disciplina de `_rotulo_rota`/`_rotulo_
+    multiplo`: quem nomeia é o catálogo de apresentação (A6), nunca o código
+    cru ('divida_bruta') e nunca uma tabela no JS. `tests/test_catalogo_
+    apresentacao.py` trava as chaves contra as linhas que o gate valida."""
+    info = catalogo.get("ponte", {}).get(linha)
+    if info is None:
+        raise RotuloDoCatalogoAusente(f"catálogo de apresentação sem a linha de ponte '{linha}' em 'ponte'.")
+    rotulo = info.get("rotulo", {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para a linha de ponte '{linha}'."
+        )
+    return rotulo
+
+
+def _rotulo_premissa(catalogo: dict, rota: str, premissa: str, idioma: str) -> str:
+    """Rótulo de uma premissa (`catalogo.premissas.<rota>.<premissa>`) — os
+    eixos da matriz de sensibilidade. O gate já recusa uma grade que varie
+    premissa fora do vocabulário da rota, e `tests/test_catalogo_
+    apresentacao.py::test_premissas_do_catalogo_sao_exatamente_as_do_gate`
+    já garante que o catálogo cobre esse vocabulário — então a ausência aqui
+    é erro de catálogo, nomeado, nunca um código cru na tela."""
+    info = catalogo.get("premissas", {}).get(rota, {}).get(premissa)
+    if info is None:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a premissa '{premissa}' da rota '{rota}' em 'premissas'."
+        )
+    rotulo = info.get("rotulo", {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para a premissa "
+            f"'{premissa}' da rota '{rota}'."
+        )
+    return rotulo
+
+
 def _mensagem_qc(achado, dicionario: dict) -> str:
     """Resolve `qc.<codigo>` do dicionário com `achado.params` — mesma
     receita de `builder._montar_qc_json` (módulo irmão, mesmo dicionário),
@@ -148,8 +186,18 @@ def _json_embutido(dados: Any) -> str:
     do Python aceita; `JSON.parse` do browser não) e quebraria o `JSON.parse`
     do bootstrap silenciosamente tarde demais. Recusar aqui, com uma
     exceção nomeada, é preferível a servir um JSON que o browser não
-    consegue parsear."""
-    bruto = json.dumps(dados, ensure_ascii=False, allow_nan=False)
+    consegue parsear.
+
+    `indent=2` (fatia 5B, Task 3) não é cosmético: no formato compacto, dois
+    objetos que fecham juntos imprimem '}}' — e '{{'/'}}' na página é
+    exatamente o token que `tests/test_relatorio_contrato.py::test_
+    placeholder_quebrado_por_quebra_de_linha_agora_resolve` varre para provar
+    que nenhum placeholder cru sobrou (a mesma razão pela qual o uPlot
+    minificado só é embutido quando há exhibit). O payload dos painéis da
+    Valuation aninha objetos (`paineis_valuation.ponte.total`), então o
+    formato compacto passaria a produzir esse par. Indentar separa todo
+    fechamento por uma quebra de linha, sem mudar o JSON que o browser lê."""
+    bruto = json.dumps(dados, ensure_ascii=False, allow_nan=False, indent=2)
     return bruto.replace("</", "<\\/")
 
 
@@ -385,6 +433,129 @@ def _tese_html(entrega: dict, achados: list, idioma: str, dicionario: dict, titu
 # única representaria fielmente partes que podem usar convenções distintas.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Painéis SVG da Valuation (fatia 5B, item 5, Task 3, S1): o waterfall da
+# ponte e uma matriz por grade 2D de sensibilidade. NÃO são exhibits
+# declarados — a spec resolvida de um exhibit é `eixoX + séries de números`
+# (`_exhibit_para_json`), que não expressa nem `{rotulo, valor, sinal}` nem
+# uma grade com dois eixos de premissa. São painéis alimentados direto por
+# `resultados.ponte`/`resultados.sensibilidades.grades_2d`.
+#
+# Este módulo só COLHE e ROTULA: nenhuma conta acontece aqui (E3). O total do
+# waterfall é o `nd_efetivo` que o wrapper já somou; os números das células
+# são os que o motor já rodou. Rótulo de linha da ponte e de premissa vêm do
+# catálogo (A6/S2); título e rótulo do total, do dicionário (§16.1) — o
+# `svg.js` não conhece prosa nenhuma (S3).
+# --------------------------------------------------------------------------
+
+def _grades_2d(resultados: dict) -> list:
+    sensibilidades = resultados.get("sensibilidades")
+    if not isinstance(sensibilidades, dict):
+        return []
+    grades = sensibilidades.get("grades_2d")
+    return grades if isinstance(grades, list) else []
+
+
+def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> dict | None:
+    """Payload do waterfall, ou `None` quando a entrega não tem ponte (rota
+    equity) — S6: o painel simplesmente não aparece, nada de seção vazia com
+    texto de erro."""
+    ponte = resultados.get("ponte")
+    if not isinstance(ponte, dict) or not ponte.get("parcelas"):
+        return None
+    return {
+        "parcelas": [
+            {
+                "rotulo": _rotulo_linha_da_ponte(catalogo, parcela["rotulo"], idioma),
+                "valor": parcela["valor"],
+                "sinal": parcela["sinal"],
+            }
+            for parcela in ponte["parcelas"]
+        ],
+        "total": {"rotulo": t(dicionario, "valuation.ponte_total"), "valor": ponte["nd_efetivo"]},
+    }
+
+
+def _base_da_grade(caso: dict, grade: dict) -> dict | None:
+    """O par (x, y) da célula-base de uma grade 2D — S4: as premissas
+    centrais do cenário QUE A GRADE PERTURBOU (`caso.sensibilidades.cenario`),
+    nunca outro cenário. As células são substituições naquele vetor central;
+    comparar contra outro marcaria uma célula que não é a central. A
+    comparação em si (igualdade exata) é do `svg.js`; aqui só se colhe o par.
+    Premissa do eixo ausente do cenário, ou não numérica, devolve `None` —
+    e aí nenhuma célula é marcada, nunca uma aproximação."""
+    sensibilidades = caso.get("sensibilidades")
+    if not isinstance(sensibilidades, dict):
+        return None
+    cenario = (caso.get("cenarios") or {}).get(sensibilidades.get("cenario"))
+    premissas = (cenario or {}).get("premissas") or {}
+    par = {}
+    for eixo, chave in (("x", grade.get("premissa_x")), ("y", grade.get("premissa_y"))):
+        valor = premissas.get(chave)
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            return None
+        par[eixo] = valor
+    return par
+
+
+def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str) -> list:
+    """Uma entrada por grade 2D, na ordem declarada (S6). `grade` carrega só
+    o que o `svg.js` desenha; as células vão como estão em `resultados` —
+    números prontos, nunca recalculados."""
+    rota = resultados["rota"]
+    return [
+        {
+            "grade": {
+                "pontos_x": grade["pontos_x"],
+                "pontos_y": grade["pontos_y"],
+                "celulas": grade["celulas"],
+            },
+            "base": _base_da_grade(caso, grade),
+            "rotuloX": _rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
+            "rotuloY": _rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
+        }
+        for grade in _grades_2d(resultados)
+    ]
+
+
+def _paineis_valuation_para_json(caso: dict, resultados: dict, catalogo: dict,
+                                  idioma: str, dicionario: dict) -> dict:
+    return {
+        "ponte": _ponte_para_json(resultados, catalogo, idioma, dicionario),
+        "matrizes": _matrizes_para_json(caso, resultados, catalogo, idioma),
+    }
+
+
+def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
+                             idioma: str, dicionario: dict) -> str:
+    """Hosts VAZIOS na aba Valuation, na mesma ordem do payload — só o
+    `svg.js` os preenche (bootstrap estático em `template.html`). Nenhum host
+    quando não há o que desenhar (S6)."""
+    rota = resultados["rota"]
+    blocos = []
+    if _ponte_para_json(resultados, catalogo, idioma, dicionario) is not None:
+        titulo = html.escape(t(dicionario, "valuation.ponte_titulo"))
+        blocos.append(
+            f'<section class="painel-svg">'
+            f'<h2>{titulo}</h2>'
+            f'<div class="painel-grafico" data-painel="ponte"></div>'
+            f'</section>'
+        )
+    for indice, grade in enumerate(_grades_2d(resultados)):
+        titulo = html.escape(t(
+            dicionario, "valuation.matriz_titulo",
+            x=_rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
+            y=_rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
+        ))
+        blocos.append(
+            f'<section class="painel-svg">'
+            f'<h2>{titulo}</h2>'
+            f'<div class="painel-grafico" data-painel="matriz" data-painel-indice="{indice}"></div>'
+            f'</section>'
+        )
+    return "".join(blocos)
+
+
 def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
     moeda = caso.get("moeda")
     manchete = resultados["manchete"]
@@ -467,6 +638,7 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
         f'<section class="valuation-multiplos">{bloco_multiplos}</section>'
         f'<section class="valuation-rota">{bloco_rota}</section>'
         f'{bloco_cenarios}'
+        f'{_paineis_valuation_html(caso, resultados, catalogo, idioma, dicionario)}'
     )
 
 
@@ -593,9 +765,15 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     corpo_evidencia = _evidencia_html(
         resultados, entrega["ficha_tecnica"], log, log_exhibits, idioma, dicionario)
 
+    # Os painéis SVG da Valuation entram no MESMO `<script type="application/
+    # json">` dos exhibits (uma chave a mais, `paineis_valuation`) — nunca um
+    # segundo bloco e nunca um segundo caminho de escape: `_json_embutido` é
+    # a única porta de saída de JSON deste módulo.
+    paineis_valuation = _paineis_valuation_para_json(caso, resultados, catalogo, idioma, dicionario)
     dados_exhibits = _json_embutido({
         "formatacao": _formatacao_grafico(dicionario),
         "exhibits": [_exhibit_para_json(exhibit, dados) for exhibit in exhibits_resolvidos],
+        "paineis_valuation": paineis_valuation,
     })
 
     # O uPlot vendorizado (~50 KB minificado) e o adaptador só entram na
@@ -612,6 +790,14 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     else:
         css_uplot = js_uplot = js_graficos = ""
 
+    # Mesma economia para o módulo SVG (Task 3): ele só entra quando há
+    # painel para desenhar. Os dois módulos são embutidos de forma
+    # INDEPENDENTE — uma entrega pode ter painel sem exhibit, ou o contrário
+    # —, e é por isso que `svg.js` não pode depender de `FleetGraficos`
+    # existir na página (ver o cabeçalho de `svg.js`).
+    tem_painel = paineis_valuation["ponte"] is not None or bool(paineis_valuation["matrizes"])
+    js_svg = _ler_asset("svg.js") if tem_painel else ""
+
     modelo = (_DIR_ASSETS / "template.html").read_text(encoding="utf-8")
     return string.Template(modelo).substitute(
         idioma=html.escape(str(idioma)),
@@ -625,5 +811,6 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
         css_uplot=css_uplot,
         js_uplot=js_uplot,
         js_graficos=js_graficos,
+        js_svg=js_svg,
         dados_exhibits=dados_exhibits,
     )

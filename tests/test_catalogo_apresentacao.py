@@ -19,7 +19,7 @@ FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
-from caso import POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
+from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 import diagnosticos  # noqa: E402
 
 # A2 (onda de correção da revisão final): o conjunto canônico do MOTOR,
@@ -106,8 +106,26 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
 def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
-        "premissas", "multiplos", "diagnosticos", "disclosures",
+        "ponte", "premissas", "multiplos", "diagnosticos", "disclosures",
     }
+
+
+# --------------------------------------------------------------------------
+# Fatia 5B, item 5, Task 3 (S2): o waterfall da ponte desenha um rótulo por
+# linha de balanço, e quem nomeia é o catálogo -- nunca o JS, nunca o código
+# cru ('divida_bruta') na tela. Mesma trava de upgrade das rotas e das
+# convenções terminais: uma linha nova em `caso.CAMPOS_DA_PONTE` sem entrada
+# aqui reprova na integração, não no relatório.
+# --------------------------------------------------------------------------
+
+def test_linhas_da_ponte_do_catalogo_sao_exatamente_as_do_gate():
+    assert tuple(CAT["ponte"]) == CAMPOS_DA_PONTE
+
+
+def test_toda_linha_da_ponte_tem_rotulo_em_todo_idioma():
+    for linha, info in CAT["ponte"].items():
+        for idioma in CAT["idiomas"]:
+            assert info.get("rotulo", {}).get(idioma, "").strip(), (linha, idioma)
 
 
 # --------------------------------------------------------------------------

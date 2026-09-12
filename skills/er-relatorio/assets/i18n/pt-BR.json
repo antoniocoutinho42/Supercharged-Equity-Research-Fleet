@@ -41,7 +41,10 @@
       "rota_titulo": "Rota",
       "convencao_terminal_titulo": "Convenção terminal",
       "sotp_sem_multiplo": "Soma das partes (SOTP): preço consolidado sem múltiplo único.",
-      "cenarios_titulo": "Preço por cenário"
+      "cenarios_titulo": "Preço por cenário",
+      "ponte_titulo": "Ponte da dívida líquida",
+      "ponte_total": "Dívida líquida efetiva",
+      "matriz_titulo": "Sensibilidade: {y} × {x}"
     },
     "evidencia": {
       "metodologia_titulo": "Metodologia",

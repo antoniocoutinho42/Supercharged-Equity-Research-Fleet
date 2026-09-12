@@ -212,6 +212,14 @@
     color: var(--cor-texto-suave);
     font-style: italic;
   }
+  .painel-grafico {
+    overflow-x: auto;
+  }
+  .painel-grafico svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
 </style>
 <style>$css_uplot</style>
 </head>
@@ -259,15 +267,38 @@
 <script type="application/json" id="fleet-dados-exhibits">$dados_exhibits</script>
 <script>$js_uplot</script>
 <script>$js_graficos</script>
+<script>$js_svg</script>
 <script>
 (function () {
   "use strict";
   var elementoDados = document.getElementById("fleet-dados-exhibits");
-  if (!elementoDados || typeof FleetGraficos === "undefined") { return; }
+  if (!elementoDados) { return; }
   var dados = JSON.parse(elementoDados.textContent);
-  var hosts = document.querySelectorAll(".exhibit-grafico");
-  for (var i = 0; i < dados.exhibits.length && i < hosts.length; i++) {
-    FleetGraficos.renderizar(hosts[i], dados.exhibits[i], dados.formatacao);
+
+  // Exhibits (cartesianos/tabela) e paineis SVG sao embutidos de forma
+  // INDEPENDENTE pelo render.py -- uma entrega pode ter um sem o outro --,
+  // entao cada bloco checa o SEU modulo antes de usa-lo.
+  if (typeof FleetGraficos !== "undefined") {
+    var hosts = document.querySelectorAll(".exhibit-grafico");
+    for (var i = 0; i < dados.exhibits.length && i < hosts.length; i++) {
+      FleetGraficos.renderizar(hosts[i], dados.exhibits[i], dados.formatacao);
+    }
+  }
+
+  if (typeof FleetSVG === "undefined") { return; }
+  var paineis = dados.paineis_valuation || {};
+  var hostPonte = document.querySelector('[data-painel="ponte"]');
+  if (hostPonte && paineis.ponte) {
+    hostPonte.innerHTML = FleetSVG.waterfall(paineis.ponte.parcelas, { total: paineis.ponte.total });
+  }
+  var hostsMatriz = document.querySelectorAll('[data-painel="matriz"]');
+  var matrizes = paineis.matrizes || [];
+  for (var m = 0; m < matrizes.length && m < hostsMatriz.length; m++) {
+    hostsMatriz[m].innerHTML = FleetSVG.matriz(matrizes[m].grade, {
+      base: matrizes[m].base,
+      rotuloX: matrizes[m].rotuloX,
+      rotuloY: matrizes[m].rotuloY
+    });
   }
 })();
 </script>

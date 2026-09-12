@@ -61,6 +61,33 @@
       "pt-BR": "Gordon — perpetuidade com retorno incremental terminal declarado"
     }
   },
+  "ponte": {
+    "divida_bruta": {
+      "rotulo": {
+        "pt-BR": "Dívida bruta"
+      }
+    },
+    "caixa_e_equivalentes": {
+      "rotulo": {
+        "pt-BR": "Caixa e equivalentes"
+      }
+    },
+    "outros_ativos": {
+      "rotulo": {
+        "pt-BR": "Outros ativos"
+      }
+    },
+    "outros_passivos": {
+      "rotulo": {
+        "pt-BR": "Outros passivos"
+      }
+    },
+    "minoritarios": {
+      "rotulo": {
+        "pt-BR": "Minoritários"
+      }
+    }
+  },
   "premissas": {
     "firm": {
       "g": {
