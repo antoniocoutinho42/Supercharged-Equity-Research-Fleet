@@ -1,0 +1,375 @@
+"""A fachada do espelho (camada de integração) contra o `resultados` que o
+Python publica — fatia 5C, item 5, Task 1.
+
+`skills/er-valuation/assets/espelho_fachada.js` é o equivalente em JS do
+caminho de `avaliar.py` que produz o preço de cada cenário: recebe o `caso`
+e devolve o subconjunto VIVO do `resultados.json` (preço, múltiplo de
+referência e ponte), nas mesmas chaves. Ela mora na integração, não no
+relatório (L1 do plano/E3): traduzir `caso` -> shape de `resultados` é
+conhecimento de integração e paridade; o relatório só embute e chama.
+
+Este harness é o que torna essa fachada admissível — o mesmo papel que
+`test_paridade_js.py` cumpre para o espelho do núcleo, e a mesma tolerância
+(erro RELATIVO com piso absoluto, |py - js| <= max(TAU*|py|, TAU)). Sem node
+os testes PULAM com razão explícita; o CI tem node (setup-node) e sempre
+roda.
+
+O lado Python é `relatorio_apoio.montar_entrega`, que roda `avaliar()` de
+VERDADE (motor congelado por subprocesso) sobre cada fixture de caso — nunca
+um `resultados` forjado à mão: o que a fachada tem de reproduzir é o número
+que o Python publica, não um número que este arquivo inventou.
+"""
+
+import functools
+import json
+import re
+import subprocess
+
+import pytest
+
+from relatorio_apoio import FIXTURES, montar_entrega
+from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
+
+FACHADA = RAIZ / "skills" / "er-valuation" / "assets" / "espelho_fachada.js"
+
+# Mesma tolerância dos três harnesses de paridade (ver `test_paridade_js.py`,
+# que a documenta e mede a folga): as grandezas aqui vão de múltiplo (~6) a
+# preço por ação (~60), e a fachada não introduz conta nenhuma além das do
+# espelho — um desvio acima disto é erro de orquestração, não ruído de
+# ponto flutuante.
+TAU = 1e-12
+
+# Toda fixture de caso do repositório — derivada por glob, não uma lista
+# estática: uma fixture nova entra neste harness no instante em que o arquivo
+# passa a existir. A fachada admite as três rotas (firm, equity, rampa) e o
+# bloco `degrau`, então nenhuma fixture de caso fica de fora hoje.
+FIXTURES_DE_CASO: list = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
+
+# Harness em node: carrega a fachada, avalia o caso e compara com o
+# `resultados`, devolvendo TUDO num JSON só — inclusive a recusa, quando a
+# fachada lança (é assim que o laboratório vai vê-la: uma exceção nomeada,
+# nunca um número desenhado em silêncio).
+_HARNESS = (
+    "const fs = require('fs');"
+    "const F = require(%s);"
+    "const p = JSON.parse(fs.readFileSync(%s, 'utf-8'));"
+    "const saida = {versao_contrato: F.VERSAO_CONTRATO};"
+    "try {"
+    "  saida.vivo = F.avaliarCaso(p.caso);"
+    "  saida.comparacao = F.compararComResultados(p.caso, p.resultados);"
+    "} catch (erro) {"
+    "  saida.erro = {mensagem: String(erro && erro.message), codigo: erro && erro.codigo};"
+    "}"
+    "console.log(JSON.stringify(saida));"
+)
+
+
+@functools.lru_cache(maxsize=None)
+def _entrega(fixture: str, nopat: bool = False) -> str:
+    """`montar_entrega` cacheado (roda o motor por subprocesso, cenário a
+    cenário — sem cache, cada teste parametrizado pagaria de novo).
+
+    Devolve JSON (string) porque `lru_cache` exige retorno hashável só para
+    a CHAVE, mas um dict devolvido seria compartilhado e mutável entre
+    testes — e dois testes abaixo ADULTERAM o `resultados` de propósito. A
+    string é desserializada a cada chamada, então cada teste recebe a sua
+    própria cópia.
+
+    `nopat=True`: mesma fixture firm, com a métrica-base trocada para NOPAT
+    (`mutar_caso` roda ANTES de `avaliar()`, então o `resultados` reflete a
+    troca por construção). Nenhuma fixture commitada exercita o ramo NOPAT
+    da rota firm — e é justamente o ramo em que a chave do múltiplo de
+    referência muda (`EV/NOPAT_curr`), o que este arquivo prende.
+    """
+    def _para_nopat(caso: dict) -> None:
+        caso["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0,
+                                "fonte": "harness da fachada"}
+
+    entrega = montar_entrega(fixture, mutar_caso=_para_nopat if nopat else None)
+    return json.dumps(entrega, ensure_ascii=False)
+
+
+def _caso_e_resultados(fixture: str, nopat: bool = False) -> tuple[dict, dict]:
+    entrega = json.loads(_entrega(fixture, nopat))
+    return entrega["caso"], entrega["resultados"]
+
+
+def _fachada(caso: dict, resultados: dict, tmp_path) -> dict:
+    arq = tmp_path / "payload.json"
+    arq.write_text(json.dumps({"caso": caso, "resultados": resultados}, ensure_ascii=False),
+                   encoding="utf-8")
+    script = _HARNESS % (json.dumps(str(FACHADA)), json.dumps(str(arq)))
+    r = subprocess.run(["node", "-e", script],
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return json.loads(r.stdout)
+
+
+def _erro_relativo(p: float, j: float) -> float:
+    """Mesma fórmula de `test_paridade_js.py`: relativo com piso absoluto."""
+    return abs(p - j) / max(abs(p), 1.0)
+
+
+# ---------------------------------------------------------------------------
+# O subconjunto vivo reproduz o que o Python publicou
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_a_fachada_reproduz_o_preco_de_cada_cenario_de_cada_fixture(fixture, tmp_path):
+    """O contrato central: para TODA fixture que a rota admita, o preço por
+    ação de cada cenário sai do JS dentro de TAU do que o Python publicou —
+    e `compararComResultados` concorda (`ok: true`, sem divergência)."""
+    caso, resultados = _caso_e_resultados(fixture)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    cenarios_js = saida["vivo"]["cenarios"]
+    assert sorted(cenarios_js) == sorted(resultados["cenarios"])
+    for nome, cenario_py in resultados["cenarios"].items():
+        preco_py = cenario_py["valor"]["preco_acao"]
+        preco_js = cenarios_js[nome]["valor"]["preco_acao"]
+        assert preco_js is not None, f"{fixture}/{nome}: fachada recusou onde o Python precificou"
+        assert _erro_relativo(preco_py, preco_js) <= TAU, \
+            f"{fixture}/{nome}: py={preco_py} js={preco_js}"
+        # As premissas voltam ecoadas — é o vetor que produziu o preço, e o
+        # laboratório edita exatamente essas chaves.
+        assert cenarios_js[nome]["premissas"] == caso["cenarios"][nome]["premissas"]
+
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture,nopat,chave_esperada", [
+    ("caso_minimo_firm.json", False, "EV/EBITDA_curr"),
+    ("caso_minimo_firm.json", True, "EV/NOPAT_curr"),
+    ("caso_minimo_equity.json", False, "PL_curr"),
+    ("caso_rampa.json", False, "EV/EBITDA0"),
+])
+def test_o_multiplo_da_fachada_e_a_chave_curr_da_metrica_declarada(
+        fixture, nopat, chave_esperada, tmp_path):
+    """A correspondência que o plano mandou CONFIRMAR, não presumir.
+
+    `precificarCelula` devolve UM múltiplo (o da métrica declarada) enquanto
+    `resultados.cenarios.<n>.multiplos` traz quatro chaves na rota firm. A
+    hipótese do plano — que o múltiplo da fachada é a chave `_curr` da
+    métrica declarada — foi confirmada por execução e fica presa aqui: a
+    chave publicada é a esperada, o valor bate com a entrada correspondente
+    de `multiplos` dentro de TAU, e — o que torna o teste discriminante —
+    NENHUMA outra chave de `multiplos` casa com esse mesmo número, então a
+    correspondência não pode passar por coincidência aritmética.
+    """
+    caso, resultados = _caso_e_resultados(fixture, nopat)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    for nome, cenario_py in resultados["cenarios"].items():
+        multiplo_js = saida["vivo"]["cenarios"][nome]["multiplo"]
+        assert multiplo_js["chave"] == chave_esperada
+        assert multiplo_js["valor"] is not None
+        casam = {chave for chave, valor in cenario_py["multiplos"].items()
+                 if _erro_relativo(valor, multiplo_js["valor"]) <= TAU}
+        assert casam == {chave_esperada}, (
+            f"{fixture}/{nome}: múltiplo {multiplo_js['valor']} casa com {sorted(casam)}, "
+            f"esperado só {chave_esperada} — multiplos={cenario_py['multiplos']}")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_um_caso_com_degrau_reproduz_o_preco_COM_degrau(tmp_path):
+    """L3: o caso com degrau publica o preço COM degrau (D3 da fatia D) — uma
+    fachada que só rodasse a perna P/L acusaria divergência num caso
+    legítimo. O preço da perna sem degrau entra na asserção como CONTROLE:
+    os dois números são materialmente diferentes, então reproduzir o
+    primeiro não é reproduzir o segundo por acaso. O múltiplo de referência
+    acompanha o preço (`PVP_com_degrau`, o `com_transicao` do próprio
+    degrau — a mesma escolha que `avaliar._montar_manchete` publica).
+    """
+    caso, resultados = _caso_e_resultados("caso_degrau.json")
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    cenario_py = resultados["cenarios"]["base"]
+    preco_com_degrau = cenario_py["valor"]["preco_acao"]
+    preco_sem_degrau = cenario_py["sem_degrau"]["valor"]["preco_acao"]
+    assert _erro_relativo(preco_com_degrau, preco_sem_degrau) > 0.1, \
+        "fixture deixou de discriminar as duas pernas — o controle deste teste morreu"
+
+    cenario_js = saida["vivo"]["cenarios"]["base"]
+    assert _erro_relativo(preco_com_degrau, cenario_js["valor"]["preco_acao"]) <= TAU
+    assert cenario_js["multiplo"]["chave"] == "PVP_com_degrau"
+    assert _erro_relativo(cenario_py["degrau"]["com_transicao"],
+                          cenario_js["multiplo"]["valor"]) <= TAU
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_a_ponte_publicada_e_a_mesma_do_resultados(fixture, tmp_path):
+    """A ponte é parte do escopo vivo (L3): o `nd_efetivo` que a fachada soma
+    do `caso` é o mesmo que `ponte.compor` publicou. Na rota equity não há
+    ponte de dívida — `resultados.json` não publica o bloco, e a fachada
+    também não (mesmas chaves, L2)."""
+    caso, resultados = _caso_e_resultados(fixture)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    if "ponte" in resultados:
+        assert _erro_relativo(resultados["ponte"]["nd_efetivo"],
+                              saida["vivo"]["ponte"]["nd_efetivo"]) <= TAU
+    else:
+        assert "ponte" not in saida["vivo"], saida["vivo"].get("ponte")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", ["caso_minimo_firm.json", "caso_rampa.json",
+                                     "caso_degrau.json"])
+def test_um_vetor_fora_de_dominio_recusa_o_cenario_em_vez_de_inventar_numero(fixture, tmp_path):
+    """O que o laboratório vai produzir o tempo todo: uma premissa editada
+    para fora do domínio da CLI do motor (`n < 1`, `avaliar_dominios_cli`).
+    As três pernas têm de responder no MESMO vocabulário do espelho — `null`
+    nos dois números, nunca um preço inventado — e o comparador tem de contar
+    isso como divergência (falha FECHADA), nunca como "ok por ausência de
+    número". Sem esta asserção, a perna da rampa e a do degrau estourariam um
+    TypeError dentro do laboratório em vez de recusar."""
+    caso, resultados = _caso_e_resultados(fixture)
+    caso["cenarios"]["base"]["premissas"]["n"] = 0
+
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+    cenario = saida["vivo"]["cenarios"]["base"]
+    assert cenario["valor"]["preco_acao"] is None, cenario
+    assert cenario["multiplo"]["valor"] is None, cenario
+
+    comparacao = saida["comparacao"]
+    assert comparacao["ok"] is False
+    divergencia = next(d for d in comparacao["divergencias"] if d["chave"] == "valor.preco_acao")
+    assert divergencia["js"] is None
+    assert divergencia["erro_relativo"] is None
+    assert divergencia["python"] == resultados["cenarios"]["base"]["valor"]["preco_acao"]
+
+
+# ---------------------------------------------------------------------------
+# As duas recusas: contrato desconhecido e divergência numérica
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_fachada_recusa_um_resultados_de_contrato_desconhecido(tmp_path):
+    """L2, a lição do F7 da 5B: um contrato que a fachada não sabe ler
+    REPROVA em voz alta — exceção nomeada, citando as duas versões — em vez
+    de desenhar número errado em silêncio. É o que a v10 vai encontrar."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    resultados["versao_contrato"] = "resultados/2"
+    saida = _fachada(caso, resultados, tmp_path)
+
+    assert saida["versao_contrato"] == "resultados/1"
+    assert "comparacao" not in saida, "comparou um contrato que não sabe ler"
+    erro = saida["erro"]
+    assert erro["codigo"] == "contrato_desconhecido", erro
+    assert "resultados/1" in erro["mensagem"] and "resultados/2" in erro["mensagem"], erro
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_comparador_nomeia_cenario_chave_e_os_dois_numeros(tmp_path):
+    """L4: vermelho é um fato utilizável — nomeia o cenário, a chave e os
+    dois números. Adultera o preço de UM cenário só, num caso de dois, e
+    exige que a divergência apontada seja exatamente aquela (o outro
+    cenário continua batendo, então o comparador não está reprovando em
+    bloco)."""
+    def _dois_cenarios(caso: dict) -> None:
+        caso["cenarios"]["otimista"] = json.loads(json.dumps(caso["cenarios"]["base"]))
+        caso["cenarios"]["otimista"]["premissas"]["g"] = 7.0
+        caso["cenario_base"] = "base"
+
+    entrega = montar_entrega("caso_minimo_firm.json", mutar_caso=_dois_cenarios)
+    caso, resultados = entrega["caso"], entrega["resultados"]
+
+    preco_verdadeiro = resultados["cenarios"]["otimista"]["valor"]["preco_acao"]
+    adulterado = preco_verdadeiro + 1.0
+    resultados["cenarios"]["otimista"]["valor"]["preco_acao"] = adulterado
+
+    saida = _fachada(caso, resultados, tmp_path)
+    comparacao = saida["comparacao"]
+    assert comparacao["ok"] is False
+    assert len(comparacao["divergencias"]) == 1, comparacao["divergencias"]
+    d = comparacao["divergencias"][0]
+    assert d["cenario"] == "otimista"
+    assert d["chave"] == "valor.preco_acao"
+    assert d["python"] == pytest.approx(adulterado, rel=1e-12)
+    assert _erro_relativo(preco_verdadeiro, d["js"]) <= TAU
+    assert d["erro_relativo"] > TAU
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_comparador_tambem_prende_o_multiplo_do_cenario(tmp_path):
+    """O preço e o múltiplo são DOIS números publicados — um comparador que
+    só olhasse o preço passaria por todos os testes acima. Adultera só o
+    múltiplo de referência e exige a divergência nomeada por aquela chave."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    verdadeiro = resultados["cenarios"]["base"]["multiplos"]["EV/EBITDA_curr"]
+    resultados["cenarios"]["base"]["multiplos"]["EV/EBITDA_curr"] = verdadeiro + 0.5
+
+    saida = _fachada(caso, resultados, tmp_path)
+    comparacao = saida["comparacao"]
+    assert comparacao["ok"] is False
+    assert [d["chave"] for d in comparacao["divergencias"]] == ["EV/EBITDA_curr"], \
+        comparacao["divergencias"]
+    d = comparacao["divergencias"][0]
+    assert d["cenario"] == "base"
+    assert d["python"] == pytest.approx(verdadeiro + 0.5, rel=1e-12)
+    assert _erro_relativo(verdadeiro, d["js"]) <= TAU
+
+
+# ---------------------------------------------------------------------------
+# Onde a fachada de fato roda: um <script> de browser
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_fachada_roda_em_contexto_de_browser_sem_module_nem_require(tmp_path):
+    """O consumidor real é um `<script>` dentro do HTML: sem `module`, sem
+    `require`, sem `process`. É o FIX 1 da revisão final da 4A repetido —
+    uma fachada que só funcionasse sob `require` teria harness verde e
+    laboratório morto. Carrega os FONTES (espelho e fachada, nesta ordem)
+    num `vm.createContext({})` vazio e exige que `globalThis.FachadaEspelho`
+    reproduza o preço por esse caminho."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    arq = tmp_path / "payload.json"
+    arq.write_text(json.dumps({"caso": caso, "resultados": resultados}, ensure_ascii=False),
+                   encoding="utf-8")
+    script = (
+        "const fs = require('fs');"
+        "const vm = require('vm');"
+        "const ctx = vm.createContext({});"
+        "vm.runInContext(fs.readFileSync(%s, 'utf8'), ctx);"
+        "vm.runInContext(fs.readFileSync(%s, 'utf8'), ctx);"
+        "const p = JSON.parse(fs.readFileSync(%s, 'utf-8'));"
+        "const F = ctx.FachadaEspelho;"
+        "const ok = !!(F && typeof F.avaliarCaso === 'function'"
+        " && typeof F.compararComResultados === 'function');"
+        "ctx.__p = p;"
+        "const r = ok ? vm.runInContext("
+        "  'JSON.stringify({vivo: FachadaEspelho.avaliarCaso(__p.caso),"
+        "   comparacao: FachadaEspelho.compararComResultados(__p.caso, __p.resultados)})', ctx)"
+        "  : 'null';"
+        "console.log(JSON.stringify({ok, r}));"
+    ) % (json.dumps(str(ESPELHO)), json.dumps(str(FACHADA)), json.dumps(str(arq)))
+    r = subprocess.run(["node", "-e", script],
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    d = json.loads(r.stdout)
+    assert d["ok"], "superfície pública (globalThis.FachadaEspelho) inalcançável no contexto vm"
+    saida = json.loads(d["r"])
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+    assert _erro_relativo(resultados["cenarios"]["base"]["valor"]["preco_acao"],
+                          saida["vivo"]["cenarios"]["base"]["valor"]["preco_acao"]) <= TAU
+
+
+def test_a_fachada_nao_tem_dependencia_externa():
+    """Zero npm, como o espelho: a fachada vai ser embutida num HTML
+    autocontido, sem rede. O único `require` admitido é o do espelho irmão,
+    no ramo de node — no browser os dois chegam como `<script>` e a fachada
+    acha o espelho por `globalThis`."""
+    texto = FACHADA.read_text(encoding="utf-8")
+    assert not re.search(r"^\s*import\s", texto, re.M), "import ES6 na fachada"
+    requires = re.findall(r"""require\(\s*['"]([^'"]+)['"]\s*\)""", texto)
+    assert set(requires) <= {"./motor_espelho.js"}, \
+        f"dependência além do espelho irmão: {sorted(set(requires))}"

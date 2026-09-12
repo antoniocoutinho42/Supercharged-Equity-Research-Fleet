@@ -1,0 +1,364 @@
+// ============================================================================
+// FACHADA DO ESPELHO — item 5, fatia 5C, Task 1
+//
+// O que e': o equivalente em JS do caminho de `skills/er-valuation/scripts/
+// avaliar.py` que produz o PRECO de cada cenario. Recebe um `caso` (o mesmo
+// dict que `caso.json` carrega) e devolve o subconjunto VIVO do
+// `resultados.json`, nas MESMAS chaves — para o laboratorio da aba Valuation
+// recalcular preco e multiplo a cada premissa editada, e para o badge de
+// paridade comparar chave a chave com o `resultados` que o Python publicou,
+// sem traducao nenhuma no meio.
+//
+// Onde mora, e por que: `skills/er-valuation/assets/` — camada de
+// INTEGRACAO, nunca o relatorio (decisao L1 do plano da fatia, emenda E3 do
+// desenho v4 §15). Traduzir `caso` -> shape de `resultados` e' exatamente o
+// que `avaliar.py` faz do lado Python: conhecimento de integracao e paridade.
+// Por em `skills/er-relatorio/assets/` seria reimplementar o wrapper em JS —
+// o acoplamento que E3 proibe, e que `tests/test_relatorio_fronteira.py`
+// reprova por sha256. O relatorio LE este arquivo e o embute; nunca o copia.
+//
+// O que esta fachada NAO faz: aritmetica de valuation. Toda conta de valor
+// vem de `motor_espelho.js` (`precificarCelula`, `precificarRampa`,
+// `precificarDegrau`), que por sua vez espelha o motor congelado. A unica
+// soma deste arquivo e' a PONTE (`ponte.py:compor`, linhas 36-69), que o
+// proprio modulo Python declara nao ser calculo de valor: linhas de balanco
+// com sinal explicito somadas em `nd_efetivo`. Ela entra aqui porque o
+// escopo vivo da fatia inclui a ponte (decisao L3) e o espelho do nucleo nao
+// a tem — `ponteParaPreco` cruza a ponte, nao a COMPOE.
+//
+// Escopo vivo desta fatia (L3): o que produz o preco de cada cenario. Fora
+// dele, de proposito, e rotulado "congelado nas premissas originais" na tela:
+// SOTP, reversa e sensibilidades. O espelho ja' tem `resolverCompleto`,
+// `grade1D` e `grade2D`; eles entram quando houver consumidor, nao antes.
+//
+// Carregamento: no browser os dois arquivos chegam como <script> e a fachada
+// acha o espelho por `globalThis.MotorEspelho`; em node, por `require` do
+// irmao. A busca e' PREGUICOSA (na hora da chamada, nao no topo) para que a
+// ordem das duas tags no HTML nunca importe.
+//
+// TUDO abaixo vive dentro de uma IIFE, e o arquivo inteiro nao declara UM
+// identificador de topo — nem `const`, nem `function`. Nao e' estilo: dois
+// <script> classicos compartilham o MESMO escopo lexico global, e
+// `motor_espelho.js` ja' declara `const superficiePublica` (alem de `pe`,
+// `resolver`, `identificacao`, `CHAVE`...). Uma versao anterior deste arquivo
+// repetia esse nome no topo e o segundo <script> morria inteiro com
+// `SyntaxError: Identifier 'superficiePublica' has already been declared` —
+// pego por `test_a_fachada_roda_em_contexto_de_browser_sem_module_nem_require`,
+// que carrega os dois FONTES no mesmo contexto, como o HTML faz. A IIFE fecha
+// a classe inteira do problema (guarda estrutural, nao renomeacao pontual):
+// nenhum nome daqui pode colidir com o espelho hoje nem com o que a fatia
+// acrescentar amanha.
+// ============================================================================
+
+(function () {
+  'use strict';
+
+  // A versao de `resultados.versao_contrato` que esta fachada sabe ler —
+  // `avaliar.py:140` (`VERSAO_CONTRATO = "resultados/1"`). Literal, nao
+  // derivado: e' uma DECLARACAO de qual contrato este arquivo entende, e um
+  // `resultados` de outra versao tem de reprovar aqui, em voz alta (L2).
+  const VERSAO_CONTRATO = 'resultados/1';
+
+  // Tolerancia do comparador: erro RELATIVO com piso absoluto,
+  // |py - js| <= max(TAU*|py|, TAU) — a MESMA dos tres harnesses de paridade
+  // da suite (ver `tests/test_paridade_js.py`, que a documenta e mede a folga
+  // contra o erro real). Nao e' numero novo: e' o mesmo limiar, aplicado na
+  // maquina de quem abriu o relatorio em vez de no CI.
+  const TAU = 1e-12;
+
+  // Ordem e sinal das linhas de balanco — `ponte.py:SINAIS` (linhas 18-24),
+  // verbatim. Ordem importa para o waterfall; sinal, para a soma.
+  const SINAIS_DA_PONTE = [
+    ['divida_bruta', 1],
+    ['caixa_e_equivalentes', -1],
+    ['outros_ativos', -1],
+    ['outros_passivos', 1],
+    ['minoritarios', 1],
+  ];
+
+  // Rotas que cruzam ponte de divida — `avaliar.py:881-908`: firm e rampa
+  // compoem `caso["ponte"]` e publicam o bloco em `resultados["ponte"]`; a
+  // rota equity chega em Equity direto (P/L x LL), usa `nd_efetivo = 0.0`
+  // internamente (linha 915) e NAO publica bloco nenhum.
+  const ROTAS_COM_PONTE = new Set(['firm', 'rampa']);
+
+  // Recusa NOMEADA, nunca um KeyError/TypeError nascido fundo (licao da
+  // revisao final da 5B, achado F6): quem chama recebe um `codigo` estavel
+  // para decidir o que mostrar, e uma mensagem que cita os dois lados.
+  function recusa(codigo, mensagem) {
+    const erro = new Error(`espelho_fachada: ${mensagem}`);
+    erro.codigo = codigo;
+    return erro;
+  }
+
+  function espelho() {
+    if (typeof globalThis !== 'undefined' && globalThis.MotorEspelho) {
+      return globalThis.MotorEspelho;
+    }
+    if (typeof module !== 'undefined' && typeof require === 'function') {
+      return require('./motor_espelho.js');
+    }
+    throw recusa('espelho_ausente',
+      'motor_espelho.js nao foi carregado — a fachada nao faz conta nenhuma por '
+      + 'conta propria; carregue o espelho antes (globalThis.MotorEspelho).');
+  }
+
+  // `ponte.compor` (ponte.py:36-69), sem as `parcelas`: o laboratorio vive do
+  // escalar. Linha ausente ou nao finita vira recusa nomeada — do lado Python
+  // e' um KeyError de `ponte[rotulo]`, que aqui viraria `undefined` somado em
+  // silencio (NaN, ou pior, um numero plausivel).
+  function ndEfetivoDe(ponte) {
+    if (ponte === null || typeof ponte !== 'object') {
+      throw recusa('ponte_ausente',
+        'o caso declara uma rota com ponte mas nao traz o bloco "ponte".');
+    }
+    let ndEfetivo = 0.0;
+    for (const [rotulo, sinal] of SINAIS_DA_PONTE) {
+      const valor = ponte[rotulo];
+      if (!Number.isFinite(valor)) {
+        throw recusa('ponte_incompleta',
+          `linha de ponte "${rotulo}" ausente ou nao finita: ${JSON.stringify(valor)}.`);
+      }
+      ndEfetivo += valor * sinal;
+    }
+    return ndEfetivo;
+  }
+
+  // Chave do multiplo de REFERENCIA da rota — `avaliar.py:_chave_e_base_do_
+  // multiplo` (linhas 182-212), sem a `base` (rotulo curto, que so' o
+  // relatorio usa para parear tela x justo).
+  //
+  // CONFIRMADO POR EXECUCAO, nao presumido (o plano mandava verificar): o
+  // multiplo que `precificarCelula` devolve e' o da METRICA DECLARADA, e
+  // corresponde a chave `_curr` dela em `resultados.cenarios.<n>.multiplos` —
+  // 6.6906 = `EV/EBITDA_curr` na fixture `caso_reversa_firm` (rota firm,
+  // metrica EBITDA), 9.003 = `PL_curr` em `caso_minimo_equity`. As chaves
+  // `_fwd` (e a outra base da rota firm) sao numeros DIFERENTES, e
+  // `tests/test_espelho_fachada_js.py` prende a correspondencia exigindo que
+  // nenhuma outra chave de `multiplos` case com o valor publicado.
+  function chaveDoMultiplo(rota, tipoMetrica) {
+    if (rota === 'firm') {
+      return tipoMetrica === 'EBITDA' ? 'EV/EBITDA_curr' : 'EV/NOPAT_curr';
+    }
+    if (rota === 'rampa') return 'EV/EBITDA0';
+    if (rota === 'equity') return 'PL_curr';
+    throw recusa('rota_desconhecida',
+      `rota sem multiplo de referencia: ${JSON.stringify(rota)}.`);
+  }
+
+  // Um cenario recusado pelo espelho (premissa fora de dominio, `tv` null,
+  // nucleo nao finito) publica `null` nos dois numeros — o mesmo vocabulario
+  // de recusa do espelho, nunca um numero inventado. O comparador trata `null`
+  // contra um numero do Python como divergencia (falha fechada).
+  function cenarioRecusado(premissas, chave) {
+    return {
+      premissas,
+      valor: { preco_acao: null },
+      multiplo: { chave, valor: null },
+    };
+  }
+
+  // `caso["degrau"]` chega com proveniencia por campo ({valor, fonte, data});
+  // `precificarDegrau` (motor_espelho.js) quer os numeros CRUS, do jeito que
+  // `avaliar.py:precificar_degrau` (linhas 590-600) os extrai antes de montar
+  // o vetor do subcomando. `perfil_transicao` e `fx` seguem ausentes quando o
+  // caso nao os declara: o espelho aplica os mesmos defaults do motor
+  // ('rampa' e 1.0) — repo-los aqui seria decidir por ele.
+  function blocoDegrauCru(blocoDegrau) {
+    return {
+      indice_atual: blocoDegrau.indice_atual.valor,
+      indice_alvo: blocoDegrau.indice_alvo.valor,
+      anos: blocoDegrau.anos,
+      perfil_transicao: blocoDegrau.perfil_transicao,
+      vpa: blocoDegrau.vpa.valor,
+      fx: blocoDegrau.fx,
+    };
+  }
+
+  /**
+   * O subconjunto VIVO do `resultados.json`, recalculado do `caso`.
+   *
+   * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
+   * multiplo: {chave, valor}}}}`, mais `ponte: {nd_efetivo}` nas rotas que
+   * cruzam ponte (firm/rampa) — a rota equity nao publica o bloco, do mesmo
+   * jeito que `resultados.json` nao publica (L2: mesmas chaves).
+   *
+   * Um cenario por vez, pela MESMA rota que `avaliar()` percorre
+   * (`avaliar.py:881-934`):
+   * - firm  : `precificarCelula('firm', ...)` — ramo EBITDA (ponte feita pelo
+   *           motor) ou NOPAT (algebra do wrapper sobre o multiplo
+   *           arredondado); os dois vivem dentro do espelho, nao aqui.
+   * - equity: `precificarCelula('equity', ...)`, ou `precificarDegrau` quando
+   *           o caso declara o bloco `degrau` — que so' existe nesta rota
+   *           (`caso.py:_validar_degrau`, D2). Com degrau, o preco publicado
+   *           e' o COM degrau e o multiplo de referencia vira
+   *           `PVP_com_degrau` (o `com_transicao` do proprio degrau),
+   *           exatamente a troca que `_aplicar_degrau_ao_cenario` (linha 668)
+   *           e `_montar_manchete` (linhas 266-271) fazem do lado Python.
+   * - rampa : `precificarRampa` — composicao bifasica inteira dentro do motor.
+   */
+  function avaliarCaso(caso) {
+    const M = espelho();
+    const rota = caso.rota;
+    const metrica = { tipo: caso.metrica_base.tipo, valor: caso.metrica_base.valor };
+    const acoes = caso.acoes_diluidas;
+    const moeda = caso.moeda;
+    // `mercado` e' bloco opcional (`caso.py:_validar_mercado`) — sem ele, `rf`
+    // e' null, o mesmo que `avaliar.py:842` faz. `rf` chega em PONTO
+    // PERCENTUAL (12.0 = 12%), como todo o resto do caso; quem converte e' o
+    // espelho, nao esta fachada.
+    const rf = caso.mercado ? caso.mercado.rf : null;
+    const temPonte = ROTAS_COM_PONTE.has(rota);
+    const ndEfetivo = temPonte ? ndEfetivoDe(caso.ponte) : 0.0;
+    const chave = chaveDoMultiplo(rota, metrica.tipo);
+    const blocoDegrau = rota === 'equity' ? (caso.degrau || null) : null;
+
+    const cenarios = {};
+    for (const nome of Object.keys(caso.cenarios)) {
+      const premissas = caso.cenarios[nome].premissas;
+
+      if (rota === 'rampa') {
+        const r = M.precificarRampa({ premissas, ndEfetivo, acoes, moeda, rf });
+        cenarios[nome] = r.recusado ? cenarioRecusado(premissas, chave) : {
+          premissas,
+          valor: { preco_acao: r.valor.preco_acao },
+          multiplo: { chave, valor: r.multiplo },
+        };
+        continue;
+      }
+
+      if (blocoDegrau !== null) {
+        const r = M.precificarDegrau({
+          premissas,
+          metricaValor: metrica.valor,
+          acoes,
+          precoValor: caso.preco.valor,
+          blocoDegrau: blocoDegrauCru(blocoDegrau),
+          mValor: blocoDegrau.m[nome].valor,
+        });
+        cenarios[nome] = r.recusado ? cenarioRecusado(premissas, 'PVP_com_degrau') : {
+          premissas,
+          valor: { preco_acao: r.valor.preco_acao },
+          multiplo: { chave: 'PVP_com_degrau', valor: r.degrau.com_transicao },
+        };
+        continue;
+      }
+
+      const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
+      cenarios[nome] = {
+        premissas,
+        valor: { preco_acao: r.valor },
+        multiplo: { chave, valor: r.multiplo },
+      };
+    }
+
+    const vivo = { cenarios };
+    if (temPonte) vivo.ponte = { nd_efetivo: ndEfetivo };
+    return vivo;
+  }
+
+  function erroRelativo(python, js) {
+    if (!Number.isFinite(python) || !Number.isFinite(js)) return null;
+    return Math.abs(python - js) / Math.max(Math.abs(python), 1.0);
+  }
+
+  // Onde o `resultados` publica o multiplo que a fachada acabou de recalcular.
+  // Fora do degrau e' `cenario.multiplos[<chave>]` direto; com degrau,
+  // `PVP_com_degrau` nao mora em `multiplos` (que continua sendo o PL_curr/
+  // PL_fwd integros da perna P/L, `_aplicar_degrau_ao_cenario` linhas 663-667)
+  // — mora em `cenario.degrau.com_transicao`, que e' de onde
+  // `_montar_manchete` (linhas 266-271) tira o multiplo daquele preco.
+  function multiploPublicado(cenarioPython, chave) {
+    if (chave === 'PVP_com_degrau') {
+      return cenarioPython.degrau ? cenarioPython.degrau.com_transicao : undefined;
+    }
+    return cenarioPython.multiplos ? cenarioPython.multiplos[chave] : undefined;
+  }
+
+  function registrar(divergencias, cenario, chave, python, js) {
+    const erro = erroRelativo(python, js);
+    if (erro !== null && erro <= TAU) return;
+    divergencias.push({
+      cenario,
+      chave,
+      python: python === undefined ? null : python,
+      js: js === undefined ? null : js,
+      erro_relativo: erro,
+    });
+  }
+
+  /**
+   * O badge de paridade, como FATO: recomputa cada cenario do `caso` e compara
+   * com o `resultados` publicado, numero a numero, na tolerancia dos harnesses
+   * (TAU acima). Devolve `{ok, divergencias: [{cenario, chave, python, js,
+   * erro_relativo}]}`.
+   *
+   * Verde significa que o motor do browser reproduz o que o Python publicou NA
+   * MAQUINA DE QUEM ABRIU O ARQUIVO — a paridade de build ja' e' provada pelos
+   * harnesses da suite; este e' outro fato. Vermelho nomeia o cenario, a chave
+   * e os DOIS numeros: quem chama (o laboratorio) tem o suficiente para dizer
+   * onde divergiu e travar a edicao, em vez de mostrar ao analista um numero
+   * que o relatorio nao sustenta (L4).
+   *
+   * `erro_relativo: null` e' o caso incomparavel — a fachada recusou o cenario
+   * (premissa fora de dominio) ou o `resultados` nao traz numero ali. Falha
+   * FECHADA: entra como divergencia, nunca como "ok por ausencia".
+   *
+   * Contrato: um `resultados` cuja `versao_contrato` nao seja a que esta
+   * fachada le REPROVA com excecao nomeada antes de qualquer comparacao (L2) —
+   * uma v10 que troque a semantica de um campo tem de parar aqui, em voz alta,
+   * nao desenhar numero errado em silencio.
+   */
+  function compararComResultados(caso, resultados) {
+    const versao = (resultados === null || typeof resultados !== 'object')
+      ? undefined : resultados.versao_contrato;
+    if (versao !== VERSAO_CONTRATO) {
+      throw recusa('contrato_desconhecido',
+        `esta fachada le "${VERSAO_CONTRATO}"; o resultados declara `
+        + `${JSON.stringify(versao)}. Comparar contratos diferentes e' desenhar `
+        + 'numero errado em silencio.');
+    }
+
+    const vivo = avaliarCaso(caso);
+    const cenariosPython = resultados.cenarios || {};
+    const divergencias = [];
+
+    for (const nome of Object.keys(vivo.cenarios)) {
+      const js = vivo.cenarios[nome];
+      const py = cenariosPython[nome];
+      if (py === undefined || py === null) {
+        // Cenario que o caso declara e o `resultados` nao publica: nao ha' o
+        // que comparar, e seguir em silencio seria contar um cenario como
+        // "batendo" por ausencia de contraparte.
+        divergencias.push({
+          cenario: nome,
+          chave: 'cenario_ausente_no_resultados',
+          python: null,
+          js: js.valor.preco_acao,
+          erro_relativo: null,
+        });
+        continue;
+      }
+      registrar(divergencias, nome, 'valor.preco_acao',
+        py.valor ? py.valor.preco_acao : undefined, js.valor.preco_acao);
+      registrar(divergencias, nome, js.multiplo.chave,
+        multiploPublicado(py, js.multiplo.chave), js.multiplo.valor);
+    }
+
+    return { ok: divergencias.length === 0, divergencias };
+  }
+
+  // ---------------- exportacao: CommonJS (node) OU globalThis (browser) -----
+  // Mesma disciplina do espelho (FIX 1 da revisao final da 4A):
+  // `module.exports` incondicional estoura `ReferenceError: module is not
+  // defined` num <script> de browser — que e' o consumidor REAL desta fachada.
+  const publico = {
+    VERSAO_CONTRATO, avaliarCaso, compararComResultados,
+  };
+
+  if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {
+    module.exports = publico;
+  } else {
+    globalThis.FachadaEspelho = publico;
+  }
+}());
