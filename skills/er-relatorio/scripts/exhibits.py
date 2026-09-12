@@ -30,14 +30,23 @@ um pedaço pequeno e estável do que acoplar dois módulos em ciclo.
 `ContratoDeExhibitInvalido`, portanto, é a exceção PRÓPRIA deste módulo;
 `entrega.py` a captura e relança como `EntregaInvalida`.
 
-**Como uma série `derivada` sabe de qual dataset seus campos vêm** (G3 diz
-"sobre campos do MESMO dataset", sem repetir `fonte`): uma série `direta`
-nomeia o dataset explicitamente (`fonte = "<dataset>.<campo>"`); uma série
-`derivada` NÃO tem `fonte` — ela sempre calcula sobre o dataset de MESMO
-`id` que o próprio exhibit (`entrega["dados"][exhibit["id"]]`), a mesma
-reutilização do token `<id>` que G3 já usa para nomear a chave de
-`entrega.dados`. Uma série `engine` não usa dataset nenhum — lê
-`resultados` direto.
+**Como uma série `derivada` sabe de qual dataset seus campos vêm** (G3,
+corrigido em 11/09/2026 -- ver `docs/superpowers/plans/2026-09-11-v4-item5b-
+graficos.md`, decisão G3): a série DECLARA o dataset em `fonte`, simétrico
+à `direta` (`fonte = "<dataset>.<campo>"`) mas só o id do dataset, sem
+campo (`fonte = "<dataset>"`) -- a fórmula roda sobre os campos DESSE
+dataset. A primeira versão deste módulo inferia o dataset pelo `id` do
+próprio exhibit (`entrega["dados"][exhibit["id"]]`); essa convenção
+IMPLÍCITA foi removida sem fallback nenhum -- ela acoplava a identidade do
+gráfico à do dado e impedia dois exhibits de compartilharem um dataset
+(cada um exigiria sua própria cópia dos mesmos números, num artefato que um
+agente futuro escreve à mão). Declaração explícita vence convenção
+implícita, mesmo princípio já decidido no `cenario_base`. Três causas
+DISTINTAS de `serie_nao_rastreavel` para uma `derivada` (nunca um fallback,
+sempre nomeando qual das três ocorreu, ver `resolver_serie`): `fonte`
+ausente; `fonte` com ponto (a sintaxe de `direta`, usada por engano); ou
+`fonte` nomeando um dataset que não existe em `entrega.dados`. Uma série
+`engine` não usa dataset nenhum — lê `resultados` direto.
 
 **Rastreabilidade (G8):** cada série/overlay resolvido gera UMA entrada de
 log `{exhibit, serie, origem, detalhe}` — `serie` carrega o índice
@@ -85,7 +94,7 @@ CHAVES_DE_OVERLAY: frozenset = frozenset({"chave", "rotulo"})
 # opcional além do que já está listado aqui).
 _CHAVES_SERIE_POR_DERIVACAO: dict = {
     "direta": frozenset({"derivacao", "fonte"}),
-    "derivada": frozenset({"derivacao", "formula", "formula_nota"}),
+    "derivada": frozenset({"derivacao", "fonte", "formula", "formula_nota"}),
     "engine": frozenset({"derivacao", "chave"}),
 }
 
@@ -395,7 +404,16 @@ def resolver_serie(exhibit: dict, indice: int, serie: dict, dados: dict, resulta
     """Resolve a `indice`-ésima série de `exhibit["series"]` em número(s);
     devolve `(valores, entrada_de_log)`. Levanta `SerieInvalida`
     (`serie_nao_rastreavel`, `formula_invalida` ou
-    `serie_de_tamanho_incompativel`) quando não é possível."""
+    `serie_de_tamanho_incompativel`) quando não é possível.
+
+    `derivada` (G3 corrigido): `fonte` é sempre revalidada aqui, mesmo já
+    sendo chave obrigatória no contrato (código 1) -- este módulo é
+    chamado tanto pelo caminho de produção quanto pelo QC (que acumula
+    achado sobre entregas construídas direto em teste, sem passar por
+    `entrega.carregar`/`validar_exhibits`, ver `test_relatorio_exhibits.py`).
+    Três causas distintas de `serie_nao_rastreavel`, nunca um fallback:
+    `fonte` ausente, `fonte` com ponto (sintaxe de `direta`, usada por
+    engano) ou `fonte` nomeando um dataset que não existe."""
     exhibit_id = exhibit["id"]
     onde = f"analise.exhibits.{exhibit_id}.series.{indice}"
     derivacao = serie["derivacao"]
@@ -416,12 +434,24 @@ def resolver_serie(exhibit: dict, indice: int, serie: dict, dados: dict, resulta
 
     if derivacao == "derivada":
         formula = serie["formula"]
-        dataset = dados.get(exhibit_id) if isinstance(dados, dict) else None
+        fonte = serie.get("fonte")
+        if not isinstance(fonte, str) or not fonte.strip():
+            raise SerieInvalida("serie_nao_rastreavel", onde, {
+                "exhibit": exhibit_id, "serie": indice, "referencia": "(fonte ausente)",
+                "razao": "série 'derivada' sem 'fonte' -- o id do dataset é obrigatório (G3).",
+            })
+        if "." in fonte:
+            raise SerieInvalida("serie_nao_rastreavel", onde, {
+                "exhibit": exhibit_id, "serie": indice, "referencia": fonte,
+                "razao": (f"'fonte' de uma série 'derivada' é só o id do dataset, sem campo -- "
+                          f"'{fonte}' tem um '.' (essa é a sintaxe de 'direta')."),
+            })
+        dataset = dados.get(fonte) if isinstance(dados, dict) else None
         campos = dataset.get("campos") if isinstance(dataset, dict) else None
         if not isinstance(campos, dict):
             raise SerieInvalida("serie_nao_rastreavel", onde, {
-                "exhibit": exhibit_id, "serie": indice, "referencia": formula,
-                "razao": f"exhibit '{exhibit_id}' não tem dataset em entrega.dados para calcular a fórmula.",
+                "exhibit": exhibit_id, "serie": indice, "referencia": fonte,
+                "razao": f"'{fonte}' não é um dataset em entrega.dados.",
             })
         try:
             valores = avaliar_formula(formula, campos)
@@ -430,7 +460,8 @@ def resolver_serie(exhibit: dict, indice: int, serie: dict, dados: dict, resulta
                 "exhibit": exhibit_id, "serie": indice, "formula": formula, "razao": str(erro),
             }) from erro
         _checar_tamanho(valores, dataset, exhibit_id, indice, onde)
-        return valores, {"exhibit": exhibit_id, "serie": indice, "origem": "derivada", "detalhe": formula}
+        return valores, {"exhibit": exhibit_id, "serie": indice, "origem": "derivada",
+                          "detalhe": f"{fonte}: {formula}"}
 
     # derivacao == "engine" (única terceira opção -- validar_exhibits já
     # recusou qualquer outro valor no contrato, código 1, antes do QC rodar).

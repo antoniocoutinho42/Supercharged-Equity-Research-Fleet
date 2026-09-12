@@ -101,7 +101,8 @@ def test_serie_derivada_reproduz_a_margem_esperada():
                               {"receita": [100.0, 110.0, 120.0], "ebitda": [20.0, 22.0, 30.0]})}
     exhibit = {
         "id": "fin", "pergunta": "Como a margem EBITDA evoluiu?", "tipo": "linha",
-        "series": [{"derivacao": "derivada", "formula": "ebitda / receita", "formula_nota": "margem EBITDA"}],
+        "series": [{"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
+                    "formula_nota": "margem EBITDA"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
@@ -109,7 +110,44 @@ def test_serie_derivada_reproduz_a_margem_esperada():
 
     margem_esperada = [20.0 / 100.0, 22.0 / 110.0, 30.0 / 120.0]
     assert resolvidos[0]["series"][0]["valores"] == pytest.approx(margem_esperada)
-    assert log == [{"exhibit": "fin", "serie": 0, "origem": "derivada", "detalhe": "ebitda / receita"}]
+    assert log == [{"exhibit": "fin", "serie": 0, "origem": "derivada", "detalhe": "fin: ebitda / receita"}]
+
+
+def test_duas_series_derivadas_podem_ler_o_mesmo_dataset():
+    """G3 corrigido (11/09/2026): a série `derivada` DECLARA `fonte` -- o
+    acoplamento antigo (dataset inferido pelo `id` do exhibit) impedia dois
+    exhibits de compartilharem um dataset, já que cada um buscaria
+    `dados[<seu próprio id>]`. Aqui, dois exhibits com ids DIFERENTES
+    ('margem' e 'participacao_de_custos') leem o MESMO dataset ('fin') --
+    só passa com `fonte` declarada explicitamente; a inferência antiga
+    buscaria `dados['margem']`/`dados['participacao_de_custos']`, nenhum
+    dos dois existente, e teria recusado com `serie_nao_rastreavel`."""
+    dados = {"fin": _dataset(["2023", "2024", "2025"],
+                              {"receita": [100.0, 110.0, 120.0], "ebitda": [20.0, 22.0, 30.0]})}
+    exhibit_margem = {
+        "id": "margem", "pergunta": "Como a margem EBITDA evoluiu?", "tipo": "linha",
+        "series": [{"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
+                    "formula_nota": "margem EBITDA"}],
+    }
+    exhibit_custos = {
+        "id": "participacao_de_custos", "pergunta": "Qual a participação dos custos na receita?",
+        "tipo": "linha",
+        "series": [{"derivacao": "derivada", "fonte": "fin", "formula": "(receita - ebitda) / receita",
+                    "formula_nota": "participação de custos na receita"}],
+    }
+    entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit_margem, exhibit_custos])
+
+    resolvidos, log = exhibits.resolver(entrega_dict)
+
+    margem_esperada = [20.0 / 100.0, 22.0 / 110.0, 30.0 / 120.0]
+    custos_esperado = [0.8, 0.8, 0.75]
+    assert resolvidos[0]["series"][0]["valores"] == pytest.approx(margem_esperada)
+    assert resolvidos[1]["series"][0]["valores"] == pytest.approx(custos_esperado)
+    assert log == [
+        {"exhibit": "margem", "serie": 0, "origem": "derivada", "detalhe": "fin: ebitda / receita"},
+        {"exhibit": "participacao_de_custos", "serie": 0, "origem": "derivada",
+         "detalhe": "fin: (receita - ebitda) / receita"},
+    ]
 
 
 def test_serie_engine_le_caminho_real_de_resultados():
@@ -156,8 +194,8 @@ def test_formula_hostil_e_hard_fail():
     dados = {"fin": _dataset(list(range(12)), {"receita": [float(i) for i in range(12)]})}
     exhibit = {
         "id": "fin", "pergunta": "pergunta válida", "tipo": "linha",
-        "series": [{"derivacao": "derivada", "formula": "__import__('os').system('echo oi')",
-                    "formula_nota": "hostil"}],
+        "series": [{"derivacao": "derivada", "fonte": "fin",
+                    "formula": "__import__('os').system('echo oi')", "formula_nota": "hostil"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
@@ -166,6 +204,32 @@ def test_formula_hostil_e_hard_fail():
     achado = next(a for a in achados if a.codigo == "formula_invalida")
     assert achado.nivel == "HARD_FAIL"
     assert achado.params["exhibit"] == "fin"
+
+
+def test_serie_derivada_sem_fonte_e_hard_fail():
+    """G3 corrigido: sem fallback para o `id` do exhibit -- uma `derivada`
+    sem `fonte` é 'não rastreável', o mesmo código de uma `direta` cuja
+    fonte não resolve (`serie_nao_rastreavel`). Constrói a entrega direto
+    (sem passar por `entrega.carregar`, mesmo padrão dos testes de QC
+    acima) -- uma entrega assim nunca chegaria a este ponto pelo caminho
+    real (o contrato já recusaria a chave 'fonte' ausente, código 1), mas
+    `resolver_serie` precisa recusar por conta própria mesmo assim, porque
+    também é chamado por `qc.avaliar` sobre entregas que não passaram por
+    validação de contrato nenhuma."""
+    dados = {"fin": _dataset(list(range(12)), {"receita": [float(i) for i in range(12)]})}
+    exhibit = {
+        "id": "fin", "pergunta": "pergunta válida", "tipo": "linha",
+        "series": [{"derivacao": "derivada", "formula": "receita * 2", "formula_nota": "dobro"}],
+    }
+    entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
+
+    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+
+    achado = next(a for a in achados if a.codigo == "serie_nao_rastreavel")
+    assert achado.nivel == "HARD_FAIL"
+    assert achado.params["exhibit"] == "fin"
+    assert achado.params["serie"] == 0
+    assert achado.onde == "analise.exhibits.fin.series.0"
 
 
 def test_overlay_com_chave_inexistente_e_hard_fail():
