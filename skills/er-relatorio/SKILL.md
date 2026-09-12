@@ -6,10 +6,12 @@ description: >-
   placeholders auditáveis (`{{resultados:...}}`/`{{caso:...}}`/
   `{{livre:...}}`), o QC de três níveis (HARD FAIL, REQUIRED DISCLOSURE,
   QUALITY WARNING), as três abas (Tese/Valuation/Evidência, `render.py`) ou
+  a gramática de gráfico (`analise.exhibits[]` + `entrega.dados`) ou
   o CLI `builder.py` que emite `relatorio.html` + `qc.json` a partir de uma
-  raiz de execução — ou recusa, nomeando a razão. Item 5 do v4, fatia 5A
-  (contrato + QC + render das três abas) mais a onda de correção da revisão
-  final. NÃO use para o relatório de 2 abas em produção (esse é
+  raiz de execução — ou recusa, nomeando a razão. Item 5 do v4, fatias 5A
+  (contrato + QC + render das três abas) e 5B (exhibits, uPlot e os painéis
+  SVG da Valuation), com as ondas de correção das duas revisões finais.
+  NÃO use para o relatório de 2 abas em produção (esse é
   `er-relatorio-html`, v3); não use para rodar o valuation (`er-valuation`)
   nem para o workflow da análise (`er-analise`).
 ---
@@ -86,15 +88,19 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
   "execucao": {"id": "2026-09-11-001", "ticker": "SINT3", "idioma": "pt-BR"},
   "caso": {},
   "resultados": {},
-  "analise": {"conclusao": {"texto": "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."}},
+  "analise": {
+    "conclusao": {"texto": "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."},
+    "exhibits": []
+  },
   "ledger": [],
   "ficha_tecnica": {}
 }
 ```
 
 Vocabulário fechado em todo nível que este contrato define (topo,
-`execucao`, `analise`, `analise.conclusao`) — chave desconhecida é
-recusada pelo nome, com sugestão. `caso` e `resultados` são opacos: este
+`execucao`, `analise`, `analise.conclusao`, `analise.exhibits[]` e cada
+série/overlay, `dados.<id>`) — chave desconhecida é recusada pelo nome, com
+sugestão. `caso` e `resultados` são opacos: este
 módulo só confirma que são objetos e que `resultados.versao_contrato` é
 `"resultados/1"` — o conteúdo pertence ao contrato de `er-valuation`, nunca
 revalidado aqui. Exceção pontual: quando `caso` declara um `ticker`, ele
@@ -105,6 +111,13 @@ tipo confirmado nesta fatia (lista / objeto); a fatia 5D detalha o conteúdo
 dos dois. Produzir a entrega em produção é `er-analise` (item 8); nesta
 fatia, `tests/relatorio_apoio.py` monta raízes de teste rodando `avaliar()`
 de verdade sobre uma fixture de caso.
+
+**`analise.exhibits` é OBRIGATÓRIO** (fatia 5B): uma análise sem gráfico
+nenhum declara `[]` **em voz alta**, como o `cenario_base` já faz — nunca
+por omissão. Uma entrega sem essa chave sai com `RC=1` (`campo obrigatório
+ausente em 'analise': 'exhibits'`). `dados` é o único campo de topo
+OPCIONAL: uma análise cujos exhibits são todos `engine` (leem `resultados`
+direto) não precisa de dataset nenhum.
 
 ## Placeholders auditáveis (A7)
 
@@ -130,6 +143,59 @@ com_unidade` — uma premissa em `pp` só aceita `pp*`/`num*`, `moeda` só
 `_%` só aceita `pp*`, `upside` só `pct*`). Nunca uma exceção que derruba o
 processo, nunca um valor inventado.
 
+## A gramática de exhibits (`analise.exhibits[]` + `entrega.dados`)
+
+A §10 do desenho, como contrato. **Uma spec de exhibit nunca declara número
+nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
+
+```json
+"dados": {
+  "fin": {"ledger": [], "x": ["2021", "2022", "2023", "2024"],
+          "campos": {"receita": [100.0, 110.0, 120.0, 130.0],
+                     "ebitda": [20.0, 23.0, 27.0, 31.0]}}
+},
+"analise": {
+  "exhibits": [{
+    "id": "margem",
+    "pergunta": "Como a margem EBITDA evoluiu no período?",
+    "tipo": "linha",
+    "series": [
+      {"derivacao": "direta",   "fonte": "fin.receita"},
+      {"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
+       "formula_nota": "margem EBITDA"},
+      {"derivacao": "engine",   "chave": "resultados:manchete.preco_acao"}
+    ],
+    "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}],
+    "nota_janela": "só os últimos 4 anos têm dado comparável",
+    "caption": "fonte: demonstrações auditadas",
+    "vinculo": ["pergunta-2"]
+  }]
+}
+```
+
+| Nível | Chaves | Notas |
+|---|---|---|
+| `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` só tem o tipo confirmado nesta fatia (item 7 detalha) |
+| `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption`, `vinculo` opcionais | `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela` |
+| série `direta` | `derivacao`, `fonte` (`"<dataset>.<campo>"`) | o campo, verbatim; `null` é ponto ausente legítimo (travessão no gráfico) |
+| série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval` |
+| série `engine` | `derivacao`, `chave` (`"resultados:<caminho>"`) | tem de resolver num **número finito** ou lista deles |
+| overlay | `chave` (`"resultados:<caminho>"`/`"caso:<caminho>"`) obrigatória; `rotulo` opcional | linha horizontal: um único número finito |
+
+`waterfall` e `matriz` **não são tipos de exhibit** (são vocabulário
+reservado, `exhibits.TIPOS_PROPRIOS`): os dois existem como **painéis** da
+aba Valuation, alimentados direto por `resultados.ponte` e
+`resultados.sensibilidades.grades_2d` — a spec resolvida de um exhibit
+(`eixoX` + séries de números) não expressa `{rotulo, valor, sinal}` nem uma
+grade de dois eixos. Declarar `tipo: "waterfall"` é recusa de contrato
+(`RC=1`).
+
+Todo número desenhado é formatado pela **unidade que o contrato declara**
+(`catalogo.unidades`): a célula de uma matriz usa a `unidade` que o motor
+publica na grade, e cada eixo usa a `unidade` da premissa no catálogo. O
+relatório não decora casa decimal nenhuma — unidade fora do vocabulário do
+catálogo é HARD FAIL (`unidade_desconhecida`).
+
 ## QC de três níveis (A8)
 
 `HARD_FAIL` (não emite), `REQUIRED_DISCLOSURE` (visível no HTML),
@@ -145,8 +211,15 @@ processo, nunca um valor inventado.
 | `degrau_sem_divergencia_de_base` | HARD FAIL | cenário com `degrau` sem `divergencia_de_base_%` numérico |
 | `formato_incompativel_com_unidade` | HARD FAIL | formato de placeholder não bate com a unidade do valor |
 | `multiplos_com_bases_diferentes` | HARD FAIL | `manchete.multiplo.base` ≠ `mercado_tela.base` |
-| `relatorio_nao_autocontido` | HARD FAIL | referência (`src`/`href`/`srcset`/`data`/`url()`/`@import`) que não é `#fragmento` nem URI `data:` |
+| `unidade_desconhecida` | HARD FAIL | `unidade` de uma grade 2D fora de `catalogo.unidades` |
+| `serie_nao_rastreavel` | HARD FAIL | `fonte`/`chave` de série que não resolve, ou série `engine` que resolve em algo que não é número finito |
+| `formula_invalida` | HARD FAIL | fórmula fora da gramática fechada, nome fora do dataset, campos de comprimentos diferentes, `null`/não-finito num campo lido, divisão por zero |
+| `serie_de_tamanho_incompativel` | HARD FAIL | série com comprimento diferente do `x` do seu dataset |
+| `series_de_datasets_incompativeis` | HARD FAIL | duas séries do mesmo exhibit vindas de datasets cujo `x` difere |
+| `overlay_nao_resolvido` | HARD FAIL | `chave` de overlay que não resolve num número finito |
+| `relatorio_nao_autocontido` | HARD FAIL | referência (`src`/`href`/`srcset`/`data`/`url()`/`@import`) que não é `#fragmento` nem URI `data:`; ou, no miolo de um `<script>`, chamada de rede (`fetch`, `XMLHttpRequest`, `WebSocket`, `Worker`, `importScripts`, `EventSource`, `sendBeacon`) ou atribuição de `src`/`srcset`/`href` a um endereço externo |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | `\|divergencia_de_base_%\|` acima do limiar de `catalogo.disclosures.divergencia_de_base_degrau` |
+| `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 `params` substituídos) — nunca hardcoded (§16.1); o "porquê" metodológico de
@@ -157,27 +230,43 @@ mesmo quando o builder recusa emitir o HTML.
 
 ## As três abas (`render.py`)
 
-Tese (conclusão resolvida + disclosures obrigatórios), Valuation (preço
+Tese (conclusão resolvida + disclosures obrigatórios + a seção de exhibits),
+Valuation (preço
 justo, upside, múltiplo justo pareado com o de tela pela mesma base, rota e
-convenção terminal — do catálogo, nunca de `caso` cru — e preço por cenário
-quando houver mais de um; SOTP mostra só preço/upside, sem rota/convenção
+convenção terminal — do catálogo, nunca de `caso` cru — preço por cenário
+quando houver mais de um, e os painéis SVG: o waterfall da ponte e uma
+matriz por grade 2D, cujo título nomeia o cenário que a grade perturbou;
+SOTP mostra só preço/upside, sem rota/convenção
 única) e Evidência (metodologia, ficha técnica, log de resolução de
-placeholders). `assets/template.html` é a casca estática — CSS e JS
+placeholders e a rastreabilidade série a série dos exhibits).
+`assets/template.html` é a casca estática — CSS e JS
 100% inline, nenhum `src`/`href`/`url()`/`@import` que não seja
 `#fragmento` ou `data:`. Toda string de interface vem do dicionário
-(`t()`), todo rótulo de rota/convenção terminal/múltiplo vem do catálogo —
+(`t()`), todo rótulo de rota/convenção terminal/múltiplo/linha da
+ponte/premissa vem do catálogo —
 chave ausente é `ChaveDeInterfaceAusente`/`RotuloDoCatalogoAusente`,
-nomeada, nunca um código cru na tela.
+nomeada, nunca um código cru na tela; campo de `caso`/`resultados` que um
+painel desenha e não está lá é `CampoDeContratoAusente` (`RC=1`, nomeando o
+caminho), nunca um `KeyError` cru.
 
 ## Módulos
 
 | Arquivo | Responsabilidade |
 |---|---|
 | `scripts/entrega.py` | Contrato de `entrega.json`: carrega, valida, recusa; `sha256_canonico`; identidade de ticker |
-| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`) |
+| `scripts/exhibits.py` | Contrato de `analise.exhibits`/`entrega.dados`; avaliador fechado da fórmula (`ast`, nunca `eval`); resolve série/overlay em número e produz o log de rastreabilidade |
+| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
-| `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados |
+| `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados; embute o payload dos exhibits e dos painéis |
 | `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, decide o exit code |
+
+| Asset | Papel |
+|---|---|
+| `assets/template.html` | Casca estática das três abas + bootstrap que entrega o payload aos dois módulos JS |
+| `assets/graficos.js` | Adaptador fino sobre o uPlot: desenha os cinco cartesianos e a `tabela` a partir da spec já resolvida |
+| `assets/svg.js` | Os dois painéis NÃO-cartesianos (waterfall da ponte, matriz de sensibilidade) como string SVG pura |
+| `assets/uPlot.iife.min.js` / `.min.css` / `.LICENSE` | uPlot v1.6.27 vendorizado byte a byte, embutido só quando há exhibit |
+| `assets/i18n/<idioma>.json` | Toda string de interface e toda mensagem de QC |
 
 ## Metodologia
 

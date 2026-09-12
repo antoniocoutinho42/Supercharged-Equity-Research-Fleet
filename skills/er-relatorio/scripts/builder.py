@@ -194,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
                                 exhibits_resolvidos, log_exhibits)
     except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente,
-            render.CampoDeContratoAusente) as erro:
+            render.CampoDeContratoAusente, render.JsonNaoSerializavel) as erro:
         print(str(erro), file=sys.stderr)
         return 1
 

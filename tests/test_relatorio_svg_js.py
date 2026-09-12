@@ -39,6 +39,7 @@ ASSETS = RAIZ / "skills" / "er-relatorio" / "assets"
 SVG_JS = ASSETS / "svg.js"
 
 sys.path.insert(0, str(SCRIPTS))
+import exhibits as exhibits_mod  # noqa: E402
 import placeholders  # noqa: E402
 import qc  # noqa: E402
 import render  # noqa: E402
@@ -683,17 +684,43 @@ def test_toda_unidade_do_catalogo_tem_formato_que_o_relatorio_conhece():
         assert placeholders.especificacao_de_formato(info["formato"], "pt-BR", "BRL"), unidade
 
 
-def test_json_embutido_dos_paineis_nao_cria_chaves_duplas():
-    """O JSON dos painéis aninha objetos (`paineis_valuation.ponte.total`), e
-    `json.dumps` compacto fecharia dois objetos seguidos ('}}') -- um token
-    que `tests/test_relatorio_contrato.py::test_placeholder_quebrado_por_
-    quebra_de_linha_agora_resolve` varre a página inteira procurando (é
-    exatamente a mesma razão pela qual o uPlot minificado só entra quando há
-    exhibit). Ver `render._json_embutido`."""
-    pagina = _compor(FIXTURE)
+def test_prosa_da_pagina_com_paineis_nao_tem_placeholder_cru():
+    """B6 (achado F10): a Task 3 duplicou a armadilha -- este teste varria a
+    PÁGINA INTEIRA atrás de `{{`/`}}`, e uma página com exhibit tem 50 `}}`
+    vindos do uPlot minificado. O invariante é sobre a prosa que o relatório
+    escreveu; o escopo certo é a página com `<script>`/`<style>`
+    neutralizados (`apoio.prosa_da_pagina`), não uma lista de exclusão por
+    arquivo que envelhece a cada asset novo.
 
-    assert "{{" not in pagina
-    assert "}}" not in pagina
+    O `indent=2` de `render._json_embutido` continua valendo por outro
+    motivo (JSON legível e determinístico dentro da página), mas nenhuma
+    asserção depende mais dele para não tropeçar no bundle."""
+    prosa = apoio.prosa_da_pagina(_compor(FIXTURE))
+
+    assert "{{" not in prosa
+    assert "}}" not in prosa
+
+
+def test_varredura_de_prosa_ignora_o_bundle_mas_pega_o_corpo():
+    """Controle da correção acima, nos dois sentidos: a página COM exhibit
+    (uPlot embutido, dezenas de `}}` no bundle) passa; um placeholder cru na
+    PROSA continua sendo visto."""
+    dados = {"fin": {"ledger": [], "x": [1, 2, 3], "campos": {"receita": [1.0, 2.0, 3.0]}}}
+    exhibit = {"id": "fin", "pergunta": "pergunta válida", "tipo": "linha",
+               "nota_janela": "janela curta de propósito",
+               "series": [{"derivacao": "direta", "fonte": "fin.receita"}]}
+    entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
+    resolvidos, log_exhibits = exhibits_mod.resolver(entrega_dict)
+    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
+
+    pagina = render.compor(entrega_dict, CATALOGO, achados, [], "pt-BR", resolvidos, log_exhibits)
+
+    assert pagina.count("}}") > 10, "fixture sem bundle embutido — controle vacuamente verde?"
+    assert "}}" not in apoio.prosa_da_pagina(pagina)
+
+    with_cru = apoio.prosa_da_pagina(pagina.replace("<h1>", "<h1>{{resultados:x|num2}} "))
+    assert "{{" in with_cru and "}}" in with_cru
 
 
 @pytest.mark.parametrize("chave", [

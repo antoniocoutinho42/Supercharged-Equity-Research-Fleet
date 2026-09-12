@@ -13,6 +13,7 @@ governa o PRODUTO, não a suíte que o exercita).
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Callable
@@ -20,9 +21,32 @@ from typing import Callable
 RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 
+sys.path.insert(0, str(RAIZ / "skills" / "er-relatorio" / "scripts"))
+import qc  # noqa: E402
+
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
 from caso import carregar as carregar_caso  # noqa: E402
+
+_PADRAO_ESTILO_BLOCO = re.compile(r'(<style\b[^>]*>)(.*?)(</style\s*>)', re.IGNORECASE | re.DOTALL)
+
+
+def prosa_da_pagina(html_texto: str) -> str:
+    """A página com o MIOLO de todo `<script>`/`<style>` neutralizado — o
+    escopo certo para toda asserção sobre a PROSA que o relatório escreveu.
+
+    B6 (onda de correção da revisão final, achado F10): a regra de PRODUÇÃO
+    (`placeholder_malformado`) sempre esteve certa -- varre
+    `qc._campos_de_prosa`, nunca a página. Foram os TESTES que confundiram
+    "nenhum placeholder cru sobrou" com "nenhum `}}` na página": uma página
+    com exhibit tem 50 ocorrências de `}}`, todas do uPlot minificado, e no
+    dia em que a 5C/5D rodasse essas asserções sobre uma entrega com
+    gráfico elas ficariam vermelhas pelo bundle -- com o conserto natural
+    (enfraquecer a asserção) apagando a regra que importa. Escopo, não lista
+    de exclusão por arquivo: `qc._sem_conteudo_de_script` já existe e não
+    envelhece a cada asset novo."""
+    return _PADRAO_ESTILO_BLOCO.sub(
+        lambda m: m.group(1) + m.group(3), qc._sem_conteudo_de_script(html_texto))
 
 IDIOMA_PADRAO = "pt-BR"
 TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."

@@ -128,6 +128,34 @@ def test_html_com_dois_exhibits_contem_os_dois_hosts_e_o_json_resolvido():
     assert json.dumps(preco_base) in pagina
 
 
+def test_serie_direta_de_dois_datasets_leva_a_fonte_inteira_no_rotulo():
+    """B1 (achado F3, segunda metade): dois datasets com um campo de MESMO
+    NOME davam duas séries com o MESMO rótulo de legenda ('margem'), e o
+    leitor não conseguia distinguir qual era qual. Quando o exhibit toca
+    mais de um dataset, o rótulo é a `fonte` inteira."""
+    dados = {
+        "fin": _dataset(["2021", "2022", "2023", "2024"], {"margem": [0.20, 0.21, 0.22, 0.23]}),
+        "setor": _dataset(["2021", "2022", "2023", "2024"], {"margem": [0.31, 0.32, 0.33, 0.34]}),
+    }
+    exhibit = {
+        "id": "mix", "pergunta": "A margem acompanha o setor?", "tipo": "linha",
+        "nota_janela": "janela curta de teste -- só 4 pontos",
+        "series": [{"derivacao": "direta", "fonte": "fin.margem"},
+                   {"derivacao": "direta", "fonte": "setor.margem"}],
+    }
+    entrega_dict, achados, log, resolvidos, log_exhibits = _preparar_com_exhibits(
+        [exhibit], dados=dados)
+
+    spec = render._exhibit_para_json(resolvidos[0], entrega_dict["dados"])
+
+    assert [s["rotulo"] for s in spec["series"]] == ["fin.margem", "setor.margem"]
+
+    # Com UM dataset só, o rótulo curto (nome do campo) continua valendo.
+    _e, _a, _l, resolvidos_um, _le = _preparar_com_exhibits([EXHIBIT_LINHA], dados=DADOS_RECEITA)
+    spec_um = render._exhibit_para_json(resolvidos_um[0], DADOS_RECEITA)
+    assert [s["rotulo"] for s in spec_um["series"]] == ["receita"]
+
+
 def test_pergunta_e_nota_de_janela_aparecem_na_secao_de_exhibits_da_tese():
     entrega_dict, achados, log, exhibits_resolvidos, log_exhibits = _preparar_com_exhibits(
         [EXHIBIT_LINHA], dados=DADOS_RECEITA)

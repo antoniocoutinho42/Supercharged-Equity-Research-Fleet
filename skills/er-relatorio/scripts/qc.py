@@ -603,6 +603,18 @@ def _achados_unidade_desconhecida(resultados: dict, catalogo: dict) -> list[Acha
     return achados
 
 
+def _achados_datasets_do_exhibit(exhibit: dict, dados: dict) -> list[Achado]:
+    """B1 (achado F3): `series_de_datasets_incompativeis` (HARD FAIL) --
+    a única regra de exhibit que olha as séries ENTRE SI, em vez de cada uma
+    contra o seu próprio dataset. A causa mora em `exhibits.checar_datasets_
+    do_exhibit`; aqui só se nomeia o achado, como no resto deste módulo."""
+    try:
+        exhibits.checar_datasets_do_exhibit(exhibit, dados)
+    except exhibits.SerieInvalida as erro:
+        return [Achado("HARD_FAIL", "series_de_datasets_incompativeis", erro.onde, erro.params)]
+    return []
+
+
 def _achados_exhibits(entrega: dict) -> list[Achado]:
     """As quatro regras HARD FAIL de rastreabilidade de exhibits (5B/G1-G4)
     mais a QUALITY WARNING de série curta (5B, "Regras de QC") -- uma
@@ -626,6 +638,7 @@ def _achados_exhibits(entrega: dict) -> list[Achado]:
     caso = entrega.get("caso") or {}
 
     for exhibit in exhibits_decl:
+        achados.extend(_achados_datasets_do_exhibit(exhibit, dados))
         tamanhos_resolvidos: list[int] = []
 
         for indice, serie in enumerate(exhibit.get("series", [])):

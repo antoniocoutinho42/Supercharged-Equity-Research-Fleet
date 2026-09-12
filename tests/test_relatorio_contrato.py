@@ -62,6 +62,15 @@ def codigos_de(qc_json: dict) -> set:
     (6.6906, "x2", "6,69x"),
     (-1234.5, "num2", "-1.234,50"),
     (0.0, "num2", "0,00"),
+    # B4 (onda de correção da revisão final, achado F8): 'pp' é o formato de
+    # um valor JÁ em pontos percentuais -- 10.0 é dez por cento, nunca mil.
+    # O achado estava aberto desde a 5A: com `pp` multiplicando por 100, 68
+    # testes seguiam verdes, porque nenhum afirmava a STRING que `pp`
+    # produz. Estes três são a asserção direta que faltava.
+    (10.0, "pp1", "10,0%"),
+    (10.0, "pp0", "10%"),
+    (16.428571428571427, "pp2", "16,43%"),
+    (-2.5, "pp1", "-2,5%"),
 ])
 def test_formatacao_pt_br(valor, formato, esperado):
     assert placeholders.formatar(valor, formato, "pt-BR") == esperado
@@ -258,7 +267,10 @@ def test_placeholder_quebrado_por_quebra_de_linha_agora_resolve(tmp_path):
     qc_json = ler_qc(raiz)
     assert qc_json["achados"] == []
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
-    assert "{{" not in html and "}}" not in html
+    # B6 (achado F10): o invariante é sobre a PROSA que o relatório
+    # escreveu, não sobre a página -- ver `apoio.prosa_da_pagina`.
+    prosa = apoio.prosa_da_pagina(html)
+    assert "{{" not in prosa and "}}" not in prosa
     assert "R$ 61,91" in html
 
 
@@ -519,7 +531,12 @@ def test_formato_pct_em_premissa_pp_falha(tmp_path):
 
 def test_formato_pp_em_premissa_pp_emite(tmp_path):
     """Controle: o formato correto ('pp1') para a mesma premissa emite
-    normalmente -- a checagem não é falso positivo no caminho feliz."""
+    normalmente -- a checagem não é falso positivo no caminho feliz.
+
+    B4 (achado F8): este teste afirmava só `rc == 0` e `achados == []`, e
+    por isso ficava VERDE com `pp` multiplicando por 100 -- nunca lia a
+    string renderizada. Agora afirma o TEXTO que o analista lê: um WACC de
+    10 pontos percentuais imprime "10,0%", não "1.000,0%"."""
     texto = "WACC de {{caso:cenarios.base.premissas.wacc|pp1}} no cenário-base."
     entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", texto_conclusao=texto)
     raiz = tmp_path / "formato_pp_ok"
@@ -529,6 +546,10 @@ def test_formato_pp_em_premissa_pp_emite(tmp_path):
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert ler_qc(raiz)["achados"] == []
+    wacc = entrega_dict["caso"]["cenarios"]["base"]["premissas"]["wacc"]
+    html = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    assert f"WACC de {placeholders.formatar(wacc, 'pp1', 'pt-BR')} no cenário-base." in html
+    assert "WACC de 10,0% no cenário-base." in html
 
 
 def test_formato_num_em_resultados_percentual_falha(tmp_path):
@@ -704,3 +725,167 @@ def test_idioma_sem_dicionario_falha(tmp_path):
     assert resultado.returncode == 1, resultado.stdout + resultado.stderr
     assert not (raiz / "qc.json").exists()
     assert "idioma" in resultado.stderr
+
+
+# --------------------------------------------------------------------------
+# B3 (onda de correção da revisão final, achado F6): quatro caminhos de
+# CRASH CRU -- traceback, rc 1 e nenhum `qc.json` -- todos a partir de
+# entrada que o contrato ACEITA, e todos contradizendo o que o docstring de
+# `builder.py` promete para o código 1 ("a razão sai em stderr, nomeando o
+# campo/chave"). Aqui, pelo CLI de verdade, como a revisão os provou.
+# --------------------------------------------------------------------------
+
+def _dataset(x, campos):
+    return {"ledger": [], "x": x, "campos": campos}
+
+
+def _exhibit_derivado(formula="a + b"):
+    return {
+        "id": "d", "pergunta": "pergunta válida", "tipo": "linha",
+        "nota_janela": "janela curta de propósito",
+        "series": [{"derivacao": "derivada", "fonte": "fin", "formula": formula,
+                    "formula_nota": "soma"}],
+    }
+
+
+def test_formula_sobre_campos_de_comprimentos_diferentes_recusa_nomeada(tmp_path):
+    """(a) `tamanho` saía do PRIMEIRO campo em ordem alfabética:
+    `IndexError: list index out of range`, rc 1, sem `qc.json`."""
+    dados = {"fin": _dataset([1, 2, 3], {"a": [1.0, 2.0, 3.0], "b": [1.0]})}
+    entrega_dict = apoio.montar_entrega(
+        "caso_reversa_firm.json", dados=dados, exhibits=[_exhibit_derivado()])
+    raiz = tmp_path / "formula_campos_desiguais"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    assert "formula_invalida" in codigos_de(ler_qc(raiz))
+    assert not (raiz / "relatorio.html").exists()
+
+
+def test_null_em_campo_lido_pela_formula_recusa_nomeada(tmp_path):
+    """(b) o mais provável e o mais feio: `float(None)` -> `TypeError`, rc 1,
+    sem `qc.json`. `null` é documentado como "o jeito natural de um dataset
+    marcar ponto ausente" e a série `direta` o trata com elegância."""
+    dados = {"fin": _dataset([1, 2, 3], {"a": [1.0, None, 3.0], "b": [1.0, 2.0, 3.0]})}
+    entrega_dict = apoio.montar_entrega(
+        "caso_reversa_firm.json", dados=dados, exhibits=[_exhibit_derivado()])
+    raiz = tmp_path / "formula_com_null"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    assert "formula_invalida" in codigos_de(ler_qc(raiz))
+
+
+def test_nan_em_dataset_recusa_nomeada(tmp_path):
+    """(c) `json.loads` aceita o literal `NaN`; `json.dumps(allow_nan=False)`
+    do `_json_embutido` estourava `ValueError` do `json.encoder` -- a defesa
+    em profundidade estava certa, a exceção é que não era NOMEADA."""
+    dados = {"fin": _dataset([1, 2, 3], {"receita": [1.0, float("nan"), 3.0]})}
+    exhibit = {
+        "id": "fin", "pergunta": "pergunta válida", "tipo": "linha",
+        "nota_janela": "janela curta de propósito",
+        "series": [{"derivacao": "direta", "fonte": "fin.receita"}],
+    }
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json", dados=dados, exhibits=[exhibit])
+    raiz = tmp_path / "dataset_com_nan"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 1, resultado.stdout + resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    assert "JSON" in resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+
+
+def test_contrato_do_motor_renomeado_recusa_nomeada(tmp_path):
+    """(d) um v10 que renomeie `resultados.ponte.nd_efetivo`: `KeyError:
+    'nd_efetivo'` com traceback, rc 1 e nenhuma menção ao campo. Agora a
+    recusa NOMEIA o caminho."""
+    entrega_dict = apoio.montar_entrega("caso_reversa_firm.json")
+    entrega_dict["resultados"]["ponte"]["nd_efetivo_v10"] = \
+        entrega_dict["resultados"]["ponte"].pop("nd_efetivo")
+    raiz = tmp_path / "ponte_renomeada"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 1, resultado.stdout + resultado.stderr
+    assert "Traceback" not in resultado.stderr
+    assert "resultados.ponte" in resultado.stderr
+    assert "nd_efetivo" in resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+
+
+# --------------------------------------------------------------------------
+# B5 (onda de correção da revisão final, achado F9): o `SKILL.md` documentava
+# um `entrega/1` que o builder RECUSA -- o exemplo não tinha
+# `analise.exhibits`, que a Task 1 tornou obrigatório, e a entrega
+# exatamente como documentada saía com `RC=1`. Quem produz a entrega em
+# produção é `er-analise` (item 8), um agente que lê esse arquivo: "chave
+# documentada só no plano e no código" é a classe de bug que já produziu o
+# F3 da fatia D. Os dois exemplos do SKILL.md passam a ser EXECUTADOS.
+# --------------------------------------------------------------------------
+
+SKILL_MD = SCRIPTS.parent / "SKILL.md"
+
+
+def _bloco_json_do_skill(indice: int) -> dict:
+    """O `indice`-ésimo bloco ```json do SKILL.md, como dict. O bloco da
+    gramática de exhibits é um FRAGMENTO (chaves de topo soltas), então é
+    envolvido em chaves antes de parsear."""
+    texto = SKILL_MD.read_text(encoding="utf-8")
+    blocos = [b.split("```", 1)[0] for b in texto.split("```json\n")[1:]]
+    bruto = blocos[indice].strip()
+    return json.loads(bruto if bruto.startswith("{") else "{" + bruto + "}")
+
+
+def test_exemplo_de_entrega_do_skill_md_emite(tmp_path):
+    """O exemplo do contrato, verbatim, com `caso`/`resultados` de uma
+    fixture real no lugar dos `{}` (o SKILL.md os documenta como opacos)."""
+    exemplo = _bloco_json_do_skill(0)
+    real = apoio.montar_entrega("caso_reversa_firm.json")
+    exemplo["caso"], exemplo["resultados"] = real["caso"], real["resultados"]
+    exemplo["execucao"]["ticker"] = real["execucao"]["ticker"]
+    raiz = tmp_path / "exemplo_do_skill"
+    apoio.escrever_raiz(raiz, exemplo)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert (raiz / "relatorio.html").exists()
+    assert ler_qc(raiz)["achados"] == []
+
+
+def test_exemplo_da_gramatica_de_exhibits_do_skill_md_emite(tmp_path):
+    """O segundo exemplo (dataset + exhibit com as três proveniências e um
+    overlay), montado sobre a mesma entrega válida."""
+    fragmento = _bloco_json_do_skill(1)
+    entrega_dict = apoio.montar_entrega(
+        "caso_reversa_firm.json",
+        dados=fragmento["dados"], exhibits=fragmento["analise"]["exhibits"])
+    raiz = tmp_path / "exemplo_de_exhibits"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert ler_qc(raiz)["achados"] == []
+    html = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    assert fragmento["analise"]["exhibits"][0]["pergunta"] in html
+
+
+def test_tabela_de_qc_do_skill_md_cobre_todo_codigo_emitido():
+    """Nenhum código de QC que `qc.py` de fato constrói pode ficar fora da
+    tabela do SKILL.md -- é ali que `er-analise` descobre o que o builder
+    recusa."""
+    texto = SKILL_MD.read_text(encoding="utf-8")
+    codigos = set(placeholders.carregar_dicionario("pt-BR")["qc"])
+    faltando = {codigo for codigo in codigos if f"`{codigo}`" not in texto}
+    assert not faltando, faltando

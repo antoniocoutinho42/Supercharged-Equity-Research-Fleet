@@ -70,8 +70,23 @@ import placeholders
 # --------------------------------------------------------------------------
 
 TIPOS_CARTESIANOS: frozenset = frozenset({"linha", "barras", "area", "empilhado", "dispersao"})
+
+# RESERVADO, fora do enum aceito (B7, onda de correção da revisão final,
+# achado F11): os dois gráficos NÃO-cartesianos existem como PAINÉIS da aba
+# Valuation (`render._paineis_valuation_para_json` + `assets/svg.js`),
+# alimentados direto por `resultados.ponte`/`sensibilidades.grades_2d` --
+# nunca como exhibit declarado. A spec resolvida de um exhibit é `eixoX +
+# séries de números` (`render._exhibit_para_json`), que genuinamente não
+# expressa `{rotulo, valor, sinal}` nem uma grade com dois eixos de
+# premissa: até esta correção, um exhibit `tipo: "waterfall"` saía com rc 0,
+# QC limpo, e caía no fallback textual no browser. Mesma decisão que o plano
+# já tomou para `decomposicao` -- "construir para consumidor inexistente é o
+# erro que o `degrau` já ensinou a evitar". O nome fica declarado aqui (é
+# vocabulário reservado do desenho, §10) para quando existir uma forma de
+# série que os expresse.
 TIPOS_PROPRIOS: frozenset = frozenset({"waterfall", "matriz"})
-TIPOS: frozenset = TIPOS_CARTESIANOS | TIPOS_PROPRIOS | frozenset({"tabela"})
+
+TIPOS: frozenset = TIPOS_CARTESIANOS | frozenset({"tabela"})
 
 # G3 — as três formas de proveniência de uma série; nenhuma outra existe.
 DERIVACOES: frozenset = frozenset({"direta", "derivada", "engine"})
@@ -342,6 +357,48 @@ def _avaliar_no(no: ast.AST, ambiente: dict) -> float:
     raise FormulaInvalida(f"nó não suportado na fórmula: {type(no).__name__}.")  # pragma: no cover
 
 
+def _exigir_campos_paralelos_e_numericos(expr: str, campos: dict, nomes_usados: list[str]) -> None:
+    """B3 (onda de correção da revisão final, achado F6, casos a e b): os
+    campos que a fórmula REFERENCIA têm de ser paralelos (mesmo
+    comprimento) e conter só número finito. Sem isto, duas entradas que o
+    contrato aceita derrubavam o builder com traceback cru e rc 1, sem
+    `qc.json` nenhum -- contradizendo o que o docstring de `builder.py`
+    promete para o código 1:
+
+    - comprimentos diferentes: `tamanho` saía do PRIMEIRO campo em ordem
+      alfabética e o acesso ao índice estourava `IndexError` no campo mais
+      curto;
+    - `null` num campo lido pela fórmula: `float(None)` -> `TypeError`.
+
+    O segundo é o mais provável e o mais feio: o cabeçalho de `graficos.js`
+    documenta `null` como "o jeito natural de um dataset marcar ponto
+    ausente", e uma série `direta` com `null` emite normalmente (travessão
+    no gráfico, rc 0) -- só a `derivada` estourava. A assimetria de
+    COMPORTAMENTO continua (a `direta` tolera, a `derivada` recusa: uma
+    fórmula sobre ausência não tem resultado defensável), mas agora a
+    `derivada` recusa PELO NOME (`formula_invalida`, HARD FAIL, código de QC
+    que já existia), com `qc.json` emitido, em vez de derrubar o processo.
+    """
+    if not nomes_usados:
+        return
+    tamanhos = {nome: len(campos[nome]) for nome in nomes_usados}
+    if len(set(tamanhos.values())) > 1:
+        detalhe = ", ".join(f"'{nome}' ({tamanhos[nome]})" for nome in nomes_usados)
+        raise FormulaInvalida(
+            f"campos de comprimentos diferentes na fórmula '{expr}': {detalhe} — "
+            "uma fórmula só pode combinar campos paralelos do mesmo dataset."
+        )
+    for nome in nomes_usados:
+        for indice, valor in enumerate(campos[nome]):
+            if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not math.isfinite(valor):
+                raise FormulaInvalida(
+                    f"campo '{nome}' tem valor não numérico/não finito no índice {indice} "
+                    f"({valor!r}) e a fórmula '{expr}' o referencia — um ponto ausente "
+                    "('null') é legítimo numa série 'direta' (vira travessão no gráfico), "
+                    "nunca numa fórmula."
+                )
+
+
 def avaliar_formula(expr: str, campos: dict) -> list[float]:
     """Avalia `expr` (gramática fechada acima) uma vez por índice dos
     campos referenciados, devolvendo a lista de resultados. `campos`: dict
@@ -351,8 +408,10 @@ def avaliar_formula(expr: str, campos: dict) -> list[float]:
 
     Levanta `FormulaInvalida` para: sintaxe fora da gramática fechada
     (inclusive qualquer coisa que não seja uma única expressão), nó fora do
-    whitelist, nome fora dos campos do dataset, ou resultado não finito
-    (`nan`/`inf`, inclusive divisão por zero) em qualquer índice.
+    whitelist, nome fora dos campos do dataset, campos referenciados de
+    comprimentos diferentes ou com elemento não numérico/não finito (B3,
+    achado F6 -- ver `_exigir_campos_paralelos_e_numericos`), ou resultado
+    não finito (`nan`/`inf`, inclusive divisão por zero) em qualquer índice.
     """
     if not isinstance(expr, str) or not expr.strip():
         raise FormulaInvalida(f"fórmula ausente ou vazia: {expr!r}.")
@@ -367,6 +426,8 @@ def avaliar_formula(expr: str, campos: dict) -> list[float]:
     for nome in nomes_usados:
         if not isinstance(campos, dict) or nome not in campos or not isinstance(campos[nome], list):
             raise FormulaInvalida(f"nome fora dos campos do dataset: '{nome}' (fórmula '{expr}').")
+
+    _exigir_campos_paralelos_e_numericos(expr, campos, nomes_usados)
 
     tamanho = len(campos[nomes_usados[0]]) if nomes_usados else 1
     resultado: list[float] = []
@@ -398,6 +459,74 @@ def _checar_tamanho(valores: Any, dataset: dict, exhibit_id: str, indice: int, o
             "exhibit": exhibit_id, "serie": indice,
             "tamanho_serie": len(valores), "tamanho_x": len(x),
         })
+
+
+def _e_numero_finito(valor: Any) -> bool:
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor)
+
+
+def _dataset_id_da_serie(serie: dict) -> str | None:
+    """O id do dataset que uma série `direta`/`derivada` referencia (`None`
+    para `engine`, que não usa dataset). Não valida nada: só extrai."""
+    derivacao = serie.get("derivacao")
+    fonte = serie.get("fonte")
+    if not isinstance(fonte, str) or not fonte.strip():
+        return None
+    if derivacao == "direta":
+        return fonte.partition(".")[0]
+    if derivacao == "derivada":
+        return fonte
+    return None
+
+
+def datasets_do_exhibit(exhibit: dict, dados: dict) -> list[str]:
+    """Ids de dataset que as séries de `exhibit` referenciam, na ordem de
+    primeira aparição e sem repetição -- o que `render.py` usa para decidir
+    se um rótulo de série precisa do id do dataset para desambiguar (B1b)."""
+    vistos: list[str] = []
+    for serie in exhibit.get("series") or []:
+        dataset_id = _dataset_id_da_serie(serie)
+        if dataset_id is not None and dataset_id in (dados or {}) and dataset_id not in vistos:
+            vistos.append(dataset_id)
+    return vistos
+
+
+def checar_datasets_do_exhibit(exhibit: dict, dados: dict) -> None:
+    """`series_de_datasets_incompativeis` (HARD FAIL) -- B1 (achado F3): duas
+    séries do MESMO exhibit não podem vir de datasets cujo `x` difere.
+
+    `serie_de_tamanho_incompativel` compara cada série com o `x` DO SEU
+    PRÓPRIO dataset, nunca as séries entre si: um exhibit com uma série de
+    `fin` (x = anos 2021..2024) e outra de `peers` (x = ALFA..DELTA, mesmo
+    comprimento) era perfeitamente "rastreável" pela regra e saía com rc 0 e
+    `achados: []` -- com as margens dos PARES plotadas contra os ANOS, e as
+    duas séries com o mesmo rótulo de legenda. Um gráfico assim não é um
+    gráfico degradado: é um gráfico errado, emitido em silêncio.
+
+    Compara o `x` de cada dataset com o do PRIMEIRO referenciado (a lista é
+    pequena e a mensagem nomeia os dois lados). Dataset ausente/sem `x` não
+    é assunto desta regra -- `serie_nao_rastreavel` já cobre."""
+    ids = datasets_do_exhibit(exhibit, dados)
+    if len(ids) < 2:
+        return
+    primeiro = ids[0]
+    x_primeiro = (dados[primeiro] or {}).get("x")
+    for outro in ids[1:]:
+        x_outro = (dados[outro] or {}).get("x")
+        if x_outro != x_primeiro:
+            exhibit_id = exhibit["id"]
+            raise SerieInvalida("series_de_datasets_incompativeis", f"analise.exhibits.{exhibit_id}", {
+                "exhibit": exhibit_id, "dataset_a": primeiro, "dataset_b": outro,
+                "x_a": _resumo_de_eixo(x_primeiro), "x_b": _resumo_de_eixo(x_outro),
+            })
+
+
+def _resumo_de_eixo(x: Any) -> str:
+    if not isinstance(x, list):
+        return repr(x)
+    if len(x) <= 4:
+        return repr(x)
+    return f"[{x[0]!r}, ..., {x[-1]!r}] ({len(x)} pontos)"
 
 
 def resolver_serie(exhibit: dict, indice: int, serie: dict, dados: dict, resultados: dict) -> tuple[Any, dict]:
@@ -479,6 +608,21 @@ def resolver_serie(exhibit: dict, indice: int, serie: dict, dados: dict, resulta
         raise SerieInvalida("serie_nao_rastreavel", onde, {
             "exhibit": exhibit_id, "serie": indice, "referencia": chave, "razao": str(erro),
         }) from erro
+
+    # B2 (achado F5): uma série é NÚMERO, sempre -- a mesma checagem que
+    # `resolver_overlay` já fazia e que faltava só aqui. Antes desta
+    # correção o ramo `engine` devolvia o que viesse: um dict do motor
+    # inteiro (`resultados:origem.metodologia`) ou um texto
+    # (`resultados:rota`) entravam no payload como série, rc 0 e QC limpo,
+    # e o exhibit caía no fallback textual no browser -- degradava, em vez
+    # de dizer "não rastreável", que é o que o contrato manda.
+    if not (_e_numero_finito(valor)
+            or (isinstance(valor, list) and all(_e_numero_finito(v) for v in valor))):
+        raise SerieInvalida("serie_nao_rastreavel", onde, {
+            "exhibit": exhibit_id, "serie": indice, "referencia": chave,
+            "razao": (f"valor não numérico/finito: {valor!r} — uma série 'engine' tem de "
+                      "resolver num número finito ou numa lista de números finitos."),
+        })
     return valor, {"exhibit": exhibit_id, "serie": indice, "origem": "engine", "detalhe": chave}
 
 
@@ -536,6 +680,7 @@ def resolver(entrega: dict) -> tuple[list[dict], list[dict]]:
     log: list[dict] = []
 
     for exhibit in exhibits_decl:
+        checar_datasets_do_exhibit(exhibit, dados)
         series_resolvidas = []
         for indice, serie in enumerate(exhibit.get("series", [])):
             valores, entrada = resolver_serie(exhibit, indice, serie, dados, resultados)

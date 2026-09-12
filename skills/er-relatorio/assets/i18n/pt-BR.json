@@ -15,6 +15,7 @@
     "formula_invalida": "Fórmula inválida em '{onde}' (exhibit '{exhibit}', série {serie}): '{formula}' — {razao}",
     "overlay_nao_resolvido": "Overlay não resolvido em '{onde}' (exhibit '{exhibit}', overlay {overlay}): '{chave}' não resolve — {razao}",
     "serie_de_tamanho_incompativel": "Série de tamanho incompatível em '{onde}' (exhibit '{exhibit}', série {serie}): {tamanho_serie} ponto(s) contra {tamanho_x} ponto(s) do eixo x do dataset.",
+    "series_de_datasets_incompativeis": "Séries de datasets incompatíveis em '{onde}' (exhibit '{exhibit}'): '{dataset_a}' tem eixo x {x_a} e '{dataset_b}' tem {x_b} — um exhibit desenha todas as suas séries contra UM eixo x, então séries de datasets com eixos diferentes sairiam plotadas contra o eixo do primeiro. Separe em dois exhibits.",
     "serie_curta_sem_nota_janela": "Série curta sem nota de janela em '{onde}' (exhibit '{exhibit}'): {tamanho} ponto(s) — menos de 10, sem 'nota_janela' explicando o recorte."
   },
   "moeda_simbolo": {

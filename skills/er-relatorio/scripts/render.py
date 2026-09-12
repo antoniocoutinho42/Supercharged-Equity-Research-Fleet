@@ -52,6 +52,13 @@ class ChaveDeInterfaceAusente(Exception):
     substituto silencioso."""
 
 
+class JsonNaoSerializavel(Exception):
+    """O payload que iria para dentro do `<script type="application/json">`
+    tem um valor que não vira JSON válido para o browser (`NaN`/`Infinity`
+    num dataset, por exemplo) — recusa NOMEADA, nunca a `ValueError` crua do
+    `json.encoder` com traceback (B3, achado F6)."""
+
+
 class CampoDeContratoAusente(Exception):
     """Um campo que os painéis da Valuation LEEM do contrato já validado
     (`caso`/`resultados`) não está lá — recusa NOMEADA, com o caminho
@@ -241,8 +248,21 @@ def _json_embutido(dados: Any) -> str:
     minificado só é embutido quando há exhibit). O payload dos painéis da
     Valuation aninha objetos (`paineis_valuation.ponte.total`), então o
     formato compacto passaria a produzir esse par. Indentar separa todo
-    fechamento por uma quebra de linha, sem mudar o JSON que o browser lê."""
-    bruto = json.dumps(dados, ensure_ascii=False, allow_nan=False, indent=2)
+    fechamento por uma quebra de linha, sem mudar o JSON que o browser lê.
+
+    B3 (achado F6, caso c): a defesa em profundidade acima estava certa, mas
+    a exceção NÃO ERA NOMEADA -- era a do `json.encoder`, que ninguém
+    capturava: um `NaN` num campo de dataset (o literal que `json.loads`
+    aceita) derrubava o builder com traceback cru, rc 1 e nenhum `qc.json`.
+    Agora vira `JsonNaoSerializavel`, que `builder.py` captura junto das
+    outras recusas nomeadas."""
+    try:
+        bruto = json.dumps(dados, ensure_ascii=False, allow_nan=False, indent=2)
+    except ValueError as erro:
+        raise JsonNaoSerializavel(
+            f"o payload embutido tem um valor que não vira JSON válido: {erro}. "
+            "Um dataset com NaN/Infinity quebraria o JSON.parse do browser."
+        ) from erro
     return bruto.replace("</", "<\\/")
 
 
@@ -296,6 +316,23 @@ def _dataset_da_serie(serie: dict, dados: dict) -> dict | None:
     return dados.get(dataset_id)
 
 
+def _datasets_do_exhibit(exhibit_resolvido: dict, dados: dict) -> list:
+    """Ids dos datasets que as séries `direta`/`derivada` deste exhibit
+    referenciam, sem repetição. Só para decidir o rótulo (B1b); este módulo
+    não importa `exhibits.py` (ver o cabeçalho desta seção) e lê apenas as
+    chaves que a série já resolvida carrega."""
+    ids = []
+    for serie in exhibit_resolvido["series"]:
+        derivacao = serie.get("derivacao")
+        fonte = serie.get("fonte")
+        if not isinstance(fonte, str):
+            continue
+        dataset_id = fonte.partition(".")[0] if derivacao == "direta" else fonte
+        if derivacao in ("direta", "derivada") and dataset_id in dados and dataset_id not in ids:
+            ids.append(dataset_id)
+    return ids
+
+
 def _eixo_x_do_exhibit(exhibit_resolvido: dict, dados: dict) -> list | None:
     """Eixo x comum do exhibit: o `x` do PRIMEIRO dataset que alguma série
     `direta`/`derivada` referencia (todas as séries de um mesmo exhibit
@@ -310,10 +347,17 @@ def _eixo_x_do_exhibit(exhibit_resolvido: dict, dados: dict) -> list | None:
     return None
 
 
-def _rotulo_serie(serie: dict) -> str:
+def _rotulo_serie(serie: dict, varios_datasets: bool = False) -> str:
+    """B1 (achado F3, segunda metade): quando o exhibit toca MAIS DE UM
+    dataset, o rótulo de uma série `direta` é a `fonte` INTEIRA
+    ('fin.margem'/'peers.margem'), não só o nome do campo -- dois datasets
+    com um campo de mesmo nome davam duas séries com o MESMO rótulo de
+    legenda, e o leitor não conseguia nem distinguir qual era qual. Com um
+    dataset só (o caso normal), o nome do campo continua bastando e o
+    rótulo fica curto. Isto é rotulagem de apresentação, dentro do E3."""
     derivacao = serie["derivacao"]
     if derivacao == "direta":
-        return serie["fonte"].partition(".")[2]
+        return serie["fonte"] if varios_datasets else serie["fonte"].partition(".")[2]
     if derivacao == "derivada":
         return serie["formula_nota"]
     return serie["chave"]  # engine
@@ -336,12 +380,14 @@ def _exhibit_para_json(exhibit_resolvido: dict, dados: dict) -> dict:
     """Spec resolvida que `graficos.js` de fato recebe (contrato descrito no
     cabeçalho de `graficos.js`) -- só números e rótulos, nenhuma fonte/
     fórmula/chave crua."""
+    varios_datasets = len(_datasets_do_exhibit(exhibit_resolvido, dados)) > 1
     return {
         "id": exhibit_resolvido["id"],
         "tipo": exhibit_resolvido["tipo"],
         "eixoX": _eixo_x_do_exhibit(exhibit_resolvido, dados),
         "series": [
-            {"rotulo": _rotulo_serie(serie), "valores": _valores_lista(serie["valores"])}
+            {"rotulo": _rotulo_serie(serie, varios_datasets),
+             "valores": _valores_lista(serie["valores"])}
             for serie in exhibit_resolvido["series"]
         ],
         "overlays": [
@@ -493,6 +539,22 @@ def _tese_html(entrega: dict, achados: list, idioma: str, dicionario: dict, titu
 # `svg.js` não conhece prosa nenhuma (S3).
 # --------------------------------------------------------------------------
 
+def _campo_de_contrato(objeto: dict, campo: str, onde: str) -> Any:
+    """Lê `campo` de um bloco de `resultados` que os painéis DESENHAM,
+    nomeando a ausência — B3 (achado F6, caso d): um v10 que renomeie
+    `resultados.ponte.nd_efetivo` (ou `celulas`, ou `pontos_x`) derrubava o
+    builder com `KeyError: 'nd_efetivo'`, rc 1 e nenhum `qc.json`, em vez da
+    recusa nomeada que o docstring de `builder.py` promete para o código 1.
+    `caso`/`resultados` continuam opacos (E3): este módulo não os revalida,
+    só nomeia o que faltou no ponto exato em que precisou ler."""
+    if not isinstance(objeto, dict) or campo not in objeto:
+        raise CampoDeContratoAusente(
+            f"campo ausente em '{onde}': '{campo}' — o painel da Valuation o desenha, "
+            "e o relatório nunca inventa nem omite em silêncio um número do motor."
+        )
+    return objeto[campo]
+
+
 def _grades_2d(resultados: dict) -> list:
     sensibilidades = resultados.get("sensibilidades")
     if not isinstance(sensibilidades, dict):
@@ -514,16 +576,21 @@ def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: 
     ponte = resultados.get("ponte")
     if not isinstance(ponte, dict) or not ponte.get("parcelas"):
         return None
+    onde_parcela = "resultados.ponte.parcelas[*]"
     return {
         "parcelas": [
             {
-                "rotulo": _rotulo_linha_da_ponte(catalogo, parcela["rotulo"], idioma),
-                "valor": parcela["valor"],
-                "sinal": parcela["sinal"],
+                "rotulo": _rotulo_linha_da_ponte(
+                    catalogo, _campo_de_contrato(parcela, "rotulo", onde_parcela), idioma),
+                "valor": _campo_de_contrato(parcela, "valor", onde_parcela),
+                "sinal": _campo_de_contrato(parcela, "sinal", onde_parcela),
             }
             for parcela in ponte["parcelas"]
         ],
-        "total": {"rotulo": t(dicionario, "valuation.ponte_total"), "valor": ponte["nd_efetivo"]},
+        "total": {
+            "rotulo": t(dicionario, "valuation.ponte_total"),
+            "valor": _campo_de_contrato(ponte, "nd_efetivo", "resultados.ponte"),
+        },
         "formato": placeholders.especificacao_de_formato("moeda", idioma, moeda),
     }
 
@@ -573,17 +640,20 @@ def _matrizes_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: st
     no catálogo: 'pp' para roic/g, 'anos' para n...). Antes desta correção
     `unidade` era descartada aqui e o ROIC de 12 p.p. saía "12,00" ao lado
     de uma célula em reais impressa do mesmo jeito."""
-    rota = resultados["rota"]
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    onde = "resultados.sensibilidades.grades_2d[*]"
     return [
         {
             "grade": {
-                "pontos_x": grade["pontos_x"],
-                "pontos_y": grade["pontos_y"],
-                "celulas": grade["celulas"],
+                "pontos_x": _campo_de_contrato(grade, "pontos_x", onde),
+                "pontos_y": _campo_de_contrato(grade, "pontos_y", onde),
+                "celulas": _campo_de_contrato(grade, "celulas", onde),
             },
             "base": _base_da_grade(caso, grade),
-            "rotuloX": _rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
-            "rotuloY": _rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
+            "rotuloX": _rotulo_premissa(
+                catalogo, rota, _campo_de_contrato(grade, "premissa_x", onde), idioma),
+            "rotuloY": _rotulo_premissa(
+                catalogo, rota, _campo_de_contrato(grade, "premissa_y", onde), idioma),
             "formato": _espec_de_formato_da_unidade(catalogo, grade.get("unidade"), idioma, moeda),
             "formatoX": _espec_de_formato_da_unidade(
                 catalogo, _unidade_da_premissa(catalogo, rota, grade["premissa_x"]), idioma, moeda),
@@ -630,7 +700,7 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
     """Hosts VAZIOS na aba Valuation, na mesma ordem do payload — só o
     `svg.js` os preenche (bootstrap estático em `template.html`). Nenhum host
     quando não há o que desenhar (S6)."""
-    rota = resultados["rota"]
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
     moeda = caso.get("moeda")
     blocos = []
     if _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda) is not None:
