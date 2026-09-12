@@ -29,7 +29,9 @@
     "tese": {
       "conclusao_titulo": "Conclusão",
       "disclosures_titulo": "Avisos obrigatórios",
-      "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega."
+      "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega.",
+      "exhibits_titulo": "Exhibits",
+      "exhibits_vazio": "Nenhum exhibit declarado nesta análise."
     },
     "valuation": {
       "preco_justo_titulo": "Preço justo",
@@ -55,7 +57,18 @@
         "formato": "Formato",
         "bruto": "Valor bruto",
         "resolvido": "Valor resolvido"
+      },
+      "exhibits_titulo": "Rastreabilidade dos exhibits",
+      "exhibits_vazio": "Nenhum exhibit rastreado nesta entrega.",
+      "exhibits_colunas": {
+        "exhibit": "Exhibit",
+        "indice": "Índice",
+        "origem": "Origem",
+        "detalhe": "Detalhe"
       }
+    },
+    "graficos": {
+      "indisponivel": "Gráfico não pôde ser exibido — ver a aba Evidência para a rastreabilidade dos dados."
     }
   }
 }

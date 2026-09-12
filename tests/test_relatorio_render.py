@@ -154,6 +154,31 @@ def test_referencia_autocontida_nao_dispara(html_texto):
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
+def test_atribuicao_data_dentro_de_script_nao_dispara_falso_positivo():
+    """Fatia 5B, item 5, Task 2: o uPlot vendorizado (minificado) contém a
+    sintaxe de código legítima 'data=g.slice()' -- sem esta checagem,
+    `_PADRAO_ATRIBUTO_REF` (desenhado para atributo HTML) casa a mesma
+    forma dentro do CORPO de um <script>, e um relatório com uPlot embutido
+    nunca conseguiria emitir. `src=`/`href=` como identificador de
+    variável (não atributo) dentro do script também não pode disparar."""
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    html_com_script = (
+        "<script>var data=1,src=2,href=3;function f(){data=src+href;}</script>"
+    )
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_com_script)
+    assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
+
+
+def test_src_externo_na_propria_tag_script_ainda_dispara_mesmo_com_data_no_corpo():
+    """Controle do teste acima: neutralizar o MIOLO do <script> não pode
+    esconder um `src` de verdade na TAG -- só o conteúdo entre as tags é
+    neutralizado, nunca a tag em si."""
+    entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
+    html_com_script = '<script src="https://evil.example.com/x.js">var data=1;</script>'
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_com_script)
+    assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
+
+
 def test_nenhum_recurso_externo():
     """A mesma regra que `qc.py` mecaniza (`relatorio_nao_autocontido`) —
     aqui exercida contra o HTML de verdade, não um HTML forjado."""

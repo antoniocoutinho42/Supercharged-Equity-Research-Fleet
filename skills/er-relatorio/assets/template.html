@@ -180,7 +180,40 @@
     font-size: 0.78rem;
     color: var(--cor-texto-suave);
   }
+  .exhibits-vazio p {
+    color: var(--cor-texto-suave);
+  }
+  .exhibit {
+    border: 1px solid var(--cor-borda);
+    border-radius: 6px;
+    padding: 14px 18px 18px;
+    margin: 0 0 18px;
+  }
+  .exhibit h3 {
+    font-size: 1rem;
+    margin: 0 0 8px;
+    color: var(--cor-texto);
+  }
+  .exhibit-nota-janela {
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--cor-texto-suave);
+    margin: 0 0 10px;
+  }
+  .exhibit-caption {
+    font-size: 0.85rem;
+    color: var(--cor-texto-suave);
+    margin: 10px 0 0;
+  }
+  .exhibit-grafico {
+    min-height: 60px;
+  }
+  .exhibit-indisponivel {
+    color: var(--cor-texto-suave);
+    font-style: italic;
+  }
 </style>
+<style>$css_uplot</style>
 </head>
 <body>
 <div class="pagina">
@@ -220,6 +253,21 @@
     botoes[k].addEventListener("click", function (evento) {
       selecionar(evento.currentTarget.getAttribute("data-aba"));
     });
+  }
+})();
+</script>
+<script type="application/json" id="fleet-dados-exhibits">$dados_exhibits</script>
+<script>$js_uplot</script>
+<script>$js_graficos</script>
+<script>
+(function () {
+  "use strict";
+  var elementoDados = document.getElementById("fleet-dados-exhibits");
+  if (!elementoDados || typeof FleetGraficos === "undefined") { return; }
+  var dados = JSON.parse(elementoDados.textContent);
+  var hosts = document.querySelectorAll(".exhibit-grafico");
+  for (var i = 0; i < dados.exhibits.length && i < hosts.length; i++) {
+    FleetGraficos.renderizar(hosts[i], dados.exhibits[i], dados.formatacao);
   }
 })();
 </script>

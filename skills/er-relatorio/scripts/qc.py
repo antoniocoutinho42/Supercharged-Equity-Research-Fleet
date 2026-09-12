@@ -383,6 +383,28 @@ def _achados_divergencia_de_base(resultados: dict, catalogo: dict, idioma: str) 
     return achados
 
 
+# Fatia 5B, item 5, Task 2 (primeira vez que este relatório embute uma
+# biblioteca JS de terceiros inteira -- uPlot vendorizado): o CONTEÚDO de um
+# elemento <script> é texto JS puro (a "script data state" do HTML5 nunca
+# decodifica marcação ali dentro), então uma atribuição de código legítima
+# como 'data=g.slice()' (uPlot minificado de verdade tem isso) casa com
+# `_PADRAO_ATRIBUTO_REF` (`data\s*=\s*(\S+)`) exatamente como um atributo
+# HTML casaria -- falso positivo comprovado (`data=g.slice(),en=g[0],...`),
+# nada a ver com recurso externo. `_sem_conteudo_de_script` neutraliza SÓ o
+# MIOLO de cada <script>...</script> antes da varredura (as três funções
+# abaixo) -- a TAG em si nunca é tocada, então um `<script src="...">`
+# externo de verdade continua batendo normalmente (ver
+# `test_referencia_nao_autocontida_e_hard_fail_em_qualquer_forma`, que
+# cobre exatamente esse caso). Não se aplica a <style> -- CSS não tem essa
+# ambiguidade, e a regra precisa continuar varrendo `@import`/`url(` ali
+# dentro (mesmo teste, casos de `<style>`).
+_PADRAO_SCRIPT_BLOCO = re.compile(r'(<script\b[^>]*>)(.*?)(</script\s*>)', re.IGNORECASE | re.DOTALL)
+
+
+def _sem_conteudo_de_script(html_texto: str) -> str:
+    return _PADRAO_SCRIPT_BLOCO.sub(lambda m: m.group(1) + m.group(3), html_texto)
+
+
 def _referencia_externa_invalida(html_texto: str) -> tuple[str, str] | None:
     """B6: devolve `(trecho, valor)` da primeira referência (`src=`/`href=`/
     `srcset=`/`data=`/`url(`/`@import`, com ou sem aspas) cujo valor não é
@@ -391,6 +413,11 @@ def _referencia_externa_invalida(html_texto: str) -> tuple[str, str] | None:
     carregar vários candidatos separados por vírgula (cada um com um
     descritor de densidade/largura opcional) — cada candidato é validado
     separadamente.
+
+    Fatia 5B (ver `_sem_conteudo_de_script` acima): a varredura roda sobre
+    `html_texto` com o MIOLO de todo `<script>` neutralizado -- nunca sobre
+    o texto cru -- para não confundir sintaxe de código embutido com
+    atributo HTML.
     """
     def _primeiro_grupo(m: "re.Match[str]", inicio: int = 2) -> str:
         for grupo in m.groups()[inicio - 1:]:
@@ -398,6 +425,7 @@ def _referencia_externa_invalida(html_texto: str) -> tuple[str, str] | None:
                 return grupo
         return ""
 
+    html_texto = _sem_conteudo_de_script(html_texto)
     candidatos: list[tuple[str, str]] = []
 
     for m in _PADRAO_ATRIBUTO_REF.finditer(html_texto):

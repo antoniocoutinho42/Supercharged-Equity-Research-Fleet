@@ -39,6 +39,7 @@ import html
 import json
 import string
 from pathlib import Path
+from typing import Any
 
 import placeholders
 
@@ -134,6 +135,24 @@ def _mensagem_qc(achado, dicionario: dict) -> str:
     return modelo.format(onde=achado.onde, **achado.params)
 
 
+def _json_embutido(dados: Any) -> str:
+    """JSON para dentro de `<script type="application/json">` (fatia 5B,
+    item 5, Task 2 -- primeira vez que este relatório embute JSON; a regra
+    ficou registrada, sem implementação, na revisão da 5A): `</` escapado
+    como `<\\/` -- sem isto, um valor de texto que contivesse `</script>`
+    fecharia a tag prematuramente, corrompendo o HTML em volta. `allow_nan
+    =False` (defesa em profundidade): nada no contrato de `dados`/`resultados`
+    impede um `NaN`/`Infinity` cru de chegar a uma série `direta` (só o
+    RESULTADO de uma fórmula `derivada` é garantido finito, por
+    `exhibits.avaliar_formula`) -- um `NaN` doria virar o token `NaN` (JSON
+    do Python aceita; `JSON.parse` do browser não) e quebraria o `JSON.parse`
+    do bootstrap silenciosamente tarde demais. Recusar aqui, com uma
+    exceção nomeada, é preferível a servir um JSON que o browser não
+    consegue parsear."""
+    bruto = json.dumps(dados, ensure_ascii=False, allow_nan=False)
+    return bruto.replace("</", "<\\/")
+
+
 def _texto_valor(valor) -> str:
     """Texto de exibição de um valor de dado OPACO (entrada de `log` ou de
     `ficha_tecnica`) — nunca interpretado, só tornado legível. `None` vira
@@ -146,6 +165,172 @@ def _texto_valor(valor) -> str:
     if isinstance(valor, (dict, list)):
         return json.dumps(valor, sort_keys=True, ensure_ascii=False, separators=(",", ": "))
     return str(valor)
+
+
+# --------------------------------------------------------------------------
+# Exhibits (fatia 5B, item 5, Task 2): a seção de gráficos/tabelas da Tese
+# (G7) e a rastreabilidade correspondente na Evidência (G8). Consomem
+# `exhibits_resolvidos`/`log_exhibits` que `builder.py` já produziu chamando
+# `exhibits.resolver(entrega)` UMA vez (ver o docstring de `compor` abaixo) —
+# este módulo nunca chama `exhibits.resolver` de novo, e nunca importa
+# `exhibits.py`: só lê as chaves que a série/overlay JÁ RESOLVIDA carrega
+# (`derivacao`, `fonte`/`formula_nota`/`chave`, `valores`/`valor`), o mesmo
+# jeito que `render.py` já trata `caso`/`resultados` como dado opaco (E3).
+#
+# O adaptador do browser (`graficos.js`) não lê nada disso: recebe só
+# números e rótulos já prontos (`_exhibit_para_json`) — nunca uma `fonte`,
+# `formula` ou `chave` crua. Rótulo de série/overlay é derivado do que a
+# própria série JÁ DECLARA (G3 não tem campo 'rótulo' de série): o nome do
+# campo para `direta`, a `formula_nota` para `derivada` (é exatamente o
+# propósito desse campo), a `chave` para `engine`; overlay usa `rotulo`
+# quando o analista declarou, senão a própria `chave`. Isso é rotulagem de
+# apresentação, nunca conta de valuation (E3).
+# --------------------------------------------------------------------------
+
+def _dataset_da_serie(serie: dict, dados: dict) -> dict | None:
+    """Dataset (`entrega.dados.<id>`) que a série referencia, quando ela é
+    `direta`/`derivada` (`fonte` aponta pra lá — `<dataset>.<campo>` ou só
+    `<dataset>`, ver `exhibits.py`); `None` para `engine` (não usa dataset).
+    Nunca falha: a série já passou pelo QC (regra inviolável 2) antes de
+    `compor` ser chamado, então a referência sempre resolve de verdade."""
+    derivacao = serie.get("derivacao")
+    if derivacao == "direta":
+        dataset_id = serie["fonte"].partition(".")[0]
+    elif derivacao == "derivada":
+        dataset_id = serie["fonte"]
+    else:
+        return None
+    return dados.get(dataset_id)
+
+
+def _eixo_x_do_exhibit(exhibit_resolvido: dict, dados: dict) -> list | None:
+    """Eixo x comum do exhibit: o `x` do PRIMEIRO dataset que alguma série
+    `direta`/`derivada` referencia (todas as séries de um mesmo exhibit
+    normalmente compartilham um dataset — G3/G3-corrigido existem
+    exatamente para permitir isso). Um exhibit só com séries `engine` (que
+    não têm dataset) devolve `None` — `graficos.js` cai para índice
+    posicional nesse caso (ver o cabeçalho de `graficos.js`)."""
+    for serie in exhibit_resolvido["series"]:
+        dataset = _dataset_da_serie(serie, dados)
+        if isinstance(dataset, dict) and isinstance(dataset.get("x"), list):
+            return dataset["x"]
+    return None
+
+
+def _rotulo_serie(serie: dict) -> str:
+    derivacao = serie["derivacao"]
+    if derivacao == "direta":
+        return serie["fonte"].partition(".")[2]
+    if derivacao == "derivada":
+        return serie["formula_nota"]
+    return serie["chave"]  # engine
+
+
+def _rotulo_overlay(overlay: dict) -> str:
+    rotulo = overlay.get("rotulo")
+    return rotulo if rotulo else overlay["chave"]
+
+
+def _valores_lista(valores: Any) -> list:
+    """Normaliza um valor já resolvido para lista -- uma série `engine`
+    pode resolver um ÚNICO número (ex.: o preço de um cenário, ver
+    `test_serie_engine_le_caminho_real_de_resultados`); o adaptador do
+    browser nunca precisa distinguir escalar de lista de um elemento."""
+    return valores if isinstance(valores, list) else [valores]
+
+
+def _exhibit_para_json(exhibit_resolvido: dict, dados: dict) -> dict:
+    """Spec resolvida que `graficos.js` de fato recebe (contrato descrito no
+    cabeçalho de `graficos.js`) -- só números e rótulos, nenhuma fonte/
+    fórmula/chave crua."""
+    return {
+        "id": exhibit_resolvido["id"],
+        "tipo": exhibit_resolvido["tipo"],
+        "eixoX": _eixo_x_do_exhibit(exhibit_resolvido, dados),
+        "series": [
+            {"rotulo": _rotulo_serie(serie), "valores": _valores_lista(serie["valores"])}
+            for serie in exhibit_resolvido["series"]
+        ],
+        "overlays": [
+            {"rotulo": _rotulo_overlay(overlay), "valor": overlay["valor"]}
+            for overlay in exhibit_resolvido.get("overlays", [])
+        ],
+    }
+
+
+def _formatacao_grafico(dicionario: dict) -> dict:
+    """Único pedaço de PROSA traduzida que `graficos.js` recebe (o texto de
+    fallback quando um exhibit não pôde ser desenhado) -- nunca separador
+    numérico: o adaptador tem sua PRÓPRIA tabela pt-BR (`SEPARADORES_POR_
+    IDIOMA`, duplicada de propósito de `placeholders._SEPARADORES`, ver o
+    cabeçalho de `graficos.js`), porque só prosa de interface precisa vir
+    do dicionário (§16.1) -- separador de milhar/decimal é convenção de
+    formatação, não texto de interface traduzível."""
+    return {"graficoIndisponivel": t(dicionario, "graficos.indisponivel")}
+
+
+def _exhibits_html(exhibits_resolvidos: list, dicionario: dict) -> str:
+    """Seção de exhibits na Tese (G7): um `<article>` por exhibit, na ordem
+    declarada, com a pergunta como título (prosa do analista, escapada — a
+    mesma disciplina do resto deste módulo) e um host VAZIO que só
+    `graficos.js` preenche (bootstrap estático em `template.html`). G5: a
+    5D reposiciona isto sob as perguntas da tese; nesta fatia, seção
+    própria."""
+    titulo = html.escape(t(dicionario, "tese.exhibits_titulo"))
+    if not exhibits_resolvidos:
+        vazio = html.escape(t(dicionario, "tese.exhibits_vazio"))
+        return f'<section class="exhibits exhibits-vazio"><h2>{titulo}</h2><p>{vazio}</p></section>'
+
+    blocos = []
+    for indice, exhibit in enumerate(exhibits_resolvidos):
+        pergunta = html.escape(exhibit["pergunta"])
+        bloco_nota = ""
+        if exhibit.get("nota_janela"):
+            bloco_nota = f'<p class="exhibit-nota-janela">{html.escape(exhibit["nota_janela"])}</p>'
+        bloco_caption = ""
+        if exhibit.get("caption"):
+            bloco_caption = f'<p class="exhibit-caption">{html.escape(exhibit["caption"])}</p>'
+        blocos.append(
+            f'<article class="exhibit" data-exhibit-indice="{indice}">'
+            f'<h3>{pergunta}</h3>'
+            f'{bloco_nota}'
+            f'<div class="exhibit-grafico" data-exhibit-indice="{indice}"></div>'
+            f'{bloco_caption}'
+            f'</article>'
+        )
+    return f'<section class="exhibits"><h2>{titulo}</h2>{"".join(blocos)}</section>'
+
+
+def _rastreabilidade_exhibits_html(log_exhibits: list, dicionario: dict) -> str:
+    """Rastreabilidade dos exhibits na Evidência (G8): uma linha por série/
+    overlay resolvida, dizendo de onde veio -- mesmo espírito do log de
+    resolução de placeholders logo abaixo, com o SEU PRÓPRIO formato
+    (`{exhibit, serie, origem, detalhe}`, o que `exhibits.resolver`
+    devolve; note que uma entrada de OVERLAY também usa a chave 'serie'
+    para o índice posicional -- assim `exhibits.resolver_overlay` já
+    produz, ver `exhibits.py`)."""
+    titulo = html.escape(t(dicionario, "evidencia.exhibits_titulo"))
+    if not log_exhibits:
+        vazio = html.escape(t(dicionario, "evidencia.exhibits_vazio"))
+        return f'<section class="rastreabilidade-exhibits"><h2>{titulo}</h2><p>{vazio}</p></section>'
+
+    cabecalho = (
+        f'<th>{html.escape(t(dicionario, "evidencia.exhibits_colunas.exhibit"))}</th>'
+        f'<th>{html.escape(t(dicionario, "evidencia.exhibits_colunas.indice"))}</th>'
+        f'<th>{html.escape(t(dicionario, "evidencia.exhibits_colunas.origem"))}</th>'
+        f'<th>{html.escape(t(dicionario, "evidencia.exhibits_colunas.detalhe"))}</th>'
+    )
+    linhas = "".join(
+        "<tr>"
+        f'<td>{html.escape(_texto_valor(entrada.get("exhibit")))}</td>'
+        f'<td>{html.escape(_texto_valor(entrada.get("serie")))}</td>'
+        f'<td>{html.escape(_texto_valor(entrada.get("origem")))}</td>'
+        f'<td>{html.escape(_texto_valor(entrada.get("detalhe")))}</td>'
+        "</tr>"
+        for entrada in log_exhibits
+    )
+    tabela = f'<table class="log-exhibits"><thead><tr>{cabecalho}</tr></thead><tbody>{linhas}</tbody></table>'
+    return f'<section class="rastreabilidade-exhibits"><h2>{titulo}</h2>{tabela}</section>'
 
 
 # --------------------------------------------------------------------------
@@ -291,7 +476,8 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
 # detalha) e o log de resolução de placeholders da conclusão, em tabela.
 # --------------------------------------------------------------------------
 
-def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, idioma: str, dicionario: dict) -> str:
+def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, log_exhibits: list,
+                     idioma: str, dicionario: dict) -> str:
     metodologia = resultados["origem"]["metodologia"]
     nome = html.escape(str(metodologia.get("nome", "")))
     versao = html.escape(str(metodologia.get("versao", "")))
@@ -350,10 +536,20 @@ def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, idioma: st
         f'</section>'
     )
 
-    return bloco_metodologia + bloco_ficha + bloco_log
+    bloco_rastreabilidade_exhibits = _rastreabilidade_exhibits_html(log_exhibits, dicionario)
+    return bloco_metodologia + bloco_ficha + bloco_log + bloco_rastreabilidade_exhibits
 
 
-def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str) -> str:
+def _ler_asset(nome: str) -> str:
+    """Lê um asset PRÓPRIO do skill (`assets/<nome>`) como texto -- usado só
+    para os vendorizados/adaptador do uPlot (Task 2). Nunca a integração
+    (E3): estes arquivos vivem em `skills/er-relatorio/assets/`, o mesmo
+    diretório de `template.html`/`i18n/`."""
+    return (_DIR_ASSETS / nome).read_text(encoding="utf-8")
+
+
+def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
+           exhibits_resolvidos: list | None = None, log_exhibits: list | None = None) -> str:
     """Compõe o HTML autocontido das três abas a partir só dos contratos já
     carregados/validados por quem chama (`builder.py`).
 
@@ -363,23 +559,58 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str)
     log de resolução de placeholders da conclusão (mesmo formato que
     `placeholders.resolver` devolve), exibido em tabela na Evidência.
 
+    `exhibits_resolvidos`/`log_exhibits` (fatia 5B, item 5, Task 2): o que
+    `exhibits.resolver(entrega)` devolve -- `builder.py` chama isso UMA
+    única vez (depois que a primeira passada do QC já confirmou zero HARD
+    FAIL) e passa o resultado para cá; este módulo NUNCA chama `exhibits.
+    resolver` de novo (nem importa `exhibits.py` -- só lê as chaves que a
+    série/overlay já resolvida carrega). Omissos (`None`, o padrão):
+    equivalem a uma entrega sem exhibit nenhum (`[]`/`[]`) -- preserva todo
+    chamador existente (`tests/test_relatorio_render.py`, anterior a esta
+    fatia) sem precisar tocar nele.
+
     Determinístico por construção: mesma entrada, mesmos bytes — nenhuma
     ordem de `set` não determinística, nenhum relógio, nenhum caminho
-    absoluto no HTML emitido.
+    absoluto no HTML emitido, nenhuma id gerada em tempo de execução.
     """
+    exhibits_resolvidos = exhibits_resolvidos if exhibits_resolvidos is not None else []
+    log_exhibits = log_exhibits if log_exhibits is not None else []
+
     dicionario = placeholders.carregar_dicionario(idioma)
 
     execucao = entrega["execucao"]
     caso = entrega["caso"]
     resultados = entrega["resultados"]
+    dados = entrega.get("dados") or {}
 
     empresa = html.escape(str(caso.get("companhia", "")))
     ticker = html.escape(str(execucao.get("ticker", "")))
     titulo = t(dicionario, "titulo_pagina", empresa=empresa, ticker=ticker)
 
-    corpo_tese = _tese_html(entrega, achados, idioma, dicionario, titulo)
+    corpo_tese = _tese_html(entrega, achados, idioma, dicionario, titulo) + _exhibits_html(
+        exhibits_resolvidos, dicionario)
     corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario)
-    corpo_evidencia = _evidencia_html(resultados, entrega["ficha_tecnica"], log, idioma, dicionario)
+    corpo_evidencia = _evidencia_html(
+        resultados, entrega["ficha_tecnica"], log, log_exhibits, idioma, dicionario)
+
+    dados_exhibits = _json_embutido({
+        "formatacao": _formatacao_grafico(dicionario),
+        "exhibits": [_exhibit_para_json(exhibit, dados) for exhibit in exhibits_resolvidos],
+    })
+
+    # O uPlot vendorizado (~50 KB minificado) e o adaptador só entram na
+    # página quando a entrega de fato declara exhibit -- uma entrega sem
+    # gráfico nenhum (G10 do desenho: "não há gráfico obrigatório") não
+    # paga o custo de bytes de uma biblioteca que nunca seria usada.
+    # Substitutos vazios são HTML válido (`<style></style>`/`<script>
+    # </script>`) -- o bootstrap estático de `template.html` já checa
+    # `typeof FleetGraficos === "undefined"` antes de usá-lo.
+    if exhibits_resolvidos:
+        css_uplot = _ler_asset("uPlot.min.css")
+        js_uplot = _ler_asset("uPlot.iife.min.js")
+        js_graficos = _ler_asset("graficos.js")
+    else:
+        css_uplot = js_uplot = js_graficos = ""
 
     modelo = (_DIR_ASSETS / "template.html").read_text(encoding="utf-8")
     return string.Template(modelo).substitute(
@@ -391,4 +622,8 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str)
         corpo_tese=corpo_tese,
         corpo_valuation=corpo_valuation,
         corpo_evidencia=corpo_evidencia,
+        css_uplot=css_uplot,
+        js_uplot=js_uplot,
+        js_graficos=js_graficos,
+        dados_exhibits=dados_exhibits,
     )

@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 
 import entrega as contrato_entrega
+import exhibits
 import placeholders
 import qc
 import render
@@ -180,8 +181,18 @@ def main(argv: list[str] | None = None) -> int:
     _conclusao_resolvida, log, _erros = placeholders.resolver(
         entrega_dict["analise"]["conclusao"]["texto"], fontes, idioma, "analise.conclusao.texto")
 
+    # Fatia 5B, item 5, Task 2: exhibits são resolvidos em números UMA
+    # única vez aqui -- a fase 1 do QC (acima) já confirmou zero HARD FAIL
+    # de rastreabilidade (`serie_nao_rastreavel`/`formula_invalida`/
+    # `overlay_nao_resolvido`/`serie_de_tamanho_incompativel`), então esta
+    # chamada não deveria levantar (ver o docstring de `exhibits.resolver`).
+    # `render.compor` recebe o resultado pronto -- nunca chama `exhibits.
+    # resolver` de novo por conta própria.
+    exhibits_resolvidos, log_exhibits = exhibits.resolver(entrega_dict)
+
     try:
-        pagina = render.compor(entrega_dict, catalogo, achados, log, idioma)
+        pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
+                                exhibits_resolvidos, log_exhibits)
     except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente) as erro:
         print(str(erro), file=sys.stderr)
         return 1
