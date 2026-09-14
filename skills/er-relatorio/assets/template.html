@@ -269,20 +269,26 @@
   }
   .lab-diagnostico {
     font-size: 0.85rem;
-    padding: 3px 0 3px 10px;
+    padding: 4px 10px;
     margin: 0 0 4px;
-    border-left: 3px solid var(--cor-borda);
+    border: 1px solid var(--cor-borda);
+    border-radius: 4px;
   }
   .lab-diagnostico-alerta {
     background: var(--cor-disclosure-fundo);
-    border-left-color: var(--cor-disclosure-borda);
+    border-color: var(--cor-disclosure-borda);
   }
   .lab-diagnostico-atencao {
-    border-left-color: var(--cor-acento);
+    background: var(--cor-acento-suave);
+    border-color: var(--cor-acento);
   }
   .lab-diagnostico-vazio,
   .lab-diagnostico-desconhecido {
     color: var(--cor-texto-suave);
+  }
+  .lab-diagnostico-vazio {
+    border-color: transparent;
+    padding-left: 0;
   }
   .lab-blocos {
     display: flex;
