@@ -224,20 +224,16 @@
 
   // ----------------------------------------------------------------------
   // Diagnosticos do cenario (Task 3; secao 8.4 do desenho: o diagnostico se
-  // move junto com o numero). As chaves chegam da FACHADA, na forma do
-  // contrato -- as do cenario e, num cenario com degrau, as do degrau depois
-  // delas -- e este painel so as PINTA, na ordem em que chegam: rotulo e
-  // severidade vem do catalogo, pelo payload (`dados.diagnosticos`). Nenhuma
-  // chave e interpretada aqui e nenhum predicado e avaliado aqui; a severidade
-  // so vira classe CSS. Chave que o payload nao rotula vira o texto do
-  // dicionario, nunca a chave crua (licao do B2).
+  // move junto com o numero). As chaves chegam da FACHADA numa lista so,
+  // `diagnosticos_exibidos`, que a integracao monta a partir das formas do
+  // contrato -- este painel nao conhece forma nenhuma nem caminho de contrato
+  // (onda de correcao da revisao final da 5C, F4: uma forma aditiva de uma v10
+  // chega a tela sem uma linha aqui). Ele so as PINTA, na ordem em que chegam:
+  // rotulo e severidade vem do catalogo, pelo payload (`dados.diagnosticos`).
+  // Nenhuma chave e interpretada aqui e nenhum predicado e avaliado aqui; a
+  // severidade so vira classe CSS. Chave que o payload nao rotula vira o texto
+  // do dicionario, nunca a chave crua (licao do B2).
   // ----------------------------------------------------------------------
-
-  function chavesDoCenario(registro) {
-    var proprias = registro.diagnosticos_chaves || [];
-    var doDegrau = (registro.degrau && registro.degrau.diagnosticos_chaves) || [];
-    return proprias.concat(doDegrau);
-  }
 
   function escreverDiagnosticos(bloco, registro, dados) {
     var lista = bloco.querySelector("[data-laboratorio-diagnosticos]");
@@ -253,12 +249,14 @@
       lista.appendChild(item);
     }
 
-    // Sem numero, sem diagnostico: o mesmo "sem valor" das tres saidas.
-    if (!registro) {
+    // Sem numero, sem diagnostico: o mesmo "sem valor" das tres saidas. Um
+    // registro sem lista exibivel cai no mesmo lugar -- este painel nunca
+    // afirma "nenhum diagnostico" sem uma lista que o diga.
+    if (!registro || !Array.isArray(registro.diagnosticos_exibidos)) {
       acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.semValor || SEM_VALOR_PADRAO);
       return;
     }
-    var chaves = chavesDoCenario(registro);
+    var chaves = registro.diagnosticos_exibidos;
     if (!chaves.length) {
       acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.diagnosticosNenhum || "");
       return;

@@ -207,7 +207,7 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 | `placeholder_nao_resolvido` | HARD FAIL | caminho inexistente ou valor não numérico |
 | `placeholder_malformado` | HARD FAIL | `{{...}}` que não é um placeholder reconhecido |
 | `numero_sem_proveniencia` | HARD FAIL | dígito na prosa de `analise` fora de placeholder |
-| `diagnostico_sem_chave` | HARD FAIL | `diagnosticos_chaves`/`diagnosticos_unicos_chaves` ausente, com comprimento diferente do `diagnosticos`/`diagnosticos_unicos` correspondente, ou com `null` num item — em QUALQUER par publicado em `resultados.json` (varredura recursiva) |
+| `diagnostico_sem_chave` | HARD FAIL | `diagnosticos_chaves`/`diagnosticos_unicos_chaves` ausente, com comprimento diferente do `diagnosticos`/`diagnosticos_unicos` correspondente, ou com `null` num item — em QUALQUER par publicado em `resultados.json` (varredura recursiva); ou `degrau.diagnosticos_chaves` ausente num cenário com degrau |
 | `degrau_sem_divergencia_de_base` | HARD FAIL | cenário com `degrau` sem `divergencia_de_base_%` numérico |
 | `formato_incompativel_com_unidade` | HARD FAIL | formato de placeholder não bate com a unidade do valor |
 | `multiplos_com_bases_diferentes` | HARD FAIL | `manchete.multiplo.base` ≠ `mercado_tela.base` |
@@ -218,7 +218,7 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 | `series_de_datasets_incompativeis` | HARD FAIL | duas séries do mesmo exhibit vindas de datasets cujo `x` difere |
 | `overlay_nao_resolvido` | HARD FAIL | `chave` de overlay que não resolve num número finito |
 | `relatorio_nao_autocontido` | HARD FAIL | referência (`src`/`href`/`srcset`/`data`/`url()`/`@import`) que não é `#fragmento` nem URI `data:`; ou, no miolo de um `<script>`, chamada de rede (`fetch`, `XMLHttpRequest`, `WebSocket`, `Worker`, `importScripts`, `EventSource`, `sendBeacon`) ou atribuição de `src`/`srcset`/`href` a um endereço externo |
-| `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | `\|divergencia_de_base_%\|` acima do limiar de `catalogo.disclosures.divergencia_de_base_degrau` |
+| `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
@@ -273,7 +273,8 @@ caminho), nunca um `KeyError` cru.
 Não está aqui e não é resumida aqui. Todo conhecimento metodológico que
 este relatório precisa exibir (bloco/unidade/rótulo de premissa, rótulo e
 base de múltiplo, rótulo de convenção terminal, severidade e rótulo de
-diagnóstico, limiar e texto do disclosure de divergência de base) vem de
+diagnóstico, texto do disclosure de divergência de base e a chave que o
+dispara) vem de
 `skills/er-valuation/assets/catalogo_apresentacao.json` — lido via
 `ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A fonte canônica da
 metodologia é `skills/er-multiplos-justos/SKILL.md`; da orquestração,

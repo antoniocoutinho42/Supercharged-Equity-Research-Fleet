@@ -41,13 +41,25 @@
 // - rampa: `diagnosticos_chaves` = os avisos presentes, na ordem de
 //   `AVISOS_RAMPA` (`_AVISOS_RAMPA_ORDEM`, do lado Python);
 // - degrau: as chaves do PROPRIO cenario vem da perna P/L (o wrapper preserva
-//   as de `_monta_cenario`), e as dos dois alertas do degrau vao em
+//   as de `_monta_cenario`), e as dos alertas do degrau vao em
 //   `degrau.diagnosticos_chaves`, como `precificarDegrau` as devolve
-//   (`_ALERTAS_DEGRAU_ORDEM`, do lado Python).
+//   (`_ALERTAS_DEGRAU_ORDEM`, do lado Python) — mais, desde a onda de correcao
+//   da revisao final (F1), a da divergencia de base acima do limiar, que o
+//   espelho decide com a copia travada do limiar do wrapper.
 // Nenhuma chave e' decidida AQUI — nenhum predicado, nenhum limiar: esta
 // fachada so' poe no lugar do contrato o que o espelho respondeu. Cenario
 // recusado nao tem diagnostico (o motor que recusa nao emite nenhum): lista
 // vazia, nunca as chaves de um vetor que nao produziu numero.
+//
+// LISTA EXIBIVEL (onda de correcao da revisao final da 5C, F4; E3). Alem das
+// formas do contrato, cada cenario vivo publica `diagnosticos_exibidos`: a
+// UNICA lista que o laboratorio pinta, montada AQUI a partir das formas acima
+// (as do cenario e, num cenario com degrau, as do degrau depois delas). O
+// laboratorio deixou de conhecer caminho de contrato: uma forma aditiva de uma
+// v10 (`transicao.diagnosticos_chaves`, digamos) chega a tela quando entra
+// nesta lista, sem uma linha no relatorio — e, se ficar de fora,
+// `tests/test_espelho_fachada_js.py` reprova na INTEGRACAO, porque deriva as
+// listas de cada cenario do `resultados` descendo por ele, sem nomear caminho.
 //
 // Carregamento: no browser os dois arquivos chegam como <script> e a fachada
 // acha o espelho por `globalThis.MotorEspelho`; em node, por `require` do
@@ -241,6 +253,15 @@
     return cenario;
   }
 
+  // F4 (cabecalho, "LISTA EXIBIVEL"): toda forma de diagnostico que o cenario
+  // publica, na ordem de cada uma — as do proprio cenario e, depois, as do
+  // degrau. E' o UNICO ponto que junta as formas: uma forma nova entra aqui ou
+  // reprova na trava da integracao.
+  function listaExibida(cenario) {
+    const doDegrau = cenario.degrau ? cenario.degrau.diagnosticos_chaves : [];
+    return cenario.diagnosticos_chaves.concat(doDegrau);
+  }
+
   // As chaves de um cenario firm/equity (Task 3). Do lado Python,
   // `_monta_cenario` classifica as mensagens da MESMA chamada do motor que
   // produziu o preco, com `moeda` e `rf`; o espelho ja' devolve as chaves
@@ -276,10 +297,12 @@
    *
    * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
    * multiplo: {chave, valor}, vs_preco: {upside}, diagnosticos_chaves,
-   * [degrau: {diagnosticos_chaves}]}}}`, mais `ponte: {nd_efetivo}` nas rotas que
-   * cruzam ponte (firm/rampa) — a rota equity nao publica o bloco, do mesmo
-   * jeito que `resultados.json` nao publica (L2: mesmas chaves). As chaves de
-   * diagnostico seguem as tres formas descritas no cabecalho deste arquivo.
+   * [degrau: {diagnosticos_chaves}], diagnosticos_exibidos}}}`, mais
+   * `ponte: {nd_efetivo}` nas rotas que cruzam ponte (firm/rampa) — a rota
+   * equity nao publica o bloco, do mesmo jeito que `resultados.json` nao
+   * publica (L2: mesmas chaves). As chaves de diagnostico seguem as tres
+   * formas descritas no cabecalho deste arquivo; `diagnosticos_exibidos` (F4)
+   * e' a lista que o laboratorio pinta, e nao existe no `resultados`.
    *
    * Um cenario por vez, pela MESMA rota que `avaliar()` percorre
    * (`avaliar.py:881-934`):
@@ -350,6 +373,12 @@
       const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
       cenarios[nome] = cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
         diagnosticosDaCelula(M, rota, premissas, moeda, rf, r.valor));
+    }
+
+    // F4: a lista exibivel, montada sobre o registro inteiro de cada cenario —
+    // depois das tres pernas acima, para que nenhuma delas precise lembrar.
+    for (const nome of Object.keys(cenarios)) {
+      cenarios[nome].diagnosticos_exibidos = listaExibida(cenarios[nome]);
     }
 
     const vivo = { cenarios };

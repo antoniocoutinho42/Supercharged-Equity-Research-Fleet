@@ -25,14 +25,16 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 
 import pytest
 
-from relatorio_apoio import FIXTURES, montar_entrega
+from relatorio_apoio import FIXTURES, listas_de_chaves_de_diagnostico, montar_entrega
 from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
-from avaliar import _ALERTAS_DEGRAU_ORDEM  # noqa: E402
+from avaliar import (_ALERTAS_DEGRAU_ORDEM, _CHAVE_DIVERGENCIA_DE_BASE,  # noqa: E402
+                     _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
 from caso import _PREMISSAS_POR_ROTA  # noqa: E402
 
 FACHADA = RAIZ / "skills" / "er-valuation" / "assets" / "espelho_fachada.js"
@@ -620,7 +622,9 @@ def test_os_dois_alertas_do_degrau_saem_na_ordem_do_wrapper(tmp_path):
     com os dois. Este caso cruza os dois predicados de uma vez
     (`r2 > max(2·ke, 30%)` e `g/r2 > 1`): roe=22 e ke=14 levam r2 a ≈ 30,3%,
     acima do piso de 30%, e g=31 fica acima de r2. O wrapper publica as duas
-    chaves, e a fachada tem de devolvê-las na MESMA ordem."""
+    chaves, e a fachada tem de devolvê-las na MESMA ordem. (A lista pode trazer
+    também a chave da divergência de base, depois dos alertas — F1 da onda de
+    correção; o que este teste prende é a ordem dos dois alertas entre si.)"""
     def _dois_alertas(caso: dict) -> None:
         caso["cenarios"]["base"]["premissas"].update(roe=22.0, ke=14.0, g=31.0)
 
@@ -628,7 +632,8 @@ def test_os_dois_alertas_do_degrau_saem_na_ordem_do_wrapper(tmp_path):
     caso, resultados = entrega["caso"], entrega["resultados"]
     caminho = ("degrau", "diagnosticos_chaves")
     publicadas = _lista(resultados["cenarios"]["base"], caminho, "wrapper")
-    assert sorted(publicadas) == sorted(chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM), publicadas
+    alertas = [chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM]
+    assert [chave for chave in publicadas if chave in alertas] == alertas, publicadas
 
     saida = _fachada(caso, resultados, tmp_path)
     assert "erro" not in saida, saida.get("erro")
@@ -641,7 +646,7 @@ def test_os_dois_alertas_do_degrau_saem_na_ordem_do_wrapper(tmp_path):
     # A mesma lista em ordem invertida: só um comparador ORDENADO acusa.
     pytest.param("caso_minimo_firm.json", ("diagnosticos_chaves",),
                  lambda chaves: list(reversed(chaves)), id="cenario-ordem"),
-    # Uma chave a mais no bloco do degrau (a fixture publica a lista vazia).
+    # Uma chave a mais no bloco do degrau (na fixture, a lista só traz a divergência de base).
     pytest.param("caso_degrau.json", ("degrau", "diagnosticos_chaves"),
                  lambda chaves: chaves + ["degrau_alerta"], id="degrau-presenca"),
 ])
@@ -668,3 +673,103 @@ def test_o_comparador_prende_as_chaves_de_diagnostico_por_igualdade_ordenada(
         "cenario": "base", "chave": ".".join(caminho),
         "python": adulteradas, "js": verdadeiras, "erro_relativo": None,
     }]
+
+
+# ---------------------------------------------------------------------------
+# Onda de correção da revisão final da 5C — F4 (a lista exibível) e F1 (a
+# divergência de base do degrau como chave da integração)
+# ---------------------------------------------------------------------------
+
+def _subsequencia(curta: list, longa: list) -> bool:
+    """`curta` aparece dentro de `longa` na mesma ordem (não necessariamente
+    contígua)."""
+    restante = iter(longa)
+    return all(any(item == candidato for candidato in restante) for item in curta)
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_a_lista_exibida_contem_toda_lista_de_chaves_do_cenario_em_ordem(fixture, tmp_path):
+    """F4 (MÉDIO, E3). O laboratório pinta UMA lista, `diagnosticos_exibidos`,
+    que a fachada monta por cenário — e deixa de conhecer caminho de contrato.
+    A trava que faltava mora aqui, na integração: as listas `diagnosticos_chaves`
+    do cenário publicado são DERIVADAS descendo pelo cenário
+    (`relatorio_apoio.listas_de_chaves_de_diagnostico`), sem nomear onde moram,
+    e a lista exibida tem de conter cada uma, na ordem dela, e nada além delas.
+
+    É o que faz uma forma aditiva de uma v10 (a sonda P6 da revisão:
+    `cenarios.<n>.transicao.diagnosticos_chaves`, ainda `resultados/1`) reprovar
+    AQUI quando a fachada a esquece — antes, o badge ficava verde, a tela não a
+    mostrava e nada reprovava. A ordem ENTRE listas é escolha de apresentação da
+    fachada; a ordem DENTRO de cada lista é a do motor e do wrapper, e é presa."""
+    caso, resultados = _caso_e_resultados(fixture)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    for nome, cenario_py in resultados["cenarios"].items():
+        listas = list(listas_de_chaves_de_diagnostico(cenario_py))
+        assert listas, f"{fixture}/{nome}: cenário publicado sem lista de chaves — trava vacuamente verde"
+        exibida = saida["vivo"]["cenarios"][nome].get("diagnosticos_exibidos")
+        assert isinstance(exibida, list), f"{fixture}/{nome}: sem 'diagnosticos_exibidos': {exibida!r}"
+        for caminho, lista in listas:
+            assert _subsequencia(lista, exibida), (
+                f"{fixture}/{nome}: '{'.'.join(map(str, caminho))}' = {lista} fora da lista exibida "
+                f"{exibida}, ou fora de ordem")
+        publicadas = Counter(chave for _caminho, lista in listas for chave in lista)
+        assert Counter(exibida) == publicadas, \
+            f"{fixture}/{nome}: exibida {exibida} x publicadas {dict(publicadas)}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_divergencia_de_base_do_degrau_acende_e_apaga_com_o_preco_na_mesma_chamada(tmp_path):
+    """F1 (ALTO), a regra inegociável do §8.4 aplicada ao degrau. Antes, a
+    fachada descartava `divergencia_de_base_%` e o limiar vivia na QC do build:
+    com ROE 25 a tela mostrava R$ 64,30 e o disclosure seguia congelado em
+    16,4%. Agora a integração decide "acima do limiar" e publica a chave em
+    `degrau.diagnosticos_chaves`, do mesmo jeito no wrapper e na fachada.
+
+    Quatro chamadas no MESMO processo (carga, ROE 17,2, ROE 25, desfazer), cada
+    uma conferida contra o que `avaliar()` publica para o caso editado:
+    - carga (ROE 20): 16,4% — a chave está lá;
+    - ROE 17,2: 0,16% — a chave some na chamada em que o preço anda;
+    - ROE 25: 45,5% e nenhum alerta do degrau (r2 ≈ 34,5% < 40%) — o caso da
+      revisão em que a tela não dizia nada: a chave é o único diagnóstico do
+      degrau, e chega à lista exibida;
+    - desfazer: a lista e o preço da carga voltam."""
+    fixture = "caso_degrau.json"
+    caso, resultados = _caso_e_resultados(fixture)
+    caminho = ("degrau", "diagnosticos_chaves")
+    chave = _CHAVE_DIVERGENCIA_DE_BASE
+
+    def _roe(valor: float):
+        def _mutar(c: dict) -> None:
+            c["cenarios"]["base"]["premissas"]["roe"] = valor
+        return _mutar
+
+    editadas = {roe: montar_entrega(fixture, mutar_caso=_roe(roe)) for roe in (17.2, 25.0)}
+    carga, em_17, em_25, desfeito = [
+        vivo["cenarios"]["base"] for vivo in _avaliar_em_sequencia(
+            [caso, editadas[17.2]["caso"], editadas[25.0]["caso"], caso], tmp_path)]
+    publicado = resultados["cenarios"]["base"]
+    p17 = editadas[17.2]["resultados"]["cenarios"]["base"]
+    p25 = editadas[25.0]["resultados"]["cenarios"]["base"]
+
+    assert abs(publicado["degrau"]["divergencia_de_base_%"]) > _LIMIAR_DIVERGENCIA_DE_BASE_PCT
+    assert chave in _lista(publicado, caminho, "wrapper")
+    assert _lista(carga, caminho, "fachada") == _lista(publicado, caminho, "wrapper")
+
+    assert abs(p17["degrau"]["divergencia_de_base_%"]) <= _LIMIAR_DIVERGENCIA_DE_BASE_PCT
+    assert chave not in _lista(p17, caminho, "wrapper")
+    assert _lista(em_17, caminho, "fachada") == _lista(p17, caminho, "wrapper")
+    assert chave not in em_17["diagnosticos_exibidos"]
+    assert _erro_relativo(p17["valor"]["preco_acao"], em_17["valor"]["preco_acao"]) <= TAU
+    assert _erro_relativo(carga["valor"]["preco_acao"], em_17["valor"]["preco_acao"]) > TAU, \
+        "a edição não moveu o preço — o teste deixou de provar que número e diagnóstico andam juntos"
+
+    assert _lista(p25, caminho, "wrapper") == [chave]
+    assert _lista(em_25, caminho, "fachada") == [chave]
+    assert chave in em_25["diagnosticos_exibidos"]
+    assert _erro_relativo(p25["valor"]["preco_acao"], em_25["valor"]["preco_acao"]) <= TAU
+
+    assert _lista(desfeito, caminho, "fachada") == _lista(carga, caminho, "fachada")
+    assert desfeito["valor"]["preco_acao"] == carga["valor"]["preco_acao"]

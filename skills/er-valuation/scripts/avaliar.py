@@ -308,6 +308,48 @@ _ALERTAS_DEGRAU_ORDEM: tuple[tuple[str, str], ...] = (
     ("ALERTA_RiR", "degrau_alerta_rir"),
 )
 
+# Onda de correção da revisão final da 5C (F1): a DIVERGÊNCIA DE BASE do degrau
+# também vira chave — e o limiar que a decide mora AQUI, fonte numérica única.
+# `divergencia_de_base_%` (D8, publicada desde a fatia D) mede quanto do
+# incremento que o degrau parece criar vem do descasamento entre as duas bases
+# (LL x ROE.VPA), e não do degrau. Até esta onda, "acima do limiar" era decidido
+# pela QC do relatório contra um `limiar_pct` do catálogo de apresentação: uma
+# decisão metodológica fora da integração (E3), e congelada no build — o
+# laboratório movia o preço e o disclosure ficava onde estava (§8.4). Agora o
+# wrapper publica `_CHAVE_DIVERGENCIA_DE_BASE` em `degrau.diagnosticos_chaves`,
+# DEPOIS dos alertas do motor (o motor os emite no nível-alvo; a divergência é a
+# comparação que esta camada faz em seguida), e a QC só a consome.
+#
+# Por que uma constante do wrapper, e não um número lido do catálogo: a mesma
+# decisão tem de ser tomada no navegador, e o navegador não lê arquivo. Lido do
+# catálogo, o limiar teria de viajar no payload que o RELATÓRIO monta — o
+# relatório no caminho de uma regra. `motor_espelho.js` carrega a cópia
+# (`LIMIAR_DIVERGENCIA_DE_BASE_PCT`), travada por igualdade contra esta em
+# `tests/test_paridade_wrapper_js.py`; o catálogo ficou só com o texto do
+# disclosure e o nome da chave que o dispara. O valor é o que o catálogo
+# carregava desde a 5A (5%).
+_LIMIAR_DIVERGENCIA_DE_BASE_PCT: float = 5.0
+_CHAVE_DIVERGENCIA_DE_BASE: str = "degrau_divergencia_de_base"
+
+# O vocabulário inteiro de `degrau.diagnosticos_chaves`, na ordem em que as
+# chaves saem — DERIVADO das constantes que `_chaves_do_degrau` usa, para que a
+# trava do catálogo (`tests/test_catalogo_apresentacao.py`) nunca dependa de uma
+# lista escrita à mão.
+_CHAVES_DO_DEGRAU_ORDEM: tuple[str, ...] = (
+    tuple(chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM) + (_CHAVE_DIVERGENCIA_DE_BASE,))
+
+
+def _chaves_do_degrau(nivel_alvo: dict, divergencia_de_base_pct: float) -> list[str]:
+    """`degrau.diagnosticos_chaves` de um cenário: as chaves dos alertas que o
+    motor emitiu no nível-alvo (por presença, na ordem de
+    `_ALERTAS_DEGRAU_ORDEM`) e, depois delas, a da divergência de base quando o
+    MÓDULO passa do limiar — o descasamento contamina a leitura do incremento
+    nos dois sentidos, com a base de LL acima ou abaixo de ROE.VPA."""
+    chaves = [chave for campo, chave in _ALERTAS_DEGRAU_ORDEM if campo in nivel_alvo]
+    if abs(divergencia_de_base_pct) > _LIMIAR_DIVERGENCIA_DE_BASE_PCT:
+        chaves.append(_CHAVE_DIVERGENCIA_DE_BASE)
+    return chaves
+
 
 def _montar_mercado_tela(caso: dict, resultado: dict, nd_efetivo: float) -> dict:
     """Monta o campo `mercado_tela` (regra 4): o múltiplo de mercado
@@ -678,8 +720,11 @@ def _aplicar_degrau_ao_cenario(cenario_montado: dict, cenario: dict, bloco_degra
     # Fatia 5C, item 5, Task 3 (T1): a chave pública de cada alerta presente,
     # na ordem de `_ALERTAS_DEGRAU_ORDEM` — campo aditivo do `resultados/1`. A
     # prosa acima continua publicada para auditoria; o relatório nunca a lê.
-    degrau_cenario["diagnosticos_chaves"] = [
-        chave for campo, chave in _ALERTAS_DEGRAU_ORDEM if campo in nivel_alvo]
+    # Onda de correção da revisão final da 5C (F1): mais a da divergência de
+    # base acima do limiar, decidida aqui (`_chaves_do_degrau`), nunca no
+    # relatório.
+    degrau_cenario["diagnosticos_chaves"] = _chaves_do_degrau(
+        nivel_alvo, degrau_cenario["divergencia_de_base_%"])
 
     resultado = dict(cenario_montado)
     resultado["sem_degrau"] = {

@@ -629,8 +629,9 @@ def test_moeda_sem_simbolo_usa_codigo_iso_sem_traceback(tmp_path):
 # --------------------------------------------------------------------------
 
 def test_degrau_com_divergencia_emite_com_disclosure(tmp_path):
-    """caso_degrau.json: divergencia_de_base_% ~= 16.4%, acima do limiar de
-    5.0% do catálogo — REQUIRED DISCLOSURE, não HARD FAIL."""
+    """caso_degrau.json: divergencia_de_base_% ~= 16.4%, acima do limiar da
+    integração, que publica a chave que o disclosure nomeia no catálogo —
+    REQUIRED DISCLOSURE, não HARD FAIL."""
     entrega_dict = apoio.montar_entrega("caso_degrau.json")
     raiz = tmp_path / "degrau"
     apoio.escrever_raiz(raiz, entrega_dict)
@@ -645,6 +646,75 @@ def test_degrau_com_divergencia_emite_com_disclosure(tmp_path):
     assert achado["nivel"] == "REQUIRED_DISCLOSURE"
     assert achado["params"]["cenario"] == "base"
     assert achado["params"]["valor"] == pytest.approx(16.4, abs=0.05)
+
+
+# --------------------------------------------------------------------------
+# Onda de correção da revisão final da 5C (F1): a QC CONSOME a chave que a
+# integração publica em `degrau.diagnosticos_chaves` — a que
+# `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — e não
+# compara limiar nenhum. O limiar é da integração (`avaliar.py`, espelhado na
+# fachada), e é por isso que o disclosure e o laboratório não podem mais
+# discordar: os dois leem a mesma decisão.
+# --------------------------------------------------------------------------
+
+def _disclosures_de_divergencia(entrega_dict: dict) -> list:
+    return [a for a in qc.avaliar(entrega_dict, CATALOGO) if a.codigo == "divergencia_de_base_degrau"]
+
+
+def test_o_disclosure_de_divergencia_segue_a_chave_da_integracao_nunca_um_limiar():
+    """Os dois lados que só uma QC que lê a CHAVE acerta — e que uma QC que
+    voltasse a comparar o número com um limiar erraria, qualquer que fosse o
+    limiar escolhido:
+    - número bem acima de qualquer limiar plausível (16,4%), chave retirada:
+      nenhum disclosure;
+    - número irrisório (0,1234%), chave presente: disclosure, imprimindo o
+      número publicado — e nenhum parâmetro de limiar no achado."""
+    chave = CATALOGO["disclosures"]["divergencia_de_base_degrau"]["chave"]
+    publicada = apoio.montar_entrega("caso_degrau.json")
+    degrau = publicada["resultados"]["cenarios"]["base"]["degrau"]
+    assert degrau["divergencia_de_base_%"] > 10 and chave in degrau["diagnosticos_chaves"], degrau
+
+    sem_chave = json.loads(json.dumps(publicada))
+    sem_chave["resultados"]["cenarios"]["base"]["degrau"]["diagnosticos_chaves"].remove(chave)
+    assert _disclosures_de_divergencia(sem_chave) == []
+
+    irrisoria = json.loads(json.dumps(publicada))
+    irrisoria["resultados"]["cenarios"]["base"]["degrau"]["divergencia_de_base_%"] = 0.1234
+    achados = _disclosures_de_divergencia(irrisoria)
+    assert len(achados) == 1, achados
+    assert achados[0].params["valor_fmt"] == placeholders.formatar(0.1234, "pp1", "pt-BR")
+    assert not [nome for nome in achados[0].params if nome.startswith("limiar")], achados[0].params
+
+
+@pytest.mark.parametrize("roe,valor_esperado", [(17.2, None), (25.0, 45.5)])
+def test_o_disclosure_de_divergencia_anda_com_a_premissa_editada(roe, valor_esperado):
+    """Os dois casos concretos da revisão, pelo caminho de produção
+    (`avaliar()` de verdade sobre o caso editado): ROE 17,2 leva a divergência
+    a 0,16% e o disclosure some; ROE 25 a leva a 45,5% e o disclosure imprime
+    esse número, não os 16,4% da carga."""
+    def _editar(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"]["roe"] = roe
+
+    achados = _disclosures_de_divergencia(apoio.montar_entrega("caso_degrau.json", mutar_caso=_editar))
+    if valor_esperado is None:
+        assert achados == []
+    else:
+        assert len(achados) == 1, achados
+        assert achados[0].params["valor"] == pytest.approx(valor_esperado, abs=0.05)
+
+
+def test_degrau_sem_lista_de_chaves_e_hard_fail():
+    """Defesa em profundidade, a mesma do B10: consumir a chave não pode abrir
+    um caminho em que o disclosure some em silêncio. Um degrau publicado sem
+    `diagnosticos_chaves` é contrato quebrado da integração — HARD FAIL
+    nomeando o caminho, nunca "sem chave, sem disclosure"."""
+    entrega_dict = apoio.montar_entrega("caso_degrau.json")
+    del entrega_dict["resultados"]["cenarios"]["base"]["degrau"]["diagnosticos_chaves"]
+
+    achados = qc.avaliar(entrega_dict, CATALOGO)
+    achado = next(a for a in achados if a.onde == "resultados.cenarios.base.degrau.diagnosticos_chaves")
+    assert (achado.nivel, achado.codigo) == ("HARD_FAIL", "diagnostico_sem_chave")
+    assert not [a for a in achados if a.codigo == "divergencia_de_base_degrau"]
 
 
 # --------------------------------------------------------------------------

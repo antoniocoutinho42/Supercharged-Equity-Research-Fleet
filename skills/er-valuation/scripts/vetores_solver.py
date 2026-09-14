@@ -1115,6 +1115,18 @@ def _bloco_degrau() -> list[dict]:
         {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
          "vpa": 25.0, "fx": 1.0}, m_valor=100.0))
 
+    # 17. Onda de correção da revisão final da 5C (F1): divergência de base DENTRO do limiar da
+    # integração (`avaliar._LIMIAR_DIVERGENCIA_DE_BASE_PCT`). Todo problema precificado acima tem
+    # |divergencia_de_base_%| acima dele (16,4; 25,0; -10,0; -50,0; -60,0; -77,3) — sem este, a
+    # chave `degrau_divergencia_de_base` acenderia em todos, e nem a paridade nem a cobertura
+    # discriminariam o limiar (um espelho que a acendesse SEMPRE passaria). Mesmo vetor e mesmos
+    # índices dos problemas 3-5 (h=1,5, m=100), com vpa=28,9: ROE·VPA = 18% × 28,9 = 5,202 contra
+    # LPA = 500/100 = 5 — divergência ≈ +4,03%, logo abaixo do limiar. VERIFICADO rodando o
+    # wrapper (`avaliar_python`) antes de entrar aqui.
+    v.append(_problema_degrau(
+        b, {"indice_atual": 15.0, "indice_alvo": 10.0, "anos": 4, "perfil_transicao": "rampa",
+            "vpa": 28.9, "fx": 1.0}, m_valor=100.0))
+
     return v
 
 

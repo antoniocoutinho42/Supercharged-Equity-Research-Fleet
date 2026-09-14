@@ -881,11 +881,18 @@
       "rotulo": {
         "pt-BR": "RiR = g/rentabilidade pós-degrau acima de 100%: payout negativo"
       }
+    },
+    "degrau_divergencia_de_base": {
+      "severidade": "atencao",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Divergência de base acima do limiar: parte do incremento do degrau vem do descasamento entre LL e ROE·VPA, não do degrau"
+      }
     }
   },
   "disclosures": {
     "divergencia_de_base_degrau": {
-      "limiar_pct": 5.0,
+      "chave": "degrau_divergencia_de_base",
       "texto": {
         "pt-BR": "Parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau."
       }

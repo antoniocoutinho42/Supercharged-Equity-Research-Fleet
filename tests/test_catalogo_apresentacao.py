@@ -17,7 +17,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
-from avaliar import _ALERTAS_DEGRAU_ORDEM, avaliar  # noqa: E402
+from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM, avaliar  # noqa: E402
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 import diagnosticos  # noqa: E402
@@ -46,9 +46,12 @@ MANIFEST = json.loads(
     (RAIZ / "skills" / "er-multiplos-justos" / "manifest_vendor.json").read_text(encoding="utf-8"))
 AVISOS_RAMPA = {"aviso_colheita", "aviso_delator", "aviso_gp"}
 # Fatia 5C, item 5, Task 3 (T1/T2): as chaves que o WRAPPER dá aos dois alertas do
-# degrau (`ALERTA`/`ALERTA_RiR`, prosa do motor sem chave) — derivadas da constante
-# que as publica, nunca de uma lista à mão.
-ALERTAS_DEGRAU = {chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM}
+# degrau (`ALERTA`/`ALERTA_RiR`, prosa do motor sem chave) — e, desde a onda de
+# correção da revisão final da 5C (F1), a da divergência de base acima do limiar da
+# integração. Derivadas da constante que as publica (`_CHAVES_DO_DEGRAU_ORDEM`, montada
+# em `avaliar.py` a partir das mesmas constantes que `_chaves_do_degrau` usa), nunca de
+# uma lista à mão.
+CHAVES_DO_DEGRAU = set(_CHAVES_DO_DEGRAU_ORDEM)
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
 
 
@@ -64,10 +67,11 @@ def test_premissas_do_catalogo_sao_exatamente_as_do_gate():
 def test_diagnosticos_do_catalogo_sao_exatamente_os_do_classificador():
     """Trava de upgrade dos diagnósticos: todo vocabulário de chave que a
     integração publica tem entrada no catálogo, e nada além dele — as chaves
-    do classificador, os avisos da rampa e (fatia 5C, Task 3) as chaves que o
-    wrapper dá aos alertas do degrau."""
-    assert ALERTAS_DEGRAU, "constante do wrapper vazia — a união ficaria vacuamente igual"
-    assert set(CAT["diagnosticos"]) == set(diagnosticos.CHAVES) | AVISOS_RAMPA | ALERTAS_DEGRAU
+    do classificador, os avisos da rampa e (fatia 5C) as chaves que o wrapper
+    publica em `degrau.diagnosticos_chaves` — os dois alertas do degrau e a
+    divergência de base acima do limiar."""
+    assert CHAVES_DO_DEGRAU, "constante do wrapper vazia — a união ficaria vacuamente igual"
+    assert set(CAT["diagnosticos"]) == set(diagnosticos.CHAVES) | AVISOS_RAMPA | CHAVES_DO_DEGRAU
 
 
 def test_todo_rotulo_existe_em_todo_idioma_declarado():
@@ -277,9 +281,22 @@ def test_opcoes_de_politica_tv_do_catalogo_batem_com_o_gate():
 # do catálogo; `limiares` desapareceu inteiro por ter ficado vazio.
 # --------------------------------------------------------------------------
 
-def test_disclosure_de_divergencia_de_base_tem_limiar_numerico_e_texto_em_todo_idioma():
+#
+# Onda de correção da revisão final da 5C (F1): o LIMIAR saiu daqui. Ele decidia
+# "acima do limiar" dentro da QC do relatório, e o laboratório ao vivo não tinha
+# como mover o disclosure junto com o preço. A decisão agora é da integração
+# (`avaliar._LIMIAR_DIVERGENCIA_DE_BASE_PCT`, espelhado em `motor_espelho.js` e
+# travado contra ela em `tests/test_paridade_wrapper_js.py`), que publica a chave
+# `degrau_divergencia_de_base`; o disclosure só NOMEIA a chave que o dispara e
+# carrega o texto. Vocabulário fechado: um `limiar_pct` que voltasse aqui seria uma
+# segunda fonte numérica, que ninguém lê e que diverge em silêncio.
+# --------------------------------------------------------------------------
+
+def test_disclosure_de_divergencia_de_base_nomeia_a_chave_da_integracao_sem_limiar():
     disclosure = CAT["disclosures"]["divergencia_de_base_degrau"]
-    assert isinstance(disclosure["limiar_pct"], (int, float)) and disclosure["limiar_pct"] > 0
+    assert set(disclosure) == {"chave", "texto"}, sorted(disclosure)
+    assert disclosure["chave"] == _CHAVE_DIVERGENCIA_DE_BASE
+    assert disclosure["chave"] in CAT["diagnosticos"]
     for idioma in CAT["idiomas"]:
         assert disclosure["texto"].get(idioma, "").strip()
 

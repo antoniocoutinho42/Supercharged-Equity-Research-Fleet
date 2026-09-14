@@ -321,29 +321,41 @@ def _achados_diagnostico_sem_chave(resultados: dict) -> list[Achado]:
 
 
 def _achados_divergencia_de_base(resultados: dict, catalogo: dict, idioma: str) -> list[Achado]:
-    """`divergencia_de_base_degrau` (REQUIRED DISCLOSURE): `|divergencia_de_
-    base_%|` de um cenário com degrau acima do limiar do catálogo, acima do
-    limiar — parte do incremento que o degrau parece criar vem do
+    """`divergencia_de_base_degrau` (REQUIRED DISCLOSURE): a integração
+    sinalizou, num cenário com degrau, que a divergência de base passa do
+    limiar DELA — parte do incremento que o degrau parece criar vem do
     descasamento entre as duas bases (LL x ROE.VPA), não do próprio degrau.
 
-    B8/A4 (achado F7): limiar E explicação vêm do MESMO lugar do catálogo
-    (`catalogo.disclosures.divergencia_de_base_degrau`) — o caminho antigo
-    (`catalogo.limiares.divergencia_de_base_pct_disclosure`, só o número,
-    sem explicação) foi removido; esta é agora a fonte única. A mensagem no
+    Onda de correção da revisão final da 5C (F1): esta função NÃO compara
+    limiar nenhum. Até ali ela aplicava `|divergencia_de_base_%| >
+    catalogo.disclosures.divergencia_de_base_degrau.limiar_pct` — uma decisão
+    metodológica tomada no relatório e congelada no build: o laboratório ao
+    vivo movia o preço (e a divergência) sem que o disclosure se movesse. A
+    decisão passou para a integração (`avaliar.py`, espelhada na fachada do
+    navegador), que publica a chave em `degrau.diagnosticos_chaves`; o
+    catálogo NOMEIA essa chave (`disclosures.divergencia_de_base_degrau.
+    chave`) — nenhum literal de chave de diagnóstico mora neste módulo —, e
+    esta função só a consome. O número publicado continua impresso na
+    mensagem. Defesa em profundidade da mesma família do B10: um degrau sem
+    `diagnosticos_chaves` é HARD FAIL `diagnostico_sem_chave`, nomeando o
+    caminho — consumir a chave não pode abrir um caminho em que o disclosure
+    some em silêncio.
+
+    B8/A4 (achado F7): a explicação vem do catálogo
+    (`catalogo.disclosures.divergencia_de_base_degrau.texto`). A mensagem no
     dicionário do relatório (`assets/i18n/<idioma>.json`) é só o MOLDE —
     "declare isso ao leitor" — o "porquê" (`{texto}`) é injetado aqui, vindo
     do catálogo, nunca hardcoded no relatório.
 
-    B13 (achado S5): `params` continua carregando `valor`/`limiar` como
-    NÚMEROS crus (`round(valor, 1)`/`limiar`, sem mudança de tipo — é o que
-    `qc.json` expõe para quem consome o achado como dado, e o que o teste
-    de contrato já travava com `pytest.approx`); `valor_fmt`/`limiar_fmt` são
-    a MESMA informação, formatada por `placeholders.formatar(..., "pp1",
-    idioma)` (separador decimal do idioma, sufixo '%' já embutido) — é o
-    que o MOLDE do dicionário usa para montar a mensagem. Antes desta
-    correção o molde interpolava `{valor}`/`{limiar}` (números crus) direto
-    via `.format()`, que usa `str()`: decimal com PONTO ("16.4%") numa
-    página cujo upside ao lado usa vírgula ("16,4%").
+    B13 (achado S5): `params` carrega `valor` como NÚMERO cru
+    (`round(valor, 1)` — é o que `qc.json` expõe para quem consome o achado
+    como dado, e o que o teste de contrato trava com `pytest.approx`);
+    `valor_fmt` é a MESMA informação, formatada por `placeholders.formatar(...,
+    "pp1", idioma)` (separador decimal do idioma, sufixo '%' já embutido) — é
+    o que o MOLDE do dicionário usa para montar a mensagem. Antes do B13 o
+    molde interpolava o número cru direto via `.format()`, que usa `str()`:
+    decimal com PONTO ("16.4%") numa página cujo upside ao lado usa vírgula
+    ("16,4%").
 
     B10 (achado S2): um cenário COM degrau mas sem `divergencia_de_base_%`
     numérico (ausente, `null`, texto, o que for) é HARD FAIL
@@ -356,7 +368,7 @@ def _achados_divergencia_de_base(resultados: dict, catalogo: dict, idioma: str) 
     um rename/typo futuro reprova AQUI, não em silêncio).
     """
     disclosure_catalogo = catalogo["disclosures"]["divergencia_de_base_degrau"]
-    limiar = disclosure_catalogo["limiar_pct"]
+    chave_do_disclosure = disclosure_catalogo["chave"]
     texto = disclosure_catalogo["texto"][idioma]
     achados: list[Achado] = []
 
@@ -370,13 +382,17 @@ def _achados_divergencia_de_base(resultados: dict, catalogo: dict, idioma: str) 
             achados.append(Achado("HARD_FAIL", "degrau_sem_divergencia_de_base", onde_valor,
                                   {"cenario": nome}))
             continue
-        if abs(valor) > limiar:
+        chaves = degrau.get("diagnosticos_chaves")
+        if not isinstance(chaves, list):
+            achados.append(Achado("HARD_FAIL", "diagnostico_sem_chave",
+                                  f"resultados.cenarios.{nome}.degrau.diagnosticos_chaves",
+                                  {"razao": "'diagnosticos_chaves' ausente (esperada ao lado de todo 'degrau')"}))
+            continue
+        if chave_do_disclosure in chaves:
             achados.append(Achado("REQUIRED_DISCLOSURE", "divergencia_de_base_degrau", onde_valor, {
                 "cenario": nome,
                 "valor": round(valor, 1),
                 "valor_fmt": placeholders.formatar(valor, "pp1", idioma),
-                "limiar": limiar,
-                "limiar_fmt": placeholders.formatar(limiar, "pp1", idioma),
                 "texto": texto,
             }))
 

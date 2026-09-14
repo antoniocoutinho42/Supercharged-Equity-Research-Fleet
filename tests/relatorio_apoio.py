@@ -48,6 +48,29 @@ def prosa_da_pagina(html_texto: str) -> str:
     return _PADRAO_ESTILO_BLOCO.sub(
         lambda m: m.group(1) + m.group(3), qc._sem_conteudo_de_script(html_texto))
 
+def listas_de_chaves_de_diagnostico(no, caminho: tuple = ()):
+    """Toda lista `diagnosticos_chaves` DENTRO de `no` (um cenário publicado),
+    em qualquer profundidade, na ordem em que aparece — `(caminho, lista)`.
+
+    Onda de correção da revisão final da 5C (F4): é a derivação que as travas
+    usam para saber que listas de chaves um cenário publica SEM nomear onde elas
+    moram. Hoje são duas formas (`diagnosticos_chaves` do cenário e
+    `degrau.diagnosticos_chaves`); uma forma aditiva de uma v10
+    (`transicao.diagnosticos_chaves`, a sonda P6 da revisão) entra aqui no
+    instante em que o wrapper a publica, sem editar teste nenhum — e é isso que
+    faz a trava da lista exibível reprovar na INTEGRAÇÃO quando a fachada a
+    esquece."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            if chave == "diagnosticos_chaves" and isinstance(valor, list):
+                yield caminho + (chave,), valor
+            else:
+                yield from listas_de_chaves_de_diagnostico(valor, caminho + (chave,))
+    elif isinstance(no, list):
+        for indice, item in enumerate(no):
+            yield from listas_de_chaves_de_diagnostico(item, caminho + (indice,))
+
+
 IDIOMA_PADRAO = "pt-BR"
 TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."
 

@@ -18,7 +18,8 @@ ESPELHO = RAIZ / "skills" / "er-valuation" / "assets" / "motor_espelho.js"
 FIXTURE = RAIZ / "tests" / "fixtures" / "vetores_solver.json"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 import diagnosticos  # noqa: E402
-from avaliar import _ALERTAS_DEGRAU_ORDEM  # noqa: E402
+from avaliar import (_CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM,  # noqa: E402
+                     _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
 from vetores_solver import avaliar_python  # noqa: E402
 
 TAU = 1e-12
@@ -312,11 +313,30 @@ def test_fixture_de_degrau_cobre_o_que_discrimina():
               for p in probs), "tv=book com roe_book nunca exercitado"
     assert any("ALERTA" in a["degrau"] for a in ok), "ALERTA nunca exercitado"
     assert any("ALERTA_RiR" in a["degrau"] for a in ok), "ALERTA_RiR nunca exercitado"
-    # Fatia 5C, Task 3: toda chave que o wrapper da a um alerta do degrau aparece em pelo menos um
-    # problema — sem isto, a igualdade de `degrau.diagnosticos_chaves` em
-    # test_degrau_bate_campo_a_campo poderia estar comparando so' listas vazias.
+    # Fatia 5C, Task 3: toda chave que o wrapper publica em `degrau.diagnosticos_chaves` aparece em
+    # pelo menos um problema — sem isto, a igualdade da lista em test_degrau_bate_campo_a_campo
+    # poderia estar comparando so' listas vazias. Desde a onda de correcao da revisao final (F1),
+    # o vocabulario inclui a chave da divergencia de base, derivado da constante do wrapper.
     vistas = {chave for a in ok for chave in (a["degrau"]["diagnosticos_chaves"] or [])}
-    assert vistas == {chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM}, vistas
+    assert vistas == set(_CHAVES_DO_DEGRAU_ORDEM), vistas
+    # F1: a chave da divergencia de base so' prende o LIMIAR se a fixture tiver os dois lados dele —
+    # um problema com a divergencia dentro do limiar (chave apagada) e divergencias acima dele nos
+    # DOIS sinais (a regra e' sobre o modulo: um espelho sem o `abs` so' reprova com uma negativa).
+    assert any(abs(a["degrau"]["divergencia_de_base_%"]) <= _LIMIAR_DIVERGENCIA_DE_BASE_PCT
+               for a in ok), "nenhuma divergencia de base dentro do limiar — o limiar nao e' discriminado"
+    assert any(a["degrau"]["divergencia_de_base_%"] > _LIMIAR_DIVERGENCIA_DE_BASE_PCT for a in ok), \
+        "nenhuma divergencia positiva acima do limiar"
+    assert any(a["degrau"]["divergencia_de_base_%"] < -_LIMIAR_DIVERGENCIA_DE_BASE_PCT for a in ok), \
+        "nenhuma divergencia negativa acima do limiar — o modulo da regra nao e' discriminado"
+
+    # F1, a REGRA no lado Python, problema a problema: a chave acende se e so' se o modulo da
+    # divergencia publicada passa do limiar do wrapper. O lado JS nao precisa de checagem propria:
+    # test_degrau_bate_campo_a_campo exige a MESMA lista, na mesma ordem, dos dois lados.
+    fora_da_regra = [
+        (a["degrau"]["divergencia_de_base_%"], a["degrau"]["diagnosticos_chaves"]) for a in ok
+        if (abs(a["degrau"]["divergencia_de_base_%"]) > _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
+        != (_CHAVE_DIVERGENCIA_DE_BASE in a["degrau"]["diagnosticos_chaves"])]
+    assert not fora_da_regra, fora_da_regra
 
     # h=1 nao inventa valor sem capacidade ociosa real (test_2, tests/test_valuation_degrau.py) —
     # sanidade da fixture: confirma que o problema de h=1 exibe a MESMA identidade que a Task 1 já
@@ -324,3 +344,21 @@ def test_fixture_de_degrau_cobre_o_que_discrimina():
     h1 = next(a for a in ok if a["degrau"]["h"] == pytest.approx(1.0))
     assert h1["degrau"]["com_transicao"] == pytest.approx(h1["degrau"]["multiplo_x_rentab"])
     assert h1["degrau"]["multiplo"] == pytest.approx(h1["sem_degrau"]["multiplos"]["PL_curr"])
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_limiar_e_a_chave_da_divergencia_de_base_do_espelho_sao_os_do_wrapper():
+    """Onda de correcao da revisao final da 5C (F1): a decisao "divergencia de base acima do
+    limiar" passou a ser da integracao, e tem UMA fonte numerica — `avaliar.
+    _LIMIAR_DIVERGENCIA_DE_BASE_PCT`. O espelho carrega uma copia (o navegador nao le Python), e
+    a copia e' travada aqui por IGUALDADE contra a fonte, junto com a chave que ela acende. A
+    paridade campo a campo prende o comportamento so' onde a fixture tem problema dos dois lados
+    do limiar; esta igualdade prende o numero inteiro, qualquer que seja a fixture."""
+    script = ("const M = require(%s);"
+              "console.log(JSON.stringify({limiar: M.LIMIAR_DIVERGENCIA_DE_BASE_PCT,"
+              " chave: M.CHAVE_DIVERGENCIA_DE_BASE}));") % json.dumps(str(ESPELHO))
+    r = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8",
+                       timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(r.stdout) == {"limiar": _LIMIAR_DIVERGENCIA_DE_BASE_PCT,
+                                    "chave": _CHAVE_DIVERGENCIA_DE_BASE}

@@ -717,17 +717,21 @@ def _bootstrap_do_laboratorio(pagina: str) -> str:
 
 
 def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None,
-                      passos: list | None = None) -> dict:
+                      passos: list | None = None, modulos_extra: list | None = None) -> dict:
     """Roda o painel no node e devolve uma FOTO depois da carga e depois de
     cada passo (`editar` um campo / `restaurar` um cenário): estado e texto do
     badge, itens de divergência, `disabled`/valor de cada campo e de cada
-    botão, e as três saídas de cada cenário, como a tela as mostraria."""
+    botão, e as três saídas de cada cenário, como a tela as mostraria.
+
+    `modulos_extra`: arquivos carregados DEPOIS dos três da página, no mesmo
+    contexto e antes do bootstrap — é como um teste simula uma fachada de outra
+    versão sem tocar nos arquivos da integração."""
     arvore = _ArvoreDoPainel()
     arvore.feed(_painel(pagina))
     arvore.close()
     assert arvore.raiz is not None and arvore.raiz["attrs"].get("class") == "laboratorio"
     entrada = {
-        "modulos": [str(p) for p in MODULOS_DO_LABORATORIO],
+        "modulos": [str(p) for p in MODULOS_DO_LABORATORIO] + [str(p) for p in (modulos_extra or [])],
         "arvore": arvore.raiz,
         "dados": dados if dados is not None else _dados_embutidos(pagina),
         "bootstrap": _bootstrap_do_laboratorio(pagina),
@@ -1011,3 +1015,81 @@ def test_uma_chave_que_o_payload_nao_rotula_vira_texto_do_dicionario_nunca_a_cha
         "classe": "lab-diagnostico lab-diagnostico-desconhecido",
     }
     assert not any(sem_rotulo in item["texto"] for item in itens), itens
+
+
+# --------------------------------------------------------------------------
+# Onda de correção da revisão final da 5C — F1 e F4 pela tela.
+# --------------------------------------------------------------------------
+
+def _item_do_catalogo(chave: str) -> dict:
+    info = CATALOGO["diagnosticos"][chave]
+    return {"texto": info["rotulo"]["pt-BR"],
+            "classe": "lab-diagnostico lab-diagnostico-" + info["severidade"]}
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_a_divergencia_de_base_do_degrau_aparece_na_tela_e_some_com_a_edicao(tmp_path):
+    """F1 (ALTO) pela tela. Na carga de `caso_degrau` (16,4%) o laboratório já
+    mostra a divergência de base acima do limiar, com rótulo e severidade do
+    catálogo — antes, só a prosa estática da aba Tese a mencionava. Editar ROE
+    para 17,2 (0,16%) apaga o item no mesmo evento em que o preço anda, e a
+    tela passa a mostrar exatamente o que `avaliar()` publica para o caso
+    editado; restaurar o devolve."""
+    pagina, entrega = _pagina("caso_degrau.json")
+    item = _item_do_catalogo(CATALOGO["disclosures"]["divergencia_de_base_degrau"]["chave"])
+
+    def _editar(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"]["roe"] = 17.2
+
+    editada = apoio.montar_entrega("caso_degrau.json", mutar_caso=_editar)
+    fotos = _laboratorio_vivo(pagina, tmp_path, passos=[
+        {"nome": "editado", "acao": "editar", "cenario": "base", "premissa": "roe", "valor": "17.2"},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+    carga = fotos["carga"]
+    assert carga["badge"]["estado"] == "ok", carga["badge"]
+
+    assert carga["diagnosticos"]["base"] == _itens_publicados(entrega["resultados"])
+    assert item in carga["diagnosticos"]["base"]
+    assert fotos["editado"]["diagnosticos"]["base"] == _itens_publicados(editada["resultados"])
+    assert item not in fotos["editado"]["diagnosticos"]["base"]
+    assert fotos["editado"]["saidas"]["base"]["preco"] != carga["saidas"]["base"]["preco"], \
+        "a edição não moveu o preço — número e diagnóstico deixaram de andar juntos no teste"
+    assert fotos["restaurado"]["diagnosticos"]["base"] == carga["diagnosticos"]["base"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_uma_forma_nova_que_a_fachada_exibe_chega_a_tela_sem_editar_o_laboratorio(tmp_path):
+    """F4 (MÉDIO, E3) — a sonda P6 da revisão, agora com a correção no lugar.
+    Um módulo extra, carregado depois dos três da página, simula uma fachada
+    v10 que publica uma forma ADITIVA de diagnóstico
+    (`cenarios.<n>.transicao.diagnosticos_chaves`, com uma chave real do
+    catálogo que a fixture não acende) e a inclui na lista exibível. A tela a
+    mostra, rotulada, sem nenhuma linha nova no laboratório: ele pinta
+    `diagnosticos_exibidos` e não conhece forma nenhuma. Um laboratório que
+    voltasse a juntar as listas por caminho a deixaria de fora."""
+    pagina, entrega = _pagina("caso_minimo_firm.json")
+    forma_nova = "degrau_alerta"
+    assert forma_nova in CATALOGO["diagnosticos"]
+    assert forma_nova not in entrega["resultados"]["cenarios"]["base"]["diagnosticos_chaves"]
+
+    fachada_v10 = tmp_path / "fachada_v10.js"
+    fachada_v10.write_text(
+        "(function () {\n"
+        "  var avaliarCaso = FachadaEspelho.avaliarCaso;\n"
+        "  FachadaEspelho.avaliarCaso = function (caso) {\n"
+        "    var vivo = avaliarCaso(caso);\n"
+        "    Object.keys(vivo.cenarios).forEach(function (nome) {\n"
+        "      var cenario = vivo.cenarios[nome];\n"
+        "      cenario.transicao = { diagnosticos_chaves: [" + json.dumps(forma_nova) + "] };\n"
+        "      cenario.diagnosticos_exibidos =\n"
+        "        cenario.diagnosticos_exibidos.concat(cenario.transicao.diagnosticos_chaves);\n"
+        "    });\n"
+        "    return vivo;\n"
+        "  };\n"
+        "}());\n", encoding="utf-8")
+
+    carga = _laboratorio_vivo(pagina, tmp_path, modulos_extra=[fachada_v10])["carga"]
+    assert carga["badge"]["estado"] == "ok", carga["badge"]
+    assert carga["diagnosticos"]["base"] == (
+        _itens_publicados(entrega["resultados"]) + [_item_do_catalogo(forma_nova)])

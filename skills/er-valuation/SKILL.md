@@ -172,7 +172,11 @@ convenção que já mora aqui):
   `degrau.diagnosticos_chaves` — a chave de cada alerta que o motor emitiu no
   nível-alvo (`degrau_alerta` ← `ALERTA`, `degrau_alerta_rir` ← `ALERTA_RiR`),
   por presença, ao lado da prosa do motor, que continua publicada para
-  auditoria.
+  auditoria; e, depois delas, `degrau_divergencia_de_base` quando
+  `|divergencia_de_base_%|` passa do limiar do wrapper
+  (`avaliar._LIMIAR_DIVERGENCIA_DE_BASE_PCT`, fonte única, espelhado e travado
+  em `motor_espelho.js`). A decisão "acima do limiar" é desta camada: a QC do
+  relatório consome a chave e não compara limiar nenhum.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
@@ -181,7 +185,8 @@ Conhecimento metodológico que o relatório precisa exibir mas não calcula
 (bloco/unidade/rótulo de cada premissa, rótulo por convenção terminal
 canônica — `convencoes_terminais`, fonte única, nunca duplicado por rota —,
 rótulo e base de cada múltiplo, severidade e rótulo de cada diagnóstico,
-limiar e texto do disclosure de divergência de base) é publicado à parte,
+texto do disclosure de divergência de base e o nome da chave que o dispara)
+é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
 `tests/test_catalogo_apresentacao.py`.

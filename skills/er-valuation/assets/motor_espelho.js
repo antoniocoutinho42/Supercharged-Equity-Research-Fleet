@@ -1455,6 +1455,16 @@ function resolverDiag(item) {
 // e tests/test_espelho_fachada_js.py prende a ordem com os dois alertas acesos juntos.
 const ALERTAS_DEGRAU = [['ALERTA', 'degrau_alerta'], ['ALERTA_RiR', 'degrau_alerta_rir']];
 
+// [onda de correcao da revisao final da 5C, F1] A DIVERGENCIA DE BASE do degrau como chave —
+// espelha `avaliar.py:_LIMIAR_DIVERGENCIA_DE_BASE_PCT`/`_CHAVE_DIVERGENCIA_DE_BASE`, a fonte
+// numerica UNICA do limiar (o catalogo de apresentacao deixou de carregar o numero). Copia
+// travada contra a fonte por igualdade em tests/test_paridade_wrapper_js.py (limiar e chave), e
+// pelo comportamento na paridade do degrau: `degrau.diagnosticos_chaves` compara por igualdade
+// exata, e a fixture tem divergencias dentro e acima do limiar, nos dois sinais. A chave sai
+// DEPOIS das dos alertas, quando o MODULO da divergencia passa do limiar — a regra do wrapper.
+const LIMIAR_DIVERGENCIA_DE_BASE_PCT = 5.0;
+const CHAVE_DIVERGENCIA_DE_BASE = 'degrau_divergencia_de_base';
+
 // fator_h (justos.py 793-799): h = indice_atual / indice_alvo — indice_alvo <= 0 devolve NaN
 // (guarda do nucleo; nunca alcancada pelo caminho do wrapper, que exige indice_alvo > 0 no gate).
 function fatorH(indiceAtual, indiceAlvo) {
@@ -1659,6 +1669,11 @@ function precificarDegrau({
   degrauCenario.diagnosticos_chaves = ALERTAS_DEGRAU
     .filter(([campo]) => campo in nivelAlvo)
     .map(([, chave]) => chave);
+  // [onda de correcao da 5C, F1] e a da divergencia de base acima do limiar (ver
+  // LIMIAR_DIVERGENCIA_DE_BASE_PCT acima) — `_chaves_do_degrau`, do lado Python.
+  if (Math.abs(degrauCenario['divergencia_de_base_%']) > LIMIAR_DIVERGENCIA_DE_BASE_PCT) {
+    degrauCenario.diagnosticos_chaves.push(CHAVE_DIVERGENCIA_DE_BASE);
+  }
 
   return {
     recusado: false,
@@ -1748,6 +1763,7 @@ const superficiePublica = {
   rampaBifasica, precificarRampa, resolverRampa,
   diagnosticosFirm, diagnosticosEquity, resolverDiag,
   fatorH, rentabPosDegrau, descontoTransicao, valorTransicionado, precificarDegrau, resolverDegrau,
+  LIMIAR_DIVERGENCIA_DE_BASE_PCT, CHAVE_DIVERGENCIA_DE_BASE,
   avaliarItem, avaliarItens,
 };
 
