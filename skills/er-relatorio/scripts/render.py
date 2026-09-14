@@ -33,6 +33,13 @@ colidiria com toda regra de estilo. `string.Template.substitute` ignora
 `{ }` por completo e nunca re-escaneia o valor já substituído em busca de
 mais `$nome` — seguro mesmo quando um valor formatado contém `$` de verdade
 (o símbolo "R$", por exemplo).
+
+Fatia 5D, Task 3: a aba Tese é a decisão de investimento da §9 do desenho, na
+ordem de D7 (ver a seção "Aba Tese" abaixo). Todo texto de `analise` que ela
+exibe sai de `placeholders.resolver_prosa` — a mesma lista de prosa que o QC
+varre e que o log da Evidência registra —, e todo vocabulário sai rotulado:
+premissa, bloco e classe de fronteira pelo catálogo; tema, vetor, incorporação e
+papel da faixa pelo dicionário.
 """
 
 import html
@@ -41,6 +48,7 @@ import string
 from pathlib import Path
 from typing import Any
 
+import entrega as contrato_entrega
 import placeholders
 
 _DIR_ASSETS: Path = Path(__file__).resolve().parent.parent / "assets"
@@ -76,6 +84,13 @@ class RotuloDoCatalogoAusente(Exception):
     contrato. Nunca um código cru ('firm', 'gordon') aparece no relatório em
     lugar do rótulo, e nunca um número é formatado por convenção decorada
     quando o catálogo não diz qual é a unidade."""
+
+
+class ProsaNaoAuditada(Exception):
+    """O relatório tentou exibir um texto de `analise` que não está na lista de
+    prosa auditada (`placeholders.campos_de_prosa`) — fatia 5D, Task 3, achado 3.
+    Um texto fora dela sairia na tela sem o QC de placeholder e sem linha no log
+    da Evidência; a recusa é nomeada, nunca um texto exibido às cegas."""
 
 
 def t(dicionario: dict, chave: str, **valores) -> str:
@@ -220,6 +235,55 @@ def _rotulo_premissa(catalogo: dict, rota: str, premissa: str, idioma: str) -> s
     return rotulo
 
 
+def _rotulo_bloco(catalogo: dict, bloco: str, idioma: str) -> str:
+    """Rótulo de um bloco econômico (`catalogo.blocos.<bloco>`) — os grupos do
+    laboratório (5C) e os itens de vínculo e mecanismo da Tese (5D, D2). Mesma
+    disciplina de `_rotulo_premissa`: a ausência é erro de catálogo, nomeado, e
+    as duas leituras passam por aqui, para que o mesmo rótulo nunca seja lido de
+    dois jeitos."""
+    info = (catalogo.get("blocos") or {}).get(bloco)
+    if info is None:
+        raise RotuloDoCatalogoAusente(f"catálogo de apresentação sem o bloco '{bloco}' em 'blocos'.")
+    rotulo = (info.get("rotulo") or {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para o bloco '{bloco}'.")
+    return rotulo
+
+
+def _rotulo_fronteira(catalogo: dict, classe: str, idioma: str) -> str:
+    """Rótulo de uma classe de fronteira de escopo (`catalogo.fronteiras_de_
+    escopo.<classe>`, 5D, D3). O gate valida a classe e `tests/test_catalogo_
+    apresentacao.py` trava o catálogo contra esse vocabulário; a ausência aqui é
+    recusa nomeada, nunca a chave crua na Conclusão."""
+    info = (catalogo.get("fronteiras_de_escopo") or {}).get(classe)
+    if info is None:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a classe de fronteira de escopo '{classe}' em "
+            "'fronteiras_de_escopo'.")
+    rotulo = (info.get("rotulo") or {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para a classe de fronteira de "
+            f"escopo '{classe}'.")
+    return rotulo
+
+
+def _rotulo_do_vinculo(catalogo: dict, rota: str, item: str, idioma: str) -> str:
+    """Rótulo de um item de vínculo ou de mecanismo da Tese (D2): premissa da rota
+    (`_rotulo_premissa`) ou bloco econômico (`_rotulo_bloco`). O QC já recusa item
+    fora dos dois antes de renderizar (`vinculo_fora_do_vocabulario`, HARD FAIL);
+    aqui, defesa em profundidade, nomeada."""
+    if item in ((catalogo.get("premissas") or {}).get(rota) or {}):
+        return _rotulo_premissa(catalogo, rota, item, idioma)
+    if item in (catalogo.get("blocos") or {}):
+        return _rotulo_bloco(catalogo, item, idioma)
+    raise RotuloDoCatalogoAusente(
+        f"catálogo de apresentação sem '{item}' entre as premissas da rota '{rota}' e os "
+        "blocos econômicos — um vínculo nunca aparece pela chave crua."
+    )
+
+
 def _mensagem_qc(achado, dicionario: dict) -> str:
     """Resolve `qc.<codigo>` do dicionário com `achado.params` — mesma
     receita de `builder._montar_qc_json` (módulo irmão, mesmo dicionário),
@@ -291,8 +355,10 @@ def _texto_valor(valor) -> str:
 
 
 # --------------------------------------------------------------------------
-# Exhibits (fatia 5B, item 5, Task 2): a seção de gráficos/tabelas da Tese
-# (G7) e a rastreabilidade correspondente na Evidência (G8). Consomem
+# Exhibits (fatia 5B, item 5, Task 2; reposicionados na 5D, Task 3, D5): os
+# gráficos/tabelas da Tese — sob as perguntas que os citam, e os que nenhuma
+# pergunta cita numa seção final (G7) — e a rastreabilidade correspondente na
+# Evidência (G8). Consomem
 # `exhibits_resolvidos`/`log_exhibits` que `builder.py` já produziu chamando
 # `exhibits.resolver(entrega)` UMA vez (ver o docstring de `compor` abaixo) —
 # este módulo nunca chama `exhibits.resolver` de novo, e nunca importa
@@ -418,36 +484,40 @@ def _formatacao_grafico(dicionario: dict) -> dict:
     return {"graficoIndisponivel": t(dicionario, "graficos.indisponivel")}
 
 
-def _exhibits_html(exhibits_resolvidos: list, dicionario: dict) -> str:
-    """Seção de exhibits na Tese (G7): um `<article>` por exhibit, na ordem
-    declarada, com a pergunta como título (prosa do analista, escapada — a
-    mesma disciplina do resto deste módulo) e um host VAZIO que só
-    `graficos.js` preenche (bootstrap estático em `template.html`). G5: a
-    5D reposiciona isto sob as perguntas da tese; nesta fatia, seção
-    própria."""
-    titulo = html.escape(t(dicionario, "tese.exhibits_titulo"))
-    if not exhibits_resolvidos:
-        vazio = html.escape(t(dicionario, "tese.exhibits_vazio"))
-        return f'<section class="exhibits exhibits-vazio"><h2>{titulo}</h2><p>{vazio}</p></section>'
+def _exhibit_html(exhibit: dict, indice: int, prosa: dict, tag_titulo: str) -> str:
+    """Um exhibit como o leitor o encontra: a pergunta dele como título, a nota
+    de janela, o host VAZIO que só `graficos.js` preenche (bootstrap estático em
+    `template.html`) e o caption. Os três textos saem da lista de prosa auditada
+    (5D, Task 3, achado 4): dentro da aba Tese, um caption é prosa da tese.
 
-    blocos = []
-    for indice, exhibit in enumerate(exhibits_resolvidos):
-        pergunta = html.escape(exhibit["pergunta"])
-        bloco_nota = ""
-        if exhibit.get("nota_janela"):
-            bloco_nota = f'<p class="exhibit-nota-janela">{html.escape(exhibit["nota_janela"])}</p>'
-        bloco_caption = ""
-        if exhibit.get("caption"):
-            bloco_caption = f'<p class="exhibit-caption">{html.escape(exhibit["caption"])}</p>'
-        blocos.append(
-            f'<article class="exhibit" data-exhibit-indice="{indice}">'
-            f'<h3>{pergunta}</h3>'
-            f'{bloco_nota}'
-            f'<div class="exhibit-grafico" data-exhibit-indice="{indice}"></div>'
-            f'{bloco_caption}'
-            f'</article>'
-        )
-    return f'<section class="exhibits"><h2>{titulo}</h2>{"".join(blocos)}</section>'
+    `indice` é a posição do exhibit em `exhibits_resolvidos` — a mesma da sua
+    spec no payload (`_exhibit_para_json`, montado na mesma ordem). O host o
+    carrega em `data-exhibit-indice`, e é por ESTE atributo que o bootstrap
+    pareia host e spec (achado 1): sob as perguntas, a ordem do DOM é a das
+    perguntas, e o mesmo exhibit pode aparecer em duas delas. Nenhum outro
+    elemento da página carrega o atributo. `tag_titulo` é o nível do título:
+    `h4` sob uma pergunta, `h3` na seção final."""
+    onde = f"analise.exhibits.{indice}"
+    partes = [f'<{tag_titulo}>{html.escape(_prosa(prosa, onde + ".pergunta"))}</{tag_titulo}>']
+    if exhibit.get("nota_janela"):
+        partes.append(f'<p class="exhibit-nota-janela">{html.escape(_prosa(prosa, onde + ".nota_janela"))}</p>')
+    partes.append(f'<div class="exhibit-grafico" data-exhibit-indice="{indice}"></div>')
+    if exhibit.get("caption"):
+        partes.append(f'<p class="exhibit-caption">{html.escape(_prosa(prosa, onde + ".caption"))}</p>')
+    return f'<article class="exhibit">{"".join(partes)}</article>'
+
+
+def _exhibits_nao_citados_html(exhibits_resolvidos: list, citados: set, prosa: dict,
+                                dicionario: dict) -> str:
+    """D7: a última seção da aba, com os exhibits que nenhuma pergunta cita, na
+    ordem declarada — ou nada, quando toda pergunta cita os seus: nenhuma seção
+    vazia."""
+    artigos = [_exhibit_html(exhibit, indice, prosa, "h3")
+               for indice, exhibit in enumerate(exhibits_resolvidos) if indice not in citados]
+    if not artigos:
+        return ""
+    return _secao_html("exhibits exhibits-nao-citados", t(dicionario, "tese.exhibits_nao_citados_titulo"),
+                       "".join(artigos))
 
 
 def _rastreabilidade_exhibits_html(log_exhibits: list, dicionario: dict) -> str:
@@ -483,44 +553,373 @@ def _rastreabilidade_exhibits_html(log_exhibits: list, dicionario: dict) -> str:
 
 
 # --------------------------------------------------------------------------
-# Aba Tese: título (já resolvido por `compor`), conclusão resolvida, e todo
-# achado REQUIRED_DISCLOSURE visível. HARD_FAIL nunca chega aqui (regra
-# inviolável 2 barra antes); QUALITY_WARNING nunca é exibido (só `qc.json`).
+# Aba Tese (fatia 5D, item 5, Task 3; §9 do desenho; D3, D5 e D7 do plano): a
+# decisão de investimento, na ordem de D7 — Conclusão (faixa, veredicto com o
+# preço de tela, múltiplo justo × de tela corrente) → avisos obrigatórios →
+# premissas decisivas → o que mudou (se declarado) → Positives/Negatives →
+# perguntas, cada uma com os exhibits que cita ou a razão de não ter → riscos →
+# visão não-consensual (se declarada) → exhibits que nenhuma pergunta cita.
+#
+# Três disciplinas, as mesmas do resto deste módulo:
+# - todo TEXTO de `analise` sai de `prosa` (`_prosa`), o dicionário que
+#   `placeholders.resolver_prosa` monta sobre a lista que o QC varre e que o log
+#   da Evidência registra: o render não resolve texto nenhum por conta própria,
+#   e o que não está na lista não chega à tela;
+# - todo VOCABULÁRIO sai rotulado: premissa, bloco e classe de fronteira pelo
+#   catálogo (E3); tema, vetor, incorporação e papel da faixa pelo dicionário
+#   (vocabulário do Fleet, §7 e §9). Nunca a chave crua (a lição do B2);
+# - todo NÚMERO já vem pronto de `resultados`/`caso` e só é formatado: o preço
+#   de cada ponta da faixa, o preço de tela, o valor da premissa decisiva.
+#   Nenhuma conta de valuation.
+#
+# HARD_FAIL nunca chega aqui (a regra inviolável 2 barra antes); QUALITY_WARNING
+# nunca é exibido (só `qc.json`).
 # --------------------------------------------------------------------------
 
-def _tese_html(entrega: dict, achados: list, idioma: str, dicionario: dict, titulo: str) -> str:
-    caso = entrega["caso"]
-    resultados = entrega["resultados"]
-    fontes = {"resultados": resultados, "caso": caso}
-    conclusao_resolvida, _log, _erros = placeholders.resolver(
-        entrega["analise"]["conclusao"]["texto"], fontes, idioma, "analise.conclusao.texto")
+# O vocabulário de `resultados.manchete.fonte` (contrato `resultados/1`,
+# publicado por `avaliar._montar_manchete`): de onde vem o preço da manchete. A
+# faixa sempre lê `resultados.cenarios`; quando a manchete vem do SOTP, a base
+# da faixa é o cenário consolidado, e não a resposta (achado 5).
+FONTE_DA_MANCHETE_CENARIOS: str = "cenarios"
+FONTE_DA_MANCHETE_SOTP: str = "sotp"
 
+
+def _prosa(prosa: dict, onde: str) -> str:
+    """O texto resolvido de `onde`. Só existe o que `placeholders.campos_de_prosa`
+    lista: um campo exibido fora dela sairia sem o QC de placeholder e sem linha
+    no log da Evidência (achado 3) — recusa nomeada, nunca um texto às cegas."""
+    if onde not in prosa:
+        raise ProsaNaoAuditada(
+            f"o relatório tentou exibir '{onde}', que não está na lista de prosa auditada "
+            "(placeholders.campos_de_prosa): esse texto sairia sem o QC de placeholder e sem "
+            "linha no log da Evidência."
+        )
+    return prosa[onde]
+
+
+def _rotulo_de_vocabulario(dicionario: dict, grupo: str, codigo: str) -> str:
+    """O rótulo, no dicionário, de um código de vocabulário do contrato
+    `entrega/1` — tema, vetor, incorporação, papel da faixa (§7, §9).
+    `tests/test_relatorio_tese.py` trava cada grupo por igualdade de conjunto
+    contra as constantes de `entrega.py`; ausente, `ChaveDeInterfaceAusente`
+    nomeada, nunca o código cru."""
+    return t(dicionario, f"{grupo}.{codigo}")
+
+
+def _valor_html(classe: str, texto: str) -> str:
+    return f'<span class="{classe}">{html.escape(texto)}</span>'
+
+
+def _atributo_html(rotulo: str, valor_html: str) -> str:
+    """Uma linha "rótulo e valor" de um bloco da Tese; `valor_html` já vem
+    escapado."""
+    return (f'<p class="tese-atributo"><span class="tese-atributo-rotulo">{html.escape(rotulo)}</span> '
+            f'{valor_html}</p>')
+
+
+def _secao_html(classe: str, titulo: str, corpo: str) -> str:
+    return f'<section class="{classe}"><h2>{html.escape(titulo)}</h2>{corpo}</section>'
+
+
+def _lista_html(itens: list, dicionario: dict) -> str:
+    """Os itens de um bloco da Tese — ou, sem nenhum, a frase do dicionário: a §9
+    não fixa quantidade, e uma lista vazia também é declaração do analista."""
+    if not itens:
+        return f'<p class="tese-nenhum">{html.escape(t(dicionario, "tese.nenhum_item"))}</p>'
+    return f'<ul class="tese-lista">{"".join(itens)}</ul>'
+
+
+def _rotulos_do_valuation_html(itens: list, catalogo: dict, rota: str, idioma: str) -> str:
+    """O vínculo de uma pergunta, ou o mecanismo de um Positive/Negative (D2):
+    cada item pelo rótulo do catálogo."""
+    return " ".join(_valor_html("tese-rotulo", _rotulo_do_vinculo(catalogo, rota, item, idioma))
+                    for item in itens)
+
+
+def _fronteira_html(fronteira: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+    """D3 (§14): sob fronteira de escopo a Conclusão é condicional e sem
+    preço-alvo — a classe rotulada pelo catálogo, a arquitetura dominante e a
+    razão, como a integração as publicou em `resultados.fronteira_de_escopo`
+    (nunca lidas do `caso` cru, a lição do B2)."""
+    onde = "resultados.fronteira_de_escopo"
+    classe = _rotulo_fronteira(catalogo, _campo_de_contrato(fronteira, "classe", onde), idioma)
+    arquitetura = str(_campo_de_contrato(fronteira, "arquitetura_dominante", onde))
+    razao = str(_campo_de_contrato(fronteira, "razao", onde))
+    return (
+        '<div class="tese-fronteira">'
+        + _atributo_html(t(dicionario, "tese.fronteira_classe"), _valor_html("tese-fronteira-classe", classe))
+        + _atributo_html(t(dicionario, "tese.fronteira_arquitetura"),
+                         _valor_html("tese-fronteira-arquitetura", arquitetura))
+        + _atributo_html(t(dicionario, "tese.fronteira_razao"), _valor_html("tese-fronteira-razao", razao))
+        + '</div>'
+    )
+
+
+def _faixa_html(faixa: dict, resultados: dict, idioma: str, moeda: str | None, dicionario: dict) -> str:
+    """D1/D7: as três pontas da faixa, cada uma com o preço que
+    `resultados.cenarios.<nome>.valor.preco_acao` publica para o cenário que o
+    analista nomeou — o QC já conferiu a ordem (`faixa_fora_de_ordem`).
+
+    Achado 5: num caso SOTP a manchete é o preço da soma das partes, e a base da
+    faixa é o cenário consolidado — dois preços "base" na mesma página. A faixa
+    sai rotulada como a do consolidado, nomeando o preço da manchete. Se o SOTP
+    deveria ter faixa própria é pergunta de metodologia, não deste módulo."""
+    manchete = _campo_de_contrato(resultados, "manchete", "resultados")
+    fonte = _campo_de_contrato(manchete, "fonte", "resultados.manchete")
+    if fonte == FONTE_DA_MANCHETE_CENARIOS:
+        rotulo = t(dicionario, "tese.faixa_rotulo")
+    elif fonte == FONTE_DA_MANCHETE_SOTP:
+        preco_da_manchete = _campo_de_contrato(manchete, "preco_acao", "resultados.manchete")
+        rotulo = t(dicionario, "tese.faixa_rotulo_consolidado",
+                   preco=placeholders.formatar(preco_da_manchete, "moeda", idioma, moeda))
+    else:
+        raise CampoDeContratoAusente(
+            f"'resultados.manchete.fonte' fora do vocabulário que a faixa sabe rotular: {fonte!r} "
+            f"(conhecidos: '{FONTE_DA_MANCHETE_CENARIOS}', '{FONTE_DA_MANCHETE_SOTP}') — o relatório "
+            "não rotula ao acaso uma faixa cuja relação com a manchete ele não conhece."
+        )
+
+    cenarios = _campo_de_contrato(resultados, "cenarios", "resultados")
+    metricas = []
+    for papel in contrato_entrega.PAPEIS_DA_FAIXA:
+        nome = faixa[papel]
+        valor = _campo_de_contrato(_campo_de_contrato(cenarios, nome, "resultados.cenarios"),
+                                   "valor", f"resultados.cenarios.{nome}")
+        preco = _campo_de_contrato(valor, "preco_acao", f"resultados.cenarios.{nome}.valor")
+        metricas.append(
+            '<div class="metrica">'
+            + _valor_html("metrica-rotulo", _rotulo_de_vocabulario(dicionario, "tese.papeis_da_faixa", papel))
+            + _valor_html("metrica-valor", placeholders.formatar(preco, "moeda", idioma, moeda))
+            + _valor_html("metrica-nota", t(dicionario, "tese.faixa_cenario", cenario=nome))
+            + '</div>'
+        )
+    return (f'<div class="tese-faixa"><p class="tese-faixa-rotulo">{html.escape(rotulo)}</p>'
+            f'{"".join(metricas)}</div>')
+
+
+def _veredicto_html(caso: dict, idioma: str, moeda: str | None, dicionario: dict, prosa: dict) -> str:
+    """D1: o veredicto do analista, resolvido, com o preço de tela ao lado — o
+    valor, a data e a fonte de `caso.preco`, que o gate exige e o analista nunca
+    reescreve."""
+    preco = _campo_de_contrato(caso, "preco", "caso")
+    tela = t(dicionario, "tese.preco_de_tela",
+             preco=placeholders.formatar(_campo_de_contrato(preco, "valor", "caso.preco"), "moeda", idioma, moeda),
+             data=str(_campo_de_contrato(preco, "data", "caso.preco")),
+             fonte=str(_campo_de_contrato(preco, "fonte", "caso.preco")))
+    return (
+        '<div class="tese-veredicto">'
+        f'<h3>{html.escape(t(dicionario, "tese.veredicto_titulo"))}</h3>'
+        f'<p class="tese-veredicto-texto">{html.escape(_prosa(prosa, "analise.veredicto.texto"))}</p>'
+        f'<p class="tese-preco-de-tela">{html.escape(tela)}</p>'
+        '</div>'
+    )
+
+
+def _conclusao_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
+    """A Conclusão (D7). Sob fronteira de escopo (D3) o título é o condicional,
+    sem preço-alvo, com a classe, a arquitetura dominante e a razão — e a faixa
+    não é desenhada: o contrato já a proíbe, e este módulo não a desenharia nem
+    se ela chegasse."""
+    caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
+    moeda = caso.get("moeda")
+    fronteira = _campo_de_contrato(resultados, "fronteira_de_escopo", "resultados")
+    if fronteira is None:
+        titulo = t(dicionario, "tese.conclusao_titulo")
+        bloco_fronteira = ""
+        faixa = analise.get("faixa")
+        bloco_faixa = _faixa_html(faixa, resultados, idioma, moeda, dicionario) if isinstance(faixa, dict) else ""
+    else:
+        titulo = t(dicionario, "tese.conclusao_condicional_titulo")
+        bloco_fronteira = _fronteira_html(fronteira, catalogo, idioma, dicionario)
+        bloco_faixa = ""
+    return (
+        '<section class="conclusao">'
+        f'<h2>{html.escape(titulo)}</h2>'
+        f'{bloco_fronteira}'
+        f'<p class="conclusao-texto">{html.escape(_prosa(prosa, "analise.conclusao.texto"))}</p>'
+        f'{bloco_faixa}'
+        f'{_veredicto_html(caso, idioma, moeda, dicionario, prosa)}'
+        f'<div class="tese-multiplos">{_multiplos_html(resultados, catalogo, idioma, dicionario)}</div>'
+        '</section>'
+    )
+
+
+def _disclosures_html(achados: list, dicionario: dict) -> str:
+    """Todo achado REQUIRED_DISCLOSURE, visível, com a mensagem do dicionário — a
+    de uma limitação da reversa carrega o rótulo do catálogo que o QC pôs nos
+    params."""
     disclosures = [a for a in achados if a.nivel == "REQUIRED_DISCLOSURE"]
-    titulo_disclosures = html.escape(t(dicionario, "tese.disclosures_titulo"))
+    titulo = html.escape(t(dicionario, "tese.disclosures_titulo"))
     if disclosures:
         itens = "".join(f"<li>{html.escape(_mensagem_qc(a, dicionario))}</li>" for a in disclosures)
-        bloco_disclosures = (
-            f'<section class="disclosures">'
-            f'<h2>{titulo_disclosures}</h2>'
-            f'<ul>{itens}</ul>'
-            f'</section>'
-        )
-    else:
-        vazio = html.escape(t(dicionario, "tese.disclosures_vazio"))
-        bloco_disclosures = (
-            f'<section class="disclosures disclosures-vazio">'
-            f'<h2>{titulo_disclosures}</h2>'
-            f'<p>{vazio}</p>'
-            f'</section>'
-        )
+        return f'<section class="disclosures"><h2>{titulo}</h2><ul>{itens}</ul></section>'
+    vazio = html.escape(t(dicionario, "tese.disclosures_vazio"))
+    return f'<section class="disclosures disclosures-vazio"><h2>{titulo}</h2><p>{vazio}</p></section>'
 
+
+def _premissas_decisivas_html(analise: dict, resultados: dict, catalogo: dict, idioma: str,
+                               moeda: str | None, dicionario: dict, prosa: dict) -> str:
+    """D1: cada premissa decisiva com o rótulo do catálogo, o número do cenário da
+    manchete (`resultados.manchete.cenario`, presente também sob fronteira e num
+    caso SOTP) formatado pela unidade do catálogo — pela mesma leitura do valor
+    original do laboratório, `_valor_exibido_da_premissa` — e a derivação."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    nome = _campo_de_contrato(_campo_de_contrato(resultados, "manchete", "resultados"),
+                              "cenario", "resultados.manchete")
+    cenario = _campo_de_contrato(_campo_de_contrato(resultados, "cenarios", "resultados"),
+                                 nome, "resultados.cenarios")
+    premissas = _campo_de_contrato(cenario, "premissas", f"resultados.cenarios.{nome}")
+    itens = []
+    for indice, declarada in enumerate(analise["premissas_decisivas"]):
+        chave = declarada["chave"]
+        rotulo = _rotulo_premissa(catalogo, rota, chave, idioma)
+        valor = _valor_exibido_da_premissa(
+            catalogo["premissas"][rota][chave],
+            _campo_de_contrato(premissas, chave, f"resultados.cenarios.{nome}.premissas"),
+            catalogo, idioma, moeda, dicionario)
+        derivacao = _prosa(prosa, f"analise.premissas_decisivas.{indice}.derivacao")
+        itens.append(
+            '<li class="tese-premissa"><div class="metrica">'
+            + _valor_html("metrica-rotulo", rotulo)
+            + _valor_html("metrica-valor", valor)
+            + f'</div><p class="tese-derivacao">{html.escape(derivacao)}</p></li>'
+        )
+    return _secao_html("tese-premissas-decisivas", t(dicionario, "tese.premissas_decisivas_titulo"),
+                       _lista_html(itens, dicionario))
+
+
+def _o_que_mudou_html(analise: dict, dicionario: dict, prosa: dict) -> str:
+    """§9: o que mudou desde a análise fornecida — só quando declarado."""
+    mudou = analise.get("mudou_desde_analise_fornecida")
+    if not isinstance(mudou, dict):
+        return ""
+    linhas = []
+    for indice in range(len(mudou["linhas"])):
+        linha = _prosa(prosa, f"analise.mudou_desde_analise_fornecida.linhas.{indice}")
+        linhas.append(f"<li>{html.escape(linha)}</li>")
+    return _secao_html("tese-o-que-mudou", t(dicionario, "tese.o_que_mudou_titulo"), f'<ul>{"".join(linhas)}</ul>')
+
+
+def _item_do_valuation_html(lado: str, indice: int, item: dict, catalogo: dict, rota: str, idioma: str,
+                             dicionario: dict, prosa: dict) -> str:
+    """Um Positive ou Negative (§9): a afirmação, o vetor que atinge, o mecanismo
+    do valuation que move, o observável que o confirma ou o mata, e se ele está
+    refletido no valuation ou declarado como não incorporado — com a razão."""
+    onde = f"analise.{lado}.{indice}"
+    linhas = [
+        f'<p class="tese-afirmacao">{html.escape(_prosa(prosa, onde + ".afirmacao"))}</p>',
+        _atributo_html(t(dicionario, "tese.vetor"),
+                       _valor_html("tese-vetor", _rotulo_de_vocabulario(dicionario, "tese.vetores", item["vetor"]))),
+        _atributo_html(t(dicionario, "tese.mecanismo"),
+                       _rotulos_do_valuation_html(item["mecanismo"], catalogo, rota, idioma)),
+        _atributo_html(t(dicionario, "tese.observavel_item"),
+                       _valor_html("tese-observavel", _prosa(prosa, onde + ".observavel"))),
+        _atributo_html(t(dicionario, "tese.incorporacao"),
+                       _valor_html("tese-incorporacao",
+                                   _rotulo_de_vocabulario(dicionario, "tese.incorporacoes", item["incorporacao"]))),
+    ]
+    if "razao" in item:
+        linhas.append(_atributo_html(t(dicionario, "tese.razao"),
+                                     _valor_html("tese-razao", _prosa(prosa, onde + ".razao"))))
+    return f'<li class="tese-item">{"".join(linhas)}</li>'
+
+
+def _positives_negatives_html(analise: dict, catalogo: dict, rota: str, idioma: str, dicionario: dict,
+                               prosa: dict) -> str:
+    lados = []
+    for lado, titulo in (("positives", t(dicionario, "tese.positives_titulo")),
+                         ("negatives", t(dicionario, "tese.negatives_titulo"))):
+        itens = [_item_do_valuation_html(lado, indice, item, catalogo, rota, idioma, dicionario, prosa)
+                 for indice, item in enumerate(analise[lado])]
+        lados.append(f'<div class="tese-lado"><h3>{html.escape(titulo)}</h3>{_lista_html(itens, dicionario)}</div>')
+    return _secao_html("tese-positives-negatives", t(dicionario, "tese.positives_negatives_titulo"),
+                       f'<div class="tese-lados">{"".join(lados)}</div>')
+
+
+def _pergunta_html(indice: int, pergunta: dict, catalogo: dict, rota: str, idioma: str, dicionario: dict,
+                    prosa: dict, exhibits_resolvidos: list, indice_por_id: dict) -> str:
+    """Uma pergunta da tese (§7, §10): o tema, a pergunta, a evidência, o
+    observável que a falsificaria, o vínculo com o valuation e — D5 — os exhibits
+    que ela cita, na ordem em que os cita, ou a razão de nenhum acrescentar."""
+    onde = f"analise.perguntas.{indice}"
+    tema = _rotulo_de_vocabulario(dicionario, "tese.temas", pergunta["tema"])
+    linhas = [
+        f'<p class="tese-tema">{html.escape(tema)}</p>',
+        f'<h3>{html.escape(_prosa(prosa, onde + ".pergunta"))}</h3>',
+        _atributo_html(t(dicionario, "tese.evidencia"),
+                       _valor_html("tese-evidencia", _prosa(prosa, onde + ".evidencia"))),
+        _atributo_html(t(dicionario, "tese.observavel_pergunta"),
+                       _valor_html("tese-observavel", _prosa(prosa, onde + ".observavel"))),
+        _atributo_html(t(dicionario, "tese.vinculo"),
+                       _rotulos_do_valuation_html(pergunta["vinculo"], catalogo, rota, idioma)),
+    ]
+    if "exhibits" in pergunta:
+        artigos = []
+        for posicao, exhibit_id in enumerate(pergunta["exhibits"]):
+            if exhibit_id not in indice_por_id:
+                raise CampoDeContratoAusente(
+                    f"'{onde}.exhibits.{posicao}' cita o exhibit '{exhibit_id}', que não está entre os "
+                    "exhibits resolvidos que o builder passou ao relatório — nenhum gráfico sai sem a sua spec."
+                )
+            indice_do_exhibit = indice_por_id[exhibit_id]
+            artigos.append(_exhibit_html(exhibits_resolvidos[indice_do_exhibit], indice_do_exhibit, prosa, "h4"))
+        linhas.append(f'<div class="tese-pergunta-exhibits">{"".join(artigos)}</div>')
+    else:
+        linhas.append(_atributo_html(t(dicionario, "tese.sem_exhibit"),
+                                     _valor_html("tese-sem-exhibit", _prosa(prosa, onde + ".sem_exhibit.razao"))))
+    return f'<article class="tese-pergunta">{"".join(linhas)}</article>'
+
+
+def _riscos_html(analise: dict, dicionario: dict, prosa: dict) -> str:
+    """§9: cada risco com o observável que o monitoraria."""
+    itens = []
+    for indice in range(len(analise["riscos"])):
+        onde = f"analise.riscos.{indice}"
+        itens.append(
+            f'<li class="tese-item"><p class="tese-risco">{html.escape(_prosa(prosa, onde + ".risco"))}</p>'
+            + _atributo_html(t(dicionario, "tese.observavel_risco"),
+                             _valor_html("tese-observavel", _prosa(prosa, onde + ".observavel")))
+            + '</li>'
+        )
+    return _secao_html("tese-riscos", t(dicionario, "tese.riscos_titulo"), _lista_html(itens, dicionario))
+
+
+def _visao_nao_consensual_html(analise: dict, dicionario: dict, prosa: dict) -> str:
+    """§9: a visão não-consensual — só quando declarada."""
+    if not isinstance(analise.get("visao_nao_consensual"), dict):
+        return ""
+    texto = _prosa(prosa, "analise.visao_nao_consensual.texto")
+    return _secao_html("tese-visao-nao-consensual", t(dicionario, "tese.visao_nao_consensual_titulo"),
+                       f"<p>{html.escape(texto)}</p>")
+
+
+def _tese_html(entrega: dict, catalogo: dict, achados: list, idioma: str, dicionario: dict, titulo: str,
+               prosa: dict, exhibits_resolvidos: list) -> str:
+    """A aba inteira, na ordem de D7. `exhibits_resolvidos` é a lista que o
+    builder resolveu uma vez: cada exhibit é desenhado sob as perguntas que o
+    citam, pelo índice do seu id nessa lista — o mesmo índice da sua spec no
+    payload —, e o que nenhuma pergunta cita vai para a seção final."""
+    analise, resultados = entrega["analise"], entrega["resultados"]
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    moeda = entrega["caso"].get("moeda")
+    indice_por_id = {exhibit["id"]: indice for indice, exhibit in enumerate(exhibits_resolvidos)}
+    citados = {indice_por_id[exhibit_id] for pergunta in analise["perguntas"]
+               for exhibit_id in pergunta.get("exhibits", []) if exhibit_id in indice_por_id}
+    perguntas = "".join(
+        _pergunta_html(indice, pergunta, catalogo, rota, idioma, dicionario, prosa, exhibits_resolvidos,
+                       indice_por_id)
+        for indice, pergunta in enumerate(analise["perguntas"]))
     return (
         f'<h1>{titulo}</h1>'
-        f'<section class="conclusao">'
-        f'<h2>{html.escape(t(dicionario, "tese.conclusao_titulo"))}</h2>'
-        f'<p>{html.escape(conclusao_resolvida)}</p>'
-        f'</section>'
-        f'{bloco_disclosures}'
+        + _conclusao_html(entrega, catalogo, idioma, dicionario, prosa)
+        + _disclosures_html(achados, dicionario)
+        + _premissas_decisivas_html(analise, resultados, catalogo, idioma, moeda, dicionario, prosa)
+        + _o_que_mudou_html(analise, dicionario, prosa)
+        + _positives_negatives_html(analise, catalogo, rota, idioma, dicionario, prosa)
+        + _secao_html("tese-perguntas", t(dicionario, "tese.perguntas_titulo"), perguntas)
+        + _riscos_html(analise, dicionario, prosa)
+        + _visao_nao_consensual_html(analise, dicionario, prosa)
+        + _exhibits_nao_citados_html(exhibits_resolvidos, citados, prosa, dicionario)
     )
 
 
@@ -773,14 +1172,9 @@ def _blocos_do_catalogo(catalogo: dict, idioma: str) -> list:
     com a mesma `ordem` ainda produzam um HTML determinístico."""
     blocos = catalogo.get("blocos") or {}
     ordenados = sorted(blocos.items(), key=lambda par: (par[1].get("ordem", 0), par[0]))
-    saida = []
-    for chave, info in ordenados:
-        rotulo = (info.get("rotulo") or {}).get(idioma)
-        if not rotulo:
-            raise RotuloDoCatalogoAusente(
-                f"catálogo de apresentação sem rótulo em '{idioma}' para o bloco '{chave}'.")
-        saida.append((chave, rotulo))
-    return saida
+    # Fatia 5D, Task 3: o rótulo sai de `_rotulo_bloco`, o mesmo auxiliar do
+    # vínculo da Tese — duas leituras do mesmo rótulo divergiriam.
+    return [(chave, _rotulo_bloco(catalogo, chave, idioma)) for chave, _info in ordenados]
 
 
 def _premissas_da_rota(catalogo: dict, rota: str) -> dict | None:
@@ -800,8 +1194,12 @@ def _valor_exibido_da_premissa(info: dict, valor: Any, catalogo: dict, idioma: s
     escolha vira o rótulo da opção; booleano vira sim/não do dicionário."""
     entrada = info.get("entrada")
     if entrada == "escolha":
+        # Fatia 5D, Task 3: a premissa decisiva da Tese também passa por aqui, e
+        # `resultados.cenarios.<nome>.premissas` repete o valor como o caso o
+        # declarou — um alias legado ('spread') não tem rótulo no catálogo. A
+        # frase do dicionário diz isso; o código cru nunca chega à tela.
         rotulo = ((info.get("rotulos_opcoes") or {}).get(valor) or {}).get(idioma)
-        return rotulo if rotulo else str(valor)
+        return rotulo if rotulo else t(dicionario, "valuation.laboratorio_valor_nao_rotulavel")
     if entrada == "booleano":
         return t(dicionario, "valuation.laboratorio_sim" if valor else "valuation.laboratorio_nao")
     return placeholders.formatar(
@@ -894,25 +1292,28 @@ def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
     ), info.get("bloco")
 
 
-def _saidas_do_cenario_html(dicionario: dict) -> str:
+def _saidas_do_cenario_html(dicionario: dict, titulo_do_preco: str) -> str:
     """As três saídas que `laboratorio.js` reescreve a cada edição: preço,
     múltiplo e upside. Nascem com o texto de "sem valor" — o JS as preenche na
     carga (reproduzindo, aí, exatamente o que o relatório publicou, que é o
     que o badge acabou de provar) e a cada mudança. Se o badge reprovar, elas
     FICAM assim: um número recalculado por um motor que discorda do relatório
-    é justamente o que L4 proíbe mostrar."""
+    é justamente o que L4 proíbe mostrar.
+
+    `titulo_do_preco` (fatia 5D, Task 3, achado 2) é o MESMO rótulo do cabeçalho
+    da aba (`_titulo_do_preco`): sob fronteira de escopo, leitura condicional."""
     vazio = html.escape(t(dicionario, "valuation.laboratorio_sem_valor"))
     campos = [
-        ("preco", "valuation.preco_justo_titulo", True),
-        ("multiplo", "valuation.multiplo_justo_titulo", False),
-        ("upside", "valuation.upside_titulo", True),
+        ("preco", titulo_do_preco, True),
+        ("multiplo", t(dicionario, "valuation.multiplo_justo_titulo"), False),
+        ("upside", t(dicionario, "valuation.upside_titulo"), True),
     ]
     blocos = []
-    for chave, chave_rotulo, sem_nota in campos:
+    for chave, rotulo, sem_nota in campos:
         nota = "" if sem_nota else f'<span class="metrica-nota" data-laboratorio-saida="{chave}-rotulo"></span>'
         blocos.append(
             f'<div class="metrica">'
-            f'<span class="metrica-rotulo">{html.escape(t(dicionario, chave_rotulo))}</span>'
+            f'<span class="metrica-rotulo">{html.escape(rotulo)}</span>'
             f'<span class="metrica-valor" data-laboratorio-saida="{chave}">{vazio}</span>'
             f'{nota}'
             f'</div>'
@@ -942,7 +1343,7 @@ def _diagnosticos_do_cenario_html(dicionario: dict) -> str:
 
 def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
                                   premissas_catalogo: dict, catalogo: dict, idioma: str,
-                                  moeda: str | None, dicionario: dict) -> str:
+                                  moeda: str | None, dicionario: dict, titulo_do_preco: str) -> str:
     campos_por_bloco: dict[str, list] = {}
     travados: list[str] = []
     for posicao, (chave, valor) in enumerate(premissas.items()):
@@ -975,7 +1376,7 @@ def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: 
     return (
         f'<section class="lab-cenario" data-laboratorio-cenario="{html.escape(nome)}">'
         f'<h3>{titulo}</h3>'
-        f'{_saidas_do_cenario_html(dicionario)}'
+        f'{_saidas_do_cenario_html(dicionario, titulo_do_preco)}'
         f'{_diagnosticos_do_cenario_html(dicionario)}'
         f'<div class="lab-blocos">{"".join(grupos)}</div>'
         f'<p class="lab-acoes"><button type="button" data-laboratorio-restaurar>{restaurar}</button></p>'
@@ -1011,11 +1412,12 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
     if premissas_catalogo is None or not cenarios:
         return ""
     moeda = caso.get("moeda")
+    titulo_do_preco = _titulo_do_preco(resultados, dicionario)
 
     paineis = "".join(
         _cenario_do_laboratorio_html(
             rota, nome, (bloco or {}).get("premissas") or {}, indice, premissas_catalogo,
-            catalogo, idioma, moeda, dicionario)
+            catalogo, idioma, moeda, dicionario, titulo_do_preco)
         for indice, (nome, bloco) in enumerate(cenarios.items())
     )
     return (
@@ -1117,6 +1519,46 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
     }
 
 
+def _titulo_do_preco(resultados: dict, dicionario: dict) -> str:
+    """D3 e achado 2 (fatia 5D, Task 3): o rótulo do preço por ação na aba
+    Valuation. Sob fronteira de escopo o número é leitura condicional, nunca
+    preço justo — e a regra vale para os DOIS lugares que o nomeiam, o cabeçalho
+    e as saídas de cada cenário do laboratório: trocar só o cabeçalho deixaria o
+    laboratório chamando de preço justo o que a Tese diz ser condicional."""
+    if _campo_de_contrato(resultados, "fronteira_de_escopo", "resultados") is None:
+        return t(dicionario, "valuation.preco_justo_titulo")
+    return t(dicionario, "valuation.preco_condicional_titulo")
+
+
+def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+    """O múltiplo justo da manchete ao lado do múltiplo de tela, cada lado com o
+    rótulo da própria chave (a regra 4 de `resultados/1` garante a mesma base) —
+    ou, num caso SOTP (sem `manchete.multiplo`), a nota de que o preço
+    consolidado não tem múltiplo único. Uma leitura só, para o cabeçalho da
+    Valuation e a Conclusão da Tese (5D, Task 3): duas leituras do mesmo par
+    divergiriam."""
+    manchete = resultados["manchete"]
+    if "multiplo" not in manchete:
+        return f'<p class="sotp-nota">{html.escape(t(dicionario, "valuation.sotp_sem_multiplo"))}</p>'
+    mj, mt = manchete["multiplo"], resultados["mercado_tela"]
+    mj_fmt = html.escape(placeholders.formatar(mj["valor"], "x2", idioma))
+    mt_fmt = html.escape(placeholders.formatar(mt["valor"], "x2", idioma))
+    mj_rotulo = html.escape(_rotulo_multiplo(catalogo, mj["chave"], idioma))
+    mt_rotulo = html.escape(_rotulo_multiplo(catalogo, mt["chave"], idioma))
+    return (
+        f'<div class="metrica">'
+        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_justo_titulo"))}</span>'
+        f'<span class="metrica-valor">{mj_fmt}</span>'
+        f'<span class="metrica-nota">{mj_rotulo}</span>'
+        f'</div>'
+        f'<div class="metrica">'
+        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_tela_titulo"))}</span>'
+        f'<span class="metrica-valor">{mt_fmt}</span>'
+        f'<span class="metrica-nota">{mt_rotulo}</span>'
+        f'</div>'
+    )
+
+
 def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
                      com_laboratorio: bool = False) -> str:
     moeda = caso.get("moeda")
@@ -1126,7 +1568,7 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
     upside_fmt = html.escape(placeholders.formatar(manchete["upside"], "pct1", idioma))
     cabecalho = (
         f'<div class="metrica">'
-        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.preco_justo_titulo"))}</span>'
+        f'<span class="metrica-rotulo">{html.escape(_titulo_do_preco(resultados, dicionario))}</span>'
         f'<span class="metrica-valor">{preco_fmt}</span>'
         f'</div>'
         f'<div class="metrica">'
@@ -1135,25 +1577,8 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
         f'</div>'
     )
 
+    bloco_multiplos = _multiplos_html(resultados, catalogo, idioma, dicionario)
     if "multiplo" in manchete:
-        mj, mt = manchete["multiplo"], resultados["mercado_tela"]
-        mj_fmt = html.escape(placeholders.formatar(mj["valor"], "x2", idioma))
-        mt_fmt = html.escape(placeholders.formatar(mt["valor"], "x2", idioma))
-        mj_rotulo = html.escape(_rotulo_multiplo(catalogo, mj["chave"], idioma))
-        mt_rotulo = html.escape(_rotulo_multiplo(catalogo, mt["chave"], idioma))
-        bloco_multiplos = (
-            f'<div class="metrica">'
-            f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_justo_titulo"))}</span>'
-            f'<span class="metrica-valor">{mj_fmt}</span>'
-            f'<span class="metrica-nota">{mj_rotulo}</span>'
-            f'</div>'
-            f'<div class="metrica">'
-            f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_tela_titulo"))}</span>'
-            f'<span class="metrica-valor">{mt_fmt}</span>'
-            f'<span class="metrica-nota">{mt_rotulo}</span>'
-            f'</div>'
-        )
-
         # B2 (achado F2): rota e convenção terminal vêm de `resultados`
         # (dados já canonicalizados pela integração), nunca de `caso` --
         # `resultados.rota` e `manchete.convencao_terminal` (A1; sempre
@@ -1175,8 +1600,6 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
             f'</div>'
         )
     else:
-        nota_sotp = html.escape(t(dicionario, "valuation.sotp_sem_multiplo"))
-        bloco_multiplos = f'<p class="sotp-nota">{nota_sotp}</p>'
         bloco_rota = ""
 
     # L3, e o achado 3 da Task 1: num caso com SOTP, `manchete.preco_acao` é o
@@ -1223,7 +1646,9 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
 # --------------------------------------------------------------------------
 # Aba Evidência: metodologia (`resultados.origem.metodologia`),
 # `ficha_tecnica` (conteúdo opaco nesta fatia — só o tipo é contrato; a 5D
-# detalha) e o log de resolução de placeholders da conclusão, em tabela.
+# detalha) e o log de resolução dos placeholders de toda a prosa (a conclusão
+# até a 5D, Task 3; desde então, também os textos da Tese e dos exhibits), em
+# tabela.
 # --------------------------------------------------------------------------
 
 def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, log_exhibits: list,
@@ -1307,8 +1732,10 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     `achados`: a lista de `qc.Achado` que `qc.avaliar` já produziu — a Tese
     mostra só os de nível REQUIRED_DISCLOSURE (HARD_FAIL nunca chega aqui,
     regra inviolável 2; QUALITY_WARNING nunca aparece no HTML). `log`: o
-    log de resolução de placeholders da conclusão (mesmo formato que
-    `placeholders.resolver` devolve), exibido em tabela na Evidência.
+    log de resolução dos placeholders de TODA a prosa, como
+    `placeholders.resolver_prosa` o devolve (até a 5D, Task 3, só o da
+    conclusão), exibido em tabela na Evidência — o texto que a Tese exibe sai
+    da mesma lista.
 
     `exhibits_resolvidos`/`log_exhibits` (fatia 5B, item 5, Task 2): o que
     `exhibits.resolver(entrega)` devolve -- `builder.py` chama isso UMA
@@ -1349,8 +1776,10 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     laboratorio = (_laboratorio_para_json(caso, resultados, catalogo, idioma, dicionario)
                    if js_da_integracao else None)
 
-    corpo_tese = _tese_html(entrega, achados, idioma, dicionario, titulo) + _exhibits_html(
-        exhibits_resolvidos, dicionario)
+    # Fatia 5D, Task 3: todo texto de `analise` que a Tese exibe sai daqui — a
+    # mesma lista de prosa que o QC varreu e que o `log` da Evidência registra.
+    prosa, _log_da_prosa = placeholders.resolver_prosa(entrega, idioma)
+    corpo_tese = _tese_html(entrega, catalogo, achados, idioma, dicionario, titulo, prosa, exhibits_resolvidos)
     corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario,
                                        com_laboratorio=laboratorio is not None)
     corpo_evidencia = _evidencia_html(

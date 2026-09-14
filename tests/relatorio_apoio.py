@@ -50,8 +50,8 @@ def prosa_da_pagina(html_texto: str) -> str:
     escopo certo para toda asserção sobre a PROSA que o relatório escreveu.
 
     B6 (onda de correção da revisão final, achado F10): a regra de PRODUÇÃO
-    (`placeholder_malformado`) sempre esteve certa -- varre
-    `qc._campos_de_prosa`, nunca a página. Foram os TESTES que confundiram
+    (`placeholder_malformado`) sempre esteve certa -- varre a lista de
+    prosa (`placeholders.campos_de_prosa`, desde a 5D), nunca a página. Foram os TESTES que confundiram
     "nenhum placeholder cru sobrou" com "nenhum `}}` na página": uma página
     com exhibit tem 50 ocorrências de `}}`, todas do uPlot minificado, e no
     dia em que a 5C/5D rodasse essas asserções sobre uma entrega com

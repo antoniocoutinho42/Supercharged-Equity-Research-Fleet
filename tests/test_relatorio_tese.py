@@ -12,6 +12,10 @@ pergunta) e D6 (as regras da §11). Três famílias de teste:
   vizinho que não dispara.
 - A limitação da reversa: o disclosure nomeado no `qc.json` de `caso_degrau` e de
   `caso_rampa`, pelo CLI de verdade.
+- A ABA RENDERIZADA (Task 3, D3/D5/D7): a ordem das seções, a faixa e o preço de tela,
+  os rótulos no lugar das chaves, o pareamento de cada gráfico ao seu host, o log de
+  toda a prosa na Evidência, a fronteira de escopo e a faixa de um caso SOTP. Toda
+  asserção lê o TEXTO que o analista vê (`apoio.prosa_da_pagina`), nunca um atributo.
 
 E3: o relatório nunca aprende metodologia. O vocabulário de vínculo sai do catálogo
 (`test_o_vocabulario_de_vinculo_sai_do_catalogo`), e o que torna uma limitação "de
@@ -26,8 +30,11 @@ import copy
 import functools
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -37,9 +44,12 @@ SCRIPTS = RAIZ / "skills" / "er-relatorio" / "scripts"
 BUILDER = SCRIPTS / "builder.py"
 
 sys.path.insert(0, str(SCRIPTS))
+import builder  # noqa: E402
 import entrega  # noqa: E402
+import exhibits as exhibits_mod  # noqa: E402
 import placeholders  # noqa: E402
 import qc  # noqa: E402
+import render  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "tests"))
 import relatorio_apoio as apoio  # noqa: E402
@@ -78,7 +88,14 @@ def _com_fronteira_de_escopo(caso: dict) -> None:
     }
 
 
-_VARIANTES = {"padrao": None, "tres_cenarios": _tres_cenarios, "fronteira": _com_fronteira_de_escopo}
+def _alias_legado_de_tv(caso: dict) -> None:
+    """`spread` é alias de `gordon`: o gate o aceita, e `resultados.cenarios.<nome>.
+    premissas` o repete como o caso o declara."""
+    caso["cenarios"]["base"]["premissas"]["tv"] = "spread"
+
+
+_VARIANTES = {"padrao": None, "tres_cenarios": _tres_cenarios, "fronteira": _com_fronteira_de_escopo,
+              "alias_tv": _alias_legado_de_tv}
 
 
 @functools.lru_cache(maxsize=None)
@@ -229,6 +246,11 @@ _RECUSAS_DE_FORMA = [
     pytest.param(lambda e: e["analise"].update(exhibits=[dict(copy.deepcopy(_EXHIBIT), vinculo=["moat"])]),
                  ["chave desconhecida em 'analise.exhibits.0'", "'vinculo'"],
                  id="exhibits-vinculo-D5"),
+    # Task 3: a pergunta cita o exhibit pelo id, e o gráfico é pareado ao seu host pelo
+    # índice desse id — um id repetido tornaria as duas ligações ambíguas.
+    pytest.param(lambda e: e["analise"].update(exhibits=[copy.deepcopy(_EXHIBIT), copy.deepcopy(_EXHIBIT)]),
+                 ["'analise.exhibits' repete o id 'margem'"],
+                 id="exhibits-id-repetido"),
     pytest.param(lambda e: e["resultados"].pop("fronteira_de_escopo"),
                  ["'resultados.fronteira_de_escopo' ausente"],
                  id="resultados-sem-fronteira-de-escopo"),
@@ -626,6 +648,11 @@ _CAMPOS_NOVOS_DE_PROSA = [
     ("riscos", 0, "observavel"),
     ("visao_nao_consensual", "texto"),
     ("mudou_desde_analise_fornecida", "linhas", 1),
+    # Task 3 (achado 4): com os exhibits desenhados dentro da aba Tese, os três textos
+    # de cada um são prosa da Tese.
+    ("exhibits", 0, "pergunta"),
+    ("exhibits", 0, "nota_janela"),
+    ("exhibits", 0, "caption"),
 ]
 
 
@@ -643,6 +670,7 @@ def _entrega_com_todos_os_campos_de_prosa() -> dict:
     analise["visao_nao_consensual"] = {"texto": "O mercado subestima a duração da vantagem de custo."}
     analise["mudou_desde_analise_fornecida"] = {
         "linhas": ["A margem normalizada subiu.", "O custo de capital caiu."]}
+    analise["exhibits"] = [dict(copy.deepcopy(_EXHIBIT), caption="Fonte: o cenário da manchete.")]
     return entrega_dict
 
 
@@ -664,7 +692,7 @@ def _ondes_do_molde(analise: dict, molde: tuple) -> set:
 def test_todo_campo_de_texto_da_tese_e_campo_de_prosa(tmp_path):
     entrega_dict = _entrega_com_todos_os_campos_de_prosa()
     _carregar(entrega_dict, tmp_path)
-    ondes = [onde for onde, _texto in qc._campos_de_prosa(entrega_dict)]
+    ondes = [onde for onde, _texto in placeholders.campos_de_prosa(entrega_dict)]
     assert len(ondes) == len(set(ondes)), ondes
     esperados = {"analise.conclusao.texto"}.union(
         *(_ondes_do_molde(entrega_dict["analise"], molde) for molde in _CAMPOS_NOVOS_DE_PROSA))
@@ -681,3 +709,564 @@ def test_digito_solto_num_campo_novo_da_tese_e_hard_fail(caminho):
     onde = "analise." + ".".join(map(str, caminho))
     assert [(a.nivel, a.onde) for a in _do_codigo(_achados(limpa), "numero_sem_proveniencia")] == [
         ("HARD_FAIL", onde)]
+
+
+# ==========================================================================
+# Task 3 (D3, D5, D7): a aba Tese renderizada.
+#
+# O analista lê TEXTO: a página com o miolo de <script>/<style> neutralizado
+# (`apoio.prosa_da_pagina`) e, dela, só o texto dos nós. Classe e atributo só
+# LOCALIZAM a seção — nenhuma asserção compara um atributo (lição do F1 da 5B), e
+# nenhuma varre a página inteira (lição do F10).
+# ==========================================================================
+
+DICIONARIO = placeholders.carregar_dicionario("pt-BR")
+TESE = DICIONARIO["interface"]["tese"]
+SEM_NODE = shutil.which("node") is None
+RAZAO_SEM_NODE = "node ausente do PATH -- o harness do bootstrap roda sempre no CI (setup-node)"
+
+
+class _ArvoreDaPagina(HTMLParser):
+    """A página como árvore `{tag, attrs, filhos, pai}`, com o texto desescapado como o
+    browser o entrega ao leitor. Elemento vazio do HTML não abre nível, e texto contíguo
+    vira um nó só."""
+
+    VAZIOS = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
+                        "source", "wbr"})
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.raiz = {"tag": "#documento", "attrs": {}, "filhos": [], "pai": None}
+        self._pilha = [self.raiz]
+
+    def _abrir(self, tag, attrs, vazio):
+        no = {"tag": tag, "attrs": {k: ("" if v is None else v) for k, v in attrs},
+              "filhos": [], "pai": self._pilha[-1]}
+        self._pilha[-1]["filhos"].append(no)
+        if not vazio:
+            self._pilha.append(no)
+
+    def handle_starttag(self, tag, attrs):
+        self._abrir(tag, attrs, tag in self.VAZIOS)
+
+    def handle_startendtag(self, tag, attrs):
+        self._abrir(tag, attrs, True)
+
+    def handle_endtag(self, tag):
+        for posicao in range(len(self._pilha) - 1, 0, -1):
+            if self._pilha[posicao]["tag"] == tag:
+                del self._pilha[posicao:]
+                return
+
+    def handle_data(self, data):
+        filhos = self._pilha[-1]["filhos"]
+        if filhos and "texto" in filhos[-1]:
+            filhos[-1]["texto"] += data
+        else:
+            filhos.append({"texto": data})
+
+
+def _arvore(pagina: str) -> dict:
+    parser = _ArvoreDaPagina()
+    parser.feed(apoio.prosa_da_pagina(pagina))
+    parser.close()
+    return parser.raiz
+
+
+def _elementos(no: dict):
+    """Todo elemento abaixo de `no`, na ordem do documento."""
+    for filho in no["filhos"]:
+        if "tag" in filho:
+            yield filho
+            yield from _elementos(filho)
+
+
+def _classes(no: dict) -> list:
+    return no["attrs"].get("class", "").split()
+
+
+def _todos(no: dict, *, classe: str | None = None, tag: str | None = None) -> list:
+    return [el for el in _elementos(no)
+            if (classe is None or classe in _classes(el)) and (tag is None or el["tag"] == tag)]
+
+
+def _um(no: dict, **filtro) -> dict:
+    achados = _todos(no, **filtro)
+    assert len(achados) == 1, f"esperado exatamente um elemento {filtro}, vieram {len(achados)}"
+    return achados[0]
+
+
+def _ancestral(no: dict, classe: str) -> dict | None:
+    atual = no["pai"]
+    while atual is not None and classe not in _classes(atual):
+        atual = atual["pai"]
+    return atual
+
+
+def _visivel(no: dict) -> str:
+    """O texto que o leitor vê dentro de `no`, com o espaço normalizado."""
+    partes: list[str] = []
+
+    def _varrer(atual: dict) -> None:
+        for filho in atual["filhos"]:
+            if "texto" in filho:
+                partes.append(filho["texto"])
+            else:
+                _varrer(filho)
+
+    _varrer(no)
+    return " ".join(" ".join(partes).split())
+
+
+def _aba(pagina: str, nome: str) -> dict:
+    return next(el for el in _elementos(_arvore(pagina)) if el["attrs"].get("data-aba-painel") == nome)
+
+
+def _secoes(aba: dict) -> list:
+    """As seções da aba, na ordem em que o leitor as encontra."""
+    return [filho for filho in aba["filhos"] if filho.get("tag") == "section"]
+
+
+def _titulo(no: dict) -> str:
+    """O texto do primeiro título (`h2`, `h3` ou `h4`) diretamente dentro de `no`."""
+    return _visivel(next(filho for filho in no["filhos"] if filho.get("tag") in ("h2", "h3", "h4")))
+
+
+def _secao(aba: dict, titulo: str) -> dict:
+    (secao,) = [secao for secao in _secoes(aba) if _titulo(secao) == titulo]
+    return secao
+
+
+def _moeda(entrega_dict: dict, valor: float) -> str:
+    return placeholders.formatar(valor, "moeda", "pt-BR", entrega_dict["caso"]["moeda"])
+
+
+def _pagina_da_tese(entrega_dict: dict) -> str:
+    """O HTML pelo caminho que `builder.py` percorre depois de uma primeira passada de QC
+    limpa: o log de TODA a prosa e os exhibits resolvidos uma vez."""
+    achados = _achados(entrega_dict)
+    assert not [a for a in achados if a.nivel == "HARD_FAIL"], achados
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
+    resolvidos, log_exhibits = exhibits_mod.resolver(entrega_dict)
+    return render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", resolvidos, log_exhibits)
+
+
+def _pagina_pelo_builder(entrega_dict: dict, raiz: Path) -> str:
+    """O `relatorio.html` do CLI de verdade — com o laboratório e o log que o builder monta."""
+    apoio.escrever_raiz(raiz, entrega_dict)
+    resultado = _rodar_builder(raiz)
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    return (raiz / "relatorio.html").read_text(encoding="utf-8")
+
+
+_DADOS_DOS_EXHIBITS = {"fin": {
+    "ledger": [], "x": [str(ano) for ano in range(2016, 2026)],
+    "campos": {"receita": [100.0 + 10.0 * i for i in range(10)], "ebitda": [20.0 + 3.0 * i for i in range(10)]},
+}}
+_EXHIBITS_DAS_PERGUNTAS = [
+    {"id": "receita", "pergunta": "Como a receita evoluiu no período?", "tipo": "linha",
+     "series": [{"derivacao": "direta", "fonte": "fin.receita"}]},
+    {"id": "margem", "pergunta": "A margem acompanha a expansão da capacidade?", "tipo": "linha",
+     "series": [{"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
+                 "formula_nota": "margem EBITDA"}],
+     "caption": "Fonte: demonstrações auditadas."},
+    {"id": "preco", "pergunta": "Quanto vale a ação no cenário da manchete?", "tipo": "tabela",
+     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}],
+     "nota_janela": "Um único ponto: o da manchete."},
+]
+
+
+@functools.lru_cache(maxsize=None)
+def _entrega_com_exhibits_serializada() -> str:
+    entrega_dict = apoio.montar_entrega(FIXTURE, dados=copy.deepcopy(_DADOS_DOS_EXHIBITS),
+                                        exhibits=copy.deepcopy(_EXHIBITS_DAS_PERGUNTAS))
+    moat, crescimento, _rentabilidade = entrega_dict["analise"]["perguntas"]
+    for pergunta, citados in ((moat, ["margem", "receita"]), (crescimento, ["receita"])):
+        del pergunta["sem_exhibit"]
+        pergunta["exhibits"] = citados
+    return json.dumps(entrega_dict, ensure_ascii=False)
+
+
+def _entrega_com_exhibits_nas_perguntas() -> dict:
+    """Três exhibits declarados, nesta ordem: `receita`, `margem`, `preco`. A pergunta de
+    moat cita `[margem, receita]` — fora da ordem declarada —, a de crescimento cita
+    `[receita]` — o mesmo exhibit numa segunda pergunta —, a de rentabilidade não tem
+    exhibit, e nenhuma pergunta cita `preco`."""
+    return json.loads(_entrega_com_exhibits_serializada())
+
+
+# --------------------------------------------------------------------------
+# D7: a ordem da aba.
+# --------------------------------------------------------------------------
+
+def test_a_aba_tese_segue_a_ordem_do_desenho():
+    """Conclusão → avisos obrigatórios → premissas decisivas → o que mudou (se declarado) →
+    Positives/Negatives → perguntas → riscos → visão não-consensual (se declarada) →
+    exhibits que nenhuma pergunta cita. A vizinha sem os opcionais, e sem exhibit fora das
+    perguntas, não ganha seção vazia nenhuma."""
+    completa = _entrega_com_exhibits_nas_perguntas()
+    completa["analise"]["mudou_desde_analise_fornecida"] = {"linhas": ["A margem normalizada subiu."]}
+    completa["analise"]["visao_nao_consensual"] = {"texto": "O mercado subestima a duração da vantagem."}
+    aba = _aba(_pagina_da_tese(completa), "tese")
+
+    assert [_titulo(secao) for secao in _secoes(aba)] == [
+        TESE["conclusao_titulo"], TESE["disclosures_titulo"], TESE["premissas_decisivas_titulo"],
+        TESE["o_que_mudou_titulo"], TESE["positives_negatives_titulo"], TESE["perguntas_titulo"],
+        TESE["riscos_titulo"], TESE["visao_nao_consensual_titulo"], TESE["exhibits_nao_citados_titulo"]]
+    assert "A margem normalizada subiu." in _visivel(_secao(aba, TESE["o_que_mudou_titulo"]))
+    assert "O mercado subestima a duração da vantagem." in _visivel(_secao(aba, TESE["visao_nao_consensual_titulo"]))
+    riscos = _secao(aba, TESE["riscos_titulo"])
+    assert [(_visivel(_um(item, classe="tese-risco")), _visivel(_um(item, classe="tese-observavel")))
+            for item in _todos(riscos, classe="tese-item")] == [
+        (risco["risco"], risco["observavel"]) for risco in completa["analise"]["riscos"]]
+
+    minima = _aba(_pagina_da_tese(_entrega()), "tese")
+    assert [_titulo(secao) for secao in _secoes(minima)] == [
+        TESE["conclusao_titulo"], TESE["disclosures_titulo"], TESE["premissas_decisivas_titulo"],
+        TESE["positives_negatives_titulo"], TESE["perguntas_titulo"], TESE["riscos_titulo"]]
+
+
+# --------------------------------------------------------------------------
+# D1/D7: a Conclusão — faixa, veredicto com o preço de tela, múltiplos.
+# --------------------------------------------------------------------------
+
+def _metricas(no: dict) -> list:
+    return [(_visivel(_um(metrica, classe="metrica-rotulo")), _visivel(_um(metrica, classe="metrica-valor")),
+             _visivel(_um(metrica, classe="metrica-nota")))
+            for metrica in _todos(no, classe="metrica")]
+
+
+def test_a_conclusao_mostra_a_faixa_dos_cenarios_o_veredicto_e_o_preco_de_tela_com_data_e_fonte():
+    """Os três preços vêm de `resultados.cenarios.<nome>.valor.preco_acao`, cada um no papel
+    que a faixa declara; o preço de tela, a data e a fonte vêm de `caso.preco`, nunca do
+    analista; o veredicto sai resolvido; o múltiplo justo sai ao lado do de tela."""
+    entrega_dict = _entrega(variante="tres_cenarios")
+    entrega_dict["analise"]["veredicto"]["texto"] = "A tela, a {{caso:preco.valor|moeda}}, fica abaixo da base."
+    resultados, preco, faixa = entrega_dict["resultados"], entrega_dict["caso"]["preco"], entrega_dict["analise"]["faixa"]
+    assert faixa == {"piso": "pessimista", "base": "base", "teto": "otimista"}
+    conclusao = _secao(_aba(_pagina_da_tese(entrega_dict), "tese"), TESE["conclusao_titulo"])
+
+    assert _metricas(_um(conclusao, classe="tese-faixa")) == [
+        (TESE["papeis_da_faixa"][papel],
+         _moeda(entrega_dict, resultados["cenarios"][faixa[papel]]["valor"]["preco_acao"]),
+         render.t(DICIONARIO, "tese.faixa_cenario", cenario=faixa[papel]))
+        for papel in entrega.PAPEIS_DA_FAIXA]
+
+    veredicto = _um(conclusao, classe="tese-veredicto")
+    assert _visivel(_um(veredicto, classe="tese-veredicto-texto")) == (
+        f"A tela, a {_moeda(entrega_dict, preco['valor'])}, fica abaixo da base.")
+    assert _visivel(_um(veredicto, classe="tese-preco-de-tela")) == render.t(
+        DICIONARIO, "tese.preco_de_tela", preco=_moeda(entrega_dict, preco["valor"]),
+        data=preco["data"], fonte=preco["fonte"])
+
+    justo, tela = resultados["manchete"]["multiplo"], resultados["mercado_tela"]
+    assert _metricas(_um(conclusao, classe="tese-multiplos")) == [
+        (DICIONARIO["interface"]["valuation"]["multiplo_justo_titulo"], placeholders.formatar(justo["valor"], "x2", "pt-BR"),
+         CATALOGO["multiplos"][justo["chave"]]["rotulo"]["pt-BR"]),
+        (DICIONARIO["interface"]["valuation"]["multiplo_tela_titulo"], placeholders.formatar(tela["valor"], "x2", "pt-BR"),
+         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"])]
+
+
+# --------------------------------------------------------------------------
+# E3 e a lição do B2: o rótulo, nunca a chave.
+# --------------------------------------------------------------------------
+
+def test_vinculo_mecanismo_e_premissa_decisiva_saem_pelo_catalogo_e_tema_vetor_e_incorporacao_pelo_dicionario():
+    """Vínculo e mecanismo misturam premissa da rota e bloco econômico — os dois rotulados
+    pelo catálogo; a premissa decisiva sai com o rótulo e o número do cenário da manchete,
+    formatado pela unidade do catálogo; tema, vetor e incorporação são vocabulário do Fleet,
+    rotulados pelo dicionário. Nenhuma chave crua chega à tela."""
+    entrega_dict = _entrega()
+    analise, resultados = entrega_dict["analise"], entrega_dict["resultados"]
+    analise["perguntas"][1]["vinculo"] = ["wacc", "custo_capital"]
+    analise["positives"][0]["mecanismo"] = ["roic", "crescimento_reinvestimento"]
+    analise["negatives"][0]["vetor"] = "earning_power"
+    analise["premissas_decisivas"] = [{"chave": "wacc", "derivacao": "Custo de capital da companhia no ciclo."}]
+    aba = _aba(_pagina_da_tese(entrega_dict), "tese")
+
+    premissas_da_rota = CATALOGO["premissas"][resultados["rota"]]
+    rotulo = {chave: info["rotulo"]["pt-BR"] for chave, info in premissas_da_rota.items()}
+    rotulo.update({chave: info["rotulo"]["pt-BR"] for chave, info in CATALOGO["blocos"].items()})
+
+    perguntas = _todos(aba, classe="tese-pergunta")
+    assert [[_visivel(item) for item in _todos(bloco, classe="tese-rotulo")] for bloco in perguntas] == [
+        [rotulo[item] for item in pergunta["vinculo"]] for pergunta in analise["perguntas"]]
+    assert [_visivel(_um(bloco, classe="tese-tema")) for bloco in perguntas] == [
+        TESE["temas"][pergunta["tema"]] for pergunta in analise["perguntas"]]
+
+    positives, negatives = _todos(aba, classe="tese-lado")
+    for lado, declarados in ((positives, analise["positives"]), (negatives, analise["negatives"])):
+        itens = _todos(lado, classe="tese-item")
+        assert [[_visivel(chip) for chip in _todos(item, classe="tese-rotulo")] for item in itens] == [
+            [rotulo[mecanismo] for mecanismo in declarado["mecanismo"]] for declarado in declarados]
+        assert [(_visivel(_um(item, classe="tese-vetor")), _visivel(_um(item, classe="tese-incorporacao")))
+                for item in itens] == [
+            (TESE["vetores"][declarado["vetor"]], TESE["incorporacoes"][declarado["incorporacao"]])
+            for declarado in declarados]
+
+    (premissa,) = _todos(aba, classe="tese-premissa")
+    wacc = resultados["cenarios"][resultados["manchete"]["cenario"]]["premissas"]["wacc"]
+    formato = CATALOGO["unidades"][premissas_da_rota["wacc"]["unidade"]]["formato"]
+    assert [_visivel(_um(premissa, classe=classe)) for classe in ("metrica-rotulo", "metrica-valor", "tese-derivacao")] == [
+        rotulo["wacc"], placeholders.formatar(wacc, formato, "pt-BR"), "Custo de capital da companhia no ciclo."]
+
+    texto = _visivel(aba)
+    chaves = ("wacc", "custo_capital", "roic", "crescimento_reinvestimento", "duracao_terminal", "earning_power",
+              "rentabilidade_do_crescimento", "nao_incorporado")
+    assert [chave for chave in chaves if chave in texto] == []
+
+
+def test_uma_premissa_decisiva_de_escolha_sem_rotulo_no_catalogo_nunca_mostra_o_codigo_cru():
+    """`resultados.cenarios.<nome>.premissas.tv` repete o alias legado que o caso declarou
+    (`spread`), e o catálogo só rotula as opções canônicas. A tela diz que o valor está fora
+    do vocabulário do catálogo — a mesma frase do laboratório —, nunca `spread`."""
+    entrega_dict = _entrega(variante="alias_tv")
+    resultados = entrega_dict["resultados"]
+    assert resultados["cenarios"][resultados["manchete"]["cenario"]]["premissas"]["tv"] == "spread"
+    entrega_dict["analise"]["premissas_decisivas"] = [
+        {"chave": "tv", "derivacao": "Perpetuidade com retorno incremental declarado."}]
+    aba = _aba(_pagina_da_tese(entrega_dict), "tese")
+
+    (premissa,) = _todos(aba, classe="tese-premissa")
+    assert _visivel(_um(premissa, classe="metrica-valor")) == (
+        DICIONARIO["interface"]["valuation"]["laboratorio_valor_nao_rotulavel"])
+    assert "spread" not in _visivel(aba)
+
+
+def test_os_rotulos_de_tema_vetor_incorporacao_e_papel_da_faixa_cobrem_exatamente_o_vocabulario_do_contrato():
+    """Vocabulário do contrato `entrega/1` (§7, §9), rotulado pelo dicionário: uma entrada
+    nova no contrato sem rótulo — ou um rótulo sobrando — reprova aqui, e nunca vira chave
+    crua na tela."""
+    assert set(TESE["temas"]) == entrega.TEMAS_DE_PERGUNTA
+    assert set(TESE["vetores"]) == entrega.VETORES
+    assert set(TESE["incorporacoes"]) == entrega.INCORPORACOES
+    assert set(TESE["papeis_da_faixa"]) == set(entrega.PAPEIS_DA_FAIXA)
+
+
+# --------------------------------------------------------------------------
+# D5 e achado 1: os exhibits sob as perguntas, e cada gráfico no seu host.
+# --------------------------------------------------------------------------
+
+def test_o_exhibit_fica_sob_a_pergunta_que_o_cita_e_o_nao_citado_vai_para_a_secao_final():
+    """Cada pergunta mostra os exhibits que cita, na ordem em que os cita — inclusive fora
+    da ordem declarada, e o mesmo exhibit em duas perguntas — ou a razão de não ter; o
+    exhibit que nenhuma pergunta cita aparece na seção final, e só lá."""
+    entrega_dict = _entrega_com_exhibits_nas_perguntas()
+    aba = _aba(_pagina_da_tese(entrega_dict), "tese")
+    por_id = {exhibit["id"]: exhibit for exhibit in entrega_dict["analise"]["exhibits"]}
+    perguntas = entrega_dict["analise"]["perguntas"]
+
+    blocos = _todos(_secao(aba, TESE["perguntas_titulo"]), classe="tese-pergunta")
+    assert [_titulo(bloco) for bloco in blocos] == [pergunta["pergunta"] for pergunta in perguntas]
+    assert [[_titulo(artigo) for artigo in _todos(bloco, classe="exhibit")] for bloco in blocos] == [
+        [por_id[exhibit_id]["pergunta"] for exhibit_id in pergunta.get("exhibits", [])] for pergunta in perguntas]
+    assert [_visivel(_um(bloco, classe="tese-evidencia")) for bloco in blocos] == [
+        pergunta["evidencia"] for pergunta in perguntas]
+    assert _visivel(_um(blocos[2], classe="tese-sem-exhibit")) == perguntas[2]["sem_exhibit"]["razao"]
+    assert _visivel(_um(blocos[0], classe="exhibit-caption")) == por_id["margem"]["caption"]
+
+    final = _secoes(aba)[-1]
+    assert _titulo(final) == TESE["exhibits_nao_citados_titulo"]
+    assert [_titulo(artigo) for artigo in _todos(final, classe="exhibit")] == [por_id["preco"]["pergunta"]]
+    assert _visivel(_um(final, classe="exhibit-nota-janela")) == por_id["preco"]["nota_janela"]
+
+
+_HARNESS_DOS_EXHIBITS = r"""
+const fs = require('fs');
+const vm = require('vm');
+const entrada = JSON.parse(fs.readFileSync(__ENTRADA__, 'utf-8'));
+const proprio = (objeto, nome) => Object.prototype.hasOwnProperty.call(objeto, nome);
+
+// O mesmo subconjunto de seletor do harness do laboratório: qualquer outro LANÇA, para
+// que um seletor que este DOM falso não entende reprove em voz alta.
+function casa(el, seletor) {
+  const m = /^\s*\[([\w-]+)(?:="([^"]*)")?\]\s*$/.exec(seletor);
+  if (!m) { throw new Error('seletor fora do subconjunto do harness: ' + seletor); }
+  if (!proprio(el.atributos, m[1])) { return false; }
+  return m[2] === undefined || el.atributos[m[1]] === m[2];
+}
+
+const elementos = entrada.elementos.map((atributos, ordem) => ({
+  ordem: ordem,
+  atributos: atributos,
+  getAttribute(nome) { return proprio(this.atributos, nome) ? this.atributos[nome] : null; },
+}));
+const desenhos = [];
+const ctx = vm.createContext({
+  document: {
+    getElementById: (id) => (id === 'fleet-dados-exhibits' ? { textContent: entrada.dados } : null),
+    querySelectorAll: (seletor) => elementos.filter((el) => casa(el, seletor)),
+    querySelector: (seletor) => elementos.find((el) => casa(el, seletor)) || null,
+  },
+  // Um registrador no lugar do adaptador: a posição do host no documento e o id da spec
+  // que o bootstrap entregou a ele.
+  FleetGraficos: {
+    renderizar: (host, spec) => { desenhos.push({ ordem: host.ordem, spec: spec ? spec.id : null }); },
+  },
+});
+vm.runInContext(entrada.bootstrap, ctx, { filename: 'bootstrap-dos-exhibits' });
+console.log(JSON.stringify(desenhos));
+"""
+
+
+def _desenhos_do_bootstrap(pagina: str, elementos: list, tmp_path: Path) -> list:
+    """Roda no node o bootstrap dos exhibits EXTRAÍDO da página, com o JSON que a página
+    embute, sobre os elementos da própria página — nunca relido de `template.html`."""
+    (bootstrap,) = [m.group(1) for m in re.finditer(r"<script>(.*?)</script>", pagina, re.S)
+                    if 'getElementById("fleet-dados-exhibits")' in m.group(1)]
+    dados = re.search(r'<script type="application/json" id="fleet-dados-exhibits">(.*?)</script>',
+                      pagina, re.S).group(1)
+    arquivo = tmp_path / "bootstrap_dos_exhibits.json"
+    arquivo.write_text(json.dumps({"bootstrap": bootstrap, "dados": dados,
+                                   "elementos": [el["attrs"] for el in elementos]}, ensure_ascii=False),
+                       encoding="utf-8")
+    resultado = subprocess.run(
+        ["node", "-e", _HARNESS_DOS_EXHIBITS.replace("__ENTRADA__", json.dumps(str(arquivo)))],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    return json.loads(resultado.stdout)
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_cada_host_recebe_os_dados_do_exhibit_do_seu_indice_e_nunca_os_da_sua_posicao(tmp_path):
+    """Achado 1 (MATERIAL). O bootstrap ligava `hosts[i]` a `dados.exhibits[i]` pela ORDEM no
+    DOM; sob as perguntas, essa ordem é a das perguntas. Com a citação fora de ordem, o host
+    de `margem` recebia os dados de `receita`, com rc 0; e o exhibit citado por duas
+    perguntas cria mais hosts do que o payload tem, e o último ficava vazio. O que o leitor
+    vê sobre cada host — a pergunta do exhibit — tem de ser a do exhibit cujos dados o host
+    recebeu, e todo host recebe exatamente um desenho."""
+    entrega_dict = _entrega_com_exhibits_nas_perguntas()
+    pagina = _pagina_da_tese(entrega_dict)
+    elementos = list(_elementos(_arvore(pagina)))
+    hosts = [(ordem, el) for ordem, el in enumerate(elementos) if "exhibit-grafico" in _classes(el)]
+    assert len(hosts) == 4 > len(entrega_dict["analise"]["exhibits"]), "a entrega tem de ter mais hosts que specs"
+
+    desenhos = _desenhos_do_bootstrap(pagina, elementos, tmp_path)
+
+    por_id = {exhibit["id"]: exhibit for exhibit in entrega_dict["analise"]["exhibits"]}
+    spec_do_host = {desenho["ordem"]: desenho["spec"] for desenho in desenhos}
+    assert [por_id.get(spec_do_host.get(ordem), {}).get("pergunta") for ordem, _host in hosts] == [
+        _titulo(_ancestral(host, "exhibit")) for _ordem, host in hosts]
+    assert [desenho["ordem"] for desenho in desenhos] == [ordem for ordem, _host in hosts]
+
+
+# --------------------------------------------------------------------------
+# D3 e achado 2: a fronteira de escopo na Tese e nos dois lugares da Valuation.
+# --------------------------------------------------------------------------
+
+def _rotulos_do_preco_na_valuation(pagina: str) -> tuple:
+    """O rótulo do preço no cabeçalho da aba Valuation, o de cada cenário do laboratório e
+    todos os rótulos de métrica da aba."""
+    valuation = _aba(pagina, "valuation")
+    cabecalho = _todos(_um(valuation, classe="valuation-cabecalho"), classe="metrica-rotulo")[0]
+    laboratorio = [_todos(saidas, classe="metrica-rotulo")[0] for saidas in _todos(valuation, classe="lab-saidas")]
+    return (_visivel(cabecalho), [_visivel(rotulo) for rotulo in laboratorio],
+            [_visivel(rotulo) for rotulo in _todos(valuation, classe="metrica-rotulo")])
+
+
+def test_sob_fronteira_a_conclusao_e_condicional_e_a_valuation_chama_o_preco_de_leitura_condicional(tmp_path):
+    """Sob fronteira de escopo a Conclusão diz "conclusão condicional, sem preço-alvo", com a
+    classe rotulada pelo catálogo, a arquitetura dominante e a razão, e sem faixa; e o preço
+    por ação vira leitura condicional NOS DOIS lugares da Valuation que o chamavam de preço
+    justo — o cabeçalho e as saídas do laboratório. A vizinha fora da fronteira continua
+    com "Conclusão" e "Preço justo" nos dois lugares."""
+    sob = _sob_fronteira()
+    fronteira = sob["resultados"]["fronteira_de_escopo"]
+    pagina = _pagina_pelo_builder(sob, tmp_path / "sob")
+
+    conclusao = _secoes(_aba(pagina, "tese"))[0]
+    assert _titulo(conclusao) == TESE["conclusao_condicional_titulo"]
+    assert [_visivel(_um(conclusao, classe=classe))
+            for classe in ("tese-fronteira-classe", "tese-fronteira-arquitetura", "tese-fronteira-razao")] == [
+        CATALOGO["fronteiras_de_escopo"][fronteira["classe"]]["rotulo"]["pt-BR"],
+        fronteira["arquitetura_dominante"], fronteira["razao"]]
+    assert _todos(conclusao, classe="tese-faixa") == []
+
+    condicional = DICIONARIO["interface"]["valuation"]["preco_condicional_titulo"]
+    justo = DICIONARIO["interface"]["valuation"]["preco_justo_titulo"]
+    cabecalho, laboratorio, todos = _rotulos_do_preco_na_valuation(pagina)
+    assert laboratorio, "a página do builder traz o laboratório — sem ele, a asserção seria vácua"
+    assert (cabecalho, set(laboratorio)) == (condicional, {condicional})
+    assert justo not in todos
+
+    fora = _pagina_pelo_builder(_entrega(), tmp_path / "fora")
+    assert _titulo(_secoes(_aba(fora, "tese"))[0]) == TESE["conclusao_titulo"]
+    cabecalho, laboratorio, todos = _rotulos_do_preco_na_valuation(fora)
+    assert (cabecalho, set(laboratorio)) == (justo, {justo})
+    assert condicional not in todos
+
+
+# --------------------------------------------------------------------------
+# Achados 3 e 4: toda a prosa auditada — o log da Evidência e o caption.
+# --------------------------------------------------------------------------
+
+def test_um_placeholder_num_texto_da_tese_ou_de_um_exhibit_entra_no_log_da_evidencia(tmp_path):
+    """O log de resolução da Evidência listava só a conclusão: um número citado num texto
+    novo saía resolvido na tela e FORA da trilha de auditoria. O builder resolve toda a
+    prosa pela mesma lista que o QC varre, e a tela mostra, no lugar do placeholder, o
+    número que o log registra."""
+    entrega_dict = _entrega_com_exhibits_nas_perguntas()
+    analise = entrega_dict["analise"]
+    analise["perguntas"][2]["evidencia"] = "Negociada a {{caso:preco.valor|moeda}} na tela."
+    analise["exhibits"][2]["caption"] = "A manchete, {{resultados:manchete.preco_acao|moeda}} por ação."
+    preco_de_tela = entrega_dict["caso"]["preco"]["valor"]
+    manchete = entrega_dict["resultados"]["manchete"]["preco_acao"]
+    pagina = _pagina_pelo_builder(entrega_dict, tmp_path / "log")
+
+    tabela = _um(_aba(pagina, "evidencia"), classe="log-placeholders")
+    linhas = [[_visivel(celula) for celula in _todos(linha, tag="td")] for linha in _todos(tabela, tag="tr")]
+    for esperada in (
+            ["analise.perguntas.2.evidencia", "caso", "preco.valor", "moeda", str(preco_de_tela),
+             _moeda(entrega_dict, preco_de_tela)],
+            ["analise.exhibits.2.caption", "resultados", "manchete.preco_acao", "moeda", str(manchete),
+             _moeda(entrega_dict, manchete)]):
+        assert esperada in linhas, linhas
+
+    aba = _aba(pagina, "tese")
+    assert _visivel(_um(_todos(aba, classe="tese-pergunta")[2], classe="tese-evidencia")) == (
+        f"Negociada a {_moeda(entrega_dict, preco_de_tela)} na tela.")
+    assert _visivel(_um(_secao(aba, TESE["exhibits_nao_citados_titulo"]), classe="exhibit-caption")) == (
+        f"A manchete, {_moeda(entrega_dict, manchete)} por ação.")
+
+
+def test_um_digito_solto_no_caption_de_um_exhibit_nao_emite(tmp_path):
+    """Dentro da aba Tese, "a margem subiu de 12% para 18%" num caption é número sem
+    proveniência no meio da tese — o HARD FAIL da §11. A mesma entrega sem o dígito não
+    traz achado nenhum."""
+    assert _achados(_entrega_com_exhibits_nas_perguntas()) == []
+    entrega_dict = _entrega_com_exhibits_nas_perguntas()
+    entrega_dict["analise"]["exhibits"][1]["caption"] = "A margem subiu de 12% para 18% no período."
+    raiz = tmp_path / "caption_com_digito"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = _rodar_builder(raiz)
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    assert not (raiz / "relatorio.html").exists()
+    assert [(a["nivel"], a["codigo"], a["onde"]) for a in _ler_qc(raiz)["achados"]] == [
+        ("HARD_FAIL", "numero_sem_proveniencia", "analise.exhibits.1.caption")]
+
+
+# --------------------------------------------------------------------------
+# Achado 5: a faixa de um caso SOTP.
+# --------------------------------------------------------------------------
+
+def test_num_caso_sotp_a_faixa_sai_rotulada_como_a_do_consolidado_e_a_manchete_continua_o_sotp():
+    """A manchete de um caso SOTP é o preço da soma das partes, e a faixa mostra os preços
+    dos cenários CONSOLIDADOS — dois preços "base" na mesma página. A faixa sai rotulada como
+    a do consolidado, nomeando o preço da manchete; fora do SOTP, o rótulo comum."""
+    sotp = _entrega("caso_sotp_segmento.json")
+    manchete = sotp["resultados"]["manchete"]
+    assert manchete["fonte"] == "sotp", "o valor que avaliar._montar_manchete publica para a manchete do SOTP"
+    base = sotp["resultados"]["cenarios"][sotp["analise"]["faixa"]["base"]]["valor"]["preco_acao"]
+    assert _moeda(sotp, base) != _moeda(sotp, manchete["preco_acao"]), "sem os dois preços, o teste não discrimina"
+
+    faixa = _um(_aba(_pagina_da_tese(sotp), "tese"), classe="tese-faixa")
+    assert _visivel(_um(faixa, classe="tese-faixa-rotulo")) == render.t(
+        DICIONARIO, "tese.faixa_rotulo_consolidado", preco=_moeda(sotp, manchete["preco_acao"]))
+    assert [_visivel(valor) for valor in _todos(faixa, classe="metrica-valor")] == [_moeda(sotp, base)] * 3
+
+    vizinha = _entrega()
+    assert vizinha["resultados"]["manchete"]["fonte"] == "cenarios"
+    faixa_vizinha = _um(_aba(_pagina_da_tese(vizinha), "tese"), classe="tese-faixa")
+    assert _visivel(_um(faixa_vizinha, classe="tese-faixa-rotulo")) == TESE["faixa_rotulo"]

@@ -223,6 +223,18 @@ def validar_exhibits(valor: Any) -> None:
     for indice, exhibit in enumerate(valor):
         _validar_exhibit(exhibit, f"analise.exhibits.{indice}")
 
+    # Fatia 5D, Task 3: uma pergunta da tese cita o exhibit pelo `id`, e o
+    # gráfico encontra o seu host pelo índice desse `id` na lista — com um id
+    # repetido, as duas ligações ficariam ambíguas, e um dos exhibits sumiria da
+    # página em silêncio.
+    ids = [exhibit["id"] for exhibit in valor]
+    repetidos = sorted({ident for ident in ids if ids.count(ident) > 1})
+    if repetidos:
+        raise ContratoDeExhibitInvalido(
+            f"'analise.exhibits' repete o id '{repetidos[0]}': cada exhibit tem um id próprio — é por "
+            "ele que uma pergunta da tese o cita e que o gráfico encontra o seu lugar na página."
+        )
+
 
 def _validar_tipo(tipo: Any, onde: str) -> None:
     if tipo in TIPOS:

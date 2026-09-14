@@ -39,13 +39,64 @@
     },
     "tese": {
       "conclusao_titulo": "Conclusão",
+      "conclusao_condicional_titulo": "Conclusão condicional, sem preço-alvo",
+      "fronteira_classe": "Fronteira de escopo",
+      "fronteira_arquitetura": "Arquitetura dominante",
+      "fronteira_razao": "Por que a métrica-manchete não se aplica",
+      "faixa_rotulo": "Faixa de preço por ação: piso, base e teto.",
+      "faixa_rotulo_consolidado": "Faixa dos cenários consolidados. A manchete desta análise é o preço da soma das partes, {preco}; a base desta faixa não é a resposta.",
+      "faixa_cenario": "cenário '{cenario}'",
+      "papeis_da_faixa": {
+        "piso": "Piso",
+        "base": "Base",
+        "teto": "Teto"
+      },
+      "veredicto_titulo": "Veredicto",
+      "preco_de_tela": "Preço de tela: {preco} em {data} (fonte: {fonte}).",
       "disclosures_titulo": "Avisos obrigatórios",
       "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega.",
-      "exhibits_titulo": "Exhibits",
-      "exhibits_vazio": "Nenhum exhibit declarado nesta análise."
+      "premissas_decisivas_titulo": "Premissas decisivas",
+      "o_que_mudou_titulo": "O que mudou desde a análise fornecida",
+      "positives_negatives_titulo": "Positives e Negatives",
+      "positives_titulo": "Positives",
+      "negatives_titulo": "Negatives",
+      "vetor": "Vetor",
+      "mecanismo": "O que move no valuation",
+      "observavel_item": "Observável que o confirma ou o mata",
+      "incorporacao": "No valuation",
+      "razao": "Razão",
+      "perguntas_titulo": "Perguntas da tese",
+      "evidencia": "Evidência",
+      "observavel_pergunta": "Observável que a falsificaria",
+      "vinculo": "Vínculo com o valuation",
+      "sem_exhibit": "Sem exhibit",
+      "riscos_titulo": "Riscos",
+      "observavel_risco": "Observável que o monitora",
+      "visao_nao_consensual_titulo": "Visão não-consensual",
+      "exhibits_nao_citados_titulo": "Exhibits fora das perguntas",
+      "nenhum_item": "Nenhum item declarado nesta análise.",
+      "temas": {
+        "moat": "Moat",
+        "crescimento": "Crescimento",
+        "rentabilidade_do_crescimento": "Rentabilidade do crescimento",
+        "especifica": "Específica da companhia"
+      },
+      "vetores": {
+        "crescimento": "Crescimento",
+        "moat": "Moat",
+        "rentabilidade": "Rentabilidade",
+        "risco": "Risco",
+        "earning_power": "Earning power",
+        "valuation": "Valuation"
+      },
+      "incorporacoes": {
+        "refletido": "Refletido no valuation",
+        "nao_incorporado": "Não incorporado ao valuation"
+      }
     },
     "valuation": {
       "preco_justo_titulo": "Preço justo",
+      "preco_condicional_titulo": "Leitura condicional do preço por ação (sem preço-alvo)",
       "upside_titulo": "Upside sobre o preço de mercado",
       "multiplo_justo_titulo": "Múltiplo justo",
       "multiplo_tela_titulo": "Múltiplo de tela",

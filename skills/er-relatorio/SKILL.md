@@ -9,8 +9,10 @@ description: >-
   a gramática de gráfico (`analise.exhibits[]` + `entrega.dados`) ou
   o CLI `builder.py` que emite `relatorio.html` + `qc.json` a partir de uma
   raiz de execução — ou recusa, nomeando a razão. Item 5 do v4, fatias 5A
-  (contrato + QC + render das três abas) e 5B (exhibits, uPlot e os painéis
-  SVG da Valuation), com as ondas de correção das duas revisões finais.
+  (contrato + QC + render das três abas), 5B (exhibits, uPlot e os painéis
+  SVG da Valuation), 5C (laboratório) e 5D (a Tese: perguntas, faixa,
+  veredicto, fronteira de escopo e a aba renderizada), com as ondas de
+  correção das revisões finais.
   NÃO use para o relatório de 2 abas em produção (esse é
   `er-relatorio-html`, v3); não use para rodar o valuation (`er-valuation`)
   nem para o workflow da análise (`er-analise`).
@@ -46,7 +48,11 @@ reimplementa valuation. Concretamente:
   número livre legítimo é `{{livre:...}}`; qualquer outro dígito na prosa é
   HARD FAIL (`numero_sem_proveniencia`); qualquer `{{...}}` que não seja um
   placeholder reconhecido é HARD FAIL (`placeholder_malformado`) — nenhum
-  bloco malformado ganha imunidade da busca de dígito.
+  bloco malformado ganha imunidade da busca de dígito. A prosa é **uma
+  lista só** (`placeholders.campos_de_prosa`): a conclusão, todo texto da
+  Tese e `pergunta`/`nota_janela`/`caption` de cada exhibit. O QC a varre, o
+  log da Evidência registra cada placeholder dela, e a aba Tese só exibe
+  texto que está nela.
 - **Rótulo de metodologia vem sempre do catálogo, nunca de `caso` cru.** O
   cabeçalho da Valuation lê `resultados.rota` e
   `manchete.convencao_terminal` (já canonicalizados pela integração) e
@@ -174,8 +180,9 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 **O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
 Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) ou blocos
 econômicos (`catalogo.blocos`) — o vocabulário vem do catálogo, nunca deste
-skill. Um exhibit não declara vínculo. Todo campo de texto da Tese passa pelos
-placeholders auditáveis, como a conclusão. A Análise exige a reversa
+skill. Um exhibit não declara vínculo. Todo campo de texto da Tese — e
+`pergunta`, `nota_janela` e `caption` de cada exhibit, que a aba desenha sob as
+perguntas — passa pelos placeholders auditáveis, como a conclusão. A Análise exige a reversa
 (`resultados.reversa`); quando o caso a torna impossível, a integração publica a
 limitação em `resultados.limitacoes`, e o catálogo declara o bloco que ela
 suprime (`catalogo.limitacoes.<chave>.afeta`) — a entrega sai com o disclosure,
@@ -235,7 +242,7 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
       {"derivacao": "engine",   "chave": "resultados:manchete.preco_acao"}
     ],
     "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}],
-    "nota_janela": "só os últimos 4 anos têm dado comparável",
+    "nota_janela": "só os últimos {{livre:4}} anos têm dado comparável",
     "caption": "fonte: demonstrações auditadas"
   }]
 }
@@ -244,7 +251,7 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
 | Nível | Chaves | Notas |
 |---|---|---|
 | `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` só tem o tipo confirmado nesta fatia (item 7 detalha) |
-| `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption` opcionais | `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela`; o exhibit não declara vínculo (5D, D5) — a pergunta da tese que ele responde o cita em `perguntas[].exhibits` |
+| `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption` opcionais | `id` único; `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela`; o exhibit não declara vínculo (5D, D5) — a pergunta da tese que ele responde o cita em `perguntas[].exhibits`, e ele é desenhado sob ela; `pergunta`, `nota_janela` e `caption` são prosa auditável (dígito só por placeholder) |
 | série `direta` | `derivacao`, `fonte` (`"<dataset>.<campo>"`) | o campo, verbatim; `null` é ponto ausente legítimo (travessão no gráfico) |
 | série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval` |
 | série `engine` | `derivacao`, `chave` (`"resultados:<caminho>"`) | tem de resolver num **número finito** ou lista deles |
@@ -308,15 +315,52 @@ mesmo quando o builder recusa emitir o HTML.
 
 ## As três abas (`render.py`)
 
-Tese (conclusão resolvida + disclosures obrigatórios + a seção de exhibits),
-Valuation (preço
-justo, upside, múltiplo justo pareado com o de tela pela mesma base, rota e
-convenção terminal — do catálogo, nunca de `caso` cru — preço por cenário
-quando houver mais de um, e os painéis SVG: o waterfall da ponte e uma
-matriz por grade 2D, cujo título nomeia o cenário que a grade perturbou;
-SOTP mostra só preço/upside, sem rota/convenção
-única) e Evidência (metodologia, ficha técnica, log de resolução de
-placeholders e a rastreabilidade série a série dos exhibits).
+**Tese** (fatia 5D) — a decisão de investimento, nesta ordem:
+
+1. **Conclusão**: o texto da conclusão; a faixa piso–base–teto, cada ponta com
+   o preço que `resultados.cenarios.<nome>.valor.preco_acao` publica e o nome
+   do cenário; o veredicto, com o preço de tela, a data e a fonte de
+   `caso.preco`; e o múltiplo justo ao lado do de tela. Num caso SOTP
+   (`resultados.manchete.fonte` igual a `sotp`) a faixa sai rotulada como a
+   dos cenários consolidados, nomeando o preço da soma das partes — que
+   continua sendo a manchete. **Sob fronteira de escopo** o título é
+   "conclusão condicional, sem preço-alvo", com a classe (rótulo do
+   catálogo), a arquitetura dominante e a razão que
+   `resultados.fronteira_de_escopo` publica, e nenhuma faixa;
+2. avisos obrigatórios (todo REQUIRED DISCLOSURE);
+3. premissas decisivas: o rótulo do catálogo, o número do cenário da manchete
+   formatado pela unidade do catálogo e a derivação;
+4. o que mudou desde a análise fornecida, se declarado;
+5. Positives e Negatives: a afirmação, o vetor, o que move no valuation, o
+   observável, e se está refletido ou não incorporado (com a razão);
+6. as perguntas da tese: tema, pergunta, evidência, observável e vínculo — e
+   **os exhibits que ela cita, desenhados ali**, na ordem citada, ou a razão
+   de não ter nenhum;
+7. riscos, cada um com o observável;
+8. visão não-consensual, se declarada;
+9. os exhibits que nenhuma pergunta cita, se houver.
+
+Vínculo, mecanismo, premissa e classe de fronteira saem pelo rótulo do
+catálogo; tema, vetor, incorporação e papel da faixa, pelo dicionário — nunca
+a chave crua. Todo texto de `analise` sai de `placeholders.resolver_prosa`: um
+campo que o render tentasse exibir fora da lista de prosa é
+`ProsaNaoAuditada` (`RC=1`). Cada host de gráfico carrega o índice da sua
+spec no payload (`data-exhibit-indice`), e o bootstrap pareia host e spec por
+esse índice, nunca pela posição no DOM — o mesmo exhibit pode aparecer sob
+duas perguntas.
+
+**Valuation** — preço justo (sob fronteira de escopo, "leitura condicional do
+preço por ação", no cabeçalho e nas saídas de cada cenário do laboratório),
+upside, múltiplo justo pareado com o de tela pela mesma base, rota e
+convenção terminal — do catálogo, nunca de `caso` cru —, preço por cenário
+quando houver mais de um, os painéis SVG (o waterfall da ponte e uma matriz
+por grade 2D, cujo título nomeia o cenário que a grade perturbou) e o
+laboratório; SOTP mostra só preço/upside, sem rota/convenção única.
+
+**Evidência** — metodologia, ficha técnica, o log de resolução de **todo**
+placeholder da prosa (conclusão, textos da Tese e dos exhibits) e a
+rastreabilidade série a série dos exhibits.
+
 `assets/template.html` é a casca estática — CSS e JS
 100% inline, nenhum `src`/`href`/`url()`/`@import` que não seja
 `#fragmento` ou `data:`. Toda string de interface vem do dicionário
@@ -333,14 +377,14 @@ caminho), nunca um `KeyError` cru.
 |---|---|
 | `scripts/entrega.py` | Contrato de `entrega.json`: carrega, valida, recusa; `sha256_canonico`; identidade de ticker |
 | `scripts/exhibits.py` | Contrato de `analise.exhibits`/`entrega.dados`; avaliador fechado da fórmula (`ast`, nunca `eval`); resolve série/overlay em número e produz o log de rastreabilidade |
-| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica |
+| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; e a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
 | `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados; embute o payload dos exhibits e dos painéis |
 | `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, decide o exit code |
 
 | Asset | Papel |
 |---|---|
-| `assets/template.html` | Casca estática das três abas + bootstrap que entrega o payload aos dois módulos JS |
+| `assets/template.html` | Casca estática das três abas + bootstrap que entrega o payload aos módulos JS, pareando cada gráfico ao seu host pelo índice (`data-exhibit-indice`) |
 | `assets/graficos.js` | Adaptador fino sobre o uPlot: desenha os cinco cartesianos e a `tabela` a partir da spec já resolvida |
 | `assets/svg.js` | Os dois painéis NÃO-cartesianos (waterfall da ponte, matriz de sensibilidade) como string SVG pura |
 | `assets/uPlot.iife.min.js` / `.min.css` / `.LICENSE` | uPlot v1.6.27 vendorizado byte a byte, embutido só quando há exhibit |

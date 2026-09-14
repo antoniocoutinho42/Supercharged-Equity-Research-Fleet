@@ -206,9 +206,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 2
 
-    fontes = {"resultados": entrega_dict["resultados"], "caso": entrega_dict["caso"]}
-    _conclusao_resolvida, log, _erros = placeholders.resolver(
-        entrega_dict["analise"]["conclusao"]["texto"], fontes, idioma, "analise.conclusao.texto")
+    # Fatia 5D, Task 3 (achado 3): o log de resolução que a aba Evidência exibe
+    # cobre TODO campo de prosa — a mesma lista que o QC acabou de varrer
+    # (`placeholders.campos_de_prosa`), nunca só a conclusão. Um número citado
+    # num texto da Tese ou no caption de um exhibit sai resolvido na tela e,
+    # junto, na trilha de auditoria.
+    _prosa_resolvida, log = placeholders.resolver_prosa(entrega_dict, idioma)
 
     # Fatia 5B, item 5, Task 2: exhibits são resolvidos em números UMA
     # única vez aqui -- a fase 1 do QC (acima) já confirmou zero HARD FAIL
@@ -223,7 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
                                 exhibits_resolvidos, log_exhibits, js_da_integracao)
     except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente,
-            render.CampoDeContratoAusente, render.JsonNaoSerializavel) as erro:
+            render.CampoDeContratoAusente, render.JsonNaoSerializavel,
+            render.ProsaNaoAuditada) as erro:
         print(str(erro), file=sys.stderr)
         return 1
 

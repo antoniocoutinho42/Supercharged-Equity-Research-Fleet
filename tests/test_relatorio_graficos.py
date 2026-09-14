@@ -65,9 +65,7 @@ def _preparar_com_exhibits(exhibits_decl, dados=None, texto_conclusao=None):
         kwargs["texto_conclusao"] = texto_conclusao
     entrega_dict = apoio.montar_entrega(FIXTURE, **kwargs)
 
-    fontes = {"resultados": entrega_dict["resultados"], "caso": entrega_dict["caso"]}
-    _resolvido, log, _erros = placeholders.resolver(
-        entrega_dict["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
 
     achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
@@ -79,7 +77,7 @@ def _preparar_com_exhibits(exhibits_decl, dados=None, texto_conclusao=None):
 DADOS_RECEITA = {"fin": _dataset(["2023", "2024", "2025"], {"receita": [111.25, 222.5, 333.75]})}
 EXHIBIT_LINHA = {
     "id": "receita", "pergunta": "Como a receita evoluiu no período?", "tipo": "linha",
-    "nota_janela": "janela curta de teste -- só 3 pontos",
+    "nota_janela": "janela curta de teste -- só {{livre:3}} pontos",
     "series": [{"derivacao": "direta", "fonte": "fin.receita"}],
 }
 EXHIBIT_TABELA = {
@@ -139,7 +137,7 @@ def test_serie_direta_de_dois_datasets_leva_a_fonte_inteira_no_rotulo():
     }
     exhibit = {
         "id": "mix", "pergunta": "A margem acompanha o setor?", "tipo": "linha",
-        "nota_janela": "janela curta de teste -- só 4 pontos",
+        "nota_janela": "janela curta de teste -- só {{livre:4}} pontos",
         "series": [{"derivacao": "direta", "fonte": "fin.margem"},
                    {"derivacao": "direta", "fonte": "setor.margem"}],
     }
@@ -156,21 +154,28 @@ def test_serie_direta_de_dois_datasets_leva_a_fonte_inteira_no_rotulo():
     assert [s["rotulo"] for s in spec_um["series"]] == ["receita"]
 
 
-def test_pergunta_e_nota_de_janela_aparecem_na_secao_de_exhibits_da_tese():
+def test_pergunta_e_nota_de_janela_aparecem_na_secao_de_exhibits_fora_das_perguntas():
+    """Fatia 5D, Task 3 (D5): a Tese padrão do apoio responde toda pergunta com
+    `sem_exhibit`, então o exhibit desta entrega não é citado por pergunta nenhuma e vai
+    para a seção final da aba — a que antes era a seção única de exhibits. A colocação sob
+    as perguntas é de `tests/test_relatorio_tese.py`."""
     entrega_dict, achados, log, exhibits_resolvidos, log_exhibits = _preparar_com_exhibits(
         [EXHIBIT_LINHA], dados=DADOS_RECEITA)
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", exhibits_resolvidos, log_exhibits)
 
-    assert render.t(DICIONARIO, "tese.exhibits_titulo") in pagina
+    assert render.t(DICIONARIO, "tese.exhibits_nao_citados_titulo") in pagina
     assert "Como a receita evoluiu no período?" in pagina
-    assert "janela curta de teste" in pagina
+    assert "janela curta de teste -- só 3 pontos" in pagina
 
 
-def test_secao_de_exhibits_mostra_mensagem_vazia_sem_exhibit_declarado():
+def test_sem_exhibit_declarado_a_tese_nao_tem_secao_de_exhibits_nem_host():
+    """Fatia 5D, Task 3 (D7): sem exhibit, cada pergunta já declara a razão de não ter
+    um — a seção final de exhibits fora das perguntas não aparece vazia. A Evidência
+    continua dizendo que não há exhibit rastreado."""
     entrega_dict, achados, log, exhibits_resolvidos, log_exhibits = _preparar_com_exhibits([])
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", exhibits_resolvidos, log_exhibits)
 
-    assert render.t(DICIONARIO, "tese.exhibits_vazio") in pagina
+    assert render.t(DICIONARIO, "tese.exhibits_nao_citados_titulo") not in pagina
     assert render.t(DICIONARIO, "evidencia.exhibits_vazio") in pagina
     assert 'class="exhibit-grafico"' not in pagina
 
@@ -281,7 +286,7 @@ def test_json_embutido_escapa_fechamento_de_script():
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("chave", [
-    "tese.exhibits_titulo", "tese.exhibits_vazio",
+    "tese.exhibits_nao_citados_titulo",
     "evidencia.exhibits_titulo", "evidencia.exhibits_vazio",
     "evidencia.exhibits_colunas.exhibit", "evidencia.exhibits_colunas.indice",
     "evidencia.exhibits_colunas.origem", "evidencia.exhibits_colunas.detalhe",

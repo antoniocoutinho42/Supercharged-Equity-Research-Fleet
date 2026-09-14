@@ -312,3 +312,98 @@ def resolver(texto: str, fontes: Fontes, idioma: str, onde: str) -> tuple[str, l
 
     texto_resolvido = _PADRAO_PLACEHOLDER.sub(_substituir, texto)
     return texto_resolvido, log, erros
+
+
+# --------------------------------------------------------------------------
+# A prosa auditável da entrega (fatia 5D, item 5, Task 3, achados 3 e 4).
+#
+# UMA lista de campos para as três leituras que precisam dela: o QC (`qc.py`,
+# que confere todo placeholder e todo dígito solto), o log de resolução que a
+# aba Evidência exibe (`builder.py`) e o texto que a aba Tese exibe
+# (`render.py`). Mora aqui — no módulo dos placeholders auditáveis, que os três
+# já importam — porque uma segunda lista divergiria da primeira no próximo
+# campo novo, e um texto exibido fora dela sairia sem QC e sem trilha de
+# auditoria. Até a Task 2 esta lista era `qc._campos_de_prosa`.
+# --------------------------------------------------------------------------
+
+def _objeto(valor: Any) -> dict:
+    return valor if isinstance(valor, dict) else {}
+
+
+def _lista(valor: Any) -> list:
+    return valor if isinstance(valor, list) else []
+
+
+def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
+    """Todo campo de prosa de `analise`, como pares `(onde, texto)`: o que está
+    sujeito a `numero_sem_proveniencia`/`placeholder_nao_resolvido`/
+    `placeholder_malformado`, o que o log da Evidência registra e o que a Tese
+    exibe.
+
+    - `conclusao.texto`, desde a 5A (A7);
+    - todo campo de TEXTO da Tese, desde a 5D (Task 2, D1), na ordem da aba (D7);
+    - `pergunta`, `nota_janela` e `caption` de cada exhibit, na ordem declarada,
+      desde a 5D (Task 3, achado 4): os exhibits passaram a ser desenhados dentro
+      da aba Tese, sob as perguntas, e um caption como "a margem subiu de 12% para
+      18%" é número sem proveniência no meio da tese.
+
+    Identificador e vocabulário (`id`, `tema`, `vetor`, `incorporacao`, `vinculo`,
+    `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit) não são prosa e não
+    entram. Também ficam de fora a `formula_nota` de uma série e o `rotulo` de um
+    overlay: são rótulos de legenda, que o adaptador desenha dentro do gráfico, e
+    não texto da aba.
+
+    Tolerante a forma: o QC também roda sobre entregas montadas direto em teste,
+    sem `entrega.carregar` — o que não é texto simplesmente não é colhido."""
+    analise = _objeto(entrega.get("analise"))
+    campos: list[tuple[str, str]] = []
+
+    def _texto(onde: str, valor: Any) -> None:
+        if isinstance(valor, str):
+            campos.append((onde, valor))
+
+    _texto("analise.conclusao.texto", _objeto(analise.get("conclusao")).get("texto"))
+    _texto("analise.veredicto.texto", _objeto(analise.get("veredicto")).get("texto"))
+    for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
+        _texto(f"analise.premissas_decisivas.{indice}.derivacao", _objeto(premissa).get("derivacao"))
+    for lado in ("positives", "negatives"):
+        for indice, item in enumerate(_lista(analise.get(lado))):
+            for campo in ("afirmacao", "observavel", "razao"):
+                _texto(f"analise.{lado}.{indice}.{campo}", _objeto(item).get(campo))
+    for indice, pergunta in enumerate(_lista(analise.get("perguntas"))):
+        pergunta = _objeto(pergunta)
+        for campo in ("pergunta", "evidencia", "observavel"):
+            _texto(f"analise.perguntas.{indice}.{campo}", pergunta.get(campo))
+        _texto(f"analise.perguntas.{indice}.sem_exhibit.razao", _objeto(pergunta.get("sem_exhibit")).get("razao"))
+    for indice, risco in enumerate(_lista(analise.get("riscos"))):
+        for campo in ("risco", "observavel"):
+            _texto(f"analise.riscos.{indice}.{campo}", _objeto(risco).get(campo))
+    _texto("analise.visao_nao_consensual.texto", _objeto(analise.get("visao_nao_consensual")).get("texto"))
+    linhas = _lista(_objeto(analise.get("mudou_desde_analise_fornecida")).get("linhas"))
+    for indice, linha in enumerate(linhas):
+        _texto(f"analise.mudou_desde_analise_fornecida.linhas.{indice}", linha)
+    for indice, exhibit in enumerate(_lista(analise.get("exhibits"))):
+        for campo in ("pergunta", "nota_janela", "caption"):
+            _texto(f"analise.exhibits.{indice}.{campo}", _objeto(exhibit).get(campo))
+    return campos
+
+
+def resolver_prosa(entrega: dict, idioma: str) -> tuple[dict[str, str], list[dict]]:
+    """Resolve todo campo de `campos_de_prosa(entrega)`; devolve
+    `({onde: texto_resolvido}, log)`, com o log de cada campo na ordem da lista.
+
+    `builder.py` passa o log à aba Evidência — a trilha de auditoria de TODO número
+    citado na prosa, não só na conclusão (achado 3) — e `render.py` exibe cada texto
+    pelo seu `onde` neste dicionário, nunca por uma resolução própria: o que não está
+    na lista não tem como chegar à tela. Os erros de resolução não voltam daqui:
+    quem os transforma em achado é o QC, sobre a mesma lista, antes de qualquer
+    render."""
+    caso = entrega.get("caso") or {}
+    fontes = {"resultados": entrega.get("resultados"), "caso": caso}
+    resolvidos: dict[str, str] = {}
+    log: list[dict] = []
+    for onde, texto in campos_de_prosa(entrega):
+        resolvido, log_do_campo, _erros = resolver(texto, fontes, idioma, onde)
+        resolvidos[onde] = resolvido
+        log.extend(log_do_campo)
+    return resolvidos, log

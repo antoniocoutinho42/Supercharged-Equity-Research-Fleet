@@ -47,7 +47,12 @@ Fatia 5D, item 5, Task 2 (as regras da §11 que pertencem à Tese, D6):
 `tese_dependente_de_uma_premissa` (QUALITY WARNING). Mais duas referências da
 Tese que não resolvem, da família de `overlay_nao_resolvido`:
 `premissa_decisiva_fora_do_cenario` e `limitacao_desconhecida` (HARD FAIL).
-`_campos_de_prosa` cobre todo campo de texto da Tese. Ver `_achados_da_tese`.
+A lista de prosa cobre todo campo de texto da Tese. Ver `_achados_da_tese`.
+
+Fatia 5D, item 5, Task 3: a lista de prosa saiu deste módulo para
+`placeholders.campos_de_prosa`, a única que o QC, o log da Evidência
+(`builder.py`) e o texto da Tese (`render.py`) leem — e passou a cobrir também
+`pergunta`, `nota_janela` e `caption` de cada exhibit.
 """
 
 import json
@@ -131,46 +136,6 @@ def _objeto(valor) -> dict:
 
 def _lista(valor) -> list:
     return valor if isinstance(valor, list) else []
-
-
-def _campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
-    """Todo campo de prosa de `analise` sujeito a `numero_sem_proveniencia`/
-    `placeholder_nao_resolvido`/`placeholder_malformado` — `conclusao.texto`
-    desde a 5A (A7) e, desde a 5D (Task 2, D1), todo campo de TEXTO da Tese, na
-    ordem da aba (D7). Identificador e vocabulário (`id`, `tema`, `vetor`,
-    `incorporacao`, `vinculo`, `mecanismo`, `chave`, os nomes da faixa, os ids de
-    exhibit) não são prosa e não entram.
-
-    Tolerante a forma: o QC também roda sobre entregas montadas direto em teste,
-    sem `entrega.carregar` — o que não é texto simplesmente não é colhido."""
-    analise = _objeto(entrega.get("analise"))
-    campos: list[tuple[str, str]] = []
-
-    def _texto(onde: str, valor) -> None:
-        if isinstance(valor, str):
-            campos.append((onde, valor))
-
-    _texto("analise.conclusao.texto", _objeto(analise.get("conclusao")).get("texto"))
-    _texto("analise.veredicto.texto", _objeto(analise.get("veredicto")).get("texto"))
-    for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
-        _texto(f"analise.premissas_decisivas.{indice}.derivacao", _objeto(premissa).get("derivacao"))
-    for lado in ("positives", "negatives"):
-        for indice, item in enumerate(_lista(analise.get(lado))):
-            for campo in ("afirmacao", "observavel", "razao"):
-                _texto(f"analise.{lado}.{indice}.{campo}", _objeto(item).get(campo))
-    for indice, pergunta in enumerate(_lista(analise.get("perguntas"))):
-        pergunta = _objeto(pergunta)
-        for campo in ("pergunta", "evidencia", "observavel"):
-            _texto(f"analise.perguntas.{indice}.{campo}", pergunta.get(campo))
-        _texto(f"analise.perguntas.{indice}.sem_exhibit.razao", _objeto(pergunta.get("sem_exhibit")).get("razao"))
-    for indice, risco in enumerate(_lista(analise.get("riscos"))):
-        for campo in ("risco", "observavel"):
-            _texto(f"analise.riscos.{indice}.{campo}", _objeto(risco).get(campo))
-    _texto("analise.visao_nao_consensual.texto", _objeto(analise.get("visao_nao_consensual")).get("texto"))
-    linhas = _lista(_objeto(analise.get("mudou_desde_analise_fornecida")).get("linhas"))
-    for indice, linha in enumerate(linhas):
-        _texto(f"analise.mudou_desde_analise_fornecida.linhas.{indice}", linha)
-    return campos
 
 
 # B11 (achado S3): formatos aceitáveis por unidade DE PREMISSA (catálogo,
@@ -275,7 +240,7 @@ def _achados_prosa(entrega: dict, catalogo: dict) -> list[Achado]:
     caso = entrega.get("caso") or {}
     fontes = {"resultados": entrega.get("resultados"), "caso": caso}
 
-    for onde, texto in _campos_de_prosa(entrega):
+    for onde, texto in placeholders.campos_de_prosa(entrega):
         _resolvido, log, erros = placeholders.resolver(texto, fontes, idioma, onde)
         for erro in erros:
             achados.append(Achado("HARD_FAIL", "placeholder_nao_resolvido", onde,
@@ -900,7 +865,7 @@ def _achados_fronteira_com_preco_alvo(entrega: dict) -> list[Achado]:
         achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", "analise.faixa", {
             "classe": classe, "trecho": json.dumps(analise["faixa"], ensure_ascii=False, sort_keys=True),
         }))
-    for onde, texto in _campos_de_prosa(entrega):
+    for onde, texto in placeholders.campos_de_prosa(entrega):
         for placeholder in _PADRAO_PLACEHOLDER_RECONHECIDO.finditer(texto):
             if placeholder.group(1) == "livre":
                 continue

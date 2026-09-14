@@ -8,6 +8,7 @@ sintético do teste de QUALITY_WARNING, que o próprio plano autoriza
 ('pode ser testado passando um Achado sintético direto em render.compor').
 """
 
+import copy
 import html
 import json
 import re
@@ -37,9 +38,7 @@ def _preparar(nome_fixture: str, **kwargs):
     os três argumentos que `builder.py` de fato passa para `render.compor`
     depois de uma primeira passada de QC limpa (html=None)."""
     entrega_dict = apoio.montar_entrega(nome_fixture, **kwargs)
-    fontes = {"resultados": entrega_dict["resultados"], "caso": entrega_dict["caso"]}
-    _resolvido, log, _erros = placeholders.resolver(
-        entrega_dict["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
     achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
     return entrega_dict, achados, log
@@ -310,3 +309,42 @@ def test_chave_de_interface_ausente_levanta_erro_nomeado():
 def test_rotulo_do_catalogo_ausente_levanta_erro_nomeado():
     with pytest.raises(render.RotuloDoCatalogoAusente, match="rota_que_nao_existe"):
         render._rotulo_rota(CATALOGO, "rota_que_nao_existe", "pt-BR")
+
+
+@pytest.mark.parametrize("remover", ["bloco", "rotulo_no_idioma"])
+def test_rotulo_de_bloco_ausente_levanta_erro_nomeado(remover):
+    """Fatia 5D, Task 3: o bloco econômico (vínculo e mecanismo da Tese, e os grupos do
+    laboratório) é rotulado pelo catálogo com a mesma disciplina de rota e premissa — a
+    ausência é recusa nomeada, nunca a chave crua na tela."""
+    assert render._rotulo_bloco(CATALOGO, "custo_capital", "pt-BR") == (
+        CATALOGO["blocos"]["custo_capital"]["rotulo"]["pt-BR"])
+    catalogo = copy.deepcopy(CATALOGO)
+    if remover == "bloco":
+        del catalogo["blocos"]["custo_capital"]
+    else:
+        del catalogo["blocos"]["custo_capital"]["rotulo"]["pt-BR"]
+    with pytest.raises(render.RotuloDoCatalogoAusente, match="custo_capital"):
+        render._rotulo_bloco(catalogo, "custo_capital", "pt-BR")
+
+
+def test_os_grupos_do_laboratorio_leem_o_rotulo_de_bloco_pelo_mesmo_auxiliar_da_tese(monkeypatch):
+    """O painel da 5C lia o rótulo de bloco inline; passa a ler por `_rotulo_bloco`, o
+    mesmo auxiliar do vínculo da Tese — duas leituras do mesmo rótulo divergiriam."""
+    lidos = []
+    original = render._rotulo_bloco
+
+    def _registrar(catalogo, bloco, idioma):
+        lidos.append(bloco)
+        return original(catalogo, bloco, idioma)
+
+    monkeypatch.setattr(render, "_rotulo_bloco", _registrar)
+    blocos = render._blocos_do_catalogo(CATALOGO, "pt-BR")
+    assert lidos and [chave for chave, _rotulo in blocos] == lidos
+
+
+def test_rotulo_de_fronteira_de_escopo_ausente_levanta_erro_nomeado():
+    """A classe de fronteira de escopo é rotulada pelo catálogo (D3), nunca pela chave."""
+    assert render._rotulo_fronteira(CATALOGO, "pre_lucro", "pt-BR") == (
+        CATALOGO["fronteiras_de_escopo"]["pre_lucro"]["rotulo"]["pt-BR"])
+    with pytest.raises(render.RotuloDoCatalogoAusente, match="classe_que_nao_existe"):
+        render._rotulo_fronteira(CATALOGO, "classe_que_nao_existe", "pt-BR")

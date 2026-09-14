@@ -280,7 +280,7 @@ def test_serie_com_nota_janela_nao_dispara_warning():
     dados = {"fin": _dataset([1, 2, 3], {"receita": [1.0, 2.0, 3.0]})}
     exhibit = {
         "id": "fin", "pergunta": "pergunta válida", "tipo": "linha",
-        "nota_janela": "só os últimos 3 anos têm dado comparável",
+        "nota_janela": "só os últimos {{livre:3}} anos têm dado comparável",
         "series": [{"derivacao": "direta", "fonte": "fin.receita"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
