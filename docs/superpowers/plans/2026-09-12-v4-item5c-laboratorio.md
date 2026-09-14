@@ -146,9 +146,22 @@ rede da 5B roda sobre o arquivo novo).
 `skills/er-relatorio/assets/laboratorio.js`, `render.py`, `tests/test_espelho_fachada_js.py`,
 `tests/test_relatorio_laboratorio.py`.
 
-`FachadaEspelho.avaliarCaso` passa a devolver, por cenário, `diagnosticos_chaves` — as chaves que
-`diagnosticosFirm`/`diagnosticosEquity` produzem para aquelas premissas. O laboratório pinta cada chave
-com o texto e a severidade de `catalogo.diagnosticos`.
+`FachadaEspelho.avaliarCaso` passa a devolver as chaves de diagnóstico **na mesma forma e no mesmo lugar
+em que o wrapper as publica**, e o laboratório pinta cada chave com o texto e a severidade de
+`catalogo.diagnosticos`.
+
+*Correção da primeira versão deste plano, que mandava usar só `diagnosticosFirm`/`diagnosticosEquity`:
+isso cobre firm e equity, mas a fachada precifica quatro pernas, e o wrapper publica diagnóstico em três
+formas. **Firm/equity** (inclusive as chaves próprias de um cenário com degrau, que vêm da chamada `pe`):
+`cenarios.<n>.diagnosticos_chaves`, classificadas das mensagens do motor. **Rampa:** a mesma chave, mas
+por presença dos avisos na ordem de `_AVISOS_RAMPA_ORDEM` — o espelho já os devolve em
+`precificarRampa(...).avisos`. **Degrau:** `cenarios.<n>.degrau.ALERTA`/`ALERTA_RiR` com a **prosa do
+motor e sem chave**, e sem entrada no catálogo. Seguir a primeira versão deixaria os avisos da rampa e os
+alertas do degrau congelados enquanto o preço deles se move — exatamente o que a regra inegociável do
+§8.4 proíbe.* Por isso a Task 3 começa na **integração**: o wrapper passa a publicar
+`cenarios.<n>.degrau.diagnosticos_chaves` (ordenadas por presença, no padrão da rampa), o catálogo ganha
+os dois rótulos, e a fachada espelha as três formas. O comparador do badge passa a cobrir as chaves, em
+ordem.
 
 **O teste que importa (§8.4, regra inegociável):** partindo de um cenário sem alerta, uma edição que
 torne a combinação economicamente incoerente **muda a lista de chaves na mesma chamada** — e o contrário
