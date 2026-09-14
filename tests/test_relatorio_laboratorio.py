@@ -226,6 +226,8 @@ def test_cada_cenario_ganha_seu_painel_com_saidas_e_botao_de_restaurar():
     assert painel.count("data-laboratorio-restaurar") == 2
     for papel in ("preco", "multiplo", "upside"):
         assert painel.count(f'data-laboratorio-saida="{papel}"') == 2
+    # Task 3: e um lugar por cenário para os diagnósticos que o JS pinta.
+    assert painel.count("data-laboratorio-diagnosticos") == 2
 
 
 def test_um_valor_que_o_catalogo_nao_sabe_nomear_nao_vaza_o_codigo_cru():
@@ -361,6 +363,24 @@ def test_o_payload_leva_os_dois_lados_da_paridade():
     # inclusive a do degrau, que não mora em `multiplos` do `resultados`.
     assert "PVP_com_degrau" in dados["rotulosMultiplos"]
     assert "{cenario}" in dados["textos"]["paridadeItem"]
+
+
+def test_o_payload_leva_rotulo_e_severidade_de_todo_diagnostico_do_catalogo():
+    """T5: o laboratório só PINTA chaves — rótulo e severidade de cada uma vêm
+    do catálogo, no idioma da página, pelo payload. Todo diagnóstico do
+    catálogo entra (inclusive os alertas do degrau), porque qualquer edição
+    pode acender qualquer um; e os dois textos de estado (nenhum diagnóstico;
+    chave sem rótulo) vêm do dicionário."""
+    pagina, _entrega = _pagina()
+    dados = _dados_embutidos(pagina)
+    assert dados["diagnosticos"] == {
+        chave: {"rotulo": info["rotulo"]["pt-BR"], "severidade": info["severidade"]}
+        for chave, info in CATALOGO["diagnosticos"].items()
+    }
+    assert dados["textos"]["diagnosticosNenhum"] == render.t(
+        DICIONARIO, "valuation.laboratorio_diagnosticos_nenhum")
+    assert dados["textos"]["diagnosticoDesconhecido"] == render.t(
+        DICIONARIO, "valuation.laboratorio_diagnostico_desconhecido")
 
 
 # --------------------------------------------------------------------------
@@ -641,6 +661,16 @@ function foto() {
       multiploRotulo: ler('multiplo-rotulo'), upside: ler('upside'),
     };
   }
+  // Task 3: os itens de diagnóstico de cada cenário, como a tela os mostra --
+  // texto e classe (a severidade vira classe CSS). A chave nunca chega à tela,
+  // então a foto também não a tem.
+  const diagnosticos = {};
+  for (const bloco of raiz.querySelectorAll('[data-laboratorio-cenario]')) {
+    const lista = bloco.querySelector('[data-laboratorio-diagnosticos]');
+    diagnosticos[bloco.getAttribute('data-laboratorio-cenario')] = lista === null ? null
+      : lista.filhos.filter((f) => !f.eTexto)
+        .map((item) => ({ texto: item.textContent, classe: item.getAttribute('class') }));
+  }
   return {
     badge: { estado: badge.getAttribute('data-estado'), texto: badge.filhos.length && !badge.filhos[0].eTexto
       ? badge.filhos[0].textContent : badge.textContent, itens: itens },
@@ -650,6 +680,7 @@ function foto() {
     })),
     botoes: raiz.querySelectorAll('[data-laboratorio-restaurar]').map((b) => b.disabled),
     saidas: saidas,
+    diagnosticos: diagnosticos,
   };
 }
 
@@ -864,3 +895,119 @@ def test_o_laboratorio_devolve_o_texto_de_sem_valor_para_o_que_a_fachada_recusou
                        encoding="utf-8", timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout) == ["--", "--", "1 e x"]
+
+
+# --------------------------------------------------------------------------
+# Fatia 5C, Task 3 — o diagnóstico ao vivo pela TELA: a regra inegociável do
+# §8.4 com o bootstrap real, a marcação emitida e o motor de verdade. O que se
+# confere é o que o analista vê: o texto e a classe de cada item, na ordem.
+# --------------------------------------------------------------------------
+
+def _itens_publicados(resultados: dict) -> list:
+    """Os itens de diagnóstico de `base` como a tela deve mostrá-los, a partir
+    das chaves que o PYTHON publicou: as do cenário e, num cenário com degrau,
+    as do degrau depois delas — rótulo e severidade do catálogo."""
+    cenario = resultados["cenarios"]["base"]
+    chaves = list(cenario["diagnosticos_chaves"])
+    if "degrau" in cenario:
+        chaves += cenario["degrau"]["diagnosticos_chaves"]
+    if not chaves:
+        return [{"texto": render.t(DICIONARIO, "valuation.laboratorio_diagnosticos_nenhum"),
+                 "classe": "lab-diagnostico lab-diagnostico-vazio"}]
+    return [{"texto": CATALOGO["diagnosticos"][chave]["rotulo"]["pt-BR"],
+             "classe": "lab-diagnostico lab-diagnostico-" + CATALOGO["diagnosticos"][chave]["severidade"]}
+            for chave in chaves]
+
+
+# As mesmas edições de `test_espelho_fachada_js.py::test_o_diagnostico_se_move_com_o_numero_na_
+# mesma_chamada`, uma por forma — lá está o predicado que cada uma cruza.
+_EDICOES_PELA_TELA = [
+    pytest.param("caso_minimo_firm.json", "roic", 8.0, id="firm"),
+    pytest.param("caso_rampa.json", "g2", 20.0, id="rampa"),
+    pytest.param("caso_degrau.json", "roe", 30.0, id="degrau"),
+]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+@pytest.mark.parametrize("fixture,premissa,editado", _EDICOES_PELA_TELA)
+def test_editar_a_premissa_acende_o_diagnostico_na_tela_e_restaurar_o_apaga(
+        fixture, premissa, editado, tmp_path):
+    """§8.4 pela tela, uma vez por forma (firm, rampa, degrau): na carga, os
+    itens são exatamente os que o Python publicou, rotulados pelo catálogo;
+    editar o campo — um evento de input, nada mais — faz a tela mostrar os
+    itens que `avaliar()` publica para o caso EDITADO, com UM item novo (o
+    alerta que a edição acendeu, na classe da sua severidade), no mesmo passo
+    em que o preço se move; restaurar devolve os itens da carga."""
+    pagina, entrega = _pagina(fixture)
+
+    def _editar(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"][premissa] = editado
+
+    editada = apoio.montar_entrega(fixture, mutar_caso=_editar)
+    fotos = _laboratorio_vivo(pagina, tmp_path, passos=[
+        {"nome": "editado", "acao": "editar", "cenario": "base", "premissa": premissa,
+         "valor": json.dumps(editado)},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+    carga = fotos["carga"]
+    assert carga["badge"]["estado"] == "ok", carga["badge"]
+
+    na_carga = _itens_publicados(entrega["resultados"])
+    na_edicao = _itens_publicados(editada["resultados"])
+    novos = [item for item in na_edicao if item not in na_carga]
+    assert len(novos) == 1, novos
+    assert novos[0]["classe"] == "lab-diagnostico lab-diagnostico-alerta", novos
+
+    assert carga["diagnosticos"]["base"] == na_carga
+    assert fotos["editado"]["diagnosticos"]["base"] == na_edicao
+    assert fotos["editado"]["saidas"]["base"]["preco"] != carga["saidas"]["base"]["preco"], \
+        "a edição não moveu o preço — número e diagnóstico deixaram de andar juntos no teste"
+    assert fotos["restaurado"]["diagnosticos"]["base"] == na_carga
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_uma_chave_de_diagnostico_adulterada_deixa_o_badge_vermelho_e_nomeada(tmp_path):
+    """T4 na tela: o `resultados` embutido passa a publicar uma chave que o
+    motor do navegador não acende — uma chave REAL do catálogo, para provar que
+    o badge compara chaves e não depende de rótulo. Badge `divergente`, UM item
+    que nomeia o cenário, o caminho e a chave adulterada; campos travados; e a
+    lista de diagnósticos fica no "sem valor" — nenhum diagnóstico de um motor
+    que o relatório não sustenta chega à tela."""
+    pagina, _entrega = _pagina("caso_minimo_firm.json")
+    dados = _dados_embutidos(pagina)
+    publicadas = dados["resultados"]["cenarios"]["base"]["diagnosticos_chaves"]
+    adulterada = next(chave for chave in sorted(CATALOGO["diagnosticos"]) if chave not in publicadas)
+    dados["resultados"]["cenarios"]["base"]["diagnosticos_chaves"] = publicadas + [adulterada]
+
+    carga = _laboratorio_vivo(pagina, tmp_path, dados=dados)["carga"]
+    assert carga["badge"]["estado"] == "divergente", carga["badge"]
+    assert len(carga["badge"]["itens"]) == 1, carga["badge"]["itens"]
+    item = carga["badge"]["itens"][0]
+    assert "base" in item and "diagnosticos_chaves" in item and adulterada in item, item
+    assert carga["campos"] and all(campo["disabled"] for campo in carga["campos"])
+    vazio = render.t(DICIONARIO, "valuation.laboratorio_sem_valor")
+    assert carga["diagnosticos"]["base"] == [
+        {"texto": vazio, "classe": "lab-diagnostico lab-diagnostico-vazio"}]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_uma_chave_que_o_payload_nao_rotula_vira_texto_do_dicionario_nunca_a_chave_crua(tmp_path):
+    """T5 e a lição do B2: se o payload não traz rótulo para uma chave que a
+    fachada devolveu, a tela escreve o texto do dicionário para isso — nunca a
+    chave. O badge continua verde: a paridade é das chaves, e as chaves batem;
+    o que falta é só o rótulo."""
+    pagina, entrega = _pagina("caso_minimo_firm.json")
+    dados = _dados_embutidos(pagina)
+    publicadas = entrega["resultados"]["cenarios"]["base"]["diagnosticos_chaves"]
+    sem_rotulo = publicadas[0]
+    del dados["diagnosticos"][sem_rotulo]
+
+    carga = _laboratorio_vivo(pagina, tmp_path, dados=dados)["carga"]
+    assert carga["badge"]["estado"] == "ok", carga["badge"]
+    itens = carga["diagnosticos"]["base"]
+    assert len(itens) == len(publicadas), itens
+    assert itens[0] == {
+        "texto": render.t(DICIONARIO, "valuation.laboratorio_diagnostico_desconhecido"),
+        "classe": "lab-diagnostico lab-diagnostico-desconhecido",
+    }
+    assert not any(sem_rotulo in item["texto"] for item in itens), itens

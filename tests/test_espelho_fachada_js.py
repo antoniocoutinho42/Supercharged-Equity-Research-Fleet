@@ -32,6 +32,7 @@ from relatorio_apoio import FIXTURES, montar_entrega
 from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
+from avaliar import _ALERTAS_DEGRAU_ORDEM  # noqa: E402
 from caso import _PREMISSAS_POR_ROTA  # noqa: E402
 
 FACHADA = RAIZ / "skills" / "er-valuation" / "assets" / "espelho_fachada.js"
@@ -462,3 +463,208 @@ def test_a_fachada_nao_tem_dependencia_externa():
     requires = re.findall(r"""require\(\s*['"]([^'"]+)['"]\s*\)""", texto)
     assert set(requires) <= {"./motor_espelho.js"}, \
         f"dependência além do espelho irmão: {sorted(set(requires))}"
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5C, Task 3 — o diagnóstico ao vivo (§8.4 do desenho, regra
+# inegociável: o diagnóstico se move junto com o número)
+# ---------------------------------------------------------------------------
+
+# Várias avaliações NO MESMO PROCESSO, como o laboratório faz a cada edição: a
+# mesma instância da fachada recebe a carga, a edição e o desfazer. Um harness
+# que abrisse um processo por chamada não enxergaria uma fachada que guardasse
+# (congelasse) o que respondeu da primeira vez.
+_HARNESS_SEQUENCIA = (
+    "const fs = require('fs');"
+    "const F = require(%s);"
+    "const casos = JSON.parse(fs.readFileSync(%s, 'utf-8'));"
+    "console.log(JSON.stringify(casos.map((caso) => F.avaliarCaso(caso))));"
+)
+
+
+def _avaliar_em_sequencia(casos: list, tmp_path) -> list:
+    arq = tmp_path / "sequencia.json"
+    arq.write_text(json.dumps(casos, ensure_ascii=False), encoding="utf-8")
+    script = _HARNESS_SEQUENCIA % (json.dumps(str(FACHADA)), json.dumps(str(arq)))
+    r = subprocess.run(["node", "-e", script],
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return json.loads(r.stdout)
+
+
+def _lista(cenario: dict, caminho: tuple, lado: str) -> list:
+    """A lista de chaves em `caminho` dentro de um cenário (vivo ou publicado)
+    — e a exigência de que ela EXISTA como lista: ausência nunca vale como
+    lista vazia."""
+    atual = cenario
+    for parte in caminho:
+        assert isinstance(atual, dict) and parte in atual, f"{lado}: sem '{'.'.join(caminho)}'"
+        atual = atual[parte]
+    assert isinstance(atual, list), f"{lado}: '{'.'.join(caminho)}' não é lista: {atual!r}"
+    return atual
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_as_chaves_de_diagnostico_da_fachada_sao_as_do_resultados_em_ordem(fixture, tmp_path):
+    """Carga (T3): para toda fixture, as chaves que a fachada devolve são
+    exatamente as que o wrapper publicou, na mesma ordem e no mesmo lugar —
+    `cenarios.<n>.diagnosticos_chaves` em toda perna, e
+    `cenarios.<n>.degrau.diagnosticos_chaves` só nos cenários com degrau (a
+    fachada não inventa um bloco `degrau` onde o `resultados` não tem)."""
+    caso, resultados = _caso_e_resultados(fixture)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    for nome, cenario_py in resultados["cenarios"].items():
+        cenario_js = saida["vivo"]["cenarios"][nome]
+        caminho = ("diagnosticos_chaves",)
+        assert _lista(cenario_js, caminho, "fachada") == _lista(cenario_py, caminho, "wrapper"), \
+            f"{fixture}/{nome}"
+        if "degrau" in cenario_py:
+            caminho = ("degrau", "diagnosticos_chaves")
+            assert _lista(cenario_js, caminho, "fachada") == _lista(cenario_py, caminho, "wrapper"), \
+                f"{fixture}/{nome}"
+        else:
+            assert "degrau" not in cenario_js, f"{fixture}/{nome}: {cenario_js.get('degrau')}"
+
+
+# Uma edição por FORMA em que o wrapper publica diagnóstico, escolhida lendo o
+# predicado do espelho — não por tentativa — e confirmada rodando o wrapper (o
+# teste compara com o `resultados` que `avaliar()` publica para o caso
+# editado, então o nome da chave nunca é presumido):
+#
+# - firm (`diagnosticosFirm`): `roic < w && g > 0` acende
+#   `firm_alerta_roic_abaixo_wacc`. `caso_minimo_firm`: g=5, wacc=10, roic=12;
+#   roic=8 cruza. Nenhum outro predicado cruza junto: RiR = 5/8 = 62,5% < 100%,
+#   e |roic − wacc| = 2 p.p. fica longe da faixa de neutralidade (0,05 p.p.).
+# - rampa (`rampaBifasica`): `rir2 >= 1` acende `aviso_delator`, com
+#   rir2 = (wk + kappa)·g2 / ((1 + g2)·m2n). Na fixture, wk + kappa = 37,04% e
+#   a margem NOPAT da fase 2 é m2n ≈ 5,49%: rir2 ≈ 50% com g2 = 8%, e o limiar
+#   cai em g2 ≈ 17,4%. g2 = 20 leva rir2 a ≈ 112%.
+# - degrau (`nivelDegrau`): `r2 > max(2·ke, 30%)` acende o ALERTA do motor, que o
+#   wrapper publica como `degrau_alerta`, com r2 = roe·(1 + (h − 1)·m). Na
+#   fixture, h = 19,3/14 ≈ 1,3786, m = 100% e ke = 20% (limiar de 40%): cruza
+#   com roe > ≈ 29,0%. roe = 30 leva r2 a ≈ 41,4%.
+_EDICOES_QUE_CRUZAM_UM_PREDICADO = [
+    pytest.param("caso_minimo_firm.json", "roic", 8.0, ("diagnosticos_chaves",),
+                 "firm_alerta_roic_abaixo_wacc", id="firm"),
+    pytest.param("caso_rampa.json", "g2", 20.0, ("diagnosticos_chaves",),
+                 "aviso_delator", id="rampa"),
+    pytest.param("caso_degrau.json", "roe", 30.0, ("degrau", "diagnosticos_chaves"),
+                 "degrau_alerta", id="degrau"),
+]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture,premissa,editado,caminho,chave", _EDICOES_QUE_CRUZAM_UM_PREDICADO)
+def test_o_diagnostico_se_move_com_o_numero_na_mesma_chamada(
+        fixture, premissa, editado, caminho, chave, tmp_path):
+    """§8.4, a regra inegociável, uma vez por forma: partindo de um cenário SEM
+    o alerta, UMA edição que cruza o predicado acende a chave na MESMA chamada
+    de `avaliarCaso` que move o preço — e desfazer a edição devolve a lista
+    original. As três chamadas acontecem no mesmo processo, na ordem em que o
+    laboratório as faria (carga, edição, desfazer).
+
+    Os dois lados são o wrapper de verdade: a lista da carga é a que
+    `avaliar()` publicou para o caso, e a da edição é a que ele publica para o
+    caso EDITADO — mesma lista, mesma ordem. Discriminante nos dois sentidos:
+    a edição acende exatamente a chave esperada sem apagar nenhuma outra
+    daquela lista, e o preço se move na mesma chamada."""
+    caso, resultados = _caso_e_resultados(fixture)
+    original = caso["cenarios"]["base"]["premissas"][premissa]
+
+    def _editar(c: dict) -> None:
+        c["cenarios"]["base"]["premissas"][premissa] = editado
+
+    editada = montar_entrega(fixture, mutar_caso=_editar)
+    caso_editado, resultados_editados = editada["caso"], editada["resultados"]
+    caso_desfeito = json.loads(json.dumps(caso_editado))
+    caso_desfeito["cenarios"]["base"]["premissas"][premissa] = original
+
+    carga, na_edicao, desfeito = [
+        vivo["cenarios"]["base"]
+        for vivo in _avaliar_em_sequencia([caso, caso_editado, caso_desfeito], tmp_path)]
+    publicado = resultados["cenarios"]["base"]
+    publicado_editado = resultados_editados["cenarios"]["base"]
+
+    # Partida: o cenário publicado não tem o alerta, e a fachada concorda.
+    assert chave not in _lista(publicado, caminho, "wrapper")
+    assert _lista(carga, caminho, "fachada") == _lista(publicado, caminho, "wrapper")
+
+    # A edição: o wrapper acende a chave (o nome é confirmado rodando), e a
+    # fachada devolve a MESMA lista, na MESMA chamada que move o preço.
+    antes = _lista(carga, caminho, "fachada")
+    depois = _lista(na_edicao, caminho, "fachada")
+    assert chave in _lista(publicado_editado, caminho, "wrapper")
+    assert depois == _lista(publicado_editado, caminho, "wrapper")
+    assert [c for c in depois if c not in antes] == [chave]
+    assert [c for c in antes if c not in depois] == []
+    assert na_edicao["diagnosticos_chaves"] == publicado_editado["diagnosticos_chaves"]
+    assert _erro_relativo(publicado_editado["valor"]["preco_acao"],
+                          na_edicao["valor"]["preco_acao"]) <= TAU
+    assert _erro_relativo(carga["valor"]["preco_acao"], na_edicao["valor"]["preco_acao"]) > TAU, \
+        "a edição não moveu o preço — o teste deixou de provar que número e diagnóstico andam juntos"
+
+    # Desfazer: a lista original volta, exatamente, com o preço original.
+    assert _lista(desfeito, caminho, "fachada") == antes
+    assert desfeito["diagnosticos_chaves"] == carga["diagnosticos_chaves"]
+    assert desfeito["valor"]["preco_acao"] == carga["valor"]["preco_acao"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_os_dois_alertas_do_degrau_saem_na_ordem_do_wrapper(tmp_path):
+    """A ordem das chaves do degrau só é observável com os DOIS alertas acesos
+    no mesmo cenário — e a fixture de paridade do degrau
+    (`vetores_solver._bloco_degrau`) tem um problema para cada alerta, nenhum
+    com os dois. Este caso cruza os dois predicados de uma vez
+    (`r2 > max(2·ke, 30%)` e `g/r2 > 1`): roe=22 e ke=14 levam r2 a ≈ 30,3%,
+    acima do piso de 30%, e g=31 fica acima de r2. O wrapper publica as duas
+    chaves, e a fachada tem de devolvê-las na MESMA ordem."""
+    def _dois_alertas(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"].update(roe=22.0, ke=14.0, g=31.0)
+
+    entrega = montar_entrega("caso_degrau.json", mutar_caso=_dois_alertas)
+    caso, resultados = entrega["caso"], entrega["resultados"]
+    caminho = ("degrau", "diagnosticos_chaves")
+    publicadas = _lista(resultados["cenarios"]["base"], caminho, "wrapper")
+    assert sorted(publicadas) == sorted(chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM), publicadas
+
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+    assert _lista(saida["vivo"]["cenarios"]["base"], caminho, "fachada") == publicadas
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture,caminho,adulterar", [
+    # A mesma lista em ordem invertida: só um comparador ORDENADO acusa.
+    pytest.param("caso_minimo_firm.json", ("diagnosticos_chaves",),
+                 lambda chaves: list(reversed(chaves)), id="cenario-ordem"),
+    # Uma chave a mais no bloco do degrau (a fixture publica a lista vazia).
+    pytest.param("caso_degrau.json", ("degrau", "diagnosticos_chaves"),
+                 lambda chaves: chaves + ["degrau_alerta"], id="degrau-presenca"),
+])
+def test_o_comparador_prende_as_chaves_de_diagnostico_por_igualdade_ordenada(
+        fixture, caminho, adulterar, tmp_path):
+    """T4: o badge cobre as chaves — igualdade EXATA e ORDENADA, nos dois
+    lugares em que o contrato as publica. Adultera só a lista no `resultados`
+    e exige UMA divergência, nomeando o cenário, o caminho e as DUAS listas
+    inteiras (a publicada, adulterada, e a recalculada). Preço, múltiplo e
+    upside continuam batendo, então o comparador não reprova em bloco."""
+    caso, resultados = _caso_e_resultados(fixture)
+    no = resultados["cenarios"]["base"]
+    for parte in caminho[:-1]:
+        no = no[parte]
+    verdadeiras = list(_lista(resultados["cenarios"]["base"], caminho, "wrapper"))
+    adulteradas = adulterar(list(verdadeiras))
+    assert adulteradas != verdadeiras, "a adulteração não mudou a lista — teste vacuamente verde"
+    no[caminho[-1]] = adulteradas
+
+    saida = _fachada(caso, resultados, tmp_path)
+    comparacao = saida["comparacao"]
+    assert comparacao["ok"] is False
+    assert comparacao["divergencias"] == [{
+        "cenario": "base", "chave": ".".join(caminho),
+        "python": adulteradas, "js": verdadeiras, "erro_relativo": None,
+    }]

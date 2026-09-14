@@ -1438,6 +1438,12 @@ def _avaliar_degrau(problema: dict) -> dict:
     for chave in ("ALERTA", "ALERTA_RiR"):
         if chave in degrau_bruto:
             degrau_saida[chave] = True
+    # Fatia 5C, Task 3 (T1/T3): as CHAVES que o wrapper passou a publicar para os dois alertas, na
+    # ordem dele — comparadas por igualdade exata com `precificarDegrau`. `.get`, e nao indexacao:
+    # um wrapper que deixasse de publicar a lista aparece no harness como divergencia NOMEADA do
+    # campo (None contra a lista do espelho), nunca como um KeyError que derrubaria a paridade do
+    # degrau inteira sem dizer qual campo sumiu.
+    degrau_saida["diagnosticos_chaves"] = degrau_bruto.get("diagnosticos_chaves")
 
     return {
         "id": problema["id"], "recusado": False,

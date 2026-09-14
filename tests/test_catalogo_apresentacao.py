@@ -17,7 +17,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
-from avaliar import avaliar  # noqa: E402
+from avaliar import _ALERTAS_DEGRAU_ORDEM, avaliar  # noqa: E402
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 import diagnosticos  # noqa: E402
@@ -45,6 +45,10 @@ CAT = json.loads(
 MANIFEST = json.loads(
     (RAIZ / "skills" / "er-multiplos-justos" / "manifest_vendor.json").read_text(encoding="utf-8"))
 AVISOS_RAMPA = {"aviso_colheita", "aviso_delator", "aviso_gp"}
+# Fatia 5C, item 5, Task 3 (T1/T2): as chaves que o WRAPPER dá aos dois alertas do
+# degrau (`ALERTA`/`ALERTA_RiR`, prosa do motor sem chave) — derivadas da constante
+# que as publica, nunca de uma lista à mão.
+ALERTAS_DEGRAU = {chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM}
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
 
 
@@ -58,7 +62,12 @@ def test_premissas_do_catalogo_sao_exatamente_as_do_gate():
 
 
 def test_diagnosticos_do_catalogo_sao_exatamente_os_do_classificador():
-    assert set(CAT["diagnosticos"]) == set(diagnosticos.CHAVES) | AVISOS_RAMPA
+    """Trava de upgrade dos diagnósticos: todo vocabulário de chave que a
+    integração publica tem entrada no catálogo, e nada além dele — as chaves
+    do classificador, os avisos da rampa e (fatia 5C, Task 3) as chaves que o
+    wrapper dá aos alertas do degrau."""
+    assert ALERTAS_DEGRAU, "constante do wrapper vazia — a união ficaria vacuamente igual"
+    assert set(CAT["diagnosticos"]) == set(diagnosticos.CHAVES) | AVISOS_RAMPA | ALERTAS_DEGRAU
 
 
 def test_todo_rotulo_existe_em_todo_idioma_declarado():

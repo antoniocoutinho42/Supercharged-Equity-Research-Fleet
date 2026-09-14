@@ -292,6 +292,22 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
 # paridade (não é dependência de produção), e este módulo não depende dele.
 _AVISOS_RAMPA_ORDEM: tuple[str, ...] = ("aviso_colheita", "aviso_delator", "aviso_gp")
 
+# Fatia 5C, item 5, Task 3 (T1): as CHAVES dos dois alertas do degrau. O
+# handler `degrau` do motor publica `ALERTA`/`ALERTA_RiR` como prosa sem chave
+# (a segunda ainda interpola o RiR), e `_aplicar_degrau_ao_cenario` a repassa
+# verbatim, para auditoria. Dar chave a um alerta é trabalho desta camada, a que
+# conhece o motor: se o relatório mapeasse "`ALERTA` dentro de `degrau`
+# significa X", um v10 que renomeasse o campo quebraria o relatório — aqui,
+# quebra a paridade da integração. `degrau.diagnosticos_chaves` é a lista, na
+# ordem desta tupla, das chaves cujo campo o motor de fato emitiu no nível-alvo
+# (só a PRESENÇA importa, mesmo padrão de `_AVISOS_RAMPA_ORDEM`).
+# `motor_espelho.js` carrega a mesma tabela (`ALERTAS_DEGRAU`), e
+# `tests/test_paridade_wrapper_js.py` compara as duas listas por igualdade exata.
+_ALERTAS_DEGRAU_ORDEM: tuple[tuple[str, str], ...] = (
+    ("ALERTA", "degrau_alerta"),
+    ("ALERTA_RiR", "degrau_alerta_rir"),
+)
+
 
 def _montar_mercado_tela(caso: dict, resultado: dict, nd_efetivo: float) -> dict:
     """Monta o campo `mercado_tela` (regra 4): o múltiplo de mercado
@@ -659,6 +675,11 @@ def _aplicar_degrau_ao_cenario(cenario_montado: dict, cenario: dict, bloco_degra
         degrau_cenario["ALERTA"] = nivel_alvo["ALERTA"]
     if "ALERTA_RiR" in nivel_alvo:
         degrau_cenario["ALERTA_RiR"] = nivel_alvo["ALERTA_RiR"]
+    # Fatia 5C, item 5, Task 3 (T1): a chave pública de cada alerta presente,
+    # na ordem de `_ALERTAS_DEGRAU_ORDEM` — campo aditivo do `resultados/1`. A
+    # prosa acima continua publicada para auditoria; o relatório nunca a lê.
+    degrau_cenario["diagnosticos_chaves"] = [
+        chave for campo, chave in _ALERTAS_DEGRAU_ORDEM if campo in nivel_alvo]
 
     resultado = dict(cenario_montado)
     resultado["sem_degrau"] = {

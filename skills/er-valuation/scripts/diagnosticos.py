@@ -27,7 +27,8 @@ _CHAVES_E_PREFIXOS: tuple[dict, ...] = tuple(
 
 # Todas as chaves do arquivo, na ordem declarada — vocabulário público que o
 # catálogo de apresentação (Task 2 desta fatia) confronta: `set(CAT["diagnosticos"])
-# == set(diagnosticos.CHAVES) | AVISOS_RAMPA`.
+# == set(diagnosticos.CHAVES) | AVISOS_RAMPA | <chaves de avaliar._ALERTAS_DEGRAU_ORDEM>`
+# (as dos alertas do degrau entraram na fatia 5C, Task 3).
 CHAVES: tuple[str, ...] = tuple(c["chave"] for c in _CHAVES_E_PREFIXOS)
 
 

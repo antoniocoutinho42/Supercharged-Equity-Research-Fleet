@@ -742,8 +742,9 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
 #
 # O painel é INTERFACE sobre dados já embutidos: um campo por premissa do
 # cenário, agrupado pelos quatro blocos econômicos do catálogo (L5), com o
-# valor original ao lado do editado (L6), e três saídas por cenário que o
-# `laboratorio.js` preenche chamando a FACHADA (`FachadaEspelho.avaliarCaso`).
+# valor original ao lado do editado (L6), e três saídas por cenário — mais a
+# lista de diagnósticos (Task 3) — que o `laboratorio.js` preenche chamando a
+# FACHADA (`FachadaEspelho.avaliarCaso`).
 # Nenhuma conta de valuation acontece aqui nem lá — toda a metodologia que o
 # laboratório executa vive na camada de integração (E3/emenda do desenho §15),
 # e é por isso que o espelho e a fachada entram na página por LEITURA de
@@ -919,6 +920,26 @@ def _saidas_do_cenario_html(dicionario: dict) -> str:
     return f'<div class="lab-saidas">{"".join(blocos)}</div>'
 
 
+def _diagnosticos_do_cenario_html(dicionario: dict) -> str:
+    """O lugar em que `laboratorio.js` pinta os diagnósticos do cenário (fatia
+    5C, Task 3; §8.4 do desenho: o diagnóstico se move junto com o número).
+    Nasce com o texto de "sem valor", pela mesma razão das três saídas: o JS o
+    preenche na carga, com as chaves que a fachada recalculou (e que o badge
+    acabou de provar iguais às publicadas), e a cada mudança; se o badge
+    reprovar, ele FICA assim. Este módulo não escolhe diagnóstico nenhum — nem
+    os da carga: quem decide que chave acende é a integração."""
+    vazio = html.escape(t(dicionario, "valuation.laboratorio_sem_valor"))
+    titulo = html.escape(t(dicionario, "valuation.laboratorio_diagnosticos_titulo"))
+    return (
+        f'<div class="lab-diagnosticos">'
+        f'<h4>{titulo}</h4>'
+        f'<ul data-laboratorio-diagnosticos aria-live="polite">'
+        f'<li class="lab-diagnostico lab-diagnostico-vazio">{vazio}</li>'
+        f'</ul>'
+        f'</div>'
+    )
+
+
 def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
                                   premissas_catalogo: dict, catalogo: dict, idioma: str,
                                   moeda: str | None, dicionario: dict) -> str:
@@ -955,6 +976,7 @@ def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: 
         f'<section class="lab-cenario" data-laboratorio-cenario="{html.escape(nome)}">'
         f'<h3>{titulo}</h3>'
         f'{_saidas_do_cenario_html(dicionario)}'
+        f'{_diagnosticos_do_cenario_html(dicionario)}'
         f'<div class="lab-blocos">{"".join(grupos)}</div>'
         f'<p class="lab-acoes"><button type="button" data-laboratorio-restaurar>{restaurar}</button></p>'
         f'</section>'
@@ -1007,12 +1029,32 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
     )
 
 
+def _diagnosticos_do_catalogo(catalogo: dict, idioma: str) -> dict:
+    """`{chave: {rotulo, severidade}}` de TODO diagnóstico do catálogo, no
+    idioma (fatia 5C, Task 3, T5) — o dicionário com que `laboratorio.js`
+    pinta as chaves que a fachada devolve. Todos, não só os que o `resultados`
+    publicou: qualquer edição pode acender qualquer um. Rótulo ausente no
+    idioma é recusa nomeada, a mesma de blocos e múltiplos — o painel nunca
+    cai no código cru por falta de rótulo."""
+    saida = {}
+    diagnosticos = catalogo.get("diagnosticos") or {}
+    for chave in sorted(diagnosticos):
+        info = diagnosticos[chave] or {}
+        rotulo = (info.get("rotulo") or {}).get(idioma)
+        if not rotulo:
+            raise RotuloDoCatalogoAusente(
+                f"catálogo de apresentação sem rótulo em '{idioma}' para o diagnóstico '{chave}'.")
+        saida[chave] = {"rotulo": rotulo, "severidade": info.get("severidade")}
+    return saida
+
+
 def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str,
                             dicionario: dict) -> dict | None:
     """O payload do laboratório: o `caso` e o `resultados` INTEIROS (opacos —
     este módulo não os interpreta; quem os lê é a fachada, do lado da
     integração), as três receitas de formatação das saídas, os rótulos dos
-    múltiplos e a prosa de interface que o JS escreve.
+    múltiplos, o rótulo e a severidade de cada diagnóstico (Task 3) e a prosa
+    de interface que o JS escreve.
 
     O `resultados` viaja junto porque o badge de paridade (L4) é um FATO
     medido na máquina de quem abriu o arquivo: a fachada recomputa cada
@@ -1040,12 +1082,15 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
             "upside": placeholders.especificacao_de_formato("pct1", idioma, moeda),
         },
         "rotulosMultiplos": rotulos_multiplos,
+        "diagnosticos": _diagnosticos_do_catalogo(catalogo, idioma),
         "textos": {
             "semValor": t(dicionario, "valuation.laboratorio_sem_valor"),
             "paridadeOk": t(dicionario, "valuation.laboratorio_paridade_ok"),
             "paridadeDivergente": t(dicionario, "valuation.laboratorio_paridade_divergente"),
             "paridadeItem": t(dicionario, "valuation.laboratorio_paridade_item"),
             "paridadeIndisponivel": t(dicionario, "valuation.laboratorio_paridade_indisponivel"),
+            "diagnosticosNenhum": t(dicionario, "valuation.laboratorio_diagnosticos_nenhum"),
+            "diagnosticoDesconhecido": t(dicionario, "valuation.laboratorio_diagnostico_desconhecido"),
         },
     }
 

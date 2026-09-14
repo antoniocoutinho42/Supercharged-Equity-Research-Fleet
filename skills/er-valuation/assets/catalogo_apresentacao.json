@@ -867,6 +867,20 @@
       "rotulo": {
         "pt-BR": "Crescimento perpétuo da rampa acima do teto macro (âncora Damodaran)"
       }
+    },
+    "degrau_alerta": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Rentabilidade pós-degrau implausível como estado estacionário: reporte como teto da alavanca, não como cenário"
+      }
+    },
+    "degrau_alerta_rir": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "RiR = g/rentabilidade pós-degrau acima de 100%: payout negativo"
+      }
     }
   },
   "disclosures": {

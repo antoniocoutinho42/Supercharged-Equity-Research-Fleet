@@ -168,7 +168,11 @@ convenção que já mora aqui):
   `diagnosticos_unicos` onde quer que a lista apareça (cenários,
   `sotp.partes[*]`, `reversa.teto_do_crescimento_gratuito`); na rota rampa,
   que não emite `diagnosticos`, as chaves de aviso presentes
-  (`aviso_colheita`, `aviso_delator`, `aviso_gp`).
+  (`aviso_colheita`, `aviso_delator`, `aviso_gp`); e, num cenário com degrau,
+  `degrau.diagnosticos_chaves` — a chave de cada alerta que o motor emitiu no
+  nível-alvo (`degrau_alerta` ← `ALERTA`, `degrau_alerta_rir` ← `ALERTA_RiR`),
+  por presença, ao lado da prosa do motor, que continua publicada para
+  auditoria.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.

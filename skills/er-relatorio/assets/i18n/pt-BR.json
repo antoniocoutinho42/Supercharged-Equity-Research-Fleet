@@ -48,7 +48,7 @@
       "ponte_total": "Dívida líquida efetiva",
       "matriz_titulo": "Sensibilidade no cenário '{cenario}': {y} × {x}",
       "laboratorio_titulo": "Laboratório de premissas",
-      "laboratorio_nota": "Edite uma premissa e veja o preço, o múltiplo e o upside do cenário se moverem. A calibração original fica preservada ao lado de cada campo, e o botão abaixo devolve todos os campos a ela.",
+      "laboratorio_nota": "Edite uma premissa e veja o preço, o múltiplo, o upside e os diagnósticos do cenário se moverem. A calibração original fica preservada ao lado de cada campo, e o botão abaixo devolve todos os campos a ela.",
       "laboratorio_sem_valor": "—",
       "laboratorio_cenario_titulo": "Cenário '{cenario}'",
       "laboratorio_restaurar": "Restaurar as premissas originais",
@@ -66,7 +66,10 @@
       "laboratorio_paridade_divergente": "Paridade divergente — edição bloqueada. O motor do navegador não reproduz o que este relatório publicou, e um editor nessa condição mostraria um número que o relatório não sustenta:",
       "laboratorio_paridade_item": "{cenario} · {chave}: publicado {python}, recalculado {js}",
       "laboratorio_paridade_indisponivel": "Paridade não verificada — edição bloqueada: {erro}",
-      "laboratorio_valor_nao_rotulavel": "valor fora do vocabulário do catálogo"
+      "laboratorio_valor_nao_rotulavel": "valor fora do vocabulário do catálogo",
+      "laboratorio_diagnosticos_titulo": "Diagnósticos do cenário",
+      "laboratorio_diagnosticos_nenhum": "Nenhum diagnóstico disparado por estas premissas.",
+      "laboratorio_diagnostico_desconhecido": "Diagnóstico sem rótulo no catálogo de apresentação desta análise."
     },
     "evidencia": {
       "metodologia_titulo": "Metodologia",

@@ -18,6 +18,7 @@ ESPELHO = RAIZ / "skills" / "er-valuation" / "assets" / "motor_espelho.js"
 FIXTURE = RAIZ / "tests" / "fixtures" / "vetores_solver.json"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 import diagnosticos  # noqa: E402
+from avaliar import _ALERTAS_DEGRAU_ORDEM  # noqa: E402
 from vetores_solver import avaliar_python  # noqa: E402
 
 TAU = 1e-12
@@ -236,9 +237,12 @@ def test_fixture_de_diagnostico_cobre_os_alertas():
 # dos dois lados quando a chave nao existe) — nunca a prosa do motor, mesma convencao de
 # `avisos`/AVISOS_RAMPA acima. `divergencia_de_base_%` fica DE FORA desta lista de propósito: nao
 # e' arredondada pelo wrapper (D8) — compara por TAU em teste separado, abaixo.
+# Fatia 5C, Task 3 (T3): `diagnosticos_chaves` — as chaves que o wrapper passou a dar aos dois
+# alertas, na ordem de `_ALERTAS_DEGRAU_ORDEM` — tambem por igualdade exata: a MESMA lista, na
+# MESMA ordem, dos dois lados (a presenca de ALERTA/ALERTA_RiR sozinha nao prende o nome da chave).
 CAMPOS_DEGRAU_EXATOS = ("h", "rentabilidade_pos_%", "multiplo", "multiplo_x_rentab",
                         "com_transicao", "fator_transicao", "perfil_transicao", "m",
-                        "ALERTA", "ALERTA_RiR")
+                        "ALERTA", "ALERTA_RiR", "diagnosticos_chaves")
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
@@ -308,6 +312,11 @@ def test_fixture_de_degrau_cobre_o_que_discrimina():
               for p in probs), "tv=book com roe_book nunca exercitado"
     assert any("ALERTA" in a["degrau"] for a in ok), "ALERTA nunca exercitado"
     assert any("ALERTA_RiR" in a["degrau"] for a in ok), "ALERTA_RiR nunca exercitado"
+    # Fatia 5C, Task 3: toda chave que o wrapper da a um alerta do degrau aparece em pelo menos um
+    # problema — sem isto, a igualdade de `degrau.diagnosticos_chaves` em
+    # test_degrau_bate_campo_a_campo poderia estar comparando so' listas vazias.
+    vistas = {chave for a in ok for chave in (a["degrau"]["diagnosticos_chaves"] or [])}
+    assert vistas == {chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM}, vistas
 
     # h=1 nao inventa valor sem capacidade ociosa real (test_2, tests/test_valuation_degrau.py) —
     # sanidade da fixture: confirma que o problema de h=1 exibe a MESMA identidade que a Task 1 já

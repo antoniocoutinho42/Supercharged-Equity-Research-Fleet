@@ -121,13 +121,18 @@
   // mostraria ao analista um numero que o relatorio nao sustenta.
   // ----------------------------------------------------------------------
 
-  // Os dois numeros da divergencia saem CRUS, de proposito. Aplicar a receita
+  // Os dois lados da divergencia saem CRUS, de proposito. Aplicar a receita
   // de apresentacao arredondaria justamente a diferenca que o badge existe
   // para denunciar (6,69 e 6,69 imprimem igual), e o campo divergente pode
   // ser preco, multiplo ou razao -- tres unidades distintas, que este arquivo
   // nao tem como distinguir sem passar a conhecer o vocabulario da fachada.
-  function numeroCru(valor, vazio) {
-    return (typeof valor === "number" && isFinite(valor)) ? String(valor) : vazio;
+  // Uma LISTA de chaves de diagnostico (Task 3) sai crua pelo mesmo motivo:
+  // pintada pelo catalogo, duas chaves sem rotulo imprimiriam o mesmo texto e
+  // a divergencia sumiria justamente da mensagem que existe para mostra-la.
+  function valorCru(valor, vazio) {
+    if (typeof valor === "number" && isFinite(valor)) { return String(valor); }
+    if (Array.isArray(valor)) { return JSON.stringify(valor); }
+    return vazio;
   }
 
   function pintarBadge(alvo, estado, texto, itens) {
@@ -217,6 +222,62 @@
     if (alvo) { alvo.textContent = texto; }
   }
 
+  // ----------------------------------------------------------------------
+  // Diagnosticos do cenario (Task 3; secao 8.4 do desenho: o diagnostico se
+  // move junto com o numero). As chaves chegam da FACHADA, na forma do
+  // contrato -- as do cenario e, num cenario com degrau, as do degrau depois
+  // delas -- e este painel so as PINTA, na ordem em que chegam: rotulo e
+  // severidade vem do catalogo, pelo payload (`dados.diagnosticos`). Nenhuma
+  // chave e interpretada aqui e nenhum predicado e avaliado aqui; a severidade
+  // so vira classe CSS. Chave que o payload nao rotula vira o texto do
+  // dicionario, nunca a chave crua (licao do B2).
+  // ----------------------------------------------------------------------
+
+  function chavesDoCenario(registro) {
+    var proprias = registro.diagnosticos_chaves || [];
+    var doDegrau = (registro.degrau && registro.degrau.diagnosticos_chaves) || [];
+    return proprias.concat(doDegrau);
+  }
+
+  function escreverDiagnosticos(bloco, registro, dados) {
+    var lista = bloco.querySelector("[data-laboratorio-diagnosticos]");
+    if (!lista) { return; }
+    while (lista.firstChild) { lista.removeChild(lista.firstChild); }
+    var textos = dados.textos || {};
+    var rotulados = dados.diagnosticos || {};
+
+    function acrescentar(classe, texto) {
+      var item = lista.ownerDocument.createElement("li");
+      item.setAttribute("class", classe);
+      item.textContent = texto;
+      lista.appendChild(item);
+    }
+
+    // Sem numero, sem diagnostico: o mesmo "sem valor" das tres saidas.
+    if (!registro) {
+      acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.semValor || SEM_VALOR_PADRAO);
+      return;
+    }
+    var chaves = chavesDoCenario(registro);
+    if (!chaves.length) {
+      acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.diagnosticosNenhum || "");
+      return;
+    }
+    var indice;
+    for (indice = 0; indice < chaves.length; indice++) {
+      var info = Object.prototype.hasOwnProperty.call(rotulados, chaves[indice])
+        ? rotulados[chaves[indice]] : null;
+      if (info && typeof info.rotulo === "string" && info.rotulo) {
+        acrescentar(typeof info.severidade === "string" && info.severidade
+          ? "lab-diagnostico lab-diagnostico-" + info.severidade : "lab-diagnostico",
+          info.rotulo);
+      } else {
+        acrescentar("lab-diagnostico lab-diagnostico-desconhecido",
+          textos.diagnosticoDesconhecido || "");
+      }
+    }
+  }
+
   function escrever(raiz, vivo, cegos, dados) {
     var idioma = dados.idioma;
     var vazio = (dados.textos && dados.textos.semValor) || SEM_VALOR_PADRAO;
@@ -234,6 +295,7 @@
         escreverSaida(bloco, "multiplo", vazio);
         escreverSaida(bloco, "multiplo-rotulo", "");
         escreverSaida(bloco, "upside", vazio);
+        escreverDiagnosticos(bloco, null, dados);
         continue;
       }
       escreverSaida(bloco, "preco",
@@ -243,6 +305,7 @@
       escreverSaida(bloco, "multiplo-rotulo", rotulos[registro.multiplo.chave] || "");
       escreverSaida(bloco, "upside",
         formatar(registro.vs_preco.upside, formatos.upside, idioma, vazio));
+      escreverDiagnosticos(bloco, registro, dados);
     }
   }
 
@@ -296,7 +359,7 @@
   /**
    * Liga o painel. `raiz`: o elemento `[data-laboratorio]` que `render.py`
    * emitiu. `dados`: o payload embutido ({idioma, caso, resultados, formatos,
-   * rotulosMultiplos, textos}).
+   * rotulosMultiplos, diagnosticos, textos}).
    *
    * A ordem importa: o badge de paridade e decidido ANTES de qualquer campo
    * ficar editavel. Se a fachada recusar o contrato, ou se algum numero
@@ -327,8 +390,8 @@
         itens.push(textoDe(textos.paridadeItem, {
           cenario: divergencia.cenario,
           chave: divergencia.chave,
-          python: numeroCru(divergencia.python, vazio),
-          js: numeroCru(divergencia.js, vazio)
+          python: valorCru(divergencia.python, vazio),
+          js: valorCru(divergencia.js, vazio)
         }));
       }
       pintarBadge(alvo, "divergente", textos.paridadeDivergente, itens);

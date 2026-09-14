@@ -1447,6 +1447,14 @@ function resolverDiag(item) {
 // frase do motor; o harness de paridade compara so' a presenca das duas chaves.
 // ============================================================================
 
+// [fatia 5C, item 5, task 3] A CHAVE publica de cada alerta do degrau — espelha
+// `avaliar.py:_ALERTAS_DEGRAU_ORDEM`. O motor publica ALERTA/ALERTA_RiR como prosa sem chave; o
+// wrapper (a camada que conhece o motor) da a chave e publica `degrau.diagnosticos_chaves`: as
+// chaves cujo campo esta' presente no nivel-alvo, na ORDEM deste array — mesma convencao de
+// presenca de AVISOS_RAMPA. tests/test_paridade_wrapper_js.py compara a lista exata dos dois lados,
+// e tests/test_espelho_fachada_js.py prende a ordem com os dois alertas acesos juntos.
+const ALERTAS_DEGRAU = [['ALERTA', 'degrau_alerta'], ['ALERTA_RiR', 'degrau_alerta_rir']];
+
 // fator_h (justos.py 793-799): h = indice_atual / indice_alvo — indice_alvo <= 0 devolve NaN
 // (guarda do nucleo; nunca alcancada pelo caminho do wrapper, que exige indice_alvo > 0 no gate).
 function fatorH(indiceAtual, indiceAlvo) {
@@ -1646,6 +1654,11 @@ function precificarDegrau({
   };
   if ('ALERTA' in nivelAlvo) degrauCenario.ALERTA = true;
   if ('ALERTA_RiR' in nivelAlvo) degrauCenario.ALERTA_RiR = true;
+  // [fatia 5C, task 3] as chaves dos alertas presentes, na ordem de ALERTAS_DEGRAU (acima) — o
+  // campo que `_aplicar_degrau_ao_cenario` publica ao lado da prosa.
+  degrauCenario.diagnosticos_chaves = ALERTAS_DEGRAU
+    .filter(([campo]) => campo in nivelAlvo)
+    .map(([, chave]) => chave);
 
   return {
     recusado: false,

@@ -31,6 +31,24 @@
 // SOTP, reversa e sensibilidades. O espelho ja' tem `resolverCompleto`,
 // `grade1D` e `grade2D`; eles entram quando houver consumidor, nao antes.
 //
+// DIAGNOSTICO (Task 3; secao 8.4 do desenho, regra inegociavel: o diagnostico
+// se move junto com o numero). Cada cenario vivo publica as CHAVES de
+// diagnostico no mesmo lugar e na mesma ordem em que `avaliar.py` as publica —
+// tres formas, porque a fachada precifica quatro pernas:
+// - firm/equity: `diagnosticos_chaves` = `diagnosticosFirm`/
+//   `diagnosticosEquity` do espelho (do lado Python, as mensagens da mesma
+//   chamada do motor, classificadas por `diagnosticos.classificar`);
+// - rampa: `diagnosticos_chaves` = os avisos presentes, na ordem de
+//   `AVISOS_RAMPA` (`_AVISOS_RAMPA_ORDEM`, do lado Python);
+// - degrau: as chaves do PROPRIO cenario vem da perna P/L (o wrapper preserva
+//   as de `_monta_cenario`), e as dos dois alertas do degrau vao em
+//   `degrau.diagnosticos_chaves`, como `precificarDegrau` as devolve
+//   (`_ALERTAS_DEGRAU_ORDEM`, do lado Python).
+// Nenhuma chave e' decidida AQUI — nenhum predicado, nenhum limiar: esta
+// fachada so' poe no lugar do contrato o que o espelho respondeu. Cenario
+// recusado nao tem diagnostico (o motor que recusa nao emite nenhum): lista
+// vazia, nunca as chaves de um vetor que nao produziu numero.
+//
 // Carregamento: no browser os dois arquivos chegam como <script> e a fachada
 // acha o espelho por `globalThis.MotorEspelho`; em node, por `require` do
 // irmao. A busca e' PREGUICOSA (na hora da chamada, nao no topo) para que a
@@ -191,23 +209,49 @@
   // Um cenario recusado pelo espelho (premissa fora de dominio, `tv` null,
   // nucleo nao finito) publica `null` nos dois numeros — o mesmo vocabulario
   // de recusa do espelho, nunca um numero inventado. O comparador trata `null`
-  // contra um numero do Python como divergencia (falha fechada).
+  // contra um numero do Python como divergencia (falha fechada). Diagnostico:
+  // lista vazia (Task 3) — o motor que recusa nao emite nenhum.
   function cenarioRecusado(premissas, chave) {
     return {
       premissas,
       valor: { preco_acao: null },
       multiplo: { chave, valor: null },
       vs_preco: { upside: null },
+      diagnosticos_chaves: [],
     };
   }
 
-  function cenarioPrecificado(premissas, precoAcao, chave, multiplo, precoDeTela) {
+  function cenarioPrecificado(premissas, precoAcao, chave, multiplo, precoDeTela,
+    chavesDeDiagnostico) {
     return {
       premissas,
       valor: { preco_acao: precoAcao },
       multiplo: { chave, valor: multiplo },
       vs_preco: { upside: upsideDe(precoAcao, precoDeTela) },
+      diagnosticos_chaves: chavesDeDiagnostico,
     };
+  }
+
+  // `cenarios.<n>.degrau.diagnosticos_chaves` (Task 3): o unico campo do bloco
+  // `degrau` do `resultados` que esta fachada publica — o preco e o multiplo
+  // COM degrau ja' estao em `valor`/`multiplo`. So' existe nos cenarios com
+  // degrau, do mesmo jeito que o bloco so' existe la' no `resultados`.
+  function comDegrau(cenario, chavesDoDegrau) {
+    cenario.degrau = { diagnosticos_chaves: chavesDoDegrau };
+    return cenario;
+  }
+
+  // As chaves de um cenario firm/equity (Task 3). Do lado Python,
+  // `_monta_cenario` classifica as mensagens da MESMA chamada do motor que
+  // produziu o preco, com `moeda` e `rf`; o espelho ja' devolve as chaves
+  // prontas, com a paridade presa em `tests/test_paridade_wrapper_js.py`.
+  // Preco recusado: o motor de verdade teria saido com erro, sem diagnostico
+  // nenhum — lista vazia.
+  function diagnosticosDaCelula(M, rota, premissas, moeda, rf, precoAcao) {
+    if (!Number.isFinite(precoAcao)) return [];
+    return rota === 'firm'
+      ? M.diagnosticosFirm(premissas, moeda, rf)
+      : M.diagnosticosEquity(premissas, moeda, rf);
   }
 
   // `caso["degrau"]` chega com proveniencia por campo ({valor, fonte, data});
@@ -231,9 +275,11 @@
    * O subconjunto VIVO do `resultados.json`, recalculado do `caso`.
    *
    * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
-   * multiplo: {chave, valor}, vs_preco: {upside}}}}`, mais `ponte: {nd_efetivo}` nas rotas que
+   * multiplo: {chave, valor}, vs_preco: {upside}, diagnosticos_chaves,
+   * [degrau: {diagnosticos_chaves}]}}}`, mais `ponte: {nd_efetivo}` nas rotas que
    * cruzam ponte (firm/rampa) — a rota equity nao publica o bloco, do mesmo
-   * jeito que `resultados.json` nao publica (L2: mesmas chaves).
+   * jeito que `resultados.json` nao publica (L2: mesmas chaves). As chaves de
+   * diagnostico seguem as tres formas descritas no cabecalho deste arquivo.
    *
    * Um cenario por vez, pela MESMA rota que `avaliar()` percorre
    * (`avaliar.py:881-934`):
@@ -272,9 +318,11 @@
 
       if (rota === 'rampa') {
         const r = M.precificarRampa({ premissas, ndEfetivo, acoes, moeda, rf });
+        // Diagnostico da rampa: os avisos presentes, na ordem de AVISOS_RAMPA.
         cenarios[nome] = r.recusado
           ? cenarioRecusado(premissas, chave)
-          : cenarioPrecificado(premissas, r.valor.preco_acao, chave, r.multiplo, precoDeTela);
+          : cenarioPrecificado(premissas, r.valor.preco_acao, chave, r.multiplo, precoDeTela,
+            r.avisos);
         continue;
       }
 
@@ -287,15 +335,21 @@
           blocoDegrau: blocoDegrauCru(blocoDegrau),
           mValor: blocoDegrau.m[nome].valor,
         });
+        // Diagnostico do degrau em duas listas, como o wrapper: as do cenario
+        // (perna P/L) e as dos alertas do proprio degrau.
         cenarios[nome] = r.recusado
-          ? cenarioRecusado(premissas, 'PVP_com_degrau')
-          : cenarioPrecificado(premissas, r.valor.preco_acao, 'PVP_com_degrau',
-            r.degrau.com_transicao, precoDeTela);
+          ? comDegrau(cenarioRecusado(premissas, 'PVP_com_degrau'), [])
+          : comDegrau(
+            cenarioPrecificado(premissas, r.valor.preco_acao, 'PVP_com_degrau',
+              r.degrau.com_transicao, precoDeTela,
+              diagnosticosDaCelula(M, rota, premissas, moeda, rf, r.valor.preco_acao)),
+            r.degrau.diagnosticos_chaves);
         continue;
       }
 
       const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
-      cenarios[nome] = cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela);
+      cenarios[nome] = cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
+        diagnosticosDaCelula(M, rota, premissas, moeda, rf, r.valor));
     }
 
     const vivo = { cenarios };
@@ -330,6 +384,28 @@
       python: python === undefined ? null : python,
       js: js === undefined ? null : js,
       erro_relativo: erro,
+    });
+  }
+
+  // Listas de chaves de diagnostico (Task 3, T4): IGUALDADE EXATA E ORDENADA —
+  // a mesma chave na mesma posicao. A ordem nao e' enfeite: e' a ordem em que
+  // o motor emite e o wrapper publica, e e' a ordem em que o laboratorio as
+  // mostra. A divergencia leva as DUAS listas inteiras (`erro_relativo: null`,
+  // o caso incomparavel): quem le o badge precisa ver o que sobrou e o que
+  // faltou, nao um resumo.
+  function mesmasChaves(python, js) {
+    if (!Array.isArray(python) || !Array.isArray(js) || python.length !== js.length) return false;
+    return python.every((chave, posicao) => chave === js[posicao]);
+  }
+
+  function registrarLista(divergencias, cenario, chave, python, js) {
+    if (mesmasChaves(python, js)) return;
+    divergencias.push({
+      cenario,
+      chave,
+      python: python === undefined ? null : python,
+      js: js === undefined ? null : js,
+      erro_relativo: null,
     });
   }
 
@@ -395,6 +471,16 @@
       // do laboratorio.
       registrar(divergencias, nome, 'vs_preco.upside',
         py.vs_preco ? py.vs_preco.upside : undefined, js.vs_preco.upside);
+      // Task 3 (T4): as chaves de diagnostico, nos dois lugares do contrato —
+      // o que o laboratorio pinta ao lado dos tres numeros. Um motor de browser
+      // que reproduzisse o preco mas acendesse outro alerta mostraria ao
+      // analista um diagnostico que o relatorio nao sustenta.
+      registrarLista(divergencias, nome, 'diagnosticos_chaves',
+        py.diagnosticos_chaves, js.diagnosticos_chaves);
+      if (js.degrau) {
+        registrarLista(divergencias, nome, 'degrau.diagnosticos_chaves',
+          py.degrau ? py.degrau.diagnosticos_chaves : undefined, js.degrau.diagnosticos_chaves);
+      }
     }
 
     return { ok: divergencias.length === 0, divergencias };

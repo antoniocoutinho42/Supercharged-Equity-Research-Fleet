@@ -259,6 +259,31 @@
   .lab-saidas .metrica-valor {
     font-size: 1.15rem;
   }
+  .lab-diagnosticos {
+    margin: 0 0 14px;
+  }
+  .lab-diagnosticos ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .lab-diagnostico {
+    font-size: 0.85rem;
+    padding: 3px 0 3px 10px;
+    margin: 0 0 4px;
+    border-left: 3px solid var(--cor-borda);
+  }
+  .lab-diagnostico-alerta {
+    background: var(--cor-disclosure-fundo);
+    border-left-color: var(--cor-disclosure-borda);
+  }
+  .lab-diagnostico-atencao {
+    border-left-color: var(--cor-acento);
+  }
+  .lab-diagnostico-vazio,
+  .lab-diagnostico-desconhecido {
+    color: var(--cor-texto-suave);
+  }
   .lab-blocos {
     display: flex;
     flex-wrap: wrap;
@@ -268,7 +293,8 @@
     flex: 1 1 240px;
     min-width: 220px;
   }
-  .lab-bloco h4 {
+  .lab-bloco h4,
+  .lab-diagnosticos h4 {
     font-size: 0.74rem;
     font-weight: 700;
     text-transform: uppercase;
