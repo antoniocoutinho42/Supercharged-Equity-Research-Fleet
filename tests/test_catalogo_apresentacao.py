@@ -119,8 +119,20 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
 def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
-        "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures",
+        "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
     }
+
+
+def test_todo_motivo_de_recusa_tem_rotulo_em_todo_idioma():
+    """Onda de correção da revisão final da 5C (F2): o laboratório diz por que
+    um cenário foi recusado, com o rótulo que o catálogo dá ao código que a
+    fachada publica. A trava contra a FACHADA (o conjunto exato de motivos) mora
+    em `tests/test_espelho_fachada_js.py`, que roda node; esta confere só que
+    nenhum motivo fica sem texto em algum idioma declarado."""
+    assert CAT["recusas"], "catálogo sem motivos de recusa"
+    for codigo, info in CAT["recusas"].items():
+        for idioma in CAT["idiomas"]:
+            assert info.get("rotulo", {}).get(idioma, "").strip(), (codigo, idioma)
 
 
 # --------------------------------------------------------------------------

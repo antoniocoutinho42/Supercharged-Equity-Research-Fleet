@@ -34,10 +34,13 @@ from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import (_ALERTAS_DEGRAU_ORDEM, _CHAVE_DIVERGENCIA_DE_BASE,  # noqa: E402
-                     _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
-from caso import _PREMISSAS_POR_ROTA  # noqa: E402
+                     _LIMIAR_DIVERGENCIA_DE_BASE_PCT, avaliar)
+from caso import _PREMISSAS_POR_ROTA, TV_CANON, CasoInvalido, carregar, validar  # noqa: E402
+from motor import MotorFalhou  # noqa: E402
 
 FACHADA = RAIZ / "skills" / "er-valuation" / "assets" / "espelho_fachada.js"
+CATALOGO = json.loads(
+    (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
 
 # Mesma tolerância dos três harnesses de paridade (ver `test_paridade_js.py`,
 # que a documenta e mede a folga): as grandezas aqui vão de múltiplo (~6) a
@@ -60,7 +63,8 @@ _HARNESS = (
     "const fs = require('fs');"
     "const F = require(%s);"
     "const p = JSON.parse(fs.readFileSync(%s, 'utf-8'));"
-    "const saida = {versao_contrato: F.VERSAO_CONTRATO, rotas: F.ROTAS_ATENDIDAS};"
+    "const saida = {versao_contrato: F.VERSAO_CONTRATO, rotas: F.ROTAS_ATENDIDAS,"
+    " motivos: F.MOTIVOS_DE_RECUSA};"
     "try {"
     "  saida.vivo = F.avaliarCaso(p.caso);"
     "  saida.comparacao = F.compararComResultados(p.caso, p.resultados);"
@@ -256,6 +260,17 @@ def test_um_vetor_fora_de_dominio_recusa_o_cenario_em_vez_de_inventar_numero(fix
     assert divergencia["js"] is None
     assert divergencia["erro_relativo"] is None
     assert divergencia["python"] == resultados["cenarios"]["base"]["valor"]["preco_acao"]
+
+    # Onda de correção da revisão final (F2): um cenário recusado não afirma "nenhum
+    # diagnóstico". As listas saem `null` — nunca `[]` —, a lista exibível também, e o motivo
+    # sai nomeado: n < 1 é recusa de domínio da CLI (`avaliar_dominios_cli`, código 2 no motor).
+    assert cenario["diagnosticos_chaves"] is None, cenario
+    assert cenario["diagnosticos_exibidos"] is None, cenario
+    assert cenario["recusa"] == {"codigo": "dominio_da_cli"}, cenario
+    if "degrau" in resultados["cenarios"]["base"]:
+        assert cenario["degrau"]["diagnosticos_chaves"] is None, cenario
+    lista = next(d for d in comparacao["divergencias"] if d["chave"] == "diagnosticos_chaves")
+    assert lista["js"] is None and lista["erro_relativo"] is None, lista
 
 
 # ---------------------------------------------------------------------------
@@ -529,6 +544,8 @@ def test_as_chaves_de_diagnostico_da_fachada_sao_as_do_resultados_em_ordem(fixtu
                 f"{fixture}/{nome}"
         else:
             assert "degrau" not in cenario_js, f"{fixture}/{nome}: {cenario_js.get('degrau')}"
+        # F2: um cenário precificado declara que NÃO foi recusado — o campo existe e é `null`.
+        assert cenario_js["recusa"] is None, f"{fixture}/{nome}: {cenario_js['recusa']}"
 
 
 # Uma edição por FORMA em que o wrapper publica diagnóstico, escolhida lendo o
@@ -773,3 +790,125 @@ def test_a_divergencia_de_base_do_degrau_acende_e_apaga_com_o_preco_na_mesma_cha
 
     assert _lista(desfeito, caminho, "fachada") == _lista(carga, caminho, "fachada")
     assert desfeito["valor"]["preco_acao"] == carga["valor"]["preco_acao"]
+
+
+# ---------------------------------------------------------------------------
+# Onda de correção da revisão final da 5C — F2 (recusa nomeada, listas `null`)
+# e F3 (a D6 do gate aplicada ao caso editado)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_os_motivos_de_recusa_da_fachada_sao_exatamente_os_do_catalogo(tmp_path):
+    """F2: todo motivo que a fachada pode publicar tem rótulo no catálogo, e o
+    catálogo não rotula motivo que a fachada não publica — a mesma trava de
+    upgrade das rotas e das chaves de diagnóstico. Um motivo novo na fachada
+    sem rótulo reprova AQUI, na integração, e nunca chega à tela como código
+    cru."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    saida = _fachada(caso, resultados, tmp_path)
+    assert saida["motivos"], "fachada não expõe MOTIVOS_DE_RECUSA — trava vacuamente verde"
+    assert len(saida["motivos"]) == len(set(saida["motivos"])), saida["motivos"]
+    assert set(saida["motivos"]) == set(CATALOGO["recusas"])
+
+
+# Uma edição por motivo e por perna, cada uma alcançável com UM campo do painel.
+# O motivo de cada linha é CONFERIDO contra o motor de verdade, nunca presumido:
+# `avaliar()` sobre o caso editado levanta `MotorFalhou`, e a mensagem diz se o
+# motor saiu com código 2 (a CLI recusou antes de calcular: argparse com `--n`/
+# `--t-rampa` inteiros, ou `avaliar_dominios_cli`) ou se o núcleo não fechou um
+# número (`null` serializado, ou erro do próprio núcleo — a composição da rampa
+# sem fase 2 sai com código 1).
+_RECUSAS_POR_EDICAO = [
+    pytest.param("caso_minimo_firm.json", {"gp": 10.0}, "nucleo_nao_finito", id="firm-gp-igual-ao-wacc"),
+    pytest.param("caso_minimo_firm.json", {"n": 10.5}, "dominio_da_cli", id="firm-n-fracionario"),
+    pytest.param("caso_minimo_equity.json", {"tv": "gordon"}, "nucleo_nao_finito",
+                 id="equity-gordon-sem-roe-tv"),
+    pytest.param("caso_minimo_equity.json", {"ke": -150.0}, "dominio_da_cli", id="equity-ke-abaixo-de-menos-100"),
+    pytest.param("caso_rampa.json", {"t_rampa": 2.5}, "dominio_da_cli", id="rampa-t-rampa-fracionario"),
+    pytest.param("caso_rampa.json", {"t_rampa": 10}, "nucleo_nao_finito", id="rampa-sem-fase-2"),
+    pytest.param("caso_degrau.json", {"gp": 20.0}, "nucleo_nao_finito", id="degrau-gp-igual-ao-ke"),
+    pytest.param("caso_degrau.json", {"n": 10.5}, "dominio_da_cli", id="degrau-n-fracionario"),
+]
+
+
+def _motivo_segundo_o_motor(caso: dict) -> str:
+    try:
+        avaliar(caso)
+    except MotorFalhou as erro:
+        return "dominio_da_cli" if "saiu com código 2" in str(erro) else "nucleo_nao_finito"
+    raise AssertionError("o motor precificou o caso editado — a edição deixou de ser uma recusa")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture,edicao,motivo", _RECUSAS_POR_EDICAO)
+def test_um_cenario_recusado_publica_null_e_o_motivo_que_o_motor_confirma(fixture, edicao, motivo, tmp_path):
+    """F2 (MÉDIO). Antes, um cenário recusado publicava `[]` nas listas e a
+    tela dizia "Nenhum diagnóstico disparado por estas premissas." — com
+    `gp = 10` sob gordon, o motor emite quatro. Agora a fachada publica `null`
+    em toda lista do cenário (e na exibível) e o motivo como código nomeado,
+    o mesmo que o motor de verdade confirma para o caso editado, nas três
+    rotas e no degrau."""
+    caso, resultados = _caso_e_resultados(fixture)
+    caso["cenarios"]["base"]["premissas"].update(edicao)
+    assert _motivo_segundo_o_motor(json.loads(json.dumps(caso))) == motivo
+
+    cenario = _avaliar_em_sequencia([caso], tmp_path)[0]["cenarios"]["base"]
+    assert cenario["valor"]["preco_acao"] is None, cenario
+    assert cenario["recusa"] == {"codigo": motivo}, cenario
+    assert cenario["diagnosticos_chaves"] is None, cenario
+    assert cenario["diagnosticos_exibidos"] is None, cenario
+    if "degrau" in resultados["cenarios"]["base"]:
+        assert cenario["degrau"]["diagnosticos_chaves"] is None, cenario
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_fachada_recusa_pela_d6_se_e_so_se_o_gate_recusa_o_caso_editado(tmp_path):
+    """F3 (MÉDIO). O `select` da convenção terminal levava o degrau à
+    combinação que o gate recusa por nome (D6: `tv` canônico 'book' sem
+    `roe_book` — a conflação agravada pelo degrau), e a tela a mostrava como
+    cenário: R$ 42,56 com badge verde. O relatório não reimplementa o gate; a
+    FACHADA aplica a D6 ao caso editado e recusa com código nomeado. A revisão
+    varreu as regras de cenário e só a D6 é alcançável pelos campos do painel.
+
+    A trava: para cada fixture com degrau, cada cenário, cada grafia de `tv`
+    (as opções do catálogo e os aliases que o gate canoniza) e `roe_book`
+    ausente ou declarado, a fachada recusa pela D6 SE E SÓ SE `caso.validar`
+    recusa o caso editado — e, quando o gate aceita, a fachada precifica."""
+    com_degrau = [f for f in FIXTURES_DE_CASO
+                  if "degrau" in json.loads((FIXTURES / f).read_text(encoding="utf-8"))]
+    assert com_degrau, "nenhuma fixture com degrau — trava vacuamente verde"
+    grafias_de_tv = sorted(set(CATALOGO["premissas"]["equity"]["tv"]["opcoes"]) | set(TV_CANON))
+
+    variantes = []
+    for fixture in com_degrau:
+        base = carregar(FIXTURES / fixture)
+        for nome in base["cenarios"]:
+            for roe_book in (None, 18.0):
+                for tv in grafias_de_tv:
+                    caso = json.loads(json.dumps(base))
+                    premissas = caso["cenarios"][nome]["premissas"]
+                    premissas["tv"] = tv
+                    premissas.pop("roe_book", None)
+                    if roe_book is not None:
+                        premissas["roe_book"] = roe_book
+                    try:
+                        validar(json.loads(json.dumps(caso)))
+                        gate = None
+                    except CasoInvalido as erro:
+                        gate = str(erro)
+                    variantes.append((f"{fixture}/{nome}/tv={tv}/roe_book={roe_book}", nome, caso, gate))
+
+    vivos = _avaliar_em_sequencia([caso for _rotulo, _nome, caso, _gate in variantes], tmp_path)
+    recusadas = 0
+    for (rotulo, nome, _caso, gate), vivo in zip(variantes, vivos):
+        cenario = vivo["cenarios"][nome]
+        if gate is None:
+            assert cenario["recusa"] is None, (rotulo, cenario["recusa"])
+            assert cenario["valor"]["preco_acao"] is not None, rotulo
+        else:
+            assert "D6" in gate, (rotulo, gate)
+            assert cenario["recusa"] == {"codigo": "degrau_book_sem_roe_book"}, (rotulo, cenario["recusa"])
+            assert cenario["valor"]["preco_acao"] is None, rotulo
+            assert cenario["diagnosticos_exibidos"] is None, rotulo
+            recusadas += 1
+    assert 0 < recusadas < len(variantes), f"a varredura não exercita os dois lados da D6: {recusadas}"

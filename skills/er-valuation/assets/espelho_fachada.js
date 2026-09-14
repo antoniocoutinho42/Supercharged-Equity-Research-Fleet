@@ -47,9 +47,24 @@
 //   da revisao final (F1), a da divergencia de base acima do limiar, que o
 //   espelho decide com a copia travada do limiar do wrapper.
 // Nenhuma chave e' decidida AQUI — nenhum predicado, nenhum limiar: esta
-// fachada so' poe no lugar do contrato o que o espelho respondeu. Cenario
-// recusado nao tem diagnostico (o motor que recusa nao emite nenhum): lista
-// vazia, nunca as chaves de um vetor que nao produziu numero.
+// fachada so' poe no lugar do contrato o que o espelho respondeu.
+//
+// CENARIO RECUSADO (onda de correcao da revisao final da 5C, F2 e F3). Um
+// cenario recusado publica `null` — nunca `[]` — em toda lista de chaves e na
+// lista exibivel, e `recusa: {codigo}` com o motivo nomeado:
+// - `dominio_da_cli`: a CLI do motor recusa o vetor antes de calcular (codigo
+//   2: argparse ou avaliar_dominios_cli) — `MotorEspelho.cliRecusa`;
+// - `nucleo_nao_finito`: a CLI aceita, mas o nucleo nao fecha um numero finito
+//   (o motor devolve `null`, ou o proprio nucleo levanta erro);
+// - `degrau_book_sem_roe_book`: a D6 do gate (`caso.py:_validar_degrau`),
+//   aplicada AQUI ao caso editado — a unica regra de cenario do gate que os
+//   campos do painel alcancam. O laboratorio edita sem passar pelo gate, e o
+//   relatorio nao reimplementa gate nenhum.
+// `null`, e nao lista vazia, porque "nenhum diagnostico" seria falso: o motor
+// que recusa por nucleo nao finito EMITE diagnosticos (com gp = wacc sob
+// gordon sao quatro); o que ele nao produz e' numero. Cenario precificado
+// publica `recusa: null`. Os tres codigos sao `MOTIVOS_DE_RECUSA`, expostos na
+// superficie publica e travados contra os rotulos do catalogo.
 //
 // LISTA EXIBIVEL (onda de correcao da revisao final da 5C, F4; E3). Alem das
 // formas do contrato, cada cenario vivo publica `diagnosticos_exibidos`: a
@@ -95,6 +110,17 @@
   // contra o erro real). Nao e' numero novo: e' o mesmo limiar, aplicado na
   // maquina de quem abriu o relatorio em vez de no CI.
   const TAU = 1e-12;
+
+  // Os motivos de recusa de um CENARIO (F2 e F3; ver o cabecalho, "CENARIO
+  // RECUSADO"). O rotulo de cada um mora em `catalogo_apresentacao.json:
+  // recusas`, com o conjunto travado contra este em
+  // `tests/test_espelho_fachada_js.py`.
+  const RECUSA_DOMINIO_DA_CLI = 'dominio_da_cli';
+  const RECUSA_NUCLEO_NAO_FINITO = 'nucleo_nao_finito';
+  const RECUSA_DEGRAU_BOOK_SEM_ROE_BOOK = 'degrau_book_sem_roe_book';
+  const MOTIVOS_DE_RECUSA = Object.freeze([
+    RECUSA_DOMINIO_DA_CLI, RECUSA_NUCLEO_NAO_FINITO, RECUSA_DEGRAU_BOOK_SEM_ROE_BOOK,
+  ]);
 
   // Ordem e sinal das linhas de balanco — `ponte.py:SINAIS` (linhas 18-24),
   // verbatim. Ordem importa para o waterfall; sinal, para a soma.
@@ -218,18 +244,20 @@
     return valor;
   }
 
-  // Um cenario recusado pelo espelho (premissa fora de dominio, `tv` null,
-  // nucleo nao finito) publica `null` nos dois numeros — o mesmo vocabulario
-  // de recusa do espelho, nunca um numero inventado. O comparador trata `null`
-  // contra um numero do Python como divergencia (falha fechada). Diagnostico:
-  // lista vazia (Task 3) — o motor que recusa nao emite nenhum.
-  function cenarioRecusado(premissas, chave) {
+  // Um cenario recusado (premissa fora de dominio, `tv` null, nucleo nao
+  // finito, ou a D6 no degrau) publica `null` nos dois numeros — o mesmo
+  // vocabulario de recusa do espelho, nunca um numero inventado — e `null` na
+  // lista de chaves: "nenhum diagnostico" seria falso (F2, cabecalho). O
+  // comparador trata `null` contra o que o Python publicou como divergencia
+  // (falha fechada). `codigo` e' um de MOTIVOS_DE_RECUSA.
+  function cenarioRecusado(premissas, chave, codigo) {
     return {
       premissas,
       valor: { preco_acao: null },
       multiplo: { chave, valor: null },
       vs_preco: { upside: null },
-      diagnosticos_chaves: [],
+      diagnosticos_chaves: null,
+      recusa: { codigo },
     };
   }
 
@@ -241,7 +269,28 @@
       multiplo: { chave, valor: multiplo },
       vs_preco: { upside: upsideDe(precoAcao, precoDeTela) },
       diagnosticos_chaves: chavesDeDiagnostico,
+      recusa: null,
     };
+  }
+
+  // F2: POR QUE o espelho recusou este cenario — a pergunta que o motor de
+  // verdade responderia pelo codigo de saida: a CLI recusa antes de calcular
+  // (argparse ou avaliar_dominios_cli, `MotorEspelho.cliRecusa`) ou o nucleo
+  // nao fecha um numero finito. So' e' chamada DEPOIS de o espelho recusar:
+  // para essas recusas, esta fachada so' da o nome.
+  function motivoDaRecusa(M, premissas) {
+    return M.cliRecusa(premissas) ? RECUSA_DOMINIO_DA_CLI : RECUSA_NUCLEO_NAO_FINITO;
+  }
+
+  // F3: a D6 do gate (`caso.py:_validar_degrau`) — degrau com `tv` CANONICO
+  // 'book' e sem `roe_book` (ausente ou `null`, como o `is None` do gate). O
+  // alias legado 'ic' e' 'book' para o motor, por isso a comparacao passa por
+  // `MotorEspelho.tvCanon`, o mesmo TV_CANON do espelho.
+  // `tests/test_espelho_fachada_js.py` prende que esta fachada recusa pela D6
+  // se e so' se `caso.validar` recusa o caso editado.
+  function violaD6(M, premissas) {
+    return M.tvCanon(premissas.tv) === 'book'
+      && (premissas.roe_book === null || premissas.roe_book === undefined);
   }
 
   // `cenarios.<n>.degrau.diagnosticos_chaves` (Task 3): o unico campo do bloco
@@ -258,18 +307,21 @@
   // degrau. E' o UNICO ponto que junta as formas: uma forma nova entra aqui ou
   // reprova na trava da integracao.
   function listaExibida(cenario) {
-    const doDegrau = cenario.degrau ? cenario.degrau.diagnosticos_chaves : [];
-    return cenario.diagnosticos_chaves.concat(doDegrau);
+    const formas = [cenario.diagnosticos_chaves];
+    if (cenario.degrau) formas.push(cenario.degrau.diagnosticos_chaves);
+    // F2: cenario recusado publica `null` em toda forma, e a lista exibivel
+    // tambem sai `null` — nunca uma lista vazia que se leria como "nenhum
+    // diagnostico".
+    if (!formas.every((lista) => Array.isArray(lista))) return null;
+    return [].concat(...formas);
   }
 
-  // As chaves de um cenario firm/equity (Task 3). Do lado Python,
+  // As chaves de um cenario firm/equity PRECIFICADO (Task 3). Do lado Python,
   // `_monta_cenario` classifica as mensagens da MESMA chamada do motor que
   // produziu o preco, com `moeda` e `rf`; o espelho ja' devolve as chaves
-  // prontas, com a paridade presa em `tests/test_paridade_wrapper_js.py`.
-  // Preco recusado: o motor de verdade teria saido com erro, sem diagnostico
-  // nenhum — lista vazia.
-  function diagnosticosDaCelula(M, rota, premissas, moeda, rf, precoAcao) {
-    if (!Number.isFinite(precoAcao)) return [];
+  // prontas, com a paridade presa em `tests/test_paridade_wrapper_js.py`. So'
+  // e' chamada com preco finito: cenario recusado publica `null` (F2).
+  function diagnosticosDaCelula(M, rota, premissas, moeda, rf) {
     return rota === 'firm'
       ? M.diagnosticosFirm(premissas, moeda, rf)
       : M.diagnosticosEquity(premissas, moeda, rf);
@@ -297,7 +349,7 @@
    *
    * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
    * multiplo: {chave, valor}, vs_preco: {upside}, diagnosticos_chaves,
-   * [degrau: {diagnosticos_chaves}], diagnosticos_exibidos}}}`, mais
+   * [degrau: {diagnosticos_chaves}], diagnosticos_exibidos, recusa}}}`, mais
    * `ponte: {nd_efetivo}` nas rotas que cruzam ponte (firm/rampa) — a rota
    * equity nao publica o bloco, do mesmo jeito que `resultados.json` nao
    * publica (L2: mesmas chaves). As chaves de diagnostico seguem as tres
@@ -343,13 +395,20 @@
         const r = M.precificarRampa({ premissas, ndEfetivo, acoes, moeda, rf });
         // Diagnostico da rampa: os avisos presentes, na ordem de AVISOS_RAMPA.
         cenarios[nome] = r.recusado
-          ? cenarioRecusado(premissas, chave)
+          ? cenarioRecusado(premissas, chave, motivoDaRecusa(M, premissas))
           : cenarioPrecificado(premissas, r.valor.preco_acao, chave, r.multiplo, precoDeTela,
             r.avisos);
         continue;
       }
 
       if (blocoDegrau !== null) {
+        // F3: a D6, sobre o caso EDITADO e antes de qualquer conta — a
+        // combinacao que a metodologia proibe, alcancavel por um `select`.
+        if (violaD6(M, premissas)) {
+          cenarios[nome] = comDegrau(
+            cenarioRecusado(premissas, 'PVP_com_degrau', RECUSA_DEGRAU_BOOK_SEM_ROE_BOOK), null);
+          continue;
+        }
         const r = M.precificarDegrau({
           premissas,
           metricaValor: metrica.valor,
@@ -361,18 +420,23 @@
         // Diagnostico do degrau em duas listas, como o wrapper: as do cenario
         // (perna P/L) e as dos alertas do proprio degrau.
         cenarios[nome] = r.recusado
-          ? comDegrau(cenarioRecusado(premissas, 'PVP_com_degrau'), [])
+          ? comDegrau(
+            cenarioRecusado(premissas, 'PVP_com_degrau', motivoDaRecusa(M, premissas)), null)
           : comDegrau(
             cenarioPrecificado(premissas, r.valor.preco_acao, 'PVP_com_degrau',
               r.degrau.com_transicao, precoDeTela,
-              diagnosticosDaCelula(M, rota, premissas, moeda, rf, r.valor.preco_acao)),
+              diagnosticosDaCelula(M, rota, premissas, moeda, rf)),
             r.degrau.diagnosticos_chaves);
         continue;
       }
 
+      // `precificarCelula` recusa com `null` nos dois numeros; preco finito e
+      // multiplo finito andam juntos (os dois saem do mesmo nucleo).
       const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
-      cenarios[nome] = cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
-        diagnosticosDaCelula(M, rota, premissas, moeda, rf, r.valor));
+      cenarios[nome] = Number.isFinite(r.valor)
+        ? cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
+          diagnosticosDaCelula(M, rota, premissas, moeda, rf))
+        : cenarioRecusado(premissas, chave, motivoDaRecusa(M, premissas));
     }
 
     // F4: a lista exibivel, montada sobre o registro inteiro de cada cenario —
@@ -520,7 +584,7 @@
   // `module.exports` incondicional estoura `ReferenceError: module is not
   // defined` num <script> de browser — que e' o consumidor REAL desta fachada.
   const publico = {
-    VERSAO_CONTRATO, ROTAS_ATENDIDAS, avaliarCaso, compararComResultados,
+    VERSAO_CONTRATO, ROTAS_ATENDIDAS, MOTIVOS_DE_RECUSA, avaliarCaso, compararComResultados,
   };
 
   if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {

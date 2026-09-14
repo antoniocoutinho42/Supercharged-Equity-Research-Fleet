@@ -249,10 +249,29 @@
       lista.appendChild(item);
     }
 
-    // Sem numero, sem diagnostico: o mesmo "sem valor" das tres saidas. Um
-    // registro sem lista exibivel cai no mesmo lugar -- este painel nunca
+    // Sem numero, sem diagnostico: o mesmo "sem valor" das tres saidas.
+    if (!registro) {
+      acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.semValor || SEM_VALOR_PADRAO);
+      return;
+    }
+    // Cenario RECUSADO pela fachada (onda de correcao da revisao final da 5C,
+    // F2 e F3): as tres saidas ja estao em "sem valor", e a lista diz por que.
+    // O motivo chega como CODIGO e o rotulo vem do catalogo, pelo payload
+    // (`dados.recusas`). Nunca o texto de "nenhum diagnostico" -- que seria
+    // falso -- e nunca o codigo cru: motivo sem rotulo vira texto do dicionario.
+    if (registro.recusa) {
+      var rotulosDeRecusa = dados.recusas || {};
+      var codigo = registro.recusa.codigo;
+      var motivo = (typeof codigo === "string"
+        && Object.prototype.hasOwnProperty.call(rotulosDeRecusa, codigo) && rotulosDeRecusa[codigo])
+        ? rotulosDeRecusa[codigo] : (textos.recusaDesconhecida || "");
+      acrescentar("lab-diagnostico lab-diagnostico-recusado",
+        textoDe(textos.diagnosticosRecusado, { motivo: motivo }));
+      return;
+    }
+    // Um registro sem lista exibivel cai no "sem valor" -- este painel nunca
     // afirma "nenhum diagnostico" sem uma lista que o diga.
-    if (!registro || !Array.isArray(registro.diagnosticos_exibidos)) {
+    if (!Array.isArray(registro.diagnosticos_exibidos)) {
       acrescentar("lab-diagnostico lab-diagnostico-vazio", textos.semValor || SEM_VALOR_PADRAO);
       return;
     }

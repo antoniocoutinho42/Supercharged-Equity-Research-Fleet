@@ -1048,12 +1048,31 @@ def _diagnosticos_do_catalogo(catalogo: dict, idioma: str) -> dict:
     return saida
 
 
+def _recusas_do_catalogo(catalogo: dict, idioma: str) -> dict:
+    """`{codigo: rotulo}` de todo motivo de recusa do catálogo, no idioma (onda
+    de correção da revisão final da 5C, F2) — com que `laboratorio.js` diz POR
+    QUE a fachada recusou um cenário. O código chega da fachada; este módulo
+    não interpreta nenhum. Mesma disciplina de `_diagnosticos_do_catalogo`:
+    rótulo ausente no idioma é recusa nomeada, e o painel nunca cai no código
+    cru por falta de rótulo."""
+    saida = {}
+    recusas = catalogo.get("recusas") or {}
+    for codigo in sorted(recusas):
+        rotulo = ((recusas[codigo] or {}).get("rotulo") or {}).get(idioma)
+        if not rotulo:
+            raise RotuloDoCatalogoAusente(
+                f"catálogo de apresentação sem rótulo em '{idioma}' para o motivo de recusa '{codigo}'.")
+        saida[codigo] = rotulo
+    return saida
+
+
 def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str,
                             dicionario: dict) -> dict | None:
     """O payload do laboratório: o `caso` e o `resultados` INTEIROS (opacos —
     este módulo não os interpreta; quem os lê é a fachada, do lado da
     integração), as três receitas de formatação das saídas, os rótulos dos
-    múltiplos, o rótulo e a severidade de cada diagnóstico (Task 3) e a prosa
+    múltiplos, o rótulo e a severidade de cada diagnóstico (Task 3), o rótulo
+    de cada motivo de recusa (onda de correção da revisão final, F2) e a prosa
     de interface que o JS escreve.
 
     O `resultados` viaja junto porque o badge de paridade (L4) é um FATO
@@ -1083,6 +1102,7 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
         },
         "rotulosMultiplos": rotulos_multiplos,
         "diagnosticos": _diagnosticos_do_catalogo(catalogo, idioma),
+        "recusas": _recusas_do_catalogo(catalogo, idioma),
         "textos": {
             "semValor": t(dicionario, "valuation.laboratorio_sem_valor"),
             "paridadeOk": t(dicionario, "valuation.laboratorio_paridade_ok"),
@@ -1091,6 +1111,8 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
             "paridadeIndisponivel": t(dicionario, "valuation.laboratorio_paridade_indisponivel"),
             "diagnosticosNenhum": t(dicionario, "valuation.laboratorio_diagnosticos_nenhum"),
             "diagnosticoDesconhecido": t(dicionario, "valuation.laboratorio_diagnostico_desconhecido"),
+            "diagnosticosRecusado": t(dicionario, "valuation.laboratorio_diagnosticos_recusado"),
+            "recusaDesconhecida": t(dicionario, "valuation.laboratorio_recusa_desconhecida"),
         },
     }
 

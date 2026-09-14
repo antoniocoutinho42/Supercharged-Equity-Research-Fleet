@@ -571,6 +571,27 @@ function dominioCliRecusa(premissas) {
   return false;
 }
 
+// [onda de correcao da revisao final da 5C, F2] cliRecusa: a CLI do motor recusa o vetor ANTES de
+// qualquer handler, com codigo 2 e sem calcular nada, em duas camadas — o ARGPARSE (`--tv`
+// obrigatorio, required=True, e `--n`/`--t-rampa` inteiros, type=int, nos quatro subcomandos que o
+// wrapper chama: justos.py:1729 ev, 1748-1752 rampa, 1762 pe, 1825-1826 degrau) e
+// avaliar_dominios_cli (dominioCliRecusa, acima). Nenhuma porta de precificacao deste arquivo
+// precisa dela: todas ja recusam esses vetores por conta propria (tv null explicito, NaN do nucleo
+// para n nao inteiro, dominioCliRecusa). Quem precisa e' a FACHADA, para dizer ao analista POR QUE
+// um cenario foi recusado — premissa fora do dominio que o motor aceita x combinacao sem valor
+// finito — com o motivo que o motor de verdade confirmaria: tests/test_espelho_fachada_js.py confere
+// cada motivo contra avaliar() (codigo 2 x `null` ou erro do nucleo).
+const CHAVES_INTEIRAS_DA_CLI = ['n', 't_rampa'];
+
+function cliRecusa(premissas) {
+  if (premissas.tv === null || premissas.tv === undefined) return true;
+  for (const nome of CHAVES_INTEIRAS_DA_CLI) {
+    const v = premissas[nome];
+    if (v !== undefined && v !== null && !Number.isInteger(v)) return true;
+  }
+  return dominioCliRecusa(premissas);
+}
+
 // ATENCAO — semantica de default OPOSTA a do nucleo (ver cabecalho do arquivo, linhas 28-40) —
 // revisao final da fatia 4B, achados F1/F2/F3: e' a armadilha central deste arquivo e ja' pegou
 // uma vez (esta funcao so' tratava 'gp' antes desta correcao).
@@ -1434,6 +1455,10 @@ function resolverDiag(item) {
 //    handler emitiria fica inalcancavel pelo caminho do wrapper (mesma logica de
 //    `coerencia_vetor` so' contribuir uma chave na rota firm, secao DIAGNOSTICOS acima: o
 //    vocabulario do CASO decide o que e' alcancavel, nao a assinatura mais ampla do motor).
+//    [onda de correcao da revisao final da 5C, F3] O laboratorio edita premissas SEM passar pelo
+//    gate, e o `select` da convencao terminal alcanca exatamente essa combinacao. A
+//    inalcancabilidade continua valendo porque a FACHADA (espelho_fachada.js) aplica a D6 ao caso
+//    editado e recusa o cenario, com o motivo nomeado, antes de chamar precificarDegrau.
 // 2) `dominioCliRecusa` roda no TOPO de `precificarDegrau` — mesma disciplina das outras quatro
 //    entradas de wrapper deste arquivo (precificarCelula, precificarRampa, diagnosticosFirm,
 //    diagnosticosEquity): o motor recusa por dominio ANTES de qualquer handler
@@ -1764,6 +1789,7 @@ const superficiePublica = {
   diagnosticosFirm, diagnosticosEquity, resolverDiag,
   fatorH, rentabPosDegrau, descontoTransicao, valorTransicionado, precificarDegrau, resolverDegrau,
   LIMIAR_DIVERGENCIA_DE_BASE_PCT, CHAVE_DIVERGENCIA_DE_BASE,
+  tvCanon, cliRecusa,
   avaliarItem, avaliarItens,
 };
 

@@ -897,5 +897,22 @@
         "pt-BR": "Parte do incremento que o degrau parece criar vem do descasamento entre as duas bases (LL × ROE·VPA), não do próprio degrau."
       }
     }
+  },
+  "recusas": {
+    "dominio_da_cli": {
+      "rotulo": {
+        "pt-BR": "premissa fora do domínio que o motor aceita — a CLI recusa estas premissas antes de calcular (por exemplo, taxa igual ou abaixo de −100%, horizonte menor que 1 ano, horizonte ou prazo de rampa fracionário)"
+      }
+    },
+    "nucleo_nao_finito": {
+      "rotulo": {
+        "pt-BR": "combinação sem valor finito — o núcleo do motor não fecha um número com estas premissas (por exemplo, crescimento perpétuo igual ou acima do custo de capital sob Gordon, ou uma rampa sem fase 2)"
+      }
+    },
+    "degrau_book_sem_roe_book": {
+      "rotulo": {
+        "pt-BR": "convenção book no degrau sem ROE book declarado — a metodologia recusa a combinação: o valor terminal usaria a rentabilidade pós-degrau como média do estoque (conflação marginal × médio agravada pelo degrau)"
+      }
+    }
   }
 }

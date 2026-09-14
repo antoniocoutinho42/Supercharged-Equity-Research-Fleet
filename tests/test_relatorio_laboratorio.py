@@ -383,6 +383,23 @@ def test_o_payload_leva_rotulo_e_severidade_de_todo_diagnostico_do_catalogo():
         DICIONARIO, "valuation.laboratorio_diagnostico_desconhecido")
 
 
+def test_o_payload_leva_o_rotulo_de_todo_motivo_de_recusa_do_catalogo():
+    """Onda de correção da revisão final da 5C (F2): o laboratório diz POR QUE
+    um cenário foi recusado — o motivo chega da fachada como código, e o
+    rótulo vem do catálogo pelo payload, como o dos diagnósticos. A moldura
+    ("cenário recusado: {motivo}") e o texto de motivo sem rótulo vêm do
+    dicionário."""
+    pagina, _entrega = _pagina()
+    dados = _dados_embutidos(pagina)
+    assert dados["recusas"] == {
+        codigo: info["rotulo"]["pt-BR"] for codigo, info in CATALOGO["recusas"].items()}
+    assert dados["textos"]["diagnosticosRecusado"] == render.t(
+        DICIONARIO, "valuation.laboratorio_diagnosticos_recusado")
+    assert "{motivo}" in dados["textos"]["diagnosticosRecusado"]
+    assert dados["textos"]["recusaDesconhecida"] == render.t(
+        DICIONARIO, "valuation.laboratorio_recusa_desconhecida")
+
+
 # --------------------------------------------------------------------------
 # O laboratório não muda o contrato de saída: autocontido, determinístico,
 # mesmo `qc.json`.
@@ -1093,3 +1110,65 @@ def test_uma_forma_nova_que_a_fachada_exibe_chega_a_tela_sem_editar_o_laboratori
     assert carga["badge"]["estado"] == "ok", carga["badge"]
     assert carga["diagnosticos"]["base"] == (
         _itens_publicados(entrega["resultados"]) + [_item_do_catalogo(forma_nova)])
+
+
+# --------------------------------------------------------------------------
+# Onda de correção da revisão final da 5C — F2 e F3 pela tela.
+# --------------------------------------------------------------------------
+
+def _item_de_recusa(motivo: str) -> dict:
+    return {"texto": render.t(DICIONARIO, "valuation.laboratorio_diagnosticos_recusado").replace(
+                "{motivo}", motivo),
+            "classe": "lab-diagnostico lab-diagnostico-recusado"}
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+@pytest.mark.parametrize("fixture,premissa,valor,codigo", [
+    pytest.param("caso_minimo_firm.json", "gp", "10", "nucleo_nao_finito", id="F2-firm-gp-igual-ao-wacc"),
+    pytest.param("caso_minimo_firm.json", "n", "10.5", "dominio_da_cli", id="F2-firm-n-fracionario"),
+    pytest.param("caso_degrau.json", "tv", "book", "degrau_book_sem_roe_book", id="F3-degrau-book-sem-roe-book"),
+])
+def test_um_cenario_recusado_mostra_o_motivo_e_nunca_nenhum_diagnostico(
+        fixture, premissa, valor, codigo, tmp_path):
+    """F2 e F3 pela tela, um evento de campo cada. Antes: `gp = 10` sob gordon
+    apagava as saídas e a lista dizia "Nenhum diagnóstico disparado por estas
+    premissas." (o motor emite quatro); trocar a convenção do degrau para Book
+    no `select` mostrava R$ 42,56 com badge verde, numa combinação que o gate
+    recusa. Agora as saídas ficam em "—" e a lista mostra UM item: a moldura
+    do dicionário com o motivo rotulado pelo catálogo — nunca o texto de
+    "nenhum", nunca o código cru. Restaurar devolve os itens da carga."""
+    pagina, _entrega = _pagina(fixture)
+    fotos = _laboratorio_vivo(pagina, tmp_path, passos=[
+        {"nome": "recusado", "acao": "editar", "cenario": "base", "premissa": premissa, "valor": valor},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+    carga, recusado = fotos["carga"], fotos["recusado"]
+    assert carga["badge"]["estado"] == "ok", carga["badge"]
+
+    vazio = render.t(DICIONARIO, "valuation.laboratorio_sem_valor")
+    assert recusado["saidas"]["base"]["preco"] == vazio
+    assert recusado["saidas"]["base"]["multiplo"] == vazio
+    assert recusado["saidas"]["base"]["upside"] == vazio
+    itens = recusado["diagnosticos"]["base"]
+    assert itens == [_item_de_recusa(CATALOGO["recusas"][codigo]["rotulo"]["pt-BR"])], itens
+    nenhum = render.t(DICIONARIO, "valuation.laboratorio_diagnosticos_nenhum")
+    assert not any(nenhum in item["texto"] or codigo in item["texto"] for item in itens), itens
+    assert fotos["restaurado"]["diagnosticos"]["base"] == carga["diagnosticos"]["base"]
+    assert fotos["restaurado"]["saidas"]["base"] == carga["saidas"]["base"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_um_motivo_que_o_payload_nao_rotula_vira_texto_do_dicionario_nunca_o_codigo_cru(tmp_path):
+    """A lição do B2 aplicada à recusa: sem o rótulo do motivo no payload, a
+    moldura leva o texto de motivo desconhecido do dicionário — o código que a
+    fachada publicou nunca chega à tela."""
+    pagina, _entrega = _pagina("caso_minimo_firm.json")
+    dados = _dados_embutidos(pagina)
+    del dados["recusas"]["nucleo_nao_finito"]
+
+    fotos = _laboratorio_vivo(pagina, tmp_path, dados=dados, passos=[
+        {"nome": "recusado", "acao": "editar", "cenario": "base", "premissa": "gp", "valor": "10"},
+    ])
+    itens = fotos["recusado"]["diagnosticos"]["base"]
+    assert itens == [_item_de_recusa(render.t(DICIONARIO, "valuation.laboratorio_recusa_desconhecida"))], itens
+    assert "nucleo_nao_finito" not in itens[0]["texto"]

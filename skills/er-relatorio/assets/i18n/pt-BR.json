@@ -62,14 +62,16 @@
       "laboratorio_congelado_reversa": "O que está no preço (reversa).",
       "laboratorio_congelado_sensibilidades": "Sensibilidades e a matriz desenhada acima.",
       "laboratorio_manchete_congelada": "O preço da manchete vem da soma das partes e fica congelado nas premissas originais: editar um cenário abaixo não o move.",
-      "laboratorio_paridade_ok": "Paridade confirmada nesta máquina: o motor do navegador reproduz todos os números que o relatório publicou.",
+      "laboratorio_paridade_ok": "Paridade confirmada nesta máquina: o motor do navegador reproduz o preço, o múltiplo, o upside e os diagnósticos de cada cenário que o relatório publicou.",
       "laboratorio_paridade_divergente": "Paridade divergente — edição bloqueada. O motor do navegador não reproduz o que este relatório publicou, e um editor nessa condição mostraria um número que o relatório não sustenta:",
       "laboratorio_paridade_item": "{cenario} · {chave}: publicado {python}, recalculado {js}",
       "laboratorio_paridade_indisponivel": "Paridade não verificada — edição bloqueada: {erro}",
       "laboratorio_valor_nao_rotulavel": "valor fora do vocabulário do catálogo",
       "laboratorio_diagnosticos_titulo": "Diagnósticos do cenário",
       "laboratorio_diagnosticos_nenhum": "Nenhum diagnóstico disparado por estas premissas.",
-      "laboratorio_diagnostico_desconhecido": "Diagnóstico sem rótulo no catálogo de apresentação desta análise."
+      "laboratorio_diagnostico_desconhecido": "Diagnóstico sem rótulo no catálogo de apresentação desta análise.",
+      "laboratorio_diagnosticos_recusado": "Cenário recusado, sem número publicável: {motivo}.",
+      "laboratorio_recusa_desconhecida": "motivo sem rótulo no catálogo de apresentação desta análise"
     },
     "evidencia": {
       "metodologia_titulo": "Metodologia",
