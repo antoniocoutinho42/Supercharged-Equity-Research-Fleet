@@ -335,33 +335,40 @@ def _lista(valor: Any) -> list:
 
 
 def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
-    """Todo campo de prosa de `analise`, como pares `(onde, texto)`: o que está
-    sujeito a `numero_sem_proveniencia`/`placeholder_nao_resolvido`/
-    `placeholder_malformado`, o que o log da Evidência registra e o que a Tese
-    exibe.
+    """Todo campo de prosa da entrega, como pares `(onde, texto)`: o que está sujeito
+    a `numero_sem_proveniencia`/`placeholder_nao_resolvido`/`placeholder_malformado`,
+    o que o log da Evidência registra e o que a Tese exibe — na ordem em que a aba o
+    mostra.
 
+    - `resultados.fronteira_de_escopo.arquitetura_dominante` e `.razao`, desde a onda
+      de correção da revisão final da 5D (F3): o caso os declara, a integração os
+      publica e a Conclusão os exibe — "a concessão vence em 2031" é número sem
+      proveniência no meio da tese, como seria no veredicto;
     - `conclusao.texto`, desde a 5A (A7);
     - todo campo de TEXTO da Tese, desde a 5D (Task 2, D1), na ordem da aba (D7);
-    - `pergunta`, `nota_janela` e `caption` de cada exhibit, na ordem declarada,
-      desde a 5D (Task 3, achado 4): os exhibits passaram a ser desenhados dentro
-      da aba Tese, sob as perguntas, e um caption como "a margem subiu de 12% para
-      18%" é número sem proveniência no meio da tese.
+    - de cada exhibit, na ordem declarada: `pergunta`, `nota_janela` e `caption`,
+      desde a 5D (Task 3, achado 4) — os exhibits são desenhados dentro da aba Tese,
+      sob as perguntas —, e os textos que o gráfico escreve ali, na legenda e no
+      cabeçalho da tabela, desde a onda de correção (F3 e N12): a `formula_nota` de
+      uma série derivada, o `rotulo` de uma série engine e o `rotulo` de um overlay.
 
     Identificador e vocabulário (`id`, `tema`, `vetor`, `incorporacao`, `vinculo`,
-    `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit) não são prosa e não
-    entram. Também ficam de fora a `formula_nota` de uma série e o `rotulo` de um
-    overlay: são rótulos de legenda, que o adaptador desenha dentro do gráfico, e
-    não texto da aba.
+    `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit, a classe da fronteira)
+    não são prosa e não entram. O nome de campo que rotula uma série direta é
+    identificador de `dados` (contrato da 5E) e também não entra.
 
     Tolerante a forma: o QC também roda sobre entregas montadas direto em teste,
     sem `entrega.carregar` — o que não é texto simplesmente não é colhido."""
     analise = _objeto(entrega.get("analise"))
+    fronteira = _objeto(_objeto(entrega.get("resultados")).get("fronteira_de_escopo"))
     campos: list[tuple[str, str]] = []
 
     def _texto(onde: str, valor: Any) -> None:
         if isinstance(valor, str):
             campos.append((onde, valor))
 
+    for campo in ("arquitetura_dominante", "razao"):
+        _texto(f"resultados.fronteira_de_escopo.{campo}", fronteira.get(campo))
     _texto("analise.conclusao.texto", _objeto(analise.get("conclusao")).get("texto"))
     _texto("analise.veredicto.texto", _objeto(analise.get("veredicto")).get("texto"))
     for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
@@ -383,8 +390,16 @@ def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
     for indice, linha in enumerate(linhas):
         _texto(f"analise.mudou_desde_analise_fornecida.linhas.{indice}", linha)
     for indice, exhibit in enumerate(_lista(analise.get("exhibits"))):
-        for campo in ("pergunta", "nota_janela", "caption"):
-            _texto(f"analise.exhibits.{indice}.{campo}", _objeto(exhibit).get(campo))
+        exhibit = _objeto(exhibit)
+        onde = f"analise.exhibits.{indice}"
+        for campo in ("pergunta", "nota_janela"):
+            _texto(f"{onde}.{campo}", exhibit.get(campo))
+        for posicao, serie in enumerate(_lista(exhibit.get("series"))):
+            for campo in ("formula_nota", "rotulo"):
+                _texto(f"{onde}.series.{posicao}.{campo}", _objeto(serie).get(campo))
+        for posicao, overlay in enumerate(_lista(exhibit.get("overlays"))):
+            _texto(f"{onde}.overlays.{posicao}.rotulo", _objeto(overlay).get("rotulo"))
+        _texto(f"{onde}.caption", exhibit.get("caption"))
     return campos
 
 
@@ -420,8 +435,8 @@ def resolver_prosa(entrega: dict, idioma: str) -> tuple[dict[str, str], list[dic
 # integração, que os publica no catálogo de apresentação (`conclusoes_de_valor`:
 # `{<unidade>: [<padrão>]}`, com `*` casando exatamente um segmento) e os trava
 # contra o que o wrapper publica (`tests/test_catalogo_apresentacao.py`). O QC e a
-# tela leem o mapa por estas duas funções — nenhum nome de campo de valor mora no
-# relatório.
+# tela leem o mapa por estas duas funções — nenhuma regra do relatório reconhece
+# conclusão de valor pelo nome do campo.
 # --------------------------------------------------------------------------
 
 MapaDeConclusoesDeValor = list[tuple[str, tuple[str, ...]]]

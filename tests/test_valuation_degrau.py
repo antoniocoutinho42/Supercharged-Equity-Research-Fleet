@@ -342,9 +342,13 @@ _CASOS_RECUSADOS = [
     pytest.param(_tv_book_sem_roe_book, "roe_book", id="tv_book_sem_roe_book"),
     pytest.param(_com_mid_year, "mid_year", id="mid_year_proibido_com_degrau"),
     pytest.param(_m_faltando_para_um_cenario, re.escape("degrau.m"), id="m_faltando_para_um_cenario"),
-    pytest.param(_degrau_mais("reversa"), "'reversa'", id="degrau_mais_reversa_D7"),
-    pytest.param(_degrau_mais("sensibilidades"), "'sensibilidades'", id="degrau_mais_sensibilidades_D7"),
-    pytest.param(_degrau_mais("sotp"), "'sotp'", id="degrau_mais_sotp_D7"),
+    # N14 (revisão final da 5D): a regex nomeia a recusa D7 ("presente junto de"), não só o
+    # bloco — `'reversa'` sozinho casava a recusa seguinte ("reversa sem mercado"), e o teste
+    # seguia verde sem a recusa que diz testar.
+    pytest.param(_degrau_mais("reversa"), re.escape("presente junto de 'reversa'"), id="degrau_mais_reversa_D7"),
+    pytest.param(_degrau_mais("sensibilidades"), re.escape("presente junto de 'sensibilidades'"),
+                 id="degrau_mais_sensibilidades_D7"),
+    pytest.param(_degrau_mais("sotp"), re.escape("presente junto de 'sotp'"), id="degrau_mais_sotp_D7"),
     pytest.param(_indice_atual_abaixo_do_indice_alvo, re.escape("degrau.indice_atual.valor"),
                  id="F1_indice_atual_abaixo_do_alvo"),
     pytest.param(_tv_ic_sem_roe_book, "roe_book", id="F2_tv_ic_sem_roe_book"),

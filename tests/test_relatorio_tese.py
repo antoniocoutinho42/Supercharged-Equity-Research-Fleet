@@ -160,7 +160,8 @@ def test_a_entrega_padrao_passa_no_contrato_e_so_traz_os_achados_nomeados(fixtur
 _EXHIBIT = {
     "id": "margem", "pergunta": "Quanto vale a ação no cenário da manchete?", "tipo": "barras",
     "nota_janela": "um único ponto, de propósito",
-    "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}],
+    "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                "rotulo": "preço por ação no cenário da manchete"}],
 }
 
 
@@ -256,6 +257,13 @@ _RECUSAS_DE_FORMA = [
     pytest.param(lambda e: e["analise"].update(exhibits=[copy.deepcopy(_EXHIBIT), copy.deepcopy(_EXHIBIT)]),
                  ["'analise.exhibits' repete o id 'margem'"],
                  id="exhibits-id-repetido"),
+    # Onda de correção da revisão final (N12): a série `engine` declara o rótulo que o gráfico
+    # escreve — sem ele, a legenda e o cabeçalho da tabela mostravam a chave crua.
+    pytest.param(lambda e: e["analise"].update(exhibits=[dict(
+                     copy.deepcopy(_EXHIBIT),
+                     series=[{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}])]),
+                 ["'analise.exhibits.0.series.0.rotulo' ausente ou vazio"],
+                 id="serie-engine-sem-rotulo-N12"),
     pytest.param(lambda e: e["resultados"].pop("fronteira_de_escopo"),
                  ["'resultados.fronteira_de_escopo' ausente"],
                  id="resultados-sem-fronteira-de-escopo"),
@@ -564,7 +572,8 @@ def test_conclusao_de_valor_num_texto_da_tese_sob_fronteira_e_hard_fail_nomeando
 
 _EXHIBIT_DO_PRECO = {"id": "preco", "pergunta": "Quanto vale a ação no cenário da manchete?", "tipo": "tabela",
                      "nota_janela": "Um único ponto: o da manchete.",
-                     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}]}
+                     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                                 "rotulo": "preço por ação no cenário da manchete"}]}
 _EXHIBIT_DA_RECEITA_COM_OVERLAY = {"id": "receita", "pergunta": "Como a receita evoluiu no período?", "tipo": "linha",
                                    "series": [{"derivacao": "direta", "fonte": "fin.receita"}],
                                    "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}]}
@@ -795,6 +804,11 @@ _CAMPOS_NOVOS_DE_PROSA = [
     ("exhibits", 0, "pergunta"),
     ("exhibits", 0, "nota_janela"),
     ("exhibits", 0, "caption"),
+    # Onda de correção da revisão final (F3, N12): os textos que o gráfico escreve sob a
+    # pergunta — o rótulo da série engine, a nota da série derivada e o rótulo do overlay.
+    ("exhibits", 0, "series", 0, "rotulo"),
+    ("exhibits", 0, "series", 1, "formula_nota"),
+    ("exhibits", 0, "overlays", 0, "rotulo"),
 ]
 
 
@@ -812,7 +826,13 @@ def _entrega_com_todos_os_campos_de_prosa() -> dict:
     analise["visao_nao_consensual"] = {"texto": "O mercado subestima a duração da vantagem de custo."}
     analise["mudou_desde_analise_fornecida"] = {
         "linhas": ["A margem normalizada subiu.", "O custo de capital caiu."]}
-    analise["exhibits"] = [dict(copy.deepcopy(_EXHIBIT), caption="Fonte: o cenário da manchete.")]
+    analise["exhibits"] = [dict(
+        copy.deepcopy(_EXHIBIT), caption="Fonte: o cenário da manchete.",
+        series=[*copy.deepcopy(_EXHIBIT["series"]),
+                {"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
+                 "formula_nota": "margem EBITDA"}],
+        overlays=[{"chave": "caso:preco.valor", "rotulo": "preço de tela"}])]
+    entrega_dict["dados"] = copy.deepcopy(_DADOS_DOS_EXHIBITS)
     return entrega_dict
 
 
@@ -1014,7 +1034,8 @@ _EXHIBITS_DAS_PERGUNTAS = [
                  "formula_nota": "margem EBITDA"}],
      "caption": "Fonte: demonstrações auditadas."},
     {"id": "preco", "pergunta": "Quanto vale a ação no cenário da manchete?", "tipo": "tabela",
-     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}],
+     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                 "rotulo": "preço por ação no cenário da manchete"}],
      "nota_janela": "Um único ponto: o da manchete."},
 ]
 
@@ -1501,3 +1522,93 @@ def test_num_caso_sotp_a_faixa_sai_rotulada_como_a_do_consolidado_e_a_manchete_c
     assert vizinha["resultados"]["manchete"]["fonte"] == "cenarios"
     faixa_vizinha = _um(_aba(_pagina_da_tese(vizinha), "tese"), classe="tese-faixa")
     assert _visivel(_um(faixa_vizinha, classe="tese-faixa-rotulo")) == TESE["faixa_rotulo"]
+
+
+def test_num_caso_sotp_as_premissas_decisivas_saem_rotuladas_como_as_do_cenario_consolidado():
+    """F4 da revisão: em `caso_sotp_safra` a Conclusão diz o preço da soma das partes, e as
+    premissas decisivas mostravam o WACC, o g e o ROIC do cenário consolidado — que nenhuma
+    parte usa — sem nada que o dissesse. A seção sai com o rótulo do consolidado, do
+    dicionário, nomeando o cenário, e sem número: sob fronteira ela também aparece, e não
+    leva conclusão de valor à Tese. Fora do SOTP, nenhum rótulo."""
+    sotp = _entrega("caso_sotp_safra.json")
+    resultados = sotp["resultados"]
+    assert resultados["manchete"]["fonte"] == "sotp"
+    modelo = TESE["premissas_decisivas_rotulo_consolidado"]
+    assert not re.search(r"\d", modelo)
+    secao = _secao(_aba(_pagina_da_tese(sotp), "tese"), TESE["premissas_decisivas_titulo"])
+    assert _visivel(_um(secao, classe="tese-premissas-rotulo")) == modelo.format(
+        cenario=resultados["manchete"]["cenario"])
+
+    vizinha = _secao(_aba(_pagina_da_tese(_entrega()), "tese"), TESE["premissas_decisivas_titulo"])
+    assert _todos(vizinha, classe="tese-premissas-rotulo") == []
+
+
+# --------------------------------------------------------------------------
+# Onda de correção da revisão final (F3, N12): o que a Tese exibe entra na lista de
+# prosa — o texto da fronteira de escopo, que a Conclusão mostra, e os textos que o
+# gráfico escreve sob a pergunta —, com o QC, o log da Evidência e a guarda
+# `ProsaNaoAuditada` valendo para eles.
+# --------------------------------------------------------------------------
+
+def _entrega_sob_fronteira_com(**textos) -> dict:
+    """Uma entrega sob fronteira com os textos da fronteira que o teste declara: o caso é
+    mutado antes de `avaliar()`, e `resultados.fronteira_de_escopo` os publica."""
+    def _mutar(caso: dict) -> None:
+        _com_fronteira_de_escopo(caso)
+        caso["fronteira_de_escopo"].update(textos)
+    return apoio.montar_entrega(FIXTURE, mutar_caso=_mutar)
+
+
+@pytest.mark.parametrize("campo", ["arquitetura_dominante", "razao"])
+def test_digito_solto_no_texto_da_fronteira_de_escopo_e_hard_fail(campo):
+    """F3 da revisão: "as reservas provadas cobrem 9 anos de produção e a concessão vence em
+    2031" saía na Conclusão sem QC e sem linha no log — e a mesma frase no veredicto era
+    HARD FAIL. O texto da fronteira é prosa da Tese."""
+    assert _do_codigo(_achados(_sob_fronteira()), "numero_sem_proveniencia") == []
+
+    com_digito = _entrega_sob_fronteira_com(
+        **{campo: "as reservas provadas cobrem 9 anos de produção e a concessão vence em 2031"})
+    assert [(a.nivel, a.onde) for a in _do_codigo(_achados(com_digito), "numero_sem_proveniencia")] == [
+        ("HARD_FAIL", f"resultados.fronteira_de_escopo.{campo}")]
+
+
+def test_o_texto_da_fronteira_sai_resolvido_na_conclusao_e_registrado_no_log_da_evidencia(tmp_path):
+    """Com o número marcado, `{{livre:9}}`, a Conclusão mostra o texto resolvido e o log da
+    Evidência registra o placeholder — como o de qualquer texto da Tese."""
+    entrega_dict = _entrega_sob_fronteira_com(razao="as reservas provadas cobrem {{livre:9}} anos de produção")
+    pagina = _pagina_pelo_builder(entrega_dict, tmp_path / "fronteira")
+
+    conclusao = _secoes(_aba(pagina, "tese"))[0]
+    assert _visivel(_um(conclusao, classe="tese-fronteira-razao")) == "as reservas provadas cobrem 9 anos de produção"
+    tabela = _um(_aba(pagina, "evidencia"), classe="log-placeholders")
+    linhas = [[_visivel(celula) for celula in _todos(linha, tag="td")] for linha in _todos(tabela, tag="tr")]
+    assert ["resultados.fronteira_de_escopo.razao", "livre", "", "", "9", "9"] in linhas, linhas
+
+
+def test_os_textos_que_o_grafico_escreve_saem_resolvidos_no_payload_e_nunca_a_chave_crua(tmp_path):
+    """F3 e N12 da revisão: o rótulo da série engine, a nota da série derivada e o rótulo do
+    overlay são escritos pelo gráfico dentro da aba Tese — na legenda e no cabeçalho da
+    tabela. Saem da lista de prosa, resolvidos: um placeholder no rótulo de um overlay vira o
+    número formatado no payload e uma linha no log da Evidência; e a série engine leva o
+    rótulo que declara, nunca `resultados:manchete.preco_acao`."""
+    entrega_dict = _entrega_com_exhibits_nas_perguntas()
+    receita = next(exhibit for exhibit in entrega_dict["analise"]["exhibits"] if exhibit["id"] == "receita")
+    receita["overlays"] = [{"chave": "caso:preco.valor", "rotulo": "preço de tela, {{caso:preco.valor|moeda}}"}]
+    preco = entrega_dict["caso"]["preco"]["valor"]
+    pagina = _pagina_pelo_builder(entrega_dict, tmp_path / "rotulos")
+
+    dados = json.loads(re.search(r'<script type="application/json" id="fleet-dados-exhibits">(.*?)</script>',
+                                 pagina, re.S).group(1))
+    por_id = {spec["id"]: spec for spec in dados["exhibits"]}
+    assert [overlay["rotulo"] for overlay in por_id["receita"]["overlays"]] == [
+        f"preço de tela, {_moeda(entrega_dict, preco)}"]
+    assert [serie["rotulo"] for serie in por_id["margem"]["series"]] == ["margem EBITDA"]
+    assert [serie["rotulo"] for serie in por_id["preco"]["series"]] == ["preço por ação no cenário da manchete"]
+    rotulos = [item["rotulo"] for spec in dados["exhibits"] for item in spec["series"] + spec["overlays"]]
+    assert [rotulo for rotulo in rotulos if rotulo.startswith(("resultados:", "caso:"))] == []
+
+    indice_da_receita = [spec["id"] for spec in dados["exhibits"]].index("receita")
+    tabela = _um(_aba(pagina, "evidencia"), classe="log-placeholders")
+    linhas = [[_visivel(celula) for celula in _todos(linha, tag="td")] for linha in _todos(tabela, tag="tr")]
+    assert [f"analise.exhibits.{indice_da_receita}.overlays.0.rotulo", "caso", "preco.valor", "moeda", str(preco),
+            _moeda(entrega_dict, preco)] in linhas, linhas

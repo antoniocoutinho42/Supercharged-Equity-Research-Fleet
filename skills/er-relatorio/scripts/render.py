@@ -373,13 +373,14 @@ def _texto_valor(valor) -> str:
 # jeito que `render.py` já trata `caso`/`resultados` como dado opaco (E3).
 #
 # O adaptador do browser (`graficos.js`) não lê nada disso: recebe só
-# números e rótulos já prontos (`_exhibit_para_json`) — nunca uma `fonte`,
-# `formula` ou `chave` crua. Rótulo de série/overlay é derivado do que a
-# própria série JÁ DECLARA (G3 não tem campo 'rótulo' de série): o nome do
-# campo para `direta`, a `formula_nota` para `derivada` (é exatamente o
-# propósito desse campo), a `chave` para `engine`; overlay usa `rotulo`
-# quando o analista declarou, senão a própria `chave`. Isso é rotulagem de
-# apresentação, nunca conta de valuation (E3).
+# números e rótulos já prontos (`_exhibit_para_json`) — nunca uma `fonte` ou
+# uma `formula` crua. Rótulo de série/overlay é o que a série declara: o nome
+# do campo para `direta` (identificador de `dados`), a `formula_nota` para
+# `derivada` e o `rotulo` para `engine` — os dois últimos, prosa da lista
+# auditável, resolvida (onda de correção da revisão final da 5D, F3 e N12: a
+# série `engine` saía com a própria `chave` no cabeçalho da tabela); overlay usa
+# o `rotulo` declarado, também da lista de prosa, senão a própria `chave`. Isso
+# é rotulagem de apresentação, nunca conta de valuation (E3).
 # --------------------------------------------------------------------------
 
 def _dataset_da_serie(serie: dict, dados: dict) -> dict | None:
@@ -429,25 +430,35 @@ def _eixo_x_do_exhibit(exhibit_resolvido: dict, dados: dict) -> list | None:
     return None
 
 
-def _rotulo_serie(serie: dict, varios_datasets: bool = False) -> str:
+def _rotulo_serie(serie: dict, onde: str, prosa: dict, varios_datasets: bool = False) -> str:
     """B1 (achado F3, segunda metade): quando o exhibit toca MAIS DE UM
     dataset, o rótulo de uma série `direta` é a `fonte` INTEIRA
     ('fin.margem'/'peers.margem'), não só o nome do campo -- dois datasets
     com um campo de mesmo nome davam duas séries com o MESMO rótulo de
     legenda, e o leitor não conseguia nem distinguir qual era qual. Com um
     dataset só (o caso normal), o nome do campo continua bastando e o
-    rótulo fica curto. Isto é rotulagem de apresentação, dentro do E3."""
+    rótulo fica curto. Isto é rotulagem de apresentação, dentro do E3.
+
+    Onda de correção da revisão final da 5D (F3 e N12): o rótulo de uma série
+    `derivada` (a `formula_nota`) e o de uma série `engine` (o `rotulo` que ela
+    declara) são prosa da Tese — o gráfico os escreve sob a pergunta — e saem da
+    lista de prosa, resolvidos (`onde` é o caminho da série). A série `engine`
+    saía com a própria `chave`, crua, no cabeçalho da tabela. O nome de campo de
+    uma série `direta` é identificador de `dados` (contrato da 5E)."""
     derivacao = serie["derivacao"]
     if derivacao == "direta":
         return serie["fonte"] if varios_datasets else serie["fonte"].partition(".")[2]
     if derivacao == "derivada":
-        return serie["formula_nota"]
-    return serie["chave"]  # engine
+        return _prosa(prosa, f"{onde}.formula_nota")
+    return _prosa(prosa, f"{onde}.rotulo")  # engine
 
 
-def _rotulo_overlay(overlay: dict) -> str:
-    rotulo = overlay.get("rotulo")
-    return rotulo if rotulo else overlay["chave"]
+def _rotulo_overlay(overlay: dict, onde: str, prosa: dict) -> str:
+    """O `rotulo` declarado, resolvido pela lista de prosa (F3) — ou, sem ele, a
+    `chave` do overlay, que o contrato da 5B mantém opcional."""
+    if overlay.get("rotulo"):
+        return _prosa(prosa, f"{onde}.rotulo")
+    return overlay["chave"]
 
 
 def _valores_lista(valores: Any) -> list:
@@ -458,23 +469,26 @@ def _valores_lista(valores: Any) -> list:
     return valores if isinstance(valores, list) else [valores]
 
 
-def _exhibit_para_json(exhibit_resolvido: dict, dados: dict) -> dict:
+def _exhibit_para_json(exhibit_resolvido: dict, indice: int, dados: dict, prosa: dict) -> dict:
     """Spec resolvida que `graficos.js` de fato recebe (contrato descrito no
-    cabeçalho de `graficos.js`) -- só números e rótulos, nenhuma fonte/
-    fórmula/chave crua."""
+    cabeçalho de `graficos.js`) -- só números e rótulos, nenhuma fonte nem
+    fórmula crua. Os rótulos de série derivada, de série engine e de overlay saem
+    resolvidos da lista de prosa (`indice` é a posição do exhibit, a mesma do seu
+    caminho na lista); só um overlay sem `rotulo` mostra a própria `chave`."""
     varios_datasets = len(_datasets_do_exhibit(exhibit_resolvido, dados)) > 1
+    onde = f"analise.exhibits.{indice}"
     return {
         "id": exhibit_resolvido["id"],
         "tipo": exhibit_resolvido["tipo"],
         "eixoX": _eixo_x_do_exhibit(exhibit_resolvido, dados),
         "series": [
-            {"rotulo": _rotulo_serie(serie, varios_datasets),
+            {"rotulo": _rotulo_serie(serie, f"{onde}.series.{posicao}", prosa, varios_datasets),
              "valores": _valores_lista(serie["valores"])}
-            for serie in exhibit_resolvido["series"]
+            for posicao, serie in enumerate(exhibit_resolvido["series"])
         ],
         "overlays": [
-            {"rotulo": _rotulo_overlay(overlay), "valor": overlay["valor"]}
-            for overlay in exhibit_resolvido.get("overlays", [])
+            {"rotulo": _rotulo_overlay(overlay, f"{onde}.overlays.{posicao}", prosa), "valor": overlay["valor"]}
+            for posicao, overlay in enumerate(exhibit_resolvido.get("overlays", []))
         ],
     }
 
@@ -642,15 +656,20 @@ def _rotulos_do_valuation_html(itens: list, catalogo: dict, rota: str, idioma: s
                     for item in itens)
 
 
-def _fronteira_html(fronteira: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+def _fronteira_html(fronteira: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
     """D3 (§14): sob fronteira de escopo a Conclusão é condicional e sem
     preço-alvo — a classe rotulada pelo catálogo, a arquitetura dominante e a
     razão, como a integração as publicou em `resultados.fronteira_de_escopo`
-    (nunca lidas do `caso` cru, a lição do B2)."""
+    (nunca lidas do `caso` cru, a lição do B2).
+
+    Onda de correção da revisão final (F3): a arquitetura e a razão saem da lista
+    de prosa (`_prosa`), resolvidas, com o QC de placeholder e a linha no log da
+    Evidência. Saíam por `_campo_de_contrato`, e "a concessão vence em 2031"
+    chegava à Conclusão sem proveniência."""
     onde = "resultados.fronteira_de_escopo"
     classe = _rotulo_fronteira(catalogo, _campo_de_contrato(fronteira, "classe", onde), idioma)
-    arquitetura = str(_campo_de_contrato(fronteira, "arquitetura_dominante", onde))
-    razao = str(_campo_de_contrato(fronteira, "razao", onde))
+    arquitetura = _prosa(prosa, f"{onde}.arquitetura_dominante")
+    razao = _prosa(prosa, f"{onde}.razao")
     return (
         '<div class="tese-fronteira">'
         + _atributo_html(t(dicionario, "tese.fronteira_classe"), _valor_html("tese-fronteira-classe", classe))
@@ -658,6 +677,26 @@ def _fronteira_html(fronteira: dict, catalogo: dict, idioma: str, dicionario: di
                          _valor_html("tese-fronteira-arquitetura", arquitetura))
         + _atributo_html(t(dicionario, "tese.fronteira_razao"), _valor_html("tese-fronteira-razao", razao))
         + '</div>'
+    )
+
+
+def _manchete_vem_do_sotp(resultados: dict) -> bool:
+    """`resultados.manchete.fonte` (contrato `resultados/1`): `True` quando a manchete
+    é o preço da soma das partes, `False` quando é o de um cenário. Uma leitura só para
+    as duas seções da Tese que mostram o cenário consolidado e precisam dizê-lo num caso
+    SOTP — a faixa (achado 5 da Task 3) e as premissas decisivas (F4 da revisão final).
+    Fonte fora do vocabulário é recusa nomeada: o relatório não rotula ao acaso um
+    cenário cuja relação com a manchete ele não conhece."""
+    fonte = _campo_de_contrato(_campo_de_contrato(resultados, "manchete", "resultados"),
+                               "fonte", "resultados.manchete")
+    if fonte == FONTE_DA_MANCHETE_CENARIOS:
+        return False
+    if fonte == FONTE_DA_MANCHETE_SOTP:
+        return True
+    raise CampoDeContratoAusente(
+        f"'resultados.manchete.fonte' fora do vocabulário que a Tese sabe rotular: {fonte!r} "
+        f"(conhecidos: '{FONTE_DA_MANCHETE_CENARIOS}', '{FONTE_DA_MANCHETE_SOTP}') — o relatório "
+        "não rotula ao acaso um cenário cuja relação com a manchete ele não conhece."
     )
 
 
@@ -671,19 +710,12 @@ def _faixa_html(faixa: dict, resultados: dict, idioma: str, moeda: str | None, d
     sai rotulada como a do consolidado, nomeando o preço da manchete. Se o SOTP
     deveria ter faixa própria é pergunta de metodologia, não deste módulo."""
     manchete = _campo_de_contrato(resultados, "manchete", "resultados")
-    fonte = _campo_de_contrato(manchete, "fonte", "resultados.manchete")
-    if fonte == FONTE_DA_MANCHETE_CENARIOS:
-        rotulo = t(dicionario, "tese.faixa_rotulo")
-    elif fonte == FONTE_DA_MANCHETE_SOTP:
+    if _manchete_vem_do_sotp(resultados):
         preco_da_manchete = _campo_de_contrato(manchete, "preco_acao", "resultados.manchete")
         rotulo = t(dicionario, "tese.faixa_rotulo_consolidado",
                    preco=placeholders.formatar(preco_da_manchete, "moeda", idioma, moeda))
     else:
-        raise CampoDeContratoAusente(
-            f"'resultados.manchete.fonte' fora do vocabulário que a faixa sabe rotular: {fonte!r} "
-            f"(conhecidos: '{FONTE_DA_MANCHETE_CENARIOS}', '{FONTE_DA_MANCHETE_SOTP}') — o relatório "
-            "não rotula ao acaso uma faixa cuja relação com a manchete ele não conhece."
-        )
+        rotulo = t(dicionario, "tese.faixa_rotulo")
 
     cenarios = _campo_de_contrato(resultados, "cenarios", "resultados")
     metricas = []
@@ -736,7 +768,7 @@ def _conclusao_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
         bloco_faixa = _faixa_html(faixa, resultados, idioma, moeda, dicionario) if isinstance(faixa, dict) else ""
     else:
         titulo = t(dicionario, "tese.conclusao_condicional_titulo")
-        bloco_fronteira = _fronteira_html(fronteira, catalogo, idioma, dicionario)
+        bloco_fronteira = _fronteira_html(fronteira, catalogo, idioma, dicionario, prosa)
         bloco_faixa = ""
     return (
         '<section class="conclusao">'
@@ -769,7 +801,13 @@ def _premissas_decisivas_html(analise: dict, resultados: dict, catalogo: dict, i
     """D1: cada premissa decisiva com o rótulo do catálogo, o número do cenário da
     manchete (`resultados.manchete.cenario`, presente também sob fronteira e num
     caso SOTP) formatado pela unidade do catálogo — pela mesma leitura do valor
-    original do laboratório, `_valor_exibido_da_premissa` — e a derivação."""
+    original do laboratório, `_valor_exibido_da_premissa` — e a derivação.
+
+    Onda de correção da revisão final (F4): num caso SOTP o cenário da manchete é
+    o consolidado, e a manchete é o preço das partes — que usam premissas
+    próprias. A seção sai com o rótulo do consolidado, do dicionário, nomeando o
+    cenário e sem número nenhum (ela aparece também sob fronteira de escopo).
+    Premissa endereçável por parte é da 5F."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     nome = _campo_de_contrato(_campo_de_contrato(resultados, "manchete", "resultados"),
                               "cenario", "resultados.manchete")
@@ -791,8 +829,13 @@ def _premissas_decisivas_html(analise: dict, resultados: dict, catalogo: dict, i
             + _valor_html("metrica-valor", valor)
             + f'</div><p class="tese-derivacao">{html.escape(derivacao)}</p></li>'
         )
+    rotulo_do_consolidado = ""
+    if _manchete_vem_do_sotp(resultados):
+        rotulo_do_consolidado = (
+            '<p class="tese-premissas-rotulo">'
+            f'{html.escape(t(dicionario, "tese.premissas_decisivas_rotulo_consolidado", cenario=nome))}</p>')
     return _secao_html("tese-premissas-decisivas", t(dicionario, "tese.premissas_decisivas_titulo"),
-                       _lista_html(itens, dicionario))
+                       rotulo_do_consolidado + _lista_html(itens, dicionario))
 
 
 def _o_que_mudou_html(analise: dict, dicionario: dict, prosa: dict) -> str:
@@ -1863,7 +1906,8 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     paineis_valuation = _paineis_valuation_para_json(caso, resultados, catalogo, idioma, dicionario)
     dados_exhibits = _json_embutido({
         "formatacao": _formatacao_grafico(dicionario),
-        "exhibits": [_exhibit_para_json(exhibit, dados) for exhibit in exhibits_resolvidos],
+        "exhibits": [_exhibit_para_json(exhibit, indice, dados, prosa)
+                     for indice, exhibit in enumerate(exhibits_resolvidos)],
         "paineis_valuation": paineis_valuation,
     })
 

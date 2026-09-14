@@ -49,10 +49,16 @@ reimplementa valuation. Concretamente:
   HARD FAIL (`numero_sem_proveniencia`); qualquer `{{...}}` que não seja um
   placeholder reconhecido é HARD FAIL (`placeholder_malformado`) — nenhum
   bloco malformado ganha imunidade da busca de dígito. A prosa é **uma
-  lista só** (`placeholders.campos_de_prosa`): a conclusão, todo texto da
-  Tese e `pergunta`/`nota_janela`/`caption` de cada exhibit. O QC a varre, o
-  log da Evidência registra cada placeholder dela, e a aba Tese só exibe
-  texto que está nela.
+  lista só** (`placeholders.campos_de_prosa`): o texto da fronteira de escopo
+  (`arquitetura_dominante` e `razao`), a conclusão, todo texto da Tese e, de
+  cada exhibit, `pergunta`, `nota_janela`, `caption` e os textos que o gráfico
+  escreve (`formula_nota` de série derivada, `rotulo` de série engine e de
+  overlay). O QC a varre e o log da Evidência registra cada placeholder dela.
+  Todo TEXTO que a aba Tese exibe sai dela; o resto do que a aba mostra é
+  rótulo de vocabulário (catálogo ou dicionário), número de `resultados`/`caso`
+  formatado, ou o nome do campo de `dados` que rotula uma série direta —
+  identificador do contrato de dados (5E), fora da lista —, e um overlay sem
+  `rotulo` mostra a própria `chave`.
 - **Rótulo de metodologia vem sempre do catálogo, nunca de `caso` cru.** O
   cabeçalho da Valuation lê `resultados.rota` e
   `manchete.convencao_terminal` (já canonicalizados pela integração) e
@@ -180,9 +186,11 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 **O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
 Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) ou blocos
 econômicos (`catalogo.blocos`) — o vocabulário vem do catálogo, nunca deste
-skill. Um exhibit não declara vínculo. Todo campo de texto da Tese — e
-`pergunta`, `nota_janela` e `caption` de cada exhibit, que a aba desenha sob as
-perguntas — passa pelos placeholders auditáveis, como a conclusão. A Análise exige a reversa
+skill. Um exhibit não declara vínculo. Todo campo de texto da Tese — e, de cada
+exhibit, que a aba desenha sob as perguntas, `pergunta`, `nota_janela`,
+`caption` e os textos que o gráfico escreve (`formula_nota`, o `rotulo` da série
+`engine` e o do overlay), além do texto da fronteira de escopo que a Conclusão
+exibe — passa pelos placeholders auditáveis, como a conclusão. A Análise exige a reversa
 (`resultados.reversa`); quando o caso a torna impossível, a integração publica a
 limitação em `resultados.limitacoes`, e o catálogo declara o bloco que ela
 suprime (`catalogo.limitacoes.<chave>.afeta`) — a entrega sai com o disclosure,
@@ -239,7 +247,8 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
       {"derivacao": "direta",   "fonte": "fin.receita"},
       {"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
        "formula_nota": "margem EBITDA"},
-      {"derivacao": "engine",   "chave": "resultados:manchete.preco_acao"}
+      {"derivacao": "engine",   "chave": "resultados:manchete.preco_acao",
+       "rotulo": "preço justo da manchete"}
     ],
     "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}],
     "nota_janela": "só os últimos {{livre:4}} anos têm dado comparável",
@@ -253,9 +262,9 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
 | `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` só tem o tipo confirmado nesta fatia (item 7 detalha) |
 | `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption` opcionais | `id` único; `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela`; o exhibit não declara vínculo (5D, D5) — a pergunta da tese que ele responde o cita em `perguntas[].exhibits`, e ele é desenhado sob ela; `pergunta`, `nota_janela` e `caption` são prosa auditável (dígito só por placeholder) |
 | série `direta` | `derivacao`, `fonte` (`"<dataset>.<campo>"`) | o campo, verbatim; `null` é ponto ausente legítimo (travessão no gráfico) |
-| série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval` |
-| série `engine` | `derivacao`, `chave` (`"resultados:<caminho>"`) | tem de resolver num **número finito** ou lista deles |
-| overlay | `chave` (`"resultados:<caminho>"`/`"caso:<caminho>"`) obrigatória; `rotulo` opcional | linha horizontal: um único número finito |
+| série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval`; `formula_nota` é prosa auditável (o gráfico a escreve na legenda) |
+| série `engine` | `derivacao`, `chave` (`"resultados:<caminho>"`), `rotulo` | tem de resolver num **número finito** ou lista deles; `rotulo` é obrigatório e é prosa auditável — o gráfico o escreve na legenda e no cabeçalho da tabela, nunca a chave crua |
+| overlay | `chave` (`"resultados:<caminho>"`/`"caso:<caminho>"`) obrigatória; `rotulo` opcional | linha horizontal: um único número finito; `rotulo`, quando declarado, é prosa auditável (sem ele, a legenda mostra a `chave`) |
 
 `waterfall` e `matriz` **não são tipos de exhibit** (são vocabulário
 reservado, `exhibits.TIPOS_PROPRIOS`): os dois existem como **painéis** da
@@ -328,13 +337,16 @@ mesmo quando o builder recusa emitir o HTML.
    continua sendo a manchete. **Sob fronteira de escopo** o título é
    "conclusão condicional, sem preço-alvo", com a classe (rótulo do
    catálogo), a arquitetura dominante e a razão que
-   `resultados.fronteira_de_escopo` publica, nenhuma faixa e, da dupla de
+   `resultados.fronteira_de_escopo` publica — prosa auditável, que sai da
+   lista de prosa —, nenhuma faixa e, da dupla de
    múltiplos, só o de tela: todo número que a integração declara conclusão de
    valor (`catalogo.conclusoes_de_valor`) fica fora da Conclusão;
 2. avisos obrigatórios (todo REQUIRED DISCLOSURE — sob fronteira de escopo,
    a limitação de escopo com o rótulo da classe, nunca "nenhum aviso");
 3. premissas decisivas: o rótulo do catálogo, o número do cenário da manchete
-   formatado pela unidade do catálogo e a derivação;
+   formatado pela unidade do catálogo e a derivação. Num caso SOTP a seção sai
+   rotulada como a do cenário consolidado (dicionário, sem número): as partes
+   que formam a manchete usam premissas próprias, e a premissa por parte é da 5F;
 4. o que mudou desde a análise fornecida, se declarado;
 5. Positives e Negatives: a afirmação, o vetor, o que move no valuation, o
    observável, e se está refletido ou não incorporado (com a razão);

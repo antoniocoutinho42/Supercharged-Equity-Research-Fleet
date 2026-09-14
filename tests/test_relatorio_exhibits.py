@@ -164,7 +164,8 @@ def test_serie_engine_le_caminho_real_de_resultados():
     `resultados` direto (aqui, o preço por ação da manchete)."""
     exhibit = {
         "id": "preco_base", "pergunta": "Qual o preço justo no cenário base?", "tipo": "tabela",
-        "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}],
+        "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                    "rotulo": "preço justo no cenário base"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
 
@@ -316,7 +317,7 @@ def test_tipo_de_painel_proprio_recusa_contrato(tipo, tmp_path):
     vez de sair com rc 0 e cair no fallback textual no browser."""
     exhibit = {
         "id": "w", "pergunta": "pergunta válida", "tipo": tipo,
-        "series": [{"derivacao": "engine", "chave": "resultados:ponte.nd_efetivo"}],
+        "series": [{"derivacao": "engine", "chave": "resultados:ponte.nd_efetivo", "rotulo": "dívida líquida"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
     raiz = tmp_path / f"tipo_proprio_{tipo}"
@@ -386,7 +387,7 @@ def test_series_de_datasets_com_o_mesmo_eixo_nao_disparam():
 def test_serie_engine_nao_numerica_e_hard_fail(chave):
     exhibit = {
         "id": "e", "pergunta": "pergunta válida", "tipo": "linha",
-        "series": [{"derivacao": "engine", "chave": chave}],
+        "series": [{"derivacao": "engine", "chave": chave, "rotulo": "série do motor"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
 
@@ -402,9 +403,11 @@ def test_serie_engine_com_lista_de_numeros_continua_valida():
     aceitos -- a checagem nova não estreita o que já era rastreável."""
     exhibit = {
         "id": "e", "pergunta": "pergunta válida", "tipo": "linha",
-        "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"},
+        "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                    "rotulo": "preço da manchete"},
                    {"derivacao": "engine",
-                    "chave": "resultados:sensibilidades.grades_2d.0.pontos_x"}],
+                    "chave": "resultados:sensibilidades.grades_2d.0.pontos_x",
+                    "rotulo": "pontos do eixo x"}],
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
 

@@ -1452,8 +1452,14 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
 # MESMO registro — não existe uma segunda lista de condições para divergir da
 # primeira. A trava de `tests/test_valuation_contrato.py` confere, fixture a
 # fixture, que a chave sai publicada se e só se o gate recusa um bloco
-# 'reversa' válido, e que a recusa é a da limitação publicada: uma recusa de
-# reversa nova escrita no gate por fora deste registro reprova ali.
+# 'reversa' válido, e que a recusa é a da limitação publicada. Ela acompanha o
+# gate NAS CONDIÇÕES QUE AS FIXTURES EXERCITAM: uma recusa de reversa nova
+# escrita por fora deste registro reprova ali quando alguma fixture exercita a
+# condição dela. Fora dessas condições a falha é fechada, nunca calada — o gate
+# recusa a reversa, `limitacoes` sai vazia e a Análise não emite (HARD FAIL
+# `analise_sem_reversa` no relatório). Por isso toda limitação nova entra com
+# uma fixture que a exercite; a trava já o exige das registradas (toda
+# limitação do registro aparece em alguma fixture). Revisão final da 5D, F5.
 # --------------------------------------------------------------------------
 
 

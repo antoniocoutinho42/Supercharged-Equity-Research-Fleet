@@ -111,10 +111,16 @@ CHAVES_DE_OVERLAY: frozenset = frozenset({"chave", "rotulo"})
 # (nenhuma é "comum" às três, exceto a própria `derivacao`); todas as
 # chaves de cada conjunto são obrigatórias (nenhuma série tem campo
 # opcional além do que já está listado aqui).
+#
+# Fatia 5D, onda de correção da revisão final (N12): a série `engine` declara o
+# `rotulo` que o gráfico escreve na legenda e no cabeçalho da tabela — prosa
+# auditável (`placeholders.campos_de_prosa`), como a `formula_nota` da derivada.
+# Sem ele, o adaptador recebia a própria `chave` ("resultados:manchete.preco_acao")
+# e a mostrava dentro da aba Tese, sob a pergunta.
 _CHAVES_SERIE_POR_DERIVACAO: dict = {
     "direta": frozenset({"derivacao", "fonte"}),
     "derivada": frozenset({"derivacao", "fonte", "formula", "formula_nota"}),
-    "engine": frozenset({"derivacao", "chave"}),
+    "engine": frozenset({"derivacao", "chave", "rotulo"}),
 }
 
 CHAVES_DE_DATASET: frozenset = frozenset({"ledger", "x", "campos"})

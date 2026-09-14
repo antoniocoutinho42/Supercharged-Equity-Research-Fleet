@@ -58,6 +58,7 @@
       "disclosures_titulo": "Avisos obrigatórios",
       "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega.",
       "premissas_decisivas_titulo": "Premissas decisivas",
+      "premissas_decisivas_rotulo_consolidado": "Premissas do cenário consolidado '{cenario}'. A manchete desta análise é o preço da soma das partes, e cada parte que o forma usa as próprias premissas.",
       "o_que_mudou_titulo": "O que mudou desde a análise fornecida",
       "positives_negatives_titulo": "Positives e Negatives",
       "positives_titulo": "Positives",

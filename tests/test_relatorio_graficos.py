@@ -82,7 +82,8 @@ EXHIBIT_LINHA = {
 }
 EXHIBIT_TABELA = {
     "id": "preco_base", "pergunta": "Qual o preço justo no cenário base?", "tipo": "tabela",
-    "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}],
+    "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao",
+                "rotulo": "preço justo no cenário base"}],
 }
 
 
@@ -100,7 +101,8 @@ def test_uplot_vendorizado_e_byte_identico_ao_legado(nome):
 
 # --------------------------------------------------------------------------
 # HTML com exhibits: dois hosts, JSON com os números resolvidos, rótulos
-# derivados do que a série já declara (nunca um campo novo).
+# derivados do que a série declara — o nome do campo de uma série direta, e o
+# `rotulo` de uma série engine (N12 da revisão final da 5D), nunca a chave crua.
 # --------------------------------------------------------------------------
 
 def test_html_com_dois_exhibits_contem_os_dois_hosts_e_o_json_resolvido():
@@ -124,6 +126,9 @@ def test_html_com_dois_exhibits_contem_os_dois_hosts_e_o_json_resolvido():
     # número resolvido da série 'engine' (escalar, tabela) cru no JSON:
     preco_base = entrega_dict["resultados"]["manchete"]["preco_acao"]
     assert json.dumps(preco_base) in pagina
+    # ... com o rótulo que a série declara, nunca a chave de contrato no cabeçalho da tabela (N12):
+    assert '"rotulo": "preço justo no cenário base"' in pagina
+    assert '"rotulo": "resultados:' not in pagina
 
 
 def test_serie_direta_de_dois_datasets_leva_a_fonte_inteira_no_rotulo():
@@ -144,13 +149,15 @@ def test_serie_direta_de_dois_datasets_leva_a_fonte_inteira_no_rotulo():
     entrega_dict, achados, log, resolvidos, log_exhibits = _preparar_com_exhibits(
         [exhibit], dados=dados)
 
-    spec = render._exhibit_para_json(resolvidos[0], entrega_dict["dados"])
+    prosa, _log_da_prosa = placeholders.resolver_prosa(entrega_dict, "pt-BR")
+    spec = render._exhibit_para_json(resolvidos[0], 0, entrega_dict["dados"], prosa)
 
     assert [s["rotulo"] for s in spec["series"]] == ["fin.margem", "setor.margem"]
 
     # Com UM dataset só, o rótulo curto (nome do campo) continua valendo.
-    _e, _a, _l, resolvidos_um, _le = _preparar_com_exhibits([EXHIBIT_LINHA], dados=DADOS_RECEITA)
-    spec_um = render._exhibit_para_json(resolvidos_um[0], DADOS_RECEITA)
+    entrega_um, _a, _l, resolvidos_um, _le = _preparar_com_exhibits([EXHIBIT_LINHA], dados=DADOS_RECEITA)
+    prosa_um, _log_da_prosa_um = placeholders.resolver_prosa(entrega_um, "pt-BR")
+    spec_um = render._exhibit_para_json(resolvidos_um[0], 0, DADOS_RECEITA, prosa_um)
     assert [s["rotulo"] for s in spec_um["series"]] == ["receita"]
 
 
@@ -269,14 +276,16 @@ def test_json_embutido_escapa_fechamento_de_script():
     exhibit = {
         "id": "margem", "pergunta": "pergunta válida", "tipo": "linha",
         "nota_janela": "janela curta de teste",
+        # Sem dígito no texto hostil: desde a onda de correção da revisão final da 5D (F3), a
+        # `formula_nota` é prosa auditada, e um dígito solto nela é `numero_sem_proveniencia`.
         "series": [{"derivacao": "derivada", "fonte": "fin", "formula": "ebitda / receita",
-                    "formula_nota": "nota</script><script>alert(1)</script>"}],
+                    "formula_nota": "nota</script><script>alert(x)</script>"}],
     }
     entrega_dict, achados, log, exhibits_resolvidos, log_exhibits = _preparar_com_exhibits([exhibit], dados=dados)
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", exhibits_resolvidos, log_exhibits)
 
-    assert "nota</script><script>alert(1)</script>" not in pagina
-    assert "nota<\\/script><script>alert(1)<\\/script>" in pagina
+    assert "nota</script><script>alert(x)</script>" not in pagina
+    assert "nota<\\/script><script>alert(x)<\\/script>" in pagina
 
 
 # --------------------------------------------------------------------------

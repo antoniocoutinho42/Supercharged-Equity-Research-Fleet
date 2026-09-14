@@ -712,8 +712,8 @@ def _achados_exhibits(entrega: dict) -> list[Achado]:
 # Tese. A FORMA da Tese é recusa de contrato (`entrega.py`, código 1); aqui só
 # o CONTEÚDO — o que depende do catálogo e dos números que a integração
 # publicou. E3: nenhum nome de premissa, nenhum limiar, nenhuma regra de
-# admissão de reversa e nenhum nome de campo de conclusão de valor moram neste
-# módulo. O vocabulário de vínculo sai do
+# admissão de reversa e nenhuma regra que reconheça conclusão de valor pelo nome
+# do campo moram neste módulo. O vocabulário de vínculo sai do
 # catálogo (`catalogo.premissas.<rota>` ∪ `catalogo.blocos`, D2), e o que torna
 # uma limitação "de reversa" é a declaração `catalogo.limitacoes.<chave>.afeta`
 # da integração — nunca o nome da chave.

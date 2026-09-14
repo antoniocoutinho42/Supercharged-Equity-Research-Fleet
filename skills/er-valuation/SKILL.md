@@ -139,10 +139,12 @@ companhia está fora do escopo da metodologia como métrica-manchete. `classe`
 é uma de `vida_economica_finita` (mineração, óleo e gás, concessão com
 termo), `reit_imobiliaria` ou `pre_lucro` — fora desse vocabulário, recusa
 nomeando a classe, com sugestão; `arquitetura_dominante` (a arquitetura
-necessária) e `razao` (por que o caso está fora) são textos não vazios; o
-bloco não aceita outra chave, e nulo é ausência. Sob fronteira declarada a
-análise continua, sem preço-alvo de manchete — regra do relatório, que lê
-`resultados.fronteira_de_escopo`.
+necessária) e `razao` (por que o caso está fora) são textos não vazios, que o
+relatório exibe como prosa auditável — dígito só por placeholder
+(`{{livre:...}}`, `{{caso:...}}`, `{{resultados:...}}`); o bloco não aceita
+outra chave, e nulo é ausência. Sob fronteira declarada a análise continua,
+sem preço-alvo de manchete — regra do relatório, que lê
+`resultados.fronteira_de_escopo` e o mapa `conclusoes_de_valor` do catálogo.
 
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
@@ -197,8 +199,12 @@ convenção que já mora aqui):
   mesmo registro de recusas que o gate aplica (`caso.LIMITACOES_DE_REVERSA`),
   nunca uma lista paralela; a trava de `tests/test_valuation_contrato.py`
   confere, fixture a fixture, que a chave sai publicada se e só se o gate
-  recusa um bloco `reversa` válido. O relatório lê a chave, o rótulo e a
-  declaração `afeta` do catálogo; a regra fica aqui.
+  recusa um bloco `reversa` válido — nas condições que as fixtures
+  exercitam. Fora delas a falha é fechada: o gate recusa a reversa,
+  `limitacoes` sai vazia e a Análise não emite (`analise_sem_reversa`). Por
+  isso toda limitação nova entra com uma fixture que a exercite (a trava já o
+  exige das registradas). O relatório lê a chave, o rótulo e a declaração
+  `afeta` do catálogo; a regra fica aqui.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
