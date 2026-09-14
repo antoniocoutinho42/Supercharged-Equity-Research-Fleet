@@ -8,6 +8,8 @@ acrescentar chave ao classificador ou o wrapper passar a emitir um múltiplo
 novo sem revisar o catálogo reprova AQUI, na integração — nunca no relatório.
 """
 
+import functools
+import itertools
 import json
 import sys
 from pathlib import Path
@@ -121,7 +123,7 @@ def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
-        "fronteiras_de_escopo", "limitacoes",
+        "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor",
     }
 
 
@@ -171,6 +173,194 @@ def test_toda_limitacao_declara_o_bloco_que_suprime_e_as_da_reversa_sao_as_do_ga
     devolvidas = {reversa_indisponivel(carregar(FIXTURES / nome)) for nome in CASOS} - {None}
     assert devolvidas, "nenhuma fixture com limitação — trava vacuamente verde?"
     assert devolvidas <= da_reversa, devolvidas - da_reversa
+
+
+# --------------------------------------------------------------------------
+# Fatia 5D, onda de correção da revisão final (F2, a raiz; emenda E3). O que é
+# CONCLUSÃO DE VALOR — o número que, sob fronteira de escopo, a Tese não pode
+# afirmar e a Valuation só mostra como leitura condicional — é saber da
+# integração, nunca do relatório: a D3 o reconhecia pelo nome do campo
+# (`preco_acao`), e a célula da grade, o upside e o múltiplo justo passavam. O
+# catálogo publica o mapa `conclusoes_de_valor`, `{<unidade>: [<padrão>]}`: cada
+# padrão é um caminho de `resultados` em que `*` casa exatamente um segmento, e
+# a unidade de cada família é do vocabulário `unidades` — a mesma que a grade de
+# sensibilidade publica para as suas células. O QC e a tela do relatório só leem
+# o mapa. As travas abaixo o amarram ao que o wrapper publica de fato, fixture a
+# fixture: toda folha numérica é conclusão de valor pelo mapa ou tem, aqui, a
+# razão declarada para não ser — um número novo sem classificação reprova AQUI.
+# --------------------------------------------------------------------------
+
+# O que o wrapper publica e NÃO é conclusão de valor, com a razão. Além destas
+# famílias, toda folha que ecoa o caso (mesmo caminho, mesmo valor) é o que o
+# caso declara. `**` casa zero ou mais segmentos — só aqui, nunca no mapa.
+_NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
+    "leitura de mercado — o preço e o múltiplo de tela, que a §14 mantém sob fronteira": (
+        "preco.**", "mercado_tela.**"),
+    "o que o preço embute — a reversa, que a §14 mantém sob fronteira": (
+        "reversa.**",),
+    "a ponte da dívida líquida — as linhas de balanço do caso e a soma delas": (
+        "ponte.**", "sotp.ponte_unica.**"),
+    "a métrica de referência, o eixo e o diagnóstico de cada ponto de grade": (
+        "sensibilidades.*.*.metrica_de_referencia.**",
+        "sensibilidades.*.*.pontos.*.x", "sensibilidades.*.*.pontos.*.diag.**",
+        "sensibilidades.*.*.celulas.*.*.x", "sensibilidades.*.*.celulas.*.*.y",
+        "sensibilidades.*.*.celulas.*.*.diag.**"),
+    "o diagnóstico do degrau — capacidade, rentabilidade pós-degrau, transição, eficiência e divergência de base": tuple(
+        f"cenarios.*.degrau.{campo}"
+        for campo in ("h", "rentabilidade_pos_%", "fator_transicao", "m", "divergencia_de_base_%")),
+    "a trajetória e as checagens da composição bifásica, por cenário e por parte de SOTP": tuple(
+        f"{dono}.{campo}"
+        for dono in ("cenarios.*", "sotp.partes.*")
+        for campo in ("T_rampa", "alfa", "beta", "capacidade_receita", "checks_internos.**", "d2_fase2_%",
+                      "d_trajetoria_fase1_%.**", "g1_%", "g2_%", "n_total", "rir2_%", "rir_fase1_%.**",
+                      "roic2_%")),
+    "o efeito, sobre o múltiplo de uma parte, da convenção terminal alternativa (C7)": (
+        "sotp.partes.*.efeito_c7_alternativa_gp_%",),
+}
+_ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
+
+
+@functools.lru_cache(maxsize=None)
+def _caso_e_resultados_serializados(nome: str) -> str:
+    """`avaliar()` roda o motor por subprocesso; cacheado, e devolvido como JSON
+    para que cada teste receba a sua cópia."""
+    caso = carregar(FIXTURES / nome)
+    return json.dumps({"caso": caso, "resultados": avaliar(caso)}, ensure_ascii=False)
+
+
+def _caso_e_resultados(nome: str) -> tuple[dict, dict]:
+    par = json.loads(_caso_e_resultados_serializados(nome))
+    return par["caso"], par["resultados"]
+
+
+def _folhas_numericas(no, caminho: tuple = ()):
+    """`(caminho, valor)` de toda folha numérica, com o índice de lista como segmento
+    — a mesma forma do caminho de um placeholder."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            yield from _folhas_numericas(valor, caminho + (str(chave),))
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            yield from _folhas_numericas(valor, caminho + (str(indice),))
+    elif isinstance(no, (int, float)) and not isinstance(no, bool):
+        yield caminho, no
+
+
+def _casa(padrao: tuple, caminho: tuple) -> bool:
+    """`*` casa exatamente um segmento; `**` casa zero ou mais."""
+    if not padrao:
+        return not caminho
+    if padrao[0] == "**":
+        return any(_casa(padrao[1:], caminho[inicio:]) for inicio in range(len(caminho) + 1))
+    return bool(caminho) and padrao[0] in ("*", caminho[0]) and _casa(padrao[1:], caminho[1:])
+
+
+def _familias_que_cobrem(caminho: tuple) -> list[tuple[str, str]]:
+    return [(unidade, padrao) for unidade, padroes in CAT["conclusoes_de_valor"].items()
+            for padrao in padroes if _casa(tuple(padrao.split(".")), caminho)]
+
+
+def _ecoa_o_caso(caso: dict, caminho: tuple, valor) -> bool:
+    atual = caso
+    for segmento in caminho:
+        if isinstance(atual, dict) and segmento in atual:
+            atual = atual[segmento]
+        elif isinstance(atual, list) and segmento.isdigit() and int(segmento) < len(atual):
+            atual = atual[int(segmento)]
+        else:
+            return False
+    return not isinstance(atual, bool) and atual == valor
+
+
+def test_o_mapa_de_conclusoes_de_valor_declara_padroes_por_unidade_do_catalogo():
+    """A forma do mapa: cada família é uma unidade do vocabulário `unidades`, com
+    padrões de caminho bem formados (`*` por segmento, nunca `**`), sem repetição, e
+    nenhum caminho concreto casado por famílias de unidades diferentes — um número tem
+    uma unidade só."""
+    mapa = CAT["conclusoes_de_valor"]
+    assert isinstance(mapa, dict) and mapa, mapa
+    assert set(mapa) <= set(CAT["unidades"]), set(mapa) - set(CAT["unidades"])
+    declarados = []
+    for unidade, padroes in mapa.items():
+        assert isinstance(padroes, list) and padroes, unidade
+        for padrao in padroes:
+            assert isinstance(padrao, str), (unidade, padrao)
+            segmentos = tuple(padrao.split("."))
+            assert all(segmento and segmento.strip() == segmento and segmento != "**"
+                       for segmento in segmentos), (unidade, padrao)
+            declarados.append((unidade, segmentos))
+    assert len({segmentos for _unidade, segmentos in declarados}) == len(declarados), "padrão repetido no mapa"
+    for (unidade_a, a), (unidade_b, b) in itertools.combinations(declarados, 2):
+        casam_o_mesmo_caminho = len(a) == len(b) and all(x == y or "*" in (x, y) for x, y in zip(a, b))
+        assert unidade_a == unidade_b or not casam_o_mesmo_caminho, (unidade_a, ".".join(a), unidade_b, ".".join(b))
+
+
+def test_o_mapa_nao_cobre_o_multiplo_de_tela_nem_o_que_o_caso_declara():
+    """§14: sob fronteira de escopo a entrega mantém a leitura de mercado — o múltiplo
+    de tela — e nada do que o caso declara (premissa, preço, métrica, bloco) é
+    conclusão de valor."""
+    vistas = {"mercado_tela": 0, "caso": 0}
+    for nome in CASOS:
+        caso, resultados = _caso_e_resultados(nome)
+        for caminho, valor in _folhas_numericas(resultados):
+            if caminho[0] == "mercado_tela":
+                vistas["mercado_tela"] += 1
+                assert not _familias_que_cobrem(caminho), (nome, ".".join(caminho))
+            if _ecoa_o_caso(caso, caminho, valor):
+                vistas["caso"] += 1
+                assert not _familias_que_cobrem(caminho), (nome, ".".join(caminho), valor)
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
+
+
+def test_toda_folha_numerica_publicada_e_conclusao_de_valor_pelo_mapa_ou_tem_razao_para_nao_ser():
+    """A trava de upgrade do mapa, fixture a fixture: toda folha numérica que o wrapper
+    publica é conclusão de valor pelo mapa ou tem a razão declarada em
+    `_NAO_SAO_CONCLUSAO_DE_VALOR` (ou ecoa o caso) — nunca as duas, nunca nenhuma. Um
+    número novo (a 5F publica valor ponderado e cross-check) reprova aqui até alguém
+    decidir de que lado ele está; e nenhum padrão do mapa fica sem folha que o exerça."""
+    sem_classificacao, nos_dois_lados, padroes_exercidos = [], [], set()
+    for nome in CASOS:
+        caso, resultados = _caso_e_resultados(nome)
+        for caminho, valor in _folhas_numericas(resultados):
+            familias = _familias_que_cobrem(caminho)
+            padroes_exercidos.update(padrao for _unidade, padrao in familias)
+            razoes = [razao for razao, padroes in _NAO_SAO_CONCLUSAO_DE_VALOR.items()
+                      if any(_casa(tuple(padrao.split(".")), caminho) for padrao in padroes)]
+            if _ecoa_o_caso(caso, caminho, valor):
+                razoes.append(_ECOA_O_CASO)
+            folha = f"{nome}: {'.'.join(caminho)} = {valor!r}"
+            if familias and razoes:
+                nos_dois_lados.append(f"{folha} — mapa {familias}; não é, por {razoes}")
+            elif not familias and not razoes:
+                sem_classificacao.append(folha)
+    assert not sem_classificacao, (
+        "número publicado sem classificação — é conclusão de valor (catalogo.conclusoes_de_valor) "
+        "ou não é (declare a razão em _NAO_SAO_CONCLUSAO_DE_VALOR)?\n" + "\n".join(sem_classificacao))
+    assert not nos_dois_lados, "\n".join(nos_dois_lados)
+    declarados = {padrao for padroes in CAT["conclusoes_de_valor"].values() for padrao in padroes}
+    assert not declarados - padroes_exercidos, (
+        f"padrão do mapa que nenhuma fixture publica: {sorted(declarados - padroes_exercidos)}")
+
+
+def test_celula_de_grade_e_coberta_pela_familia_da_unidade_que_a_grade_publica():
+    """Uma fonte da verdade: a grade de sensibilidade declara a unidade das suas células
+    (`unidade`, hoje "preço por ação"), e o mapa declara a família de cada caminho. As
+    duas declarações amarradas: toda célula é coberta por exatamente uma família, e é a
+    da unidade que a grade publica. Um v10 que troque a métrica da grade reprova aqui
+    até o mapa ser revisto."""
+    vistas = {"grades_1d": 0, "grades_2d": 0}
+    for nome in CASOS:
+        _caso, resultados = _caso_e_resultados(nome)
+        for caminho, _valor in _folhas_numericas(resultados):
+            if not (_casa(("sensibilidades", "*", "*", "pontos", "*", "valor"), caminho)
+                    or _casa(("sensibilidades", "*", "*", "celulas", "*", "*", "valor"), caminho)):
+                continue
+            grade = resultados["sensibilidades"][caminho[1]][int(caminho[2])]
+            assert grade["unidade"] in CAT["unidades"], (nome, grade["unidade"])
+            assert [unidade for unidade, _padrao in _familias_que_cobrem(caminho)] == [grade["unidade"]], (
+                nome, ".".join(caminho), grade["unidade"], _familias_que_cobrem(caminho))
+            vistas[caminho[1]] += 1
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
 
 
 def test_todo_motivo_de_recusa_tem_rotulo_em_todo_idioma():

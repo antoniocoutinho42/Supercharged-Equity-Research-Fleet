@@ -297,11 +297,13 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 | `vinculo_fora_do_vocabulario` | HARD FAIL | item de `perguntas[].vinculo` ou de `positives`/`negatives[].mecanismo` que não é premissa da rota (`catalogo.premissas.<rota>`) nem bloco econômico (`catalogo.blocos`) |
 | `premissa_decisiva_fora_do_cenario` | HARD FAIL | `premissas_decisivas[].chave` que não é premissa da rota no catálogo declarada no cenário da manchete |
 | `faixa_fora_de_ordem` | HARD FAIL | ponta da faixa que não nomeia um cenário publicado com preço; preço de `piso` acima do de `base`, ou de `base` acima do de `teto`; `base` diferente do cenário da manchete |
-| `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou placeholder de `preco_acao` em qualquer texto da Tese (o preço de tela, `caso:preco.valor`, continua permitido) |
+| `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou um número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`) chegando à Tese por um dos três lugares — placeholder `resultados:` num texto da lista de prosa, `chave` de série `engine` ou `chave` de overlay; o achado nomeia o lugar, o caminho e a unidade da família. A decisão lê o mapa, nunca o nome do campo; o preço e o múltiplo de tela não estão nele e continuam permitidos, e `livre:` fica fora |
+| `fronteira_de_escopo_desconhecida` | HARD FAIL | sob fronteira de escopo, o catálogo não rotula a classe no idioma da entrega ou não publica `conclusoes_de_valor` — sem o mapa nenhum número de valor seria reconhecido, e a regra falha fechada |
 | `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente sem nenhuma limitação publicada que o catálogo declare com `afeta: "reversa"` — a decisão lê a declaração, nunca o nome da chave |
 | `limitacao_desconhecida` | HARD FAIL | chave de `resultados.limitacoes` que o catálogo não declara com rótulo no idioma e com `afeta` |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
+| `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
 | `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
 | `tese_dependente_de_uma_premissa` | QUALITY WARNING | todas as perguntas com o mesmo `vinculo` de um item só |
 
@@ -326,8 +328,11 @@ mesmo quando o builder recusa emitir o HTML.
    continua sendo a manchete. **Sob fronteira de escopo** o título é
    "conclusão condicional, sem preço-alvo", com a classe (rótulo do
    catálogo), a arquitetura dominante e a razão que
-   `resultados.fronteira_de_escopo` publica, e nenhuma faixa;
-2. avisos obrigatórios (todo REQUIRED DISCLOSURE);
+   `resultados.fronteira_de_escopo` publica, nenhuma faixa e, da dupla de
+   múltiplos, só o de tela: todo número que a integração declara conclusão de
+   valor (`catalogo.conclusoes_de_valor`) fica fora da Conclusão;
+2. avisos obrigatórios (todo REQUIRED DISCLOSURE — sob fronteira de escopo,
+   a limitação de escopo com o rótulo da classe, nunca "nenhum aviso");
 3. premissas decisivas: o rótulo do catálogo, o número do cenário da manchete
    formatado pela unidade do catálogo e a derivação;
 4. o que mudou desde a análise fornecida, se declarado;
@@ -349,13 +354,18 @@ spec no payload (`data-exhibit-indice`), e o bootstrap pareia host e spec por
 esse índice, nunca pela posição no DOM — o mesmo exhibit pode aparecer sob
 duas perguntas.
 
-**Valuation** — preço justo (sob fronteira de escopo, "leitura condicional do
-preço por ação", no cabeçalho e nas saídas de cada cenário do laboratório),
-upside, múltiplo justo pareado com o de tela pela mesma base, rota e
-convenção terminal — do catálogo, nunca de `caso` cru —, preço por cenário
-quando houver mais de um, os painéis SVG (o waterfall da ponte e uma matriz
-por grade 2D, cujo título nomeia o cenário que a grade perturbou) e o
-laboratório; SOTP mostra só preço/upside, sem rota/convenção única.
+**Valuation** — preço justo, upside, múltiplo justo pareado com o de tela pela
+mesma base, rota e convenção terminal — do catálogo, nunca de `caso` cru —,
+preço por cenário quando houver mais de um, os painéis SVG (o waterfall da
+ponte e uma matriz por grade 2D, cujo título nomeia o cenário que a grade
+perturbou) e o laboratório; SOTP mostra só preço/upside, sem rota/convenção
+única. **Sob fronteira de escopo**, todo número que o mapa da integração declara
+conclusão de valor sai com o rótulo condicional do dicionário
+(`valuation.condicional`): o preço e o upside do cabeçalho, o múltiplo justo, o
+título da lista por cenário, as três saídas de cada cenário do laboratório e o
+título da matriz. A decisão é uma só (`render._leitura_condicional`): quem exibe
+o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome
+de campo decide.
 
 **Evidência** — metodologia, ficha técnica, o log de resolução de **todo**
 placeholder da prosa (conclusão, textos da Tese e dos exhibits) e a
@@ -377,7 +387,7 @@ caminho), nunca um `KeyError` cru.
 |---|---|
 | `scripts/entrega.py` | Contrato de `entrega.json`: carrega, valida, recusa; `sha256_canonico`; identidade de ticker |
 | `scripts/exhibits.py` | Contrato de `analise.exhibits`/`entrega.dados`; avaliador fechado da fórmula (`ast`, nunca `eval`); resolve série/overlay em número e produz o log de rastreabilidade |
-| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; e a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem |
+| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem; e o leitor do mapa das conclusões de valor (`conclusoes_de_valor`/`conclusao_de_valor`), que o QC e a tela consultam sob fronteira de escopo |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
 | `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados; embute o payload dos exhibits e dos painéis |
 | `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, decide o exit code |
@@ -397,8 +407,9 @@ este relatório precisa exibir (bloco/unidade/rótulo de premissa, rótulo e
 base de múltiplo, rótulo de convenção terminal, severidade e rótulo de
 diagnóstico, texto do disclosure de divergência de base e a chave que o
 dispara, o vocabulário de vínculo das perguntas da tese — premissas da rota e
-blocos econômicos —, e o rótulo e o bloco suprimido, `afeta`, de cada
-limitação) vem de
+blocos econômicos —, o rótulo e o bloco suprimido, `afeta`, de cada
+limitação, e o mapa das conclusões de valor — quais números de `resultados`,
+em que unidade, são leitura condicional sob fronteira de escopo) vem de
 `skills/er-valuation/assets/catalogo_apresentacao.json` — lido via
 `ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A fonte canônica da
 metodologia é `skills/er-multiplos-justos/SKILL.md`; da orquestração,

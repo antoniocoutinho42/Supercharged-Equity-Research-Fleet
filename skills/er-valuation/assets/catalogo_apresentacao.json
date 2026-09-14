@@ -73,6 +73,12 @@
     },
     "preço por ação": {
       "formato": "moeda"
+    },
+    "múltiplo": {
+      "formato": "x2"
+    },
+    "fração": {
+      "formato": "pct1"
     }
   },
   "ponte": {
@@ -945,5 +951,52 @@
         "pt-BR": "Reversa não calculada: a rota rampa ainda não define quais eixos a composição bifásica admite reverter (combinação não implementada)"
       }
     }
+  },
+  "conclusoes_de_valor": {
+    "preço por ação": [
+      "manchete.preco_acao",
+      "cenarios.*.valor.preco_acao",
+      "cenarios.*.sem_degrau.valor.preco_acao",
+      "sensibilidades.grades_1d.*.pontos.*.valor",
+      "sensibilidades.grades_2d.*.celulas.*.*.valor",
+      "sotp.preco_acao"
+    ],
+    "fração": [
+      "manchete.upside",
+      "cenarios.*.vs_preco.upside"
+    ],
+    "múltiplo": [
+      "manchete.multiplo.valor",
+      "cenarios.*.multiplos.*",
+      "cenarios.*.sem_degrau.multiplos.*",
+      "cenarios.*.degrau.multiplo",
+      "cenarios.*.degrau.multiplo_x_rentab",
+      "cenarios.*.degrau.com_transicao",
+      "sensibilidades.grades_1d.*.pontos.*.multiplo",
+      "sensibilidades.grades_2d.*.celulas.*.*.multiplo",
+      "sotp.partes.*.EV/EBITDA_curr",
+      "sotp.partes.*.EV/EBITDA_fwd",
+      "sotp.partes.*.EV/NOPAT_curr",
+      "sotp.partes.*.EV/NOPAT_fwd",
+      "sotp.partes.*.EV/EBITDA0"
+    ],
+    "moeda": [
+      "cenarios.*.valor.EV",
+      "cenarios.*.valor.Equity",
+      "cenarios.*.sem_degrau.valor.Equity",
+      "cenarios.*.vp_fase1",
+      "cenarios.*.valor_fase2_no_ano_T",
+      "sotp.ev_das_partes",
+      "sotp.ev_total",
+      "sotp.equity",
+      "sotp.topo.equity_antes_do_desconto_de_holding",
+      "sotp.topo.equity_depois_do_desconto_de_holding",
+      "sotp.materialidade.ev_blended",
+      "sotp.materialidade.ev_segmentado",
+      "sotp.materialidade.diferenca",
+      "sotp.partes.*.EV",
+      "sotp.partes.*.vp_fase1",
+      "sotp.partes.*.valor_fase2_no_ano_T"
+    ]
   }
 }

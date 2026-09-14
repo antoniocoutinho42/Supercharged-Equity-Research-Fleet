@@ -21,7 +21,9 @@
     "vinculo_fora_do_vocabulario": "Vínculo fora do vocabulário em '{onde}': '{item}' não é premissa da rota '{rota}' nem bloco econômico no catálogo de apresentação — o vínculo de uma pergunta, e o mecanismo de um Positive ou Negative, apontam para uma variável ou um mecanismo do valuation. Vocabulário aceito: {aceitos}.",
     "premissa_decisiva_fora_do_cenario": "Premissa decisiva fora do cenário da manchete em '{onde}': '{chave}' não é premissa da rota '{rota}' declarada no cenário '{cenario}' — o número mostrado ao lado de uma premissa decisiva é o desse cenário.",
     "faixa_fora_de_ordem": "Faixa fora de ordem em '{onde}': piso '{piso}' ({preco_piso}), base '{base}' ({preco_base}), teto '{teto}' ({preco_teto}); cenário da manchete: '{cenario_manchete}'. Cada ponta da faixa nomeia um cenário publicado em resultados.cenarios, os preços seguem piso ≤ base ≤ teto, e a base é o cenário da manchete.",
-    "fronteira_com_preco_alvo": "Preço-alvo sob fronteira de escopo em '{onde}' (classe '{classe}'): {trecho} — com fronteira de escopo declarada, a Tese é uma conclusão condicional, sem preço-alvo de manchete: nenhuma faixa de preços e nenhum placeholder de preço por ação.",
+    "fronteira_com_preco_alvo": "Preço-alvo sob fronteira de escopo em '{onde}' (classe '{classe}'): {trecho} — com fronteira de escopo declarada, a Tese é uma conclusão condicional, sem preço-alvo de manchete: nenhuma faixa de preços, e nenhum número que a integração declara conclusão de valor no catálogo de apresentação (conclusoes_de_valor) num texto da Tese, numa série 'engine' ou num overlay de exhibit.",
+    "fronteira_de_escopo_declarada": "Limitação de escopo: {rotulo}. A métrica-manchete da metodologia não se aplica a esta companhia; a conclusão é condicional, sem preço-alvo de manchete, e todo número de valor desta entrega é uma leitura condicional.",
+    "fronteira_de_escopo_desconhecida": "Fronteira de escopo sem declaração no catálogo em '{onde}': a classe '{classe}' não tem rótulo em '{idioma}' no catálogo de apresentação, ou o catálogo não publica o mapa das conclusões de valor (conclusoes_de_valor) — o relatório não sabe dizer ao leitor qual é a fronteira nem reconhecer um número de valor sob ela. A correção é da camada de integração, nunca do relatório.",
     "analise_sem_reversa": "Análise sem reversa em '{onde}': a entrega exige a leitura do que o preço embute (a reversa, com o custo de capital implícito), e nenhuma limitação publicada em resultados.limitacoes é declarada pelo catálogo de apresentação como a que suprime a reversa (publicadas: {limitacoes}). Rode o valuation com o bloco 'reversa' no caso.",
     "limitacao_metodologica": "Limitação de escopo desta análise: {rotulo}.",
     "limitacao_desconhecida": "Limitação sem declaração no catálogo em '{onde}': resultados.limitacoes publica '{limitacao}', que o catálogo de apresentação não declara com rótulo em '{idioma}' e com o bloco que ela suprime ('afeta') — o relatório não sabe dizer ao leitor o que ela significa nem se justifica um bloco ausente. A correção é da camada de integração, nunca do relatório.",
@@ -96,7 +98,6 @@
     },
     "valuation": {
       "preco_justo_titulo": "Preço justo",
-      "preco_condicional_titulo": "Leitura condicional do preço por ação (sem preço-alvo)",
       "upside_titulo": "Upside sobre o preço de mercado",
       "multiplo_justo_titulo": "Múltiplo justo",
       "multiplo_tela_titulo": "Múltiplo de tela",
@@ -131,7 +132,14 @@
       "laboratorio_diagnosticos_nenhum": "Nenhum diagnóstico disparado por estas premissas.",
       "laboratorio_diagnostico_desconhecido": "Diagnóstico sem rótulo no catálogo de apresentação desta análise.",
       "laboratorio_diagnosticos_recusado": "Cenário recusado, sem número publicável: {motivo}.",
-      "laboratorio_recusa_desconhecida": "motivo sem rótulo no catálogo de apresentação desta análise"
+      "laboratorio_recusa_desconhecida": "motivo sem rótulo no catálogo de apresentação desta análise",
+      "condicional": {
+        "preco_justo_titulo": "Leitura condicional do preço por ação (sem preço-alvo)",
+        "upside_titulo": "Leitura condicional do upside sobre o preço de mercado (sem preço-alvo)",
+        "multiplo_justo_titulo": "Leitura condicional do múltiplo (sem preço-alvo)",
+        "cenarios_titulo": "Leitura condicional do preço por cenário (sem preço-alvo)",
+        "matriz_titulo": "Leitura condicional da sensibilidade no cenário '{cenario}': {y} × {x} (sem preço-alvo)"
+      }
     },
     "evidencia": {
       "metodologia_titulo": "Metodologia",

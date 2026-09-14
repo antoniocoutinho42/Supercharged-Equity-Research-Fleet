@@ -407,3 +407,56 @@ def resolver_prosa(entrega: dict, idioma: str) -> tuple[dict[str, str], list[dic
         resolvidos[onde] = resolvido
         log.extend(log_do_campo)
     return resolvidos, log
+
+
+# --------------------------------------------------------------------------
+# As conclusões de valor que a integração declara (fatia 5D, onda de correção da
+# revisão final, F1 e F2; emenda E3).
+#
+# Sob fronteira de escopo (§14) a entrega não afirma preço-alvo de manchete — e
+# preço-alvo não é só o campo `preco_acao`: o upside, o múltiplo justo, a célula de
+# uma grade de sensibilidade e o equity de um cenário dizem a mesma coisa em outra
+# unidade. QUAIS números de `resultados` são conclusão de valor é saber da
+# integração, que os publica no catálogo de apresentação (`conclusoes_de_valor`:
+# `{<unidade>: [<padrão>]}`, com `*` casando exatamente um segmento) e os trava
+# contra o que o wrapper publica (`tests/test_catalogo_apresentacao.py`). O QC e a
+# tela leem o mapa por estas duas funções — nenhum nome de campo de valor mora no
+# relatório.
+# --------------------------------------------------------------------------
+
+MapaDeConclusoesDeValor = list[tuple[str, tuple[str, ...]]]
+
+
+def conclusoes_de_valor(catalogo: Any) -> MapaDeConclusoesDeValor | None:
+    """`[(unidade, segmentos do padrão)]` de `catalogo.conclusoes_de_valor`, na ordem
+    declarada — ou `None` quando o catálogo não publica o mapa na forma do contrato
+    (um objeto não vazio de listas não vazias de padrões textuais). Quem chama decide
+    o que a ausência significa — sob fronteira, o QC reprova e a tela recusa
+    nomeando —; este módulo nunca a trata como "nenhum número é conclusão de valor"."""
+    mapa = catalogo.get("conclusoes_de_valor") if isinstance(catalogo, dict) else None
+    if not isinstance(mapa, dict) or not mapa:
+        return None
+    familias: MapaDeConclusoesDeValor = []
+    for unidade, padroes in mapa.items():
+        if not isinstance(padroes, list) or not padroes or not all(isinstance(p, str) and p for p in padroes):
+            return None
+        familias.extend((unidade, tuple(padrao.split("."))) for padrao in padroes)
+    return familias
+
+
+def conclusao_de_valor(caminho: str, mapa: MapaDeConclusoesDeValor) -> tuple[str, str] | None:
+    """`(unidade, padrão)` da primeira família do `mapa` que cobre `caminho`, ou `None`
+    quando o número não é conclusão de valor.
+
+    `caminho` é pontuado, como o de um placeholder (`cenarios.base.valor.preco_acao`).
+    Os dois lados casam segmento a segmento, com o mesmo número de segmentos, e `*`
+    casa qualquer segmento DOS DOIS LADOS. Num caminho concreto — o QC, que lê o de um
+    placeholder, o de uma série e o de um overlay — é o casamento comum. Num caminho
+    com `*` — a tela, que rotula de uma vez a lista de preços por cenário ou todas as
+    células de uma grade — a pergunta vira "algum número exibido ali é conclusão de
+    valor?", e a dúvida sai como leitura condicional, nunca como preço-alvo."""
+    segmentos = tuple(caminho.split("."))
+    for unidade, padrao in mapa:
+        if len(padrao) == len(segmentos) and all(p == s or "*" in (p, s) for p, s in zip(padrao, segmentos)):
+            return unidade, ".".join(padrao)
+    return None

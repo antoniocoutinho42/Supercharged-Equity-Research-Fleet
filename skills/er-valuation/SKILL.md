@@ -219,6 +219,24 @@ como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
 `tests/test_catalogo_apresentacao.py`.
 
+**Conclusões de valor (`conclusoes_de_valor`).** Quais números de `resultados`
+são conclusão de valor — o que, sob fronteira de escopo, a Tese não pode afirmar
+e a Valuation só mostra como leitura condicional — é declaração desta camada,
+nunca do relatório: `{<unidade>: [<padrão>]}`, cada padrão um caminho de
+`resultados` em que `*` casa exatamente um segmento
+(`cenarios.*.valor.preco_acao`, `sensibilidades.grades_2d.*.celulas.*.*.valor`),
+e cada unidade do vocabulário `unidades` — a mesma que a grade de sensibilidade
+publica para as suas células. Não é só o preço por ação: o upside (`fração`), o
+múltiplo justo (`múltiplo`) e o valor da firma e do equity (`moeda`) dizem a
+mesma coisa em outra unidade. O preço e o múltiplo de tela, a reversa, a ponte e
+tudo o que o caso declara ficam fora. As travas de
+`tests/test_catalogo_apresentacao.py`, sobre as fixtures: toda folha numérica que
+o wrapper publica é conclusão de valor pelo mapa ou tem ali a razão declarada
+para não ser (um número novo sem classificação reprova); nenhum padrão sem folha
+que o exerça; nenhum caminho com duas unidades; o mapa não cobre `mercado_tela`
+nem o que o caso declara; e toda célula de grade é coberta pela família da
+unidade que a grade publica.
+
 ## Escopo desta fatia
 
 Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`

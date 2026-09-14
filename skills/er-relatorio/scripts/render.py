@@ -40,6 +40,12 @@ exibe sai de `placeholders.resolver_prosa` — a mesma lista de prosa que o QC
 varre e que o log da Evidência registra —, e todo vocabulário sai rotulado:
 premissa, bloco e classe de fronteira pelo catálogo; tema, vetor, incorporação e
 papel da faixa pelo dicionário.
+
+Fatia 5D, onda de correção da revisão final (F1): sob fronteira de escopo, todo
+número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`)
+é leitura condicional — fora da Conclusão da Tese, que fica só com o múltiplo de
+tela, e com o rótulo condicional do dicionário na Valuation. Uma decisão só, em
+`_leitura_condicional` (ver a seção "Leitura condicional").
 """
 
 import html
@@ -739,7 +745,8 @@ def _conclusao_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
         f'<p class="conclusao-texto">{html.escape(_prosa(prosa, "analise.conclusao.texto"))}</p>'
         f'{bloco_faixa}'
         f'{_veredicto_html(caso, idioma, moeda, dicionario, prosa)}'
-        f'<div class="tese-multiplos">{_multiplos_html(resultados, catalogo, idioma, dicionario)}</div>'
+        f'<div class="tese-multiplos">'
+        f'{_multiplos_html(resultados, catalogo, idioma, dicionario, omitir_conclusao_de_valor=True)}</div>'
         '</section>'
     )
 
@@ -1121,8 +1128,8 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
             f'</section>'
         )
     for indice, grade in enumerate(_grades_2d(resultados)):
-        titulo = html.escape(t(
-            dicionario, "valuation.matriz_titulo",
+        titulo = html.escape(_rotulo_do_numero(
+            resultados, catalogo, dicionario, "matriz_titulo", CAMINHO_DAS_CELULAS_DA_GRADE_2D,
             cenario=_cenario_da_grade(caso),
             x=_rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
             y=_rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
@@ -1292,7 +1299,7 @@ def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
     ), info.get("bloco")
 
 
-def _saidas_do_cenario_html(dicionario: dict, titulo_do_preco: str) -> str:
+def _saidas_do_cenario_html(dicionario: dict, rotulos_das_saidas: dict) -> str:
     """As três saídas que `laboratorio.js` reescreve a cada edição: preço,
     múltiplo e upside. Nascem com o texto de "sem valor" — o JS as preenche na
     carga (reproduzindo, aí, exatamente o que o relatório publicou, que é o
@@ -1300,16 +1307,16 @@ def _saidas_do_cenario_html(dicionario: dict, titulo_do_preco: str) -> str:
     FICAM assim: um número recalculado por um motor que discorda do relatório
     é justamente o que L4 proíbe mostrar.
 
-    `titulo_do_preco` (fatia 5D, Task 3, achado 2) é o MESMO rótulo do cabeçalho
-    da aba (`_titulo_do_preco`): sob fronteira de escopo, leitura condicional."""
+    `rotulos_das_saidas` (`preco`, `multiplo`, `upside`) sai de `_laboratorio_html`
+    pela mesma decisão do cabeçalho da aba (`_rotulo_do_numero`): sob fronteira de
+    escopo, cada saída que o mapa da integração declara conclusão de valor é
+    leitura condicional. A Task 3 trocava só o rótulo do preço, e o múltiplo justo
+    e o upside continuavam com os de sempre (F1 da revisão final)."""
     vazio = html.escape(t(dicionario, "valuation.laboratorio_sem_valor"))
-    campos = [
-        ("preco", titulo_do_preco, True),
-        ("multiplo", t(dicionario, "valuation.multiplo_justo_titulo"), False),
-        ("upside", t(dicionario, "valuation.upside_titulo"), True),
-    ]
+    campos = [("preco", True), ("multiplo", False), ("upside", True)]
     blocos = []
-    for chave, rotulo, sem_nota in campos:
+    for chave, sem_nota in campos:
+        rotulo = rotulos_das_saidas[chave]
         nota = "" if sem_nota else f'<span class="metrica-nota" data-laboratorio-saida="{chave}-rotulo"></span>'
         blocos.append(
             f'<div class="metrica">'
@@ -1343,7 +1350,7 @@ def _diagnosticos_do_cenario_html(dicionario: dict) -> str:
 
 def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
                                   premissas_catalogo: dict, catalogo: dict, idioma: str,
-                                  moeda: str | None, dicionario: dict, titulo_do_preco: str) -> str:
+                                  moeda: str | None, dicionario: dict, rotulos_das_saidas: dict) -> str:
     campos_por_bloco: dict[str, list] = {}
     travados: list[str] = []
     for posicao, (chave, valor) in enumerate(premissas.items()):
@@ -1376,7 +1383,7 @@ def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: 
     return (
         f'<section class="lab-cenario" data-laboratorio-cenario="{html.escape(nome)}">'
         f'<h3>{titulo}</h3>'
-        f'{_saidas_do_cenario_html(dicionario, titulo_do_preco)}'
+        f'{_saidas_do_cenario_html(dicionario, rotulos_das_saidas)}'
         f'{_diagnosticos_do_cenario_html(dicionario)}'
         f'<div class="lab-blocos">{"".join(grupos)}</div>'
         f'<p class="lab-acoes"><button type="button" data-laboratorio-restaurar>{restaurar}</button></p>'
@@ -1412,12 +1419,19 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
     if premissas_catalogo is None or not cenarios:
         return ""
     moeda = caso.get("moeda")
-    titulo_do_preco = _titulo_do_preco(resultados, dicionario)
+    rotulos_das_saidas = {
+        "preco": _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
+                                   CAMINHO_DOS_PRECOS_POR_CENARIO),
+        "multiplo": _rotulo_do_numero(resultados, catalogo, dicionario, "multiplo_justo_titulo",
+                                      CAMINHO_DOS_MULTIPLOS_POR_CENARIO),
+        "upside": _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
+                                    CAMINHO_DOS_UPSIDES_POR_CENARIO),
+    }
 
     paineis = "".join(
         _cenario_do_laboratorio_html(
             rota, nome, (bloco or {}).get("premissas") or {}, indice, premissas_catalogo,
-            catalogo, idioma, moeda, dicionario, titulo_do_preco)
+            catalogo, idioma, moeda, dicionario, rotulos_das_saidas)
         for indice, (nome, bloco) in enumerate(cenarios.items())
     )
     return (
@@ -1519,44 +1533,95 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
     }
 
 
-def _titulo_do_preco(resultados: dict, dicionario: dict) -> str:
-    """D3 e achado 2 (fatia 5D, Task 3): o rótulo do preço por ação na aba
-    Valuation. Sob fronteira de escopo o número é leitura condicional, nunca
-    preço justo — e a regra vale para os DOIS lugares que o nomeiam, o cabeçalho
-    e as saídas de cada cenário do laboratório: trocar só o cabeçalho deixaria o
-    laboratório chamando de preço justo o que a Tese diz ser condicional."""
+# --------------------------------------------------------------------------
+# Leitura condicional (fatia 5D, onda de correção da revisão final, F1). Sob
+# fronteira de escopo, todo número que a integração declara conclusão de valor
+# (`catalogo.conclusoes_de_valor`) é leitura condicional: na Conclusão da Tese
+# ele não sai, e na Valuation sai com o rótulo condicional do dicionário
+# (`valuation.condicional.<chave>`). A decisão é uma só, em `_leitura_condicional`:
+# quem exibe um número diz QUAL número exibe — o caminho que lê em `resultados`,
+# abaixo — e o mapa da integração responde se ele é conclusão de valor. Nenhum
+# nome de campo decide nada neste módulo. A D3 tratava só o preço por ação, e o
+# upside, o múltiplo justo, a lista por cenário, as saídas do laboratório e a
+# matriz saíam com os rótulos de sempre ao lado de "(sem preço-alvo)".
+# --------------------------------------------------------------------------
+
+# O caminho, em `resultados`, de cada número de valuation que esta página exibe;
+# `*` num segmento vale por todos os números exibidos ali.
+CAMINHO_DO_PRECO_DA_MANCHETE: str = "manchete.preco_acao"
+CAMINHO_DO_UPSIDE_DA_MANCHETE: str = "manchete.upside"
+CAMINHO_DO_MULTIPLO_DA_MANCHETE: str = "manchete.multiplo.valor"
+CAMINHO_DO_MULTIPLO_DE_TELA: str = "mercado_tela.valor"
+CAMINHO_DOS_PRECOS_POR_CENARIO: str = "cenarios.*.valor.preco_acao"
+CAMINHO_DOS_MULTIPLOS_POR_CENARIO: str = "cenarios.*.multiplos.*"
+CAMINHO_DOS_UPSIDES_POR_CENARIO: str = "cenarios.*.vs_preco.upside"
+CAMINHO_DAS_CELULAS_DA_GRADE_2D: str = "sensibilidades.grades_2d.*.celulas.*.*.valor"
+
+
+def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str) -> bool:
+    """`True` quando o número que a página exibe em `caminho` é, sob fronteira de
+    escopo, conclusão de valor pelo mapa da integração (`placeholders.conclusao_de_
+    valor`). Fora da fronteira, sempre `False` — e o mapa nem é lido. Sob ela, um
+    catálogo sem o mapa é recusa nomeada: o QC já o reprovou (`fronteira_de_escopo_
+    desconhecida`), e este módulo nunca decide ao acaso o que é preço-alvo."""
     if _campo_de_contrato(resultados, "fronteira_de_escopo", "resultados") is None:
-        return t(dicionario, "valuation.preco_justo_titulo")
-    return t(dicionario, "valuation.preco_condicional_titulo")
+        return False
+    mapa = placeholders.conclusoes_de_valor(catalogo)
+    if mapa is None:
+        raise RotuloDoCatalogoAusente(
+            "catálogo de apresentação sem o mapa das conclusões de valor ('conclusoes_de_valor'): sob "
+            "fronteira de escopo, o relatório não sabe quais números exibir como leitura condicional."
+        )
+    return placeholders.conclusao_de_valor(caminho, mapa) is not None
 
 
-def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+def _rotulo_do_numero(resultados: dict, catalogo: dict, dicionario: dict, chave: str, caminho: str,
+                      **valores) -> str:
+    """O rótulo do número exibido em `caminho`: `valuation.<chave>`, ou — quando ele é
+    leitura condicional (`_leitura_condicional`) — `valuation.condicional.<chave>`. Um
+    número que o mapa passe a cobrir sem forma condicional no dicionário é
+    `ChaveDeInterfaceAusente`, nomeada: nunca uma conclusão de valor com o rótulo de
+    sempre sob fronteira."""
+    if _leitura_condicional(resultados, catalogo, caminho):
+        return t(dicionario, f"valuation.condicional.{chave}", **valores)
+    return t(dicionario, f"valuation.{chave}", **valores)
+
+
+def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
+                    omitir_conclusao_de_valor: bool = False) -> str:
     """O múltiplo justo da manchete ao lado do múltiplo de tela, cada lado com o
     rótulo da própria chave (a regra 4 de `resultados/1` garante a mesma base) —
     ou, num caso SOTP (sem `manchete.multiplo`), a nota de que o preço
     consolidado não tem múltiplo único. Uma leitura só, para o cabeçalho da
     Valuation e a Conclusão da Tese (5D, Task 3): duas leituras do mesmo par
-    divergiriam."""
+    divergiriam.
+
+    Onda de correção da revisão final (F1): sob fronteira de escopo, o lado que o
+    mapa da integração declara conclusão de valor — hoje, o múltiplo justo — sai
+    com o rótulo condicional na Valuation e NÃO sai quando `omitir_conclusao_de_
+    valor` (a Conclusão da Tese): múltiplo justo contra o de tela é o upside dito
+    em outra unidade, e a Tese fica só com a leitura de mercado que a §14 mantém."""
     manchete = resultados["manchete"]
     if "multiplo" not in manchete:
         return f'<p class="sotp-nota">{html.escape(t(dicionario, "valuation.sotp_sem_multiplo"))}</p>'
-    mj, mt = manchete["multiplo"], resultados["mercado_tela"]
-    mj_fmt = html.escape(placeholders.formatar(mj["valor"], "x2", idioma))
-    mt_fmt = html.escape(placeholders.formatar(mt["valor"], "x2", idioma))
-    mj_rotulo = html.escape(_rotulo_multiplo(catalogo, mj["chave"], idioma))
-    mt_rotulo = html.escape(_rotulo_multiplo(catalogo, mt["chave"], idioma))
-    return (
-        f'<div class="metrica">'
-        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_justo_titulo"))}</span>'
-        f'<span class="metrica-valor">{mj_fmt}</span>'
-        f'<span class="metrica-nota">{mj_rotulo}</span>'
-        f'</div>'
-        f'<div class="metrica">'
-        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.multiplo_tela_titulo"))}</span>'
-        f'<span class="metrica-valor">{mt_fmt}</span>'
-        f'<span class="metrica-nota">{mt_rotulo}</span>'
-        f'</div>'
+    lados = (
+        ("multiplo_justo_titulo", CAMINHO_DO_MULTIPLO_DA_MANCHETE, manchete["multiplo"]),
+        ("multiplo_tela_titulo", CAMINHO_DO_MULTIPLO_DE_TELA, resultados["mercado_tela"]),
     )
+    blocos = []
+    for chave_do_rotulo, caminho, multiplo in lados:
+        if omitir_conclusao_de_valor and _leitura_condicional(resultados, catalogo, caminho):
+            continue
+        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho)
+        valor_fmt = placeholders.formatar(multiplo["valor"], "x2", idioma)
+        blocos.append(
+            f'<div class="metrica">'
+            f'<span class="metrica-rotulo">{html.escape(rotulo)}</span>'
+            f'<span class="metrica-valor">{html.escape(valor_fmt)}</span>'
+            f'<span class="metrica-nota">{html.escape(_rotulo_multiplo(catalogo, multiplo["chave"], idioma))}</span>'
+            f'</div>'
+        )
+    return "".join(blocos)
 
 
 def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
@@ -1566,13 +1631,17 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
 
     preco_fmt = html.escape(placeholders.formatar(manchete["preco_acao"], "moeda", idioma, moeda))
     upside_fmt = html.escape(placeholders.formatar(manchete["upside"], "pct1", idioma))
+    rotulo_do_preco = _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
+                                        CAMINHO_DO_PRECO_DA_MANCHETE)
+    rotulo_do_upside = _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
+                                         CAMINHO_DO_UPSIDE_DA_MANCHETE)
     cabecalho = (
         f'<div class="metrica">'
-        f'<span class="metrica-rotulo">{html.escape(_titulo_do_preco(resultados, dicionario))}</span>'
+        f'<span class="metrica-rotulo">{html.escape(rotulo_do_preco)}</span>'
         f'<span class="metrica-valor">{preco_fmt}</span>'
         f'</div>'
         f'<div class="metrica">'
-        f'<span class="metrica-rotulo">{html.escape(t(dicionario, "valuation.upside_titulo"))}</span>'
+        f'<span class="metrica-rotulo">{html.escape(rotulo_do_upside)}</span>'
         f'<span class="metrica-valor">{upside_fmt}</span>'
         f'</div>'
     )
@@ -1621,9 +1690,11 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
             f'{html.escape(placeholders.formatar(dados["valor"]["preco_acao"], "moeda", idioma, moeda))}</li>'
             for nome, dados in cenarios.items()
         )
+        titulo_dos_cenarios = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo",
+                                                CAMINHO_DOS_PRECOS_POR_CENARIO)
         bloco_cenarios = (
             f'<section class="cenarios">'
-            f'<h2>{html.escape(t(dicionario, "valuation.cenarios_titulo"))}</h2>'
+            f'<h2>{html.escape(titulo_dos_cenarios)}</h2>'
             f'<ul>{linhas}</ul>'
             f'</section>'
         )

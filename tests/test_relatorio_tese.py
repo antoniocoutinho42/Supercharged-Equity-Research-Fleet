@@ -94,8 +94,13 @@ def _alias_legado_de_tv(caso: dict) -> None:
     caso["cenarios"]["base"]["premissas"]["tv"] = "spread"
 
 
+def _tres_cenarios_sob_fronteira(caso: dict) -> None:
+    _tres_cenarios(caso)
+    _com_fronteira_de_escopo(caso)
+
+
 _VARIANTES = {"padrao": None, "tres_cenarios": _tres_cenarios, "fronteira": _com_fronteira_de_escopo,
-              "alias_tv": _alias_legado_de_tv}
+              "alias_tv": _alias_legado_de_tv, "tres_cenarios_sob_fronteira": _tres_cenarios_sob_fronteira}
 
 
 @functools.lru_cache(maxsize=None)
@@ -513,10 +518,147 @@ def test_placeholder_de_preco_por_acao_sob_fronteira_e_hard_fail(caminho, token)
     assert [(a.nivel, a.onde, a.params["trecho"]) for a in achados] == [("HARD_FAIL", onde, token)]
 
 
-def test_preco_de_tela_sob_fronteira_nao_e_preco_alvo():
+@pytest.mark.parametrize("token", [
+    pytest.param("{{caso:preco.valor|moeda}}", id="preco-de-tela"),
+    pytest.param("{{resultados:mercado_tela.valor|x2}}", id="multiplo-de-tela"),
+])
+def test_leitura_de_mercado_sob_fronteira_nao_e_preco_alvo(token):
+    """§14: sob fronteira a entrega mantém a leitura de mercado — o preço e o múltiplo
+    de tela não são conclusão de valor."""
     sob = _sob_fronteira()
-    _acrescentar(sob, ("veredicto", "texto"), " Preço de tela: {{caso:preco.valor|moeda}}.")
+    _acrescentar(sob, ("veredicto", "texto"), f" Na tela: {token}.")
     assert _do_codigo(_achados(sob), "fronteira_com_preco_alvo") == []
+
+
+# --------------------------------------------------------------------------
+# Onda de correção da revisão final (F2): o QC reconhece conclusão de valor pelo
+# mapa que a integração publica (`catalogo.conclusoes_de_valor`), nunca pelo nome
+# do campo, e varre os três lugares por onde um número de `resultados` chega à
+# Tese: placeholder da prosa, série `engine` e overlay de exhibit. Os quatro casos
+# da revisão passavam com RC=0.
+# --------------------------------------------------------------------------
+
+_CELULA_DA_GRADE = "{{resultados:sensibilidades.grades_2d.0.celulas.1.1.valor|moeda}}"
+
+
+@pytest.mark.parametrize("fixture,token,unidade", [
+    pytest.param("caso_reversa_firm.json", _CELULA_DA_GRADE, "preço por ação", id="celula-da-grade"),
+    pytest.param(FIXTURE, "{{resultados:manchete.upside|pct1}}", "fração", id="upside"),
+    pytest.param(FIXTURE, "{{resultados:manchete.multiplo.valor|x2}}", "múltiplo", id="multiplo-justo"),
+    pytest.param(FIXTURE, "{{resultados:cenarios.base.valor.Equity|moeda}}", "moeda", id="equity-do-cenario"),
+    pytest.param("caso_sotp_segmento.json", "{{resultados:sotp.preco_acao|moeda}}", "preço por ação",
+                 id="preco-do-sotp"),
+])
+def test_conclusao_de_valor_num_texto_da_tese_sob_fronteira_e_hard_fail_nomeando_o_caminho(fixture, token, unidade):
+    caminho = token[len("{{resultados:"):].split("|", 1)[0]
+    fora = _entrega(fixture)
+    _acrescentar(fora, ("veredicto", "texto"), f" Referência: {token}.")
+    assert _do_codigo(_achados(fora), "fronteira_com_preco_alvo") == []
+
+    sob = _entrega(fixture, variante="fronteira")
+    _acrescentar(sob, ("veredicto", "texto"), f" Referência: {token}.")
+    achados = _do_codigo(_achados(sob), "fronteira_com_preco_alvo")
+    assert [(a.nivel, a.onde, a.params["trecho"], a.params["caminho"], a.params["unidade"]) for a in achados] == [
+        ("HARD_FAIL", "analise.veredicto.texto", token, caminho, unidade)]
+
+
+_EXHIBIT_DO_PRECO = {"id": "preco", "pergunta": "Quanto vale a ação no cenário da manchete?", "tipo": "tabela",
+                     "nota_janela": "Um único ponto: o da manchete.",
+                     "series": [{"derivacao": "engine", "chave": "resultados:manchete.preco_acao"}]}
+_EXHIBIT_DA_RECEITA_COM_OVERLAY = {"id": "receita", "pergunta": "Como a receita evoluiu no período?", "tipo": "linha",
+                                   "series": [{"derivacao": "direta", "fonte": "fin.receita"}],
+                                   "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}]}
+
+
+def _com_exhibit_sob_a_pergunta(entrega_dict: dict, exhibit: dict) -> dict:
+    """O exhibit desenhado sob a pergunta de moat — dentro da aba Tese."""
+    entrega_dict["analise"]["exhibits"] = [copy.deepcopy(exhibit)]
+    entrega_dict["dados"] = copy.deepcopy(_DADOS_DOS_EXHIBITS)
+    pergunta = entrega_dict["analise"]["perguntas"][0]
+    del pergunta["sem_exhibit"]
+    pergunta["exhibits"] = [exhibit["id"]]
+    return entrega_dict
+
+
+@pytest.mark.parametrize("exhibit,onde,chave_de_mercado", [
+    pytest.param(_EXHIBIT_DO_PRECO, "analise.exhibits.0.series.0.chave",
+                 lambda e: e["series"][0].update(chave="resultados:mercado_tela.valor"), id="serie-engine"),
+    pytest.param(_EXHIBIT_DA_RECEITA_COM_OVERLAY, "analise.exhibits.0.overlays.0.chave",
+                 lambda e: e["overlays"][0].update(chave="resultados:mercado_tela.valor", rotulo="múltiplo de tela"),
+                 id="overlay"),
+])
+def test_conclusao_de_valor_num_exhibit_sob_a_pergunta_sob_fronteira_e_hard_fail(exhibit, onde, chave_de_mercado,
+                                                                                 tmp_path):
+    """P1d e P1e da revisão: a tabela "Quanto vale a ação no cenário da manchete?" e um
+    overlay chamado "preço justo" desenhavam R$ 61,91 sob uma pergunta da tese, com
+    RC=0. Fora da fronteira os dois continuam válidos; sob ela, a mesma referência ao
+    múltiplo de tela continua permitida."""
+    fora = _com_exhibit_sob_a_pergunta(_entrega(), exhibit)
+    _carregar(fora, tmp_path)
+    assert _achados(fora) == []
+
+    sob = _com_exhibit_sob_a_pergunta(_sob_fronteira(), exhibit)
+    achados = _do_codigo(_achados(sob), "fronteira_com_preco_alvo")
+    assert [(a.nivel, a.onde, a.params["trecho"], a.params["caminho"]) for a in achados] == [
+        ("HARD_FAIL", onde, "resultados:manchete.preco_acao", "manchete.preco_acao")]
+
+    de_mercado = copy.deepcopy(exhibit)
+    chave_de_mercado(de_mercado)
+    assert _do_codigo(_achados(_com_exhibit_sob_a_pergunta(_sob_fronteira(), de_mercado)),
+                      "fronteira_com_preco_alvo") == []
+
+
+def test_o_qc_reconhece_conclusao_de_valor_pelo_mapa_da_integracao_e_nunca_pelo_nome_do_campo():
+    """E3: a mesma entrega sob dois catálogos. Sem o padrão das células no mapa, a
+    célula da grade deixa de ser conclusão de valor; com `reversa.alvo.valor` — um
+    múltiplo que nenhum nome de campo sugere — declarado no mapa, citá-lo passa a
+    reprovar. Um QC que decidisse pelo nome ficaria igual nos dois catálogos."""
+    sob = _entrega("caso_reversa_firm.json", variante="fronteira")
+    alvo_da_reversa = "{{resultados:reversa.alvo.valor|x2}}"
+    _acrescentar(sob, ("veredicto", "texto"), f" A célula vale {_CELULA_DA_GRADE}; a tela embute {alvo_da_reversa}.")
+
+    def _trechos(catalogo: dict) -> list:
+        return [a.params["trecho"] for a in _do_codigo(_achados(sob, catalogo), "fronteira_com_preco_alvo")]
+
+    assert _trechos(CATALOGO) == [_CELULA_DA_GRADE]
+    outro = copy.deepcopy(CATALOGO)
+    outro["conclusoes_de_valor"]["preço por ação"].remove("sensibilidades.grades_2d.*.celulas.*.*.valor")
+    outro["conclusoes_de_valor"]["múltiplo"].append("reversa.alvo.valor")
+    assert _trechos(outro) == [alvo_da_reversa]
+
+
+# --------------------------------------------------------------------------
+# N10: sob fronteira, o bloco de avisos não pode dizer "nenhum aviso obrigatório" —
+# a §11 lista "limitação de escopo" como REQUIRED DISCLOSURE. O QC a emite com o
+# rótulo da classe, do catálogo; sem essa declaração (ou sem o mapa das conclusões
+# de valor), o relatório não sabe nomear a fronteira nem reconhecer um número de
+# valor sob ela, e recusa nomeando.
+# --------------------------------------------------------------------------
+
+def test_sob_fronteira_o_qc_declara_a_limitacao_de_escopo_com_o_rotulo_da_classe():
+    assert _do_codigo(_achados(_entrega()), "fronteira_de_escopo_declarada") == []
+
+    sob = _sob_fronteira()
+    classe = sob["resultados"]["fronteira_de_escopo"]["classe"]
+    assert [(a.nivel, a.onde, a.params) for a in _do_codigo(_achados(sob), "fronteira_de_escopo_declarada")] == [
+        ("REQUIRED_DISCLOSURE", "resultados.fronteira_de_escopo",
+         {"classe": classe, "rotulo": CATALOGO["fronteiras_de_escopo"][classe]["rotulo"]["pt-BR"]})]
+
+
+@pytest.mark.parametrize("falta", ["rotulo_da_classe", "mapa_de_conclusoes_de_valor"])
+def test_fronteira_que_o_catalogo_nao_declara_e_hard_fail_nomeado(falta):
+    sob = _sob_fronteira()
+    classe = sob["resultados"]["fronteira_de_escopo"]["classe"]
+    assert _do_codigo(_achados(sob), "fronteira_de_escopo_desconhecida") == []
+
+    catalogo = copy.deepcopy(CATALOGO)
+    if falta == "rotulo_da_classe":
+        del catalogo["fronteiras_de_escopo"][classe]["rotulo"]["pt-BR"]
+    else:
+        del catalogo["conclusoes_de_valor"]
+    assert [(a.nivel, a.onde, a.params) for a in _do_codigo(_achados(sob, catalogo),
+                                                            "fronteira_de_escopo_desconhecida")] == [
+        ("HARD_FAIL", "resultados.fronteira_de_escopo", {"classe": classe, "idioma": "pt-BR"})]
 
 
 # --------------------------------------------------------------------------
@@ -722,6 +864,7 @@ def test_digito_solto_num_campo_novo_da_tese_e_hard_fail(caminho):
 
 DICIONARIO = placeholders.carregar_dicionario("pt-BR")
 TESE = DICIONARIO["interface"]["tese"]
+VALUATION = DICIONARIO["interface"]["valuation"]
 SEM_NODE = shutil.which("node") is None
 RAZAO_SEM_NODE = "node ausente do PATH -- o harness do bootstrap roda sempre no CI (setup-node)"
 
@@ -1166,10 +1309,13 @@ def _rotulos_do_preco_na_valuation(pagina: str) -> tuple:
 
 def test_sob_fronteira_a_conclusao_e_condicional_e_a_valuation_chama_o_preco_de_leitura_condicional(tmp_path):
     """Sob fronteira de escopo a Conclusão diz "conclusão condicional, sem preço-alvo", com a
-    classe rotulada pelo catálogo, a arquitetura dominante e a razão, e sem faixa; e o preço
-    por ação vira leitura condicional NOS DOIS lugares da Valuation que o chamavam de preço
-    justo — o cabeçalho e as saídas do laboratório. A vizinha fora da fronteira continua
-    com "Conclusão" e "Preço justo" nos dois lugares."""
+    classe rotulada pelo catálogo, a arquitetura dominante e a razão, sem faixa e — onda de
+    correção da revisão final (F1) — só com o múltiplo de tela: o múltiplo justo ao lado do de
+    tela é o upside dito em outra unidade. O bloco de avisos traz a limitação de escopo (N10),
+    nunca "nenhum aviso obrigatório". E o preço por ação vira leitura condicional NOS DOIS
+    lugares da Valuation que o chamavam de preço justo — o cabeçalho e as saídas do
+    laboratório. A vizinha fora da fronteira continua com "Conclusão", os dois múltiplos,
+    nenhum aviso e "Preço justo" nos dois lugares."""
     sob = _sob_fronteira()
     fronteira = sob["resultados"]["fronteira_de_escopo"]
     pagina = _pagina_pelo_builder(sob, tmp_path / "sob")
@@ -1181,19 +1327,104 @@ def test_sob_fronteira_a_conclusao_e_condicional_e_a_valuation_chama_o_preco_de_
         CATALOGO["fronteiras_de_escopo"][fronteira["classe"]]["rotulo"]["pt-BR"],
         fronteira["arquitetura_dominante"], fronteira["razao"]]
     assert _todos(conclusao, classe="tese-faixa") == []
+    tela = sob["resultados"]["mercado_tela"]
+    assert _metricas(_um(conclusao, classe="tese-multiplos")) == [
+        (VALUATION["multiplo_tela_titulo"], placeholders.formatar(tela["valor"], "x2", "pt-BR"),
+         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"])]
 
-    condicional = DICIONARIO["interface"]["valuation"]["preco_condicional_titulo"]
-    justo = DICIONARIO["interface"]["valuation"]["preco_justo_titulo"]
+    avisos = _secao(_aba(pagina, "tese"), TESE["disclosures_titulo"])
+    rotulo_da_classe = CATALOGO["fronteiras_de_escopo"][fronteira["classe"]]["rotulo"]["pt-BR"]
+    assert [_visivel(item) for item in _todos(avisos, tag="li")] == [
+        DICIONARIO["qc"]["fronteira_de_escopo_declarada"].format(rotulo=rotulo_da_classe)]
+
+    condicional = VALUATION["condicional"]["preco_justo_titulo"]
+    justo = VALUATION["preco_justo_titulo"]
     cabecalho, laboratorio, todos = _rotulos_do_preco_na_valuation(pagina)
     assert laboratorio, "a página do builder traz o laboratório — sem ele, a asserção seria vácua"
     assert (cabecalho, set(laboratorio)) == (condicional, {condicional})
     assert justo not in todos
 
     fora = _pagina_pelo_builder(_entrega(), tmp_path / "fora")
-    assert _titulo(_secoes(_aba(fora, "tese"))[0]) == TESE["conclusao_titulo"]
+    conclusao_fora = _secoes(_aba(fora, "tese"))[0]
+    assert _titulo(conclusao_fora) == TESE["conclusao_titulo"]
+    assert [rotulo for rotulo, _valor, _nota in _metricas(_um(conclusao_fora, classe="tese-multiplos"))] == [
+        VALUATION["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]]
+    assert _visivel(_secao(_aba(fora, "tese"), TESE["disclosures_titulo"])) == (
+        f'{TESE["disclosures_titulo"]} {TESE["disclosures_vazio"]}')
     cabecalho, laboratorio, todos = _rotulos_do_preco_na_valuation(fora)
     assert (cabecalho, set(laboratorio)) == (justo, {justo})
     assert condicional not in todos
+
+
+def _rotulos_e_titulos(aba: dict) -> list:
+    """Todo título e todo rótulo da aba — o que o leitor lê como o nome de um número."""
+    return [_visivel(el) for el in _elementos(aba)
+            if el["tag"] in ("h1", "h2", "h3", "h4") or any(classe.endswith("rotulo") for classe in _classes(el))]
+
+
+def _e_o_rotulo(texto: str, modelo: str) -> bool:
+    """`texto` é o rótulo `modelo` do dicionário, com qualquer valor nos `{marcadores}`."""
+    literais = re.split(r"\{[^{}]*\}", modelo)
+    return re.fullmatch(".+".join(re.escape(literal) for literal in literais), texto) is not None
+
+
+def test_sob_fronteira_nenhum_numero_de_valor_sai_com_rotulo_incondicional_nas_abas_tese_e_valuation(tmp_path):
+    """F1 da revisão: sob fronteira, o upside do cabeçalho, o múltiplo justo, a lista de preços
+    por cenário, as três saídas de cada cenário do laboratório e a matriz de sensibilidade
+    saíam com os rótulos incondicionais — "Upside sobre o preço de mercado 12,6%" ao lado de
+    "(sem preço-alvo)". A varredura lê TODO título e rótulo das duas abas contra a lista de
+    rótulos incondicionais do dicionário — os que têm forma condicional
+    (`valuation.condicional`) e os da faixa, que sob fronteira não existe: nenhum aparece. A
+    vizinha fora da fronteira prova que a entrega exercita todos esses lugares — cabeçalho,
+    múltiplos, três cenários, grade 2D e laboratório —, senão a varredura seria vácua."""
+    condicionais = VALUATION["condicional"]
+    incondicionais = {chave: VALUATION[chave] for chave in condicionais}
+    da_faixa = [TESE["faixa_rotulo"], TESE["faixa_rotulo_consolidado"], *TESE["papeis_da_faixa"].values()]
+
+    def _rotulos(pagina: str) -> list:
+        return [texto for nome in ("tese", "valuation") for texto in _rotulos_e_titulos(_aba(pagina, nome))]
+
+    def _presentes(rotulos: list, modelos: dict) -> set:
+        return {chave for chave, modelo in modelos.items() if any(_e_o_rotulo(rotulo, modelo) for rotulo in rotulos)}
+
+    fora = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios"),
+                                         tmp_path / "fora"))
+    assert _presentes(fora, incondicionais) == set(incondicionais), "a entrega não exercita todo lugar da varredura"
+    assert _presentes(fora, condicionais) == set()
+
+    sob = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios_sob_fronteira"),
+                                        tmp_path / "sob"))
+    assert [rotulo for rotulo in sob
+            if any(_e_o_rotulo(rotulo, modelo) for modelo in [*incondicionais.values(), *da_faixa])] == []
+    assert _presentes(sob, condicionais) == set(condicionais)
+
+
+def test_a_tela_decide_pelo_mapa_da_integracao_qual_numero_e_leitura_condicional():
+    """E3 na tela: a mesma entrega sob fronteira, dois catálogos. Com `manchete.upside` no mapa,
+    o upside do cabeçalho é leitura condicional; fora dele, volta ao rótulo de sempre — a tela
+    lê a declaração da integração, nunca o nome do campo. O múltiplo de tela, que o mapa não
+    cobre, sai sempre com o seu rótulo."""
+    sob = _sob_fronteira()
+    condicional = VALUATION["condicional"]
+
+    def _cabecalho_e_multiplos(catalogo: dict) -> tuple:
+        achados = _achados(sob, catalogo)
+        assert not [a for a in achados if a.nivel == "HARD_FAIL"], achados
+        _prosa, log = placeholders.resolver_prosa(sob, "pt-BR")
+        resolvidos, log_exhibits = exhibits_mod.resolver(sob)
+        aba = _aba(render.compor(sob, catalogo, achados, log, "pt-BR", resolvidos, log_exhibits), "valuation")
+        return ([_visivel(r) for r in _todos(_um(aba, classe="valuation-cabecalho"), classe="metrica-rotulo")],
+                [_visivel(r) for r in _todos(_um(aba, classe="valuation-multiplos"), classe="metrica-rotulo")])
+
+    assert _cabecalho_e_multiplos(CATALOGO) == (
+        [condicional["preco_justo_titulo"], condicional["upside_titulo"]],
+        [condicional["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]])
+
+    sem_o_upside = copy.deepcopy(CATALOGO)
+    sem_o_upside["conclusoes_de_valor"]["fração"].remove("manchete.upside")
+    assert _cabecalho_e_multiplos(sem_o_upside) == (
+        [condicional["preco_justo_titulo"], VALUATION["upside_titulo"]],
+        [condicional["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]])
 
 
 # --------------------------------------------------------------------------

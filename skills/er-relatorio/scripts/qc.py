@@ -53,6 +53,16 @@ Fatia 5D, item 5, Task 3: a lista de prosa saiu deste módulo para
 `placeholders.campos_de_prosa`, a única que o QC, o log da Evidência
 (`builder.py`) e o texto da Tese (`render.py`) leem — e passou a cobrir também
 `pergunta`, `nota_janela` e `caption` de cada exhibit.
+
+Fatia 5D, onda de correção da revisão final (F2 e N10): `fronteira_com_preco_
+alvo` deixou de reconhecer preço-alvo pelo nome do campo (`preco_acao`) e lê o
+mapa das conclusões de valor que a integração publica (`catalogo.conclusoes_de_
+valor`, por `placeholders.conclusao_de_valor`), nos três lugares por onde um
+número de `resultados` chega à Tese: placeholder da prosa, série `engine` e
+overlay. Sob fronteira, a limitação de escopo sai como REQUIRED DISCLOSURE
+(`fronteira_de_escopo_declarada`), e um catálogo que não rotula a classe ou não
+publica o mapa é HARD FAIL (`fronteira_de_escopo_desconhecida`). Ver
+`_achados_fronteira_de_escopo`.
 """
 
 import json
@@ -701,8 +711,9 @@ def _achados_exhibits(entrega: dict) -> list[Achado]:
 # Fatia 5D, item 5, Task 2 (D1, D2, D4, D6): as regras da §11 que pertencem à
 # Tese. A FORMA da Tese é recusa de contrato (`entrega.py`, código 1); aqui só
 # o CONTEÚDO — o que depende do catálogo e dos números que a integração
-# publicou. E3: nenhum nome de premissa, nenhum limiar e nenhuma regra de
-# admissão de reversa moram neste módulo. O vocabulário de vínculo sai do
+# publicou. E3: nenhum nome de premissa, nenhum limiar, nenhuma regra de
+# admissão de reversa e nenhum nome de campo de conclusão de valor moram neste
+# módulo. O vocabulário de vínculo sai do
 # catálogo (`catalogo.premissas.<rota>` ∪ `catalogo.blocos`, D2), e o que torna
 # uma limitação "de reversa" é a declaração `catalogo.limitacoes.<chave>.afeta`
 # da integração — nunca o nome da chave.
@@ -721,10 +732,20 @@ MAXIMO_DE_PERGUNTAS_ESPECIFICAS: int = 2
 # POR QUE a reversa é impossível num caso é saber só da integração.
 BLOCO_DA_REVERSA: str = "reversa"
 
-# O campo de `resultados/1` que é preço por ação (`manchete.preco_acao`,
-# `cenarios.<nome>.valor.preco_acao`, `sotp.preco_acao`). Sob fronteira de
-# escopo (D3), um placeholder que o resolva é preço-alvo.
-CAMPO_DE_PRECO_POR_ACAO: str = "preco_acao"
+# De onde cada ponta da faixa lê o seu preço (D1): `resultados.cenarios.<nome>.
+# valor.preco_acao`, o caminho que o contrato da faixa declara. É leitura de
+# contrato, nunca reconhecimento de conclusão de valor: QUAIS números são
+# conclusão de valor a integração declara no mapa `catalogo.conclusoes_de_valor`,
+# que é o que `_achados_fronteira_de_escopo` lê (onda de correção da revisão
+# final da 5D, F2 — a regra reconhecia preço-alvo pelo NOME do campo, e a célula
+# da grade, o upside e o múltiplo justo passavam).
+CAMINHO_DO_PRECO_DA_FAIXA: tuple[str, ...] = ("valor", "preco_acao")
+
+# O namespace que lê `resultados` num placeholder, numa série `engine` e num
+# overlay — o único em que mora conclusão de valor. `caso:` é o que o caso
+# declara; `livre:` é, por definição, o que o contrato não sabe ler (N1 da
+# revisão da 5D).
+NAMESPACE_DOS_RESULTADOS: str = "resultados"
 
 _SEM_VALOR: str = "—"
 
@@ -830,8 +851,9 @@ def _achados_faixa(entrega: dict, idioma: str) -> list[Achado]:
     nomes = {papel: faixa.get(papel) for papel in contrato_entrega.PAPEIS_DA_FAIXA}
     precos = {}
     for papel, nome in nomes.items():
-        cenario = cenarios.get(nome) if isinstance(nome, str) else None
-        preco = _objeto(_objeto(cenario).get("valor")).get(CAMPO_DE_PRECO_POR_ACAO)
+        preco = cenarios.get(nome) if isinstance(nome, str) else None
+        for campo in CAMINHO_DO_PRECO_DA_FAIXA:
+            preco = _objeto(preco).get(campo)
         precos[papel] = preco if _numero_finito(preco) else None
 
     piso, base, teto = (precos[papel] for papel in contrato_entrega.PAPEIS_DA_FAIXA)
@@ -847,32 +869,84 @@ def _achados_faixa(entrega: dict, idioma: str) -> list[Achado]:
     return [Achado("HARD_FAIL", "faixa_fora_de_ordem", "analise.faixa", params)]
 
 
-def _achados_fronteira_com_preco_alvo(entrega: dict) -> list[Achado]:
-    """`fronteira_com_preco_alvo` (HARD FAIL, D3; §14: fair value por ação como
-    conclusão principal sob fronteira declarada): sob
-    `resultados.fronteira_de_escopo`, a Tese não declara `faixa`, e nenhum texto
-    dela tem um placeholder que resolva um preço por ação. O preço de tela
-    (`caso:preco.valor`) não é preço-alvo e continua permitido. Fora da
-    fronteira, `faixa` ausente é recusa de forma (`entrega.py`)."""
+def _referencias_a_resultados(entrega: dict) -> list[tuple[str, str, str]]:
+    """`(onde, trecho, caminho)` de todo número de `resultados` que chega à aba Tese,
+    pelos três lugares por onde ele chega: um placeholder `resultados:` num campo da
+    lista de prosa (`placeholders.campos_de_prosa`), a `chave` de uma série `engine` e
+    a `chave` de um overlay. `onde` nomeia o lugar pelo índice, como a lista de prosa
+    nomeia os textos de cada exhibit."""
+    referencias: list[tuple[str, str, str]] = []
+    for onde, texto in placeholders.campos_de_prosa(entrega):
+        for placeholder in _PADRAO_PLACEHOLDER_RECONHECIDO.finditer(texto):
+            if placeholder.group(1) == NAMESPACE_DOS_RESULTADOS:
+                caminho = placeholder.group(2).split("|", 1)[0].strip()
+                referencias.append((onde, placeholder.group(0), caminho))
+    for indice, exhibit in enumerate(_lista(_objeto(entrega.get("analise")).get("exhibits"))):
+        for lista in ("series", "overlays"):
+            for posicao, item in enumerate(_lista(_objeto(exhibit).get(lista))):
+                chave = _objeto(item).get("chave")
+                if not isinstance(chave, str):
+                    continue
+                namespace, separador, caminho = chave.partition(":")
+                if separador and namespace == NAMESPACE_DOS_RESULTADOS:
+                    referencias.append((f"analise.exhibits.{indice}.{lista}.{posicao}.chave", chave,
+                                        caminho.strip()))
+    return referencias
+
+
+def _achados_fronteira_de_escopo(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """Sob `resultados.fronteira_de_escopo` (D3; §14 do desenho) a Tese é uma conclusão
+    condicional, sem preço-alvo de manchete.
+
+    - HARD FAIL `fronteira_com_preco_alvo` (§11: "fronteira de escopo declarada com
+      fair value por ação como conclusão principal"): a Tese declara `faixa`, ou um
+      número que a integração declara conclusão de valor (`catalogo.conclusoes_de_
+      valor`, lido por `placeholders.conclusao_de_valor`) chega a ela por um dos três
+      lugares de `_referencias_a_resultados`. O achado nomeia o lugar, o caminho e a
+      unidade da família. Onda de correção da revisão final (F2): a regra reconhecia
+      só o campo `preco_acao`, pelo nome e só na prosa — a célula da grade, o upside,
+      a tabela e o overlay sob uma pergunta passavam com RC=0. O preço e o múltiplo de
+      tela não estão no mapa e continuam permitidos; `livre:` fica fora (N1).
+    - REQUIRED DISCLOSURE `fronteira_de_escopo_declarada` (§11: "metodologia especial
+      ou limitação de escopo"; N10): a fronteira entra no bloco de avisos, com o
+      rótulo que o catálogo dá à classe — o bloco nunca diz "nenhum aviso" sob ela.
+    - HARD FAIL `fronteira_de_escopo_desconhecida`: o catálogo não rotula a classe no
+      idioma, ou não publica o mapa. Sem o mapa nenhum número de valor seria
+      reconhecido: a regra falha fechada, e a correção é do catálogo.
+
+    Fora da fronteira, `faixa` ausente é recusa de forma (`entrega.py`)."""
     fronteira = _objeto(entrega.get("resultados")).get("fronteira_de_escopo")
     if fronteira is None:
         return []
     classe = str(fronteira.get("classe")) if isinstance(fronteira, dict) else str(fronteira)
     analise = _objeto(entrega.get("analise"))
+    onde_da_fronteira = "resultados.fronteira_de_escopo"
 
     achados: list[Achado] = []
     if "faixa" in analise:
         achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", "analise.faixa", {
             "classe": classe, "trecho": json.dumps(analise["faixa"], ensure_ascii=False, sort_keys=True),
+            "caminho": _SEM_VALOR, "unidade": _SEM_VALOR,
         }))
-    for onde, texto in placeholders.campos_de_prosa(entrega):
-        for placeholder in _PADRAO_PLACEHOLDER_RECONHECIDO.finditer(texto):
-            if placeholder.group(1) == "livre":
-                continue
-            caminho = placeholder.group(2).split("|", 1)[0].strip()
-            if caminho.rsplit(".", 1)[-1] == CAMPO_DE_PRECO_POR_ACAO:
-                achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", onde,
-                                      {"classe": classe, "trecho": placeholder.group(0)}))
+    mapa = placeholders.conclusoes_de_valor(catalogo)
+    if mapa is not None:
+        for onde, trecho, caminho in _referencias_a_resultados(entrega):
+            familia = placeholders.conclusao_de_valor(caminho, mapa)
+            if familia is not None:
+                unidade, _padrao = familia
+                achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", onde, {
+                    "classe": classe, "trecho": trecho, "caminho": caminho, "unidade": unidade,
+                }))
+
+    declaracao = _objeto(_objeto(catalogo.get("fronteiras_de_escopo")).get(classe))
+    rotulo = _objeto(declaracao.get("rotulo")).get(idioma)
+    rotulada = isinstance(rotulo, str) and bool(rotulo.strip())
+    if mapa is None or not rotulada:
+        achados.append(Achado("HARD_FAIL", "fronteira_de_escopo_desconhecida", onde_da_fronteira,
+                              {"classe": classe, "idioma": idioma}))
+    if rotulada:
+        achados.append(Achado("REQUIRED_DISCLOSURE", "fronteira_de_escopo_declarada", onde_da_fronteira,
+                              {"classe": classe, "rotulo": rotulo}))
     return achados
 
 
@@ -940,7 +1014,7 @@ def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]
             + _achados_vinculo_fora_do_vocabulario(analise, resultados, catalogo)
             + _achados_premissas_decisivas(analise, resultados, catalogo)
             + _achados_faixa(entrega, idioma)
-            + _achados_fronteira_com_preco_alvo(entrega)
+            + _achados_fronteira_de_escopo(entrega, catalogo, idioma)
             + _achados_reversa_e_limitacoes(resultados, catalogo, idioma)
             + _achados_tese_dependente_de_uma_premissa(analise))
 
