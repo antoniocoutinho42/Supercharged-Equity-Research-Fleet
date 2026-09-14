@@ -134,6 +134,16 @@ Campo opcional-condicional `cenario_base`: nome de um cenário declarado em
 declaração não há como saber qual preço é "a resposta" (a `manchete`, ver
 abaixo); implícito (dispensável) quando há um só cenário.
 
+Bloco opcional `fronteira_de_escopo` (§14 do desenho): declara que a
+companhia está fora do escopo da metodologia como métrica-manchete. `classe`
+é uma de `vida_economica_finita` (mineração, óleo e gás, concessão com
+termo), `reit_imobiliaria` ou `pre_lucro` — fora desse vocabulário, recusa
+nomeando a classe, com sugestão; `arquitetura_dominante` (a arquitetura
+necessária) e `razao` (por que o caso está fora) são textos não vazios; o
+bloco não aceita outra chave, e nulo é ausência. Sob fronteira declarada a
+análise continua, sem preço-alvo de manchete — regra do relatório, que lê
+`resultados.fronteira_de_escopo`.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -177,6 +187,18 @@ convenção que já mora aqui):
   (`avaliar._LIMIAR_DIVERGENCIA_DE_BASE_PCT`, fonte única, espelhado e travado
   em `motor_espelho.js`). A decisão "acima do limiar" é desta camada: a QC do
   relatório consome a chave e não compara limiar nenhum.
+- `fronteira_de_escopo` — o bloco que o gate validou, ou `null`; sempre
+  publicado (ver "Contrato do caso").
+- `limitacoes` — lista de chaves, sempre publicada e possivelmente vazia, das
+  limitações que o caso impõe à entrega. Hoje só a da reversa, que a Análise
+  exige mas o gate recusa em combinações não implementadas:
+  `reversa_na_rota_rampa` (rota `rampa`) e `reversa_com_degrau` (bloco
+  `degrau`). Quem decide é `caso.reversa_indisponivel(caso)`, que consulta o
+  mesmo registro de recusas que o gate aplica (`caso.LIMITACOES_DE_REVERSA`),
+  nunca uma lista paralela; a trava de `tests/test_valuation_contrato.py`
+  confere, fixture a fixture, que a chave sai publicada se e só se o gate
+  recusa um bloco `reversa` válido. O relatório lê a chave e o rótulo; a
+  regra fica aqui.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
@@ -185,7 +207,9 @@ Conhecimento metodológico que o relatório precisa exibir mas não calcula
 (bloco/unidade/rótulo de cada premissa, rótulo por convenção terminal
 canônica — `convencoes_terminais`, fonte única, nunca duplicado por rota —,
 rótulo e base de cada múltiplo, severidade e rótulo de cada diagnóstico,
-texto do disclosure de divergência de base e o nome da chave que o dispara)
+texto do disclosure de divergência de base e o nome da chave que o dispara,
+rótulo de cada classe de fronteira de escopo — `fronteiras_de_escopo` — e de
+cada limitação — `limitacoes`)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

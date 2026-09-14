@@ -111,7 +111,7 @@ import sys
 from pathlib import Path
 
 import diagnosticos
-from caso import CasoInvalido, _tv_canon, carregar
+from caso import CasoInvalido, _tv_canon, carregar, reversa_indisponivel
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
 from reversa import alvo_de_mercado, reverter
@@ -131,6 +131,8 @@ from reversa import alvo_de_mercado, reverter
 # desenho v4 §15) — `versao_contrato`, `origem` (regra 2), `manchete`
 # (regra 3/A4), `mercado_tela` (regra 4) e `diagnosticos_chaves` (regra 5,
 # aplicada dentro de `_monta_cenario`/`_monta_cenario_rampa` abaixo).
+# Fatia 5D, Task 1: `fronteira_de_escopo` e `limitacoes`, sempre publicados
+# (fim de `avaliar`).
 # --------------------------------------------------------------------------
 
 # Versão do contrato publicado — acréscimos compatíveis (campo novo, nunca
@@ -1051,6 +1053,18 @@ def avaliar(caso: dict) -> dict:
     # início desta função).
     resultado["manchete"] = _montar_manchete(caso, resultado)
     resultado["mercado_tela"] = _montar_mercado_tela(caso, resultado, nd_efetivo)
+
+    # Fatia 5D, Task 1 (D3/D4): o que só a integração sabe sobre o escopo do
+    # caso, SEMPRE publicado — um campo de contrato ausente não pode sumir em
+    # silêncio. `fronteira_de_escopo` é o bloco que o gate validou, ou `null`
+    # (§14 do desenho: sob fronteira, nada de preço-alvo de manchete — regra do
+    # relatório, que lê este campo). `limitacoes` é a lista de chaves das
+    # limitações do caso, rotuladas pelo catálogo: hoje só a que torna a
+    # reversa inadmissível, publicada exatamente como
+    # `caso.reversa_indisponivel` a devolve — nunca decidida aqui.
+    resultado["fronteira_de_escopo"] = caso.get("fronteira_de_escopo")
+    limitacao_da_reversa = reversa_indisponivel(caso)
+    resultado["limitacoes"] = [] if limitacao_da_reversa is None else [limitacao_da_reversa]
 
     return resultado
 

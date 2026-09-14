@@ -7,6 +7,7 @@ origem, manchete, diagnósticos classificados, cenário-base) — não repetem
 metodologia, que já é coberta por `tests/test_valuation_*.py`.
 """
 
+import copy
 import hashlib
 import json
 import sys
@@ -18,7 +19,10 @@ RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
-from caso import TV_CANON, CasoInvalido, carregar, validar  # noqa: E402
+from caso import (  # noqa: E402
+    CAMPOS_DE_MERCADO_OBRIGATORIOS, LIMITACOES_DE_REVERSA, TV_CANON, CasoInvalido, carregar,
+    reversa_indisponivel, validar,
+)
 import diagnosticos  # noqa: E402
 
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
@@ -183,3 +187,96 @@ def test_cenario_base_de_tipo_errado_e_recusado():
     caso["cenario_base"] = 123
     with pytest.raises(CasoInvalido, match="cenario_base"):
         validar(caso)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (D3/D4 do plano docs/superpowers/plans/2026-09-14-v4-item5d-
+# tese.md): o que só a integração sabe sobre o escopo do caso — a fronteira de
+# escopo declarada e as limitações que tornam a reversa impossível —, sempre
+# publicado. O relatório lê as chaves; as regras ficam em `caso.py`.
+# --------------------------------------------------------------------------
+
+def test_fronteira_de_escopo_e_limitacoes_sao_sempre_publicadas(resultados):
+    """Campo de contrato ausente não some em silêncio: toda fixture publica os
+    dois. Nenhuma declara fronteira (`null`), e `limitacoes` é exatamente o que
+    `caso.reversa_indisponivel` devolve, numa lista — vazia quando `None`."""
+    for nome, (caso, r) in resultados.items():
+        assert "fronteira_de_escopo" in r and r["fronteira_de_escopo"] is None, nome
+        chave = reversa_indisponivel(caso)
+        assert r["limitacoes"] == ([] if chave is None else [chave]), nome
+
+
+def test_fronteira_de_escopo_declarada_sai_publicada_como_o_gate_a_validou():
+    fronteira = {
+        "classe": "pre_lucro",
+        "arquitetura_dominante": "opção sobre a conversão do funil em receita recorrente",
+        "razao": "sem lucro operacional; a métrica-manchete da metodologia não se aplica",
+    }
+    caso = json.loads((FIXTURES / "caso_minimo_firm.json").read_text(encoding="utf-8"))
+    caso["fronteira_de_escopo"] = copy.deepcopy(fronteira)
+    validar(caso)
+    assert avaliar(caso)["fronteira_de_escopo"] == fronteira
+
+
+_MODELO_DE_REVERSA = json.loads((FIXTURES / "caso_reversa_firm.json").read_text(encoding="utf-8"))
+
+
+def _com_bloco_de_reversa_valido(caso: dict) -> dict:
+    """`caso` com o bloco 'reversa' de `caso_reversa_firm.json`, adaptado a ele.
+
+    O bloco não carrega premissa por eixo: `eixos` são nomes, e a premissa que
+    cada eixo resolve em cada rota mora em `reversa.RESOLVER_POR_EIXO` (wacc/ke,
+    roic/roe, g, cap). Os quatro eixos seguem como estão; o que se adapta é o
+    que o bloco aponta no caso — `cenario` vira o cenário da manchete
+    (`cenario_base`, ou o único declarado) — e o `mercado` que a reversa exige:
+    `rf`/`erp` do modelo onde o caso não os declara, porque sem eles o gate
+    recusaria a reversa por forma, não por limitação."""
+    c = copy.deepcopy(caso)
+    reversa = copy.deepcopy(_MODELO_DE_REVERSA["reversa"])
+    reversa["cenario"] = c.get("cenario_base") or next(iter(c["cenarios"]))
+    c["reversa"] = reversa
+    mercado = dict(c.get("mercado") or {})
+    for campo in CAMPOS_DE_MERCADO_OBRIGATORIOS:
+        if mercado.get(campo) is None:
+            mercado[campo] = _MODELO_DE_REVERSA["mercado"][campo]
+    c["mercado"] = mercado
+    return c
+
+
+def test_limitacao_de_reversa_e_publicada_se_e_so_se_o_gate_recusa_reversa_valida(resultados):
+    """A trava de D4. A Análise exige reversa, mas o gate a recusa em
+    combinações que o Fleet não implementa; `resultados.limitacoes` publica a
+    chave de reversa exatamente nas fixtures em que acrescentar um bloco
+    'reversa' válido faz `caso.validar` recusar — e a recusa é a da limitação
+    que a chave nomeia (`caso.LIMITACOES_DE_REVERSA`). Quem decide é o gate:
+    nenhuma fixture é nomeada aqui. Uma recusa de reversa escrita no gate por
+    fora do registro, ou um `reversa_indisponivel` que esqueça uma limitação,
+    reprovam. Os dois lados têm de aparecer — toda limitação registrada em
+    alguma fixture, e alguma fixture que admita reversa —, senão a trava seria
+    vacuamente verde."""
+    exercitadas = set()
+    admitem = []
+    for nome, (caso, r) in resultados.items():
+        publicadas = [chave for chave in r["limitacoes"] if chave in LIMITACOES_DE_REVERSA]
+        try:
+            validar(_com_bloco_de_reversa_valido(caso))
+            recusa = None
+        except CasoInvalido as erro:
+            recusa = str(erro)
+        if recusa is None:
+            assert not publicadas, (
+                f"{nome}: o gate admite um bloco 'reversa' válido, mas resultados.limitacoes "
+                f"publica {publicadas}")
+            admitem.append(nome)
+            continue
+        assert len(publicadas) == 1, (
+            f"{nome}: o gate recusa um bloco 'reversa' válido, mas resultados.limitacoes = "
+            f"{r['limitacoes']}. Recusa do gate: {recusa}")
+        assert recusa == LIMITACOES_DE_REVERSA[publicadas[0]](caso), (
+            f"{nome}: a recusa do gate não é a da limitação publicada ({publicadas[0]}). "
+            f"Recusa do gate: {recusa}")
+        exercitadas.add(publicadas[0])
+    assert admitem, "nenhuma fixture admite reversa — a trava perdeu o lado sem limitação"
+    assert exercitadas == set(LIMITACOES_DE_REVERSA), (
+        f"limitação registrada sem fixture que a exercite: "
+        f"{sorted(set(LIMITACOES_DE_REVERSA) - exercitadas)}")

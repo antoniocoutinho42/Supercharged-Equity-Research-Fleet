@@ -20,6 +20,7 @@ sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM, avaliar  # noqa: E402
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
+from caso import CLASSES_DE_FRONTEIRA_DE_ESCOPO, LIMITACOES_DE_REVERSA, reversa_indisponivel  # noqa: E402
 import diagnosticos  # noqa: E402
 
 # A2 (onda de correção da revisão final): o conjunto canônico do MOTOR,
@@ -120,7 +121,38 @@ def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
+        "fronteiras_de_escopo", "limitacoes",
     }
+
+
+# --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (D3/D4): o relatório mostra a classe da fronteira de escopo
+# e cada limitação pelo rótulo daqui, nunca pela chave crua — e as chaves são
+# as do gate. Mesma trava de upgrade das rotas e da ponte: uma classe nova em
+# `caso.CLASSES_DE_FRONTEIRA_DE_ESCOPO`, ou uma limitação nova em
+# `caso.LIMITACOES_DE_REVERSA`, sem entrada aqui reprova na integração.
+# --------------------------------------------------------------------------
+
+def _rotulos_em_todo_idioma(secao: str) -> None:
+    for chave, info in CAT[secao].items():
+        for idioma in CAT["idiomas"]:
+            assert info.get("rotulo", {}).get(idioma, "").strip(), (secao, chave, idioma)
+
+
+def test_fronteiras_de_escopo_do_catalogo_sao_exatamente_as_classes_do_gate():
+    assert set(CAT["fronteiras_de_escopo"]) == CLASSES_DE_FRONTEIRA_DE_ESCOPO
+    _rotulos_em_todo_idioma("fronteiras_de_escopo")
+
+
+def test_limitacoes_do_catalogo_sao_exatamente_as_que_reversa_indisponivel_pode_devolver():
+    """O registro que `reversa_indisponivel` consulta tem de ser exatamente o
+    catálogo, e toda chave que ela de fato devolve sobre as fixtures tem de
+    estar nele — uma chave devolvida por fora do registro também reprova."""
+    assert set(CAT["limitacoes"]) == set(LIMITACOES_DE_REVERSA)
+    devolvidas = {reversa_indisponivel(carregar(FIXTURES / nome)) for nome in CASOS} - {None}
+    assert devolvidas, "nenhuma fixture com limitação — trava vacuamente verde?"
+    assert devolvidas <= set(CAT["limitacoes"]), devolvidas - set(CAT["limitacoes"])
+    _rotulos_em_todo_idioma("limitacoes")
 
 
 def test_todo_motivo_de_recusa_tem_rotulo_em_todo_idioma():

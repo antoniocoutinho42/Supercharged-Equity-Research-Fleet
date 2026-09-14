@@ -23,7 +23,7 @@ import difflib
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 Caso = dict[str, Any]
 
@@ -354,13 +354,16 @@ _CAMPOS_DE_TOPO_ONDE_NULO_E_AUSENTE: frozenset = frozenset({
 # por `_validar_degrau` (mais abaixo), mesma disciplina de 'reversa'/
 # 'sensibilidades'/'sotp': sem o nome aqui, o gate recusaria o bloco como
 # chave de topo desconhecida antes de examinar o conteúdo dele.
+#
+# Fatia 5D, Task 1: 'fronteira_de_escopo' entrou pela mesma razão — bloco
+# opcional validado por `_validar_fronteira_de_escopo` (mais abaixo).
 CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Obrigatórias — `_RAZOES_CAMPOS_DE_TOPO`, checadas por presença/não-nulo
     # em `_validar_campos_de_topo`.
     "companhia", "moeda", "data_analise", "rota", "acoes_diluidas", "cenarios",
     # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
     "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
-    "sensibilidades", "sotp", "degrau", "cenario_base",
+    "sensibilidades", "sotp", "degrau", "cenario_base", "fronteira_de_escopo",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -457,9 +460,11 @@ def validar(caso: Caso) -> None:
     delimitador x rota -> ações diluídas -> preço -> cada cenário (âncora,
     triângulo quando a rota tiver um, premissas obrigatórias, premissas
     desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
-    -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades' e
-    'sotp', só quando presentes. Não modifica `caso`; não preenche nada —
-    só confirma ou recusa.
+    -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
+    'sotp' e 'fronteira_de_escopo', só quando presentes. As duas recusas de
+    'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
+    registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
+    modifica `caso`; não preenche nada — só confirma ou recusa.
 
     Revisão final (FIX 3): doze formatos malformados achados por sondagem
     manual escapavam desta função como AttributeError/TypeError cru — o
@@ -528,9 +533,10 @@ def validar(caso: Caso) -> None:
 
     reversa_presente = caso.get("reversa") is not None
     _validar_mercado(caso, reversa_presente)
-    _validar_reversa(caso, cenarios, rota)
+    _validar_reversa(caso, cenarios)
     _validar_sensibilidades(caso, cenarios, rota)
     _validar_sotp(caso, cenarios)
+    _validar_fronteira_de_escopo(caso)
 
 
 def _validar_campos_de_topo(caso: Caso) -> None:
@@ -1193,18 +1199,15 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
             "rota do caso."
         )
 
-    for outro in ("reversa", "sensibilidades", "sotp"):
+    # Fatia 5D, Task 1 (D4): a recusa de 'reversa' junto de 'degrau' é uma
+    # LIMITAÇÃO publicada (`resultados.limitacoes`) — aplicada pelo registro
+    # `LIMITACOES_DE_REVERSA` (logo abaixo desta função), no mesmo ponto, na
+    # mesma ordem (antes de 'sensibilidades' e 'sotp') e com a mesma mensagem
+    # de sempre (`_mensagem_degrau_junto_de`, que as três recusas D7 dividem).
+    _recusar_reversa_por_limitacao(caso, "reversa_com_degrau")
+    for outro in ("sensibilidades", "sotp"):
         if caso.get(outro) is not None:
-            raise CasoInvalido(
-                f"bloco 'degrau' presente junto de '{outro}': esta "
-                "combinação não está implementada nesta fatia (D7) — as "
-                "grades de sensibilidade, a reversa e o SOTP hoje "
-                "precificam sem degrau, e misturar quebraria a regra da "
-                "célula central (a célula na premissa do caso-base bate "
-                "com a manchete). Limitação declarada, a reabrir quando "
-                f"um caso pedir. Remova o bloco '{outro}', ou remova "
-                "'degrau'."
-            )
+            raise CasoInvalido(_mensagem_degrau_junto_de(outro))
 
     if not isinstance(degrau, dict):
         raise CasoInvalido(
@@ -1427,6 +1430,138 @@ def _validar_degrau(caso: Caso, cenarios: dict, rota: str) -> None:
 
 
 # --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (D4 do plano docs/superpowers/plans/2026-09-14-v4-item5d-
+# tese.md): as limitações que tornam a reversa inadmissível no caso.
+#
+# A Análise exige reversa — o desenho fixa a saída do M4 como "valuation +
+# reversa + sensibilidades" (§5), e o vendor torna o custo de capital
+# implícito obrigatório nela —, mas este gate recusa o bloco 'reversa' em
+# combinações que o Fleet ainda não implementa: junto de 'degrau' (D7 da
+# fatia D, em `_validar_degrau`) e na rota 'rampa' (FIX 1 da revisão final da
+# fatia C, em `_validar_reversa`). Nenhum bloco 'reversa', por mais bem
+# formado, passa por essas recusas: são LIMITAÇÕES do caso, não erros de
+# forma — e só a integração sabe delas. O relatório lê a chave publicada em
+# `resultados.limitacoes` e o rótulo que o catálogo dá a ela (E3), nunca a
+# regra.
+#
+# Por isso cada uma dessas recusas mora num registro, sob a chave pública que
+# a nomeia. `LIMITACOES_DE_REVERSA` mapeia a chave para a função que devolve a
+# mensagem de recusa quando a limitação vale para o caso (ou `None`, quando
+# não vale). O gate recusa PELO registro, nos pontos e na ordem de sempre
+# (`_recusar_reversa_por_limitacao`), e `reversa_indisponivel` consulta o
+# MESMO registro — não existe uma segunda lista de condições para divergir da
+# primeira. A trava de `tests/test_valuation_contrato.py` confere, fixture a
+# fixture, que a chave sai publicada se e só se o gate recusa um bloco
+# 'reversa' válido, e que a recusa é a da limitação publicada: uma recusa de
+# reversa nova escrita no gate por fora deste registro reprova ali.
+# --------------------------------------------------------------------------
+
+
+def _mensagem_degrau_junto_de(outro: str) -> str:
+    """Mensagem da recusa D7: bloco 'degrau' junto de `outro` ('reversa',
+    'sensibilidades' ou 'sotp'). Uma só redação para as três — as de
+    'sensibilidades' e 'sotp' saem direto de `_validar_degrau`; a de
+    'reversa', do registro de limitações."""
+    return (
+        f"bloco 'degrau' presente junto de '{outro}': esta "
+        "combinação não está implementada nesta fatia (D7) — as "
+        "grades de sensibilidade, a reversa e o SOTP hoje "
+        "precificam sem degrau, e misturar quebraria a regra da "
+        "célula central (a célula na premissa do caso-base bate "
+        "com a manchete). Limitação declarada, a reabrir quando "
+        f"um caso pedir. Remova o bloco '{outro}', ou remova "
+        "'degrau'."
+    )
+
+
+def _reversa_barrada_pelo_degrau(caso: Caso) -> str | None:
+    """Limitação `reversa_com_degrau`: a mensagem da recusa D7 quando o caso
+    declara 'degrau', ou `None`. Olha só o caso sem a reversa — a presença
+    do bloco 'reversa' é checada por quem recusa
+    (`_recusar_reversa_por_limitacao`), não aqui."""
+    if caso.get("degrau") is None:
+        return None
+    return _mensagem_degrau_junto_de("reversa")
+
+
+def _reversa_barrada_pela_rota_rampa(caso: Caso) -> str | None:
+    """Limitação `reversa_na_rota_rampa`: a mensagem da recusa quando a rota
+    do caso é 'rampa', ou `None`.
+
+    FIX 1 (Crítico, revisão final da fatia C): a rota 'rampa' não tem
+    vocabulário de reversa — `RESOLVER_POR_EIXO` (reversa.py) só mapeia
+    'firm'/'equity' para a variável que cada eixo resolve (wacc/ke,
+    roic/roe, g/g, cap/cap). Sem esta recusa, um caso rampa+reversa passava
+    pelo gate inteiro e só quebrava DEPOIS, dentro de `reversa.reverter`
+    (`RESOLVER_POR_EIXO[eixo]['rampa']`, KeyError cru), já com os cenários
+    principais do caso rodados no motor. Decisão tomada, não reaberta aqui:
+    recusar pelo NOME, como limitação declarada — mesmo padrão de
+    equity+sotp (`_validar_sotp`). Acoplar reversa à composição bifásica da
+    rampa exige decidir quais eixos essa composição de duas fases admite
+    reverter, decisão de metodologia que o Fleet ainda não tomou.
+    """
+    if caso.get("rota") != "rampa":
+        return None
+    return (
+        "bloco 'reversa' presente na rota 'rampa': esta combinação não "
+        "está implementada nesta fatia. As premissas da rota rampa "
+        "(receita0, ebitda0, da_parque, wk, kappa, g2, t_rampa...) não "
+        "são o vocabulário que a máquina de reversa resolve contra — "
+        "'RESOLVER_POR_EIXO' só conhece a tradução de eixo para "
+        "variável (wacc/roic/g...) das rotas 'firm' e 'equity'. "
+        "Acoplar reversa a uma composição bifásica exige decidir quais "
+        "eixos essa composição admite reverter, uma decisão de "
+        "metodologia que esta fatia não toma. O bloco 'reversa' pode "
+        "ser usado com as rotas 'firm' e 'equity'. Remova o bloco, ou "
+        "troque a rota do caso."
+    )
+
+
+# Chave pública da limitação -> função que devolve a mensagem de recusa (ou
+# `None`). Na ordem em que `validar` aplica as recusas (`_validar_degrau` roda
+# antes de `_validar_reversa`), que é também a ordem em que
+# `reversa_indisponivel` as consulta. As chaves são o vocabulário de
+# `resultados.limitacoes`, rotulado por `catalogo.limitacoes` (igualdade de
+# conjunto travada em tests/test_catalogo_apresentacao.py).
+LIMITACOES_DE_REVERSA: dict[str, Callable[[Caso], str | None]] = {
+    "reversa_com_degrau": _reversa_barrada_pelo_degrau,
+    "reversa_na_rota_rampa": _reversa_barrada_pela_rota_rampa,
+}
+
+
+def _recusar_reversa_por_limitacao(caso: Caso, chave: str) -> None:
+    """Recusa o bloco 'reversa' do caso quando a limitação `chave` vale.
+
+    O ponto único por onde o gate aplica uma recusa de reversa por
+    limitação — chamado de `_validar_degrau` e de `_validar_reversa`, cada
+    um nomeando a chave que aplica. Sem 'reversa' no caso, nada a recusar: a
+    limitação continua valendo (e sai publicada via `reversa_indisponivel`),
+    só não há bloco para barrar. Uma `chave` fora do registro levanta
+    `KeyError` — erro de programação deste módulo, nunca de um caso."""
+    if caso.get("reversa") is None:
+        return
+    recusa = LIMITACOES_DE_REVERSA[chave](caso)
+    if recusa is not None:
+        raise CasoInvalido(recusa)
+
+
+def reversa_indisponivel(caso: Caso) -> str | None:
+    """A chave da limitação que torna a reversa inadmissível no caso, ou `None`.
+
+    Consulta o registro que o próprio gate aplica (`LIMITACOES_DE_REVERSA`),
+    na ordem dele, e devolve a chave da primeira limitação que vale. Não
+    depende de o caso declarar 'reversa': num caso validado, uma limitação
+    que vale implica que o caso não declara reversa — o gate a teria
+    recusado. Recebe um caso já validado (`validar`) e não revalida nada;
+    `avaliar.py` publica o que ela devolve em `resultados.limitacoes`.
+    """
+    for chave, barreira in LIMITACOES_DE_REVERSA.items():
+        if barreira(caso) is not None:
+            return chave
+    return None
+
+
+# --------------------------------------------------------------------------
 # Fatia B, Task 1: blocos opcionais 'mercado', 'reversa' e 'sensibilidades'.
 #
 # Os três são opcionais — um caso sem eles é exatamente tão válido quanto
@@ -1614,48 +1749,27 @@ def _validar_cenario_base(caso: Caso, cenarios: dict) -> None:
     _validar_cenario_alvo("cenario_base", caso.get("cenario_base"), cenarios)
 
 
-def _validar_reversa(caso: Caso, cenarios: dict, rota: str) -> None:
-    """Valida o bloco opcional 'reversa': eixos, eixo obrigatório e cenário-alvo.
+def _validar_reversa(caso: Caso, cenarios: dict) -> None:
+    """Valida o bloco opcional 'reversa': limitação da rota, eixos, eixo
+    obrigatório e cenário-alvo.
 
     A exigência de 'mercado' (rf, erp) quando 'reversa' está presente já foi
     confirmada por `_validar_mercado` antes desta função rodar — não é
     responsabilidade dela.
 
     FIX 1 (Crítico, revisão final): a rota 'rampa' não tem vocabulário de
-    reversa nesta fatia — `RESOLVER_POR_EIXO` (reversa.py) só mapeia
-    'firm'/'equity' para a variável que cada eixo resolve (wacc/ke,
-    roic/roe, g/g, cap/cap). Nenhuma checagem AQUI dentro toca um dict
-    indexado por rota, então um caso rampa+reversa passava por esta função
-    inteira sem recusa — e só quebrava DEPOIS, dentro de `reversa.reverter`
-    (`RESOLVER_POR_EIXO[eixo]['rampa']`, KeyError cru), já com os cenários
-    principais do caso rodados no motor: subprocessos desperdiçados antes
-    da recusa chegar. Decisão tomada, não reaberta aqui: recusar pelo NOME,
-    como limitação declarada desta fatia — mesmo padrão de equity+sotp
-    (`_validar_sotp`, mais abaixo). Acoplar reversa à composição bifásica
-    da rampa exige decidir quais eixos essa composição de duas fases admite
-    reverter — decisão de metodologia que esta fatia não toma; inventar a
-    resposta aqui seria o scope creep que a metodologia deste módulo
-    proíbe. O bloco 'reversa' continua disponível nas rotas 'firm' e
-    'equity'.
+    reversa. A recusa pelo nome é a limitação `reversa_na_rota_rampa`,
+    aplicada aqui pelo registro `LIMITACOES_DE_REVERSA` (fatia 5D, Task 1; a
+    razão completa está em `_reversa_barrada_pela_rota_rampa`). Continua a
+    primeira checagem desta função, antes do formato do bloco — nenhum
+    bloco, por mais bem formado, passa por ela. O bloco 'reversa' continua
+    disponível nas rotas 'firm' e 'equity'.
     """
     reversa = caso.get("reversa")
     if reversa is None:
         return
 
-    if rota == "rampa":
-        raise CasoInvalido(
-            "bloco 'reversa' presente na rota 'rampa': esta combinação não "
-            "está implementada nesta fatia. As premissas da rota rampa "
-            "(receita0, ebitda0, da_parque, wk, kappa, g2, t_rampa...) não "
-            "são o vocabulário que a máquina de reversa resolve contra — "
-            "'RESOLVER_POR_EIXO' só conhece a tradução de eixo para "
-            "variável (wacc/roic/g...) das rotas 'firm' e 'equity'. "
-            "Acoplar reversa a uma composição bifásica exige decidir quais "
-            "eixos essa composição admite reverter, uma decisão de "
-            "metodologia que esta fatia não toma. O bloco 'reversa' pode "
-            "ser usado com as rotas 'firm' e 'equity'. Remova o bloco, ou "
-            "troque a rota do caso."
-        )
+    _recusar_reversa_por_limitacao(caso, "reversa_na_rota_rampa")
 
     if not isinstance(reversa, dict):
         raise CasoInvalido(
@@ -2431,6 +2545,94 @@ def _validar_materialidade(sotp: dict, rota: str) -> None:
         _validar_triangulo(prefixo, blended.get("triangulo"), rota)
 
     _validar_premissas(prefixo, blended.get("premissas"), rota)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (D3 do plano docs/superpowers/plans/2026-09-14-v4-item5d-
+# tese.md): bloco opcional 'fronteira_de_escopo' (§14 do desenho).
+#
+# A metodologia declara três classes de companhia fora do seu escopo como
+# métrica-manchete: vida econômica finita (mineração, óleo e gás, concessão
+# com termo), REITs e imobiliárias, e pré-lucro ou introdução. Sob fronteira
+# declarada a entrega continua — a arquitetura dominante e por quê, as
+# perguntas da tese, a leitura do que o preço embute, uma conclusão
+# qualitativa e condicional —, mas sem preço-alvo de manchete, que o
+# relatório reprova (fatia 5D, Task 2). A fronteira é metodologia, então é
+# declaração do CASO: validada aqui, publicada pela integração
+# (`resultados.fronteira_de_escopo`) e rotulada pelo catálogo
+# (`fronteiras_de_escopo`, igualdade de conjunto com
+# `CLASSES_DE_FRONTEIRA_DE_ESCOPO` travada em
+# tests/test_catalogo_apresentacao.py). Vocabulário fechado em todo nível,
+# mesma disciplina do bloco 'degrau'.
+# --------------------------------------------------------------------------
+
+CLASSES_DE_FRONTEIRA_DE_ESCOPO: frozenset = frozenset({
+    "vida_economica_finita", "reit_imobiliaria", "pre_lucro",
+})
+
+_CHAVES_FRONTEIRA_DE_ESCOPO_PERMITIDAS: frozenset = frozenset({
+    "classe", "arquitetura_dominante", "razao",
+})
+
+# O que cada texto obrigatório do bloco declara — entra na mensagem de recusa.
+_RAZOES_TEXTOS_DA_FRONTEIRA: dict[str, str] = {
+    "arquitetura_dominante": (
+        "é a arquitetura de valuation que a companhia exige no lugar da "
+        "métrica-manchete — o primeiro entregável sob fronteira (§14)."
+    ),
+    "razao": (
+        "é por que a companhia está fora do escopo — sem ela, a fronteira "
+        "vira uma saída cômoda para não emitir preço, não uma declaração "
+        "auditável."
+    ),
+}
+
+
+def _validar_fronteira_de_escopo(caso: Caso) -> None:
+    """Valida o bloco opcional 'fronteira_de_escopo': tipo, chaves, classe e textos.
+
+    Ausente ou `None` é um caso sem fronteira nenhuma — exatamente tão válido
+    quanto antes desta fatia. Presente, tem de ser um objeto só com
+    'classe', 'arquitetura_dominante' e 'razao' (chave fora disso recusada
+    com sugestão, `_recusar_chave_desconhecida`); 'classe' é texto dentro de
+    `CLASSES_DE_FRONTEIRA_DE_ESCOPO`, recusada pelo nome com sugestão por
+    `difflib` quando fora dele; os dois textos são não vazios. Independente
+    da rota e dos demais blocos: a fronteira não muda conta nenhuma — muda o
+    que a entrega pode concluir.
+    """
+    fronteira = caso.get("fronteira_de_escopo")
+    if fronteira is None:
+        return
+
+    if not isinstance(fronteira, dict):
+        raise CasoInvalido(
+            f"campo 'fronteira_de_escopo' não é um objeto: {fronteira!r}. "
+            "Declare 'classe', 'arquitetura_dominante' e 'razao'."
+        )
+    _recusar_chave_desconhecida(
+        fronteira, _CHAVES_FRONTEIRA_DE_ESCOPO_PERMITIDAS, "'fronteira_de_escopo'")
+
+    classe = fronteira.get("classe")
+    _exigir_texto(classe, "fronteira_de_escopo.classe")
+    if classe not in CLASSES_DE_FRONTEIRA_DE_ESCOPO:
+        sugestao = difflib.get_close_matches(classe, CLASSES_DE_FRONTEIRA_DE_ESCOPO, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'fronteira_de_escopo.classe' fora do vocabulário: '{classe}'.{dica}"
+            "A fronteira nomeia uma das classes que a metodologia declara "
+            "fora do seu escopo como métrica-manchete (§14 do desenho) — uma "
+            "classe desconhecida seria uma fronteira que nem o catálogo nem "
+            "o relatório sabem nomear. Classes aceitas: "
+            f"{', '.join(sorted(CLASSES_DE_FRONTEIRA_DE_ESCOPO))}."
+        )
+
+    for campo, razao in _RAZOES_TEXTOS_DA_FRONTEIRA.items():
+        valor = fronteira.get(campo)
+        if not isinstance(valor, str) or not valor.strip():
+            raise CasoInvalido(
+                f"'fronteira_de_escopo.{campo}' ausente ou vazio: {valor!r}. "
+                f"Tem de ser texto não vazio: {razao}"
+            )
 
 
 def carregar(caminho: Path) -> Caso:

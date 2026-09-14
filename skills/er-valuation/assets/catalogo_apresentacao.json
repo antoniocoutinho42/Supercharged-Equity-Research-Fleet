@@ -914,5 +914,34 @@
         "pt-BR": "convenção book no degrau sem ROE book declarado — a metodologia recusa a combinação: o valor terminal usaria a rentabilidade pós-degrau como média do estoque (conflação marginal × médio agravada pelo degrau)"
       }
     }
+  },
+  "fronteiras_de_escopo": {
+    "vida_economica_finita": {
+      "rotulo": {
+        "pt-BR": "Vida econômica finita (mineração, óleo e gás, concessão com termo)"
+      }
+    },
+    "reit_imobiliaria": {
+      "rotulo": {
+        "pt-BR": "REITs e imobiliárias"
+      }
+    },
+    "pre_lucro": {
+      "rotulo": {
+        "pt-BR": "Pré-lucro ou introdução"
+      }
+    }
+  },
+  "limitacoes": {
+    "reversa_com_degrau": {
+      "rotulo": {
+        "pt-BR": "Reversa não calculada: com degrau, a leitura do que o preço embute precificaria sem o degrau e deixaria de corresponder à manchete (combinação não implementada)"
+      }
+    },
+    "reversa_na_rota_rampa": {
+      "rotulo": {
+        "pt-BR": "Reversa não calculada: a rota rampa ainda não define quais eixos a composição bifásica admite reverter (combinação não implementada)"
+      }
+    }
   }
 }

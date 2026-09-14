@@ -1361,3 +1361,59 @@ def test_mercado_rf_valido_ou_ausente_sem_reversa_passa(rf):
     c = _firm()
     c["mercado"] = {"rf": rf}
     validar(c)  # nao levanta
+
+
+# --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (D3 do plano docs/superpowers/plans/2026-09-14-v4-item5d-
+# tese.md): bloco opcional 'fronteira_de_escopo' (§14 do desenho). A fronteira
+# é metodologia, então é declaração do CASO — validada aqui, publicada pela
+# integração (`resultados.fronteira_de_escopo`, tests/test_valuation_contrato.py)
+# e rotulada pelo catálogo. Vocabulário fechado em todo nível: a classe e as
+# chaves do bloco; nulo é ausência, como nos demais blocos opcionais.
+# --------------------------------------------------------------------------
+
+_FRONTEIRA_VALIDA = {
+    "classe": "vida_economica_finita",
+    "arquitetura_dominante": "fluxo de caixa até a exaustão da reserva provada",
+    "razao": "mina única, com vida útil declarada no relatório de reservas",
+}
+
+
+def _firm_com_fronteira(fronteira) -> dict:
+    c = _firm()
+    c["fronteira_de_escopo"] = fronteira
+    return c
+
+
+@pytest.mark.parametrize("classe", ["vida_economica_finita", "reit_imobiliaria", "pre_lucro"])
+def test_fronteira_de_escopo_com_cada_classe_do_desenho_e_aceita(classe):
+    validar(_firm_com_fronteira({**_FRONTEIRA_VALIDA, "classe": classe}))  # nao levanta
+
+
+def test_fronteira_de_escopo_nula_e_ausencia():
+    validar(_firm_com_fronteira(None))  # nao levanta
+
+
+def test_fronteira_com_classe_fora_do_vocabulario_recusa_nomeando_e_sugerindo():
+    with pytest.raises(CasoInvalido) as erro:
+        validar(_firm_com_fronteira({**_FRONTEIRA_VALIDA, "classe": "pre-lucro"}))
+    mensagem = str(erro.value)
+    assert "'pre-lucro'" in mensagem
+    assert "Você quis dizer 'pre_lucro'?" in mensagem
+
+
+@pytest.mark.parametrize("fronteira,nomeado", [
+    pytest.param(["pre_lucro"], "'fronteira_de_escopo' não é um objeto", id="nao_e_objeto"),
+    pytest.param({**_FRONTEIRA_VALIDA, "razão": "acento no nome da chave"}, "Você quis dizer 'razao'?",
+                 id="chave_desconhecida_com_sugestao"),
+    pytest.param({k: v for k, v in _FRONTEIRA_VALIDA.items() if k != "classe"},
+                 "'fronteira_de_escopo.classe'", id="classe_ausente"),
+    pytest.param({**_FRONTEIRA_VALIDA, "arquitetura_dominante": "   "},
+                 "'fronteira_de_escopo.arquitetura_dominante'", id="arquitetura_em_branco"),
+    pytest.param({k: v for k, v in _FRONTEIRA_VALIDA.items() if k != "razao"},
+                 "'fronteira_de_escopo.razao'", id="razao_ausente"),
+])
+def test_fronteira_de_escopo_malformada_recusa_nomeando_o_campo(fronteira, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(_firm_com_fronteira(fronteira))
+    assert nomeado in str(erro.value)
