@@ -314,7 +314,16 @@ def test_alias_legado_de_tv_emite_com_rotulo_canonico(tmp_path):
     assert ler_qc(raiz)["achados"] == []
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     assert CATALOGO["convencoes_terminais"]["gordon"]["pt-BR"] in html
-    assert "spread" not in html
+    # Escopo, não lista de exclusão (B6): o alias não pode aparecer na PROSA
+    # que o relatório escreve. Desde a fatia 5C o `caso` inteiro viaja num
+    # `<script type="application/json">` para o laboratório recalcular preço
+    # no navegador -- e lá dentro o alias existe, porque é o que o caso
+    # declara e é o que a fachada tem de receber. `prosa_da_pagina` neutraliza
+    # o miolo de todo `<script>`/`<style>`, que é exatamente a fronteira que
+    # esta asserção sempre quis: nenhum código interno na TELA.
+    # `test_relatorio_laboratorio.py::test_um_valor_que_o_catalogo_nao_sabe_
+    # nomear_nao_vaza_o_codigo_cru` cobra a mesma coisa no campo do painel.
+    assert "spread" not in apoio.prosa_da_pagina(html)
 
 
 # --------------------------------------------------------------------------

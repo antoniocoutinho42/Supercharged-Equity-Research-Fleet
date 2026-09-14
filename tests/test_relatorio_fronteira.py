@@ -16,6 +16,8 @@ relatório, e podem importar `er-valuation` livremente.
 
 import ast
 import hashlib
+import json
+import re
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -160,6 +162,100 @@ def test_nenhum_asset_do_relatorio_espelha_um_asset_da_integracao_ou_do_vendor()
             continue
         origem = hashes_da_integracao.get(_sha256_de(arquivo))
         assert origem is None, f"{arquivo} tem o mesmo conteúdo de {origem} (integração/vendor)"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5C, Task 2 — a mesma fronteira, agora para o LABORATÓRIO.
+#
+# `skills/er-relatorio/assets/laboratorio.js` é só interface: lê os campos que
+# `render.py` montou, chama `FachadaEspelho.avaliarCaso` e escreve o resultado
+# na tela. Nenhuma fórmula de valuation, nenhum limiar, nenhum nome de
+# premissa. As checagens acima não o alcançam — não é um `import`, não é um
+# literal de caminho e não é uma cópia byte a byte —, e é exatamente por isso
+# que a metodologia poderia vazar para lá sem nada reprovar.
+#
+# O vocabulário proibido é DERIVADO, como `PROIBIDOS` acima: os identificadores
+# que o espelho do núcleo declara no topo (o motor propriamente dito) mais o
+# vocabulário de premissas e de opções que o catálogo de apresentação publica.
+# Uma premissa nova, uma opção nova ou uma função nova do núcleo entram na
+# trava no instante em que passam a existir, sem editar este arquivo.
+# --------------------------------------------------------------------------
+
+LABORATORIO = ASSETS_RELATORIO / "laboratorio.js"
+ESPELHO_DO_NUCLEO = INTEGRACAO_ASSETS / "motor_espelho.js"
+CATALOGO_DE_APRESENTACAO = INTEGRACAO_ASSETS / "catalogo_apresentacao.json"
+
+# Literais de texto e comentários, nesta ordem de alternância: o primeiro
+# casamento ganha, então um `//` DENTRO de uma string é reconhecido como parte
+# da string e nunca como início de comentário.
+_LITERAIS_E_COMENTARIOS = re.compile(
+    r'"(?:[^"\\\n]|\\.)*"'
+    r"|'(?:[^'\\\n]|\\.)*'"
+    r"|`(?:[^`\\]|\\.)*`"
+    r"|/\*.*?\*/"
+    r"|//[^\n]*",
+    re.DOTALL,
+)
+
+
+def _codigo_js(texto: str) -> str:
+    """`texto` com os comentários trocados por espaço e os literais de string
+    PRESERVADOS -- mesma fronteira que `test_caminho_da_integracao_so_na_
+    constante_de_assets` já aplica do lado Python ("só literais de CÓDIGO
+    contam: docstrings e comentários podem falar da integração à vontade").
+    Preservar as strings é o ponto: um `if (nome === "wacc")` é exatamente a
+    forma que o vazamento assumiria, e ela tem de continuar visível."""
+    return _LITERAIS_E_COMENTARIOS.sub(
+        lambda m: " " if m.group(0).startswith("/") else m.group(0), texto)
+
+
+def _vocabulario_do_nucleo() -> frozenset:
+    espelho = ESPELHO_DO_NUCLEO.read_text(encoding="utf-8")
+    nomes = set(re.findall(r"^(?:const|let|var|function)\s+([A-Za-z_$][\w$]*)", espelho, re.M))
+    catalogo = json.loads(CATALOGO_DE_APRESENTACAO.read_text(encoding="utf-8"))
+    for premissas in catalogo["premissas"].values():
+        nomes |= set(premissas)
+        for info in premissas.values():
+            nomes |= set(info.get("opcoes", []))
+    return frozenset(nomes)
+
+
+def test_o_laboratorio_nao_carrega_uma_linha_de_metodologia():
+    """E3 mecanizada no arquivo em que ela é mais fácil de violar: quem edita
+    o laboratório está olhando para números de valuation, e a tentação de
+    tratar uma premissa "só desta vez" é permanente. Varredura sensível a
+    caixa (os nomes do contrato são minúsculos; identificadores de JS
+    distinguem caixa) e por fronteira de identificador -- `da` não casa dentro
+    de `data-laboratorio-premissa`, e `pe` não casa dentro de `especificacao`.
+    """
+    vocabulario = _vocabulario_do_nucleo()
+    assert len(vocabulario) > 50, "vocabulário derivado pequeno demais — trava vacuamente verde"
+
+    codigo = _codigo_js(LABORATORIO.read_text(encoding="utf-8"))
+    assert "FleetLaboratorio" in codigo, "a varredura comeu o código do módulo"
+
+    achados = sorted(
+        nome for nome in vocabulario
+        if re.search(r"(?<![\w$])" + re.escape(nome) + r"(?![\w$])", codigo)
+    )
+    assert not achados, (
+        f"{LABORATORIO.name} nomeia metodologia: {achados}. O laboratório lê campos, "
+        "chama a fachada e escreve na tela — quem conhece premissa, limiar e fórmula é "
+        "a camada de integração."
+    )
+
+
+def test_o_laboratorio_nao_conhece_a_integracao_por_caminho_nem_por_copia():
+    """As duas outras portas do mesmo vazamento: o módulo não pode localizar a
+    integração por caminho (ele é embutido no HTML; no browser não existe
+    sistema de arquivos), e não pode virar uma cópia do espelho — que
+    `test_nenhum_asset_do_relatorio_espelha_um_asset_da_integracao_ou_do_vendor`
+    já reprova por sha256, e que continua valendo para este arquivo."""
+    texto = LABORATORIO.read_text(encoding="utf-8")
+    for alvo in ("er-valuation", "multiplos-justos", "vendor"):
+        assert alvo not in texto, f"{LABORATORIO.name} nomeia '{alvo}'"
+    assert not re.search(r"""\brequire\s*\(""", texto), "o laboratório não roda em node"
+    assert not re.search(r"^\s*import\s", texto, re.M), "import ES6 no laboratório"
 
 
 def test_scripts_do_relatorio_existem():

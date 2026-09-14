@@ -21,9 +21,9 @@ HARD FAIL é que `relatorio.html` é gravado no disco — nunca antes.
 E3 (`docs/desenho-arquitetura-v4.md` §15): este módulo, como todo o resto
 de `skills/er-relatorio/scripts/`, não importa nada de `er-valuation` nem
 do vendor. O único caminho para dentro da camada de integração é a
-constante `ASSETS_DA_INTEGRACAO`, abaixo — hoje só o catálogo de
-apresentação; a fatia 5C acrescenta a fachada do espelho ali, na mesma
-linha. `tests/test_relatorio_fronteira.py` trava os dois mecanicamente:
+constante `ASSETS_DA_INTEGRACAO`, abaixo — o catálogo de apresentação e,
+desde a fatia 5C, o espelho do núcleo e a fachada que o laboratório da aba
+Valuation chama no navegador. `tests/test_relatorio_fronteira.py` trava os dois mecanicamente:
 nenhum import proibido, e nenhum literal de código fora dessa constante
 (ou de docstring) nomeia a integração.
 """
@@ -42,14 +42,37 @@ from entrega import EntregaInvalida
 
 RAIZ_DO_REPO = Path(__file__).resolve().parents[3]
 
-# Único literal de código deste pacote que nomeia a integração (ver o
+# Únicos literais de código deste pacote que nomeiam a integração (ver o
 # docstring do módulo) — mecanizado por
 # tests/test_relatorio_fronteira.py::test_caminho_da_integracao_so_na_constante_de_assets.
-ASSETS_DA_INTEGRACAO = {"catalogo": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json"}
+#
+# Fatia 5C, Task 2: o espelho do núcleo e a fachada entram aqui, ao lado do
+# catálogo, porque o laboratório da aba Valuation roda o motor no navegador
+# de quem abriu o arquivo. Eles são LIDOS daqui e embutidos no HTML —
+# NUNCA copiados para `skills/er-relatorio/assets/`: `tests/test_relatorio_
+# fronteira.py::test_nenhum_asset_do_relatorio_espelha_um_asset_da_
+# integracao_ou_do_vendor` reprova a cópia por sha256 (não por nome), e é
+# essa a intenção. Toda a metodologia que o laboratório executa continua do
+# lado da integração (E3); o relatório só embute e chama.
+ASSETS_DA_INTEGRACAO = {
+    "catalogo": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json",
+    "espelho": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "motor_espelho.js",
+    "fachada": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "espelho_fachada.js",
+}
 
 
 def _carregar_catalogo() -> dict:
     return json.loads(ASSETS_DA_INTEGRACAO["catalogo"].read_text(encoding="utf-8"))
+
+
+def _carregar_js_da_integracao() -> dict:
+    """Os dois módulos JS da integração, como TEXTO — o espelho do núcleo e a
+    fachada que o laboratório chama. Lidos de `ASSETS_DA_INTEGRACAO` a cada
+    build (nunca copiados para dentro do skill do relatório) e repassados a
+    `render.compor`, que os embute como valor de `string.Template` — nunca
+    colados no template, que tem `$marcador` próprio."""
+    return {nome: ASSETS_DA_INTEGRACAO[nome].read_text(encoding="utf-8")
+            for nome in ("espelho", "fachada")}
 
 
 def _montar_qc_json(achados: list, dicionario: dict) -> dict:
@@ -154,6 +177,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"não foi possível ler o catálogo de apresentação: {erro}.", file=sys.stderr)
         return 1
 
+    try:
+        js_da_integracao = _carregar_js_da_integracao()
+    except OSError as erro:
+        print(f"não foi possível ler o espelho/a fachada da integração: {erro}.", file=sys.stderr)
+        return 1
+
     idioma = entrega_dict["execucao"]["idioma"]
     try:
         dicionario = placeholders.carregar_dicionario(idioma)
@@ -192,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
-                                exhibits_resolvidos, log_exhibits)
+                                exhibits_resolvidos, log_exhibits, js_da_integracao)
     except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente,
             render.CampoDeContratoAusente, render.JsonNaoSerializavel) as erro:
         print(str(erro), file=sys.stderr)

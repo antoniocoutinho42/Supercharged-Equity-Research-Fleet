@@ -24,11 +24,15 @@ import functools
 import json
 import re
 import subprocess
+import sys
 
 import pytest
 
 from relatorio_apoio import FIXTURES, montar_entrega
 from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
+
+sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
+from caso import _PREMISSAS_POR_ROTA  # noqa: E402
 
 FACHADA = RAIZ / "skills" / "er-valuation" / "assets" / "espelho_fachada.js"
 
@@ -53,7 +57,7 @@ _HARNESS = (
     "const fs = require('fs');"
     "const F = require(%s);"
     "const p = JSON.parse(fs.readFileSync(%s, 'utf-8'));"
-    "const saida = {versao_contrato: F.VERSAO_CONTRATO};"
+    "const saida = {versao_contrato: F.VERSAO_CONTRATO, rotas: F.ROTAS_ATENDIDAS};"
     "try {"
     "  saida.vivo = F.avaliarCaso(p.caso);"
     "  saida.comparacao = F.compararComResultados(p.caso, p.resultados);"
@@ -239,6 +243,9 @@ def test_um_vetor_fora_de_dominio_recusa_o_cenario_em_vez_de_inventar_numero(fix
     cenario = saida["vivo"]["cenarios"]["base"]
     assert cenario["valor"]["preco_acao"] is None, cenario
     assert cenario["multiplo"]["valor"] is None, cenario
+    # Task 2: sem preço não há upside — `null`, nunca `-100%` (o que
+    # `null / preco - 1` produziria em JS, um número plausível e falso).
+    assert cenario["vs_preco"]["upside"] is None, cenario
 
     comparacao = saida["comparacao"]
     assert comparacao["ok"] is False
@@ -246,6 +253,88 @@ def test_um_vetor_fora_de_dominio_recusa_o_cenario_em_vez_de_inventar_numero(fix
     assert divergencia["js"] is None
     assert divergencia["erro_relativo"] is None
     assert divergencia["python"] == resultados["cenarios"]["base"]["valor"]["preco_acao"]
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5C, Task 2 — o upside, e a trava de rotas contra o gate
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_a_fachada_publica_o_upside_de_cada_cenario(fixture, tmp_path):
+    """Achado 2 da Task 1: o painel promete "preço, múltiplo e upside
+    recalculados", e `upside` é comparação entre dois números (preço justo ×
+    preço de tela) — conta que NÃO pode nascer em `laboratorio.js` (fronteira
+    E3). A definição é a de `avaliar._monta_cenario`: `preco_acao /
+    caso.preco.valor - 1`, a mesma que o Python publica em
+    `cenarios.<n>.vs_preco.upside`.
+
+    Discriminante: além de bater com o número publicado dentro de TAU, o
+    upside tem de ser DIFERENTE do resultado que sairia da definição errada
+    mais provável — dividir pelo preço justo do cenário-base, ou esquecer o
+    `-1`. As duas alternativas são checadas explicitamente, para que o teste
+    não passe por um `0.0` acidental."""
+    caso, resultados = _caso_e_resultados(fixture)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    preco_de_tela = caso["preco"]["valor"]
+    for nome, cenario_py in resultados["cenarios"].items():
+        upside_py = cenario_py["vs_preco"]["upside"]
+        upside_js = saida["vivo"]["cenarios"][nome]["vs_preco"]["upside"]
+        assert upside_js is not None, f"{fixture}/{nome}: fachada não publicou upside"
+        assert _erro_relativo(upside_py, upside_js) <= TAU, \
+            f"{fixture}/{nome}: py={upside_py} js={upside_js}"
+        # A razão sem o `-1` (o erro de sinal/base mais provável) é outro
+        # número: se fossem iguais, este teste não discriminaria nada.
+        razao = cenario_py["valor"]["preco_acao"] / preco_de_tela
+        assert _erro_relativo(razao, upside_js) > TAU, \
+            f"{fixture}/{nome}: upside indistinguível da razão preço/tela"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_comparador_tambem_prende_o_upside_do_cenario(tmp_path):
+    """O upside é o TERCEIRO número que a fachada passa a publicar, e o badge
+    o compara como compara os outros dois: adultera só `vs_preco.upside` no
+    `resultados` e exige a divergência nomeada por aquela chave — o preço e o
+    múltiplo continuam batendo, então o comparador não reprova em bloco."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    verdadeiro = resultados["cenarios"]["base"]["vs_preco"]["upside"]
+    resultados["cenarios"]["base"]["vs_preco"]["upside"] = verdadeiro + 0.25
+
+    saida = _fachada(caso, resultados, tmp_path)
+    comparacao = saida["comparacao"]
+    assert comparacao["ok"] is False
+    assert [d["chave"] for d in comparacao["divergencias"]] == ["vs_preco.upside"], \
+        comparacao["divergencias"]
+    d = comparacao["divergencias"][0]
+    assert d["cenario"] == "base"
+    assert d["python"] == pytest.approx(verdadeiro + 0.25, rel=1e-12)
+    assert _erro_relativo(verdadeiro, d["js"]) <= TAU
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_as_rotas_que_a_fachada_trata_sao_exatamente_as_do_gate(tmp_path):
+    """Achado 5 da Task 1, fechado: até aqui, uma rota NOVA em `avaliar.py`
+    que a fachada não espelhasse só apareceria em runtime — a fachada falha
+    fechada (`rota_desconhecida`), o que está certo, mas nada REPROVAVA a
+    ausência.
+
+    Mesma trava de upgrade que o catálogo já usa
+    (`test_catalogo_apresentacao.py::test_premissas_do_catalogo_sao_
+    exatamente_as_do_gate`): o conjunto de rotas que a fachada atende é
+    exatamente o que o gate aceita (`caso._PREMISSAS_POR_ROTA`). Uma rota
+    nova na integração passa a reprovar na INTEGRAÇÃO — onde a diretriz de
+    upgrade manda o custo cair —, nunca no relatório nem no browser do
+    analista.
+
+    `ROTAS_ATENDIDAS` não é uma lista paralela: é derivada do mesmo objeto
+    que `chaveDoMultiplo` consulta para decidir se sabe tratar a rota, então
+    não pode divergir do comportamento real por esquecimento."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    saida = _fachada(caso, resultados, tmp_path)
+    assert saida["rotas"], "fachada não expõe ROTAS_ATENDIDAS — trava vacuamente verde"
+    assert set(saida["rotas"]) == set(_PREMISSAS_POR_ROTA)
 
 
 # ---------------------------------------------------------------------------

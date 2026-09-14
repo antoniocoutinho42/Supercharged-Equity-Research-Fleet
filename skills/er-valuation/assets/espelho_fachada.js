@@ -124,9 +124,19 @@
     return ndEfetivo;
   }
 
-  // Chave do multiplo de REFERENCIA da rota — `avaliar.py:_chave_e_base_do_
-  // multiplo` (linhas 182-212), sem a `base` (rotulo curto, que so' o
+  // Chave do multiplo de REFERENCIA de cada rota — `avaliar.py:_chave_e_base_
+  // do_multiplo` (linhas 182-212), sem a `base` (rotulo curto, que so' o
   // relatorio usa para parear tela x justo).
+  //
+  // Este objeto e' o PONTO UNICO que decide quais rotas esta fachada sabe
+  // tratar: `avaliarCaso` o consulta (por `chaveDoMultiplo`) ANTES de
+  // percorrer cenario nenhum, entao uma rota ausente daqui recusa a analise
+  // inteira, nomeada. `ROTAS_ATENDIDAS` (exposta na superficie publica) e'
+  // derivada dele — nao uma segunda lista que alguem precisa lembrar de
+  // atualizar —, e `tests/test_espelho_fachada_js.py` a compara com o que o
+  // gate aceita (`caso._PREMISSAS_POR_ROTA`). E' a mesma trava de upgrade do
+  // catalogo de apresentacao: uma rota nova em `avaliar.py` sem perna aqui
+  // reprova na INTEGRACAO, nunca em runtime no browser do analista.
   //
   // CONFIRMADO POR EXECUCAO, nao presumido (o plano mandava verificar): o
   // multiplo que `precificarCelula` devolve e' o da METRICA DECLARADA, e
@@ -136,14 +146,46 @@
   // `_fwd` (e a outra base da rota firm) sao numeros DIFERENTES, e
   // `tests/test_espelho_fachada_js.py` prende a correspondencia exigindo que
   // nenhuma outra chave de `multiplos` case com o valor publicado.
+  const MULTIPLO_DE_REFERENCIA = {
+    firm: (tipoMetrica) => (tipoMetrica === 'EBITDA' ? 'EV/EBITDA_curr' : 'EV/NOPAT_curr'),
+    rampa: () => 'EV/EBITDA0',
+    equity: () => 'PL_curr',
+  };
+
+  // `Object.keys`, nao `for...in`: so' as chaves PROPRIAS do objeto acima
+  // entram — nada herdado do prototipo.
+  const ROTAS_ATENDIDAS = Object.keys(MULTIPLO_DE_REFERENCIA);
+
   function chaveDoMultiplo(rota, tipoMetrica) {
-    if (rota === 'firm') {
-      return tipoMetrica === 'EBITDA' ? 'EV/EBITDA_curr' : 'EV/NOPAT_curr';
+    if (!Object.prototype.hasOwnProperty.call(MULTIPLO_DE_REFERENCIA, rota)) {
+      throw recusa('rota_desconhecida',
+        `rota sem multiplo de referencia: ${JSON.stringify(rota)}. Esta fachada `
+        + `atende ${JSON.stringify(ROTAS_ATENDIDAS)}.`);
     }
-    if (rota === 'rampa') return 'EV/EBITDA0';
-    if (rota === 'equity') return 'PL_curr';
-    throw recusa('rota_desconhecida',
-      `rota sem multiplo de referencia: ${JSON.stringify(rota)}.`);
+    return MULTIPLO_DE_REFERENCIA[rota](tipoMetrica);
+  }
+
+  // `upside` — `avaliar._monta_cenario` (linha 704) e `_aplicar_degrau_ao_
+  // cenario` (linha 669): `preco_acao / caso.preco.valor - 1`. E' a unica
+  // conta que o wrapper Python faz FORA do motor, e por isso mesmo pertence
+  // a esta fachada e nao ao laboratorio: comparar o preco justo com o preco
+  // de tela e' orquestracao de integracao, exatamente como traduzir `caso`
+  // em `resultados`. Preco recusado (`null`) propaga `null` — nunca o `-1`
+  // que `null / preco - 1` produziria em JS, um numero plausivel e falso.
+  function upsideDe(precoAcao, precoDeTela) {
+    if (!Number.isFinite(precoAcao)) return null;
+    return precoAcao / precoDeTela - 1;
+  }
+
+  function precoDeTelaDe(caso) {
+    const preco = caso.preco;
+    const valor = (preco === null || typeof preco !== 'object') ? undefined : preco.valor;
+    if (!Number.isFinite(valor) || valor === 0) {
+      throw recusa('preco_de_tela_ausente',
+        `o caso nao declara um preco de tela utilizavel em "preco.valor": `
+        + `${JSON.stringify(valor)}. Sem ele nao existe upside.`);
+    }
+    return valor;
   }
 
   // Um cenario recusado pelo espelho (premissa fora de dominio, `tv` null,
@@ -155,6 +197,16 @@
       premissas,
       valor: { preco_acao: null },
       multiplo: { chave, valor: null },
+      vs_preco: { upside: null },
+    };
+  }
+
+  function cenarioPrecificado(premissas, precoAcao, chave, multiplo, precoDeTela) {
+    return {
+      premissas,
+      valor: { preco_acao: precoAcao },
+      multiplo: { chave, valor: multiplo },
+      vs_preco: { upside: upsideDe(precoAcao, precoDeTela) },
     };
   }
 
@@ -179,7 +231,7 @@
    * O subconjunto VIVO do `resultados.json`, recalculado do `caso`.
    *
    * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
-   * multiplo: {chave, valor}}}}`, mais `ponte: {nd_efetivo}` nas rotas que
+   * multiplo: {chave, valor}, vs_preco: {upside}}}}`, mais `ponte: {nd_efetivo}` nas rotas que
    * cruzam ponte (firm/rampa) — a rota equity nao publica o bloco, do mesmo
    * jeito que `resultados.json` nao publica (L2: mesmas chaves).
    *
@@ -212,6 +264,7 @@
     const ndEfetivo = temPonte ? ndEfetivoDe(caso.ponte) : 0.0;
     const chave = chaveDoMultiplo(rota, metrica.tipo);
     const blocoDegrau = rota === 'equity' ? (caso.degrau || null) : null;
+    const precoDeTela = precoDeTelaDe(caso);
 
     const cenarios = {};
     for (const nome of Object.keys(caso.cenarios)) {
@@ -219,11 +272,9 @@
 
       if (rota === 'rampa') {
         const r = M.precificarRampa({ premissas, ndEfetivo, acoes, moeda, rf });
-        cenarios[nome] = r.recusado ? cenarioRecusado(premissas, chave) : {
-          premissas,
-          valor: { preco_acao: r.valor.preco_acao },
-          multiplo: { chave, valor: r.multiplo },
-        };
+        cenarios[nome] = r.recusado
+          ? cenarioRecusado(premissas, chave)
+          : cenarioPrecificado(premissas, r.valor.preco_acao, chave, r.multiplo, precoDeTela);
         continue;
       }
 
@@ -232,24 +283,19 @@
           premissas,
           metricaValor: metrica.valor,
           acoes,
-          precoValor: caso.preco.valor,
+          precoValor: precoDeTela,
           blocoDegrau: blocoDegrauCru(blocoDegrau),
           mValor: blocoDegrau.m[nome].valor,
         });
-        cenarios[nome] = r.recusado ? cenarioRecusado(premissas, 'PVP_com_degrau') : {
-          premissas,
-          valor: { preco_acao: r.valor.preco_acao },
-          multiplo: { chave: 'PVP_com_degrau', valor: r.degrau.com_transicao },
-        };
+        cenarios[nome] = r.recusado
+          ? cenarioRecusado(premissas, 'PVP_com_degrau')
+          : cenarioPrecificado(premissas, r.valor.preco_acao, 'PVP_com_degrau',
+            r.degrau.com_transicao, precoDeTela);
         continue;
       }
 
       const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
-      cenarios[nome] = {
-        premissas,
-        valor: { preco_acao: r.valor },
-        multiplo: { chave, valor: r.multiplo },
-      };
+      cenarios[nome] = cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela);
     }
 
     const vivo = { cenarios };
@@ -343,6 +389,12 @@
         py.valor ? py.valor.preco_acao : undefined, js.valor.preco_acao);
       registrar(divergencias, nome, js.multiplo.chave,
         multiploPublicado(py, js.multiplo.chave), js.multiplo.valor);
+      // O terceiro numero publicado (Task 2). Nao e' redundante com o preco:
+      // o preco pode bater e o upside divergir se a DEFINICAO divergir — e a
+      // definicao e' justamente o que esta fachada passou a carregar em nome
+      // do laboratorio.
+      registrar(divergencias, nome, 'vs_preco.upside',
+        py.vs_preco ? py.vs_preco.upside : undefined, js.vs_preco.upside);
     }
 
     return { ok: divergencias.length === 0, divergencias };
@@ -353,7 +405,7 @@
   // `module.exports` incondicional estoura `ReferenceError: module is not
   // defined` num <script> de browser — que e' o consumidor REAL desta fachada.
   const publico = {
-    VERSAO_CONTRATO, avaliarCaso, compararComResultados,
+    VERSAO_CONTRATO, ROTAS_ATENDIDAS, avaliarCaso, compararComResultados,
   };
 
   if (typeof module !== 'undefined' && typeof module.exports !== 'undefined') {

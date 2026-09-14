@@ -220,6 +220,131 @@
     max-width: 100%;
     height: auto;
   }
+  .laboratorio .lab-nota,
+  .laboratorio .lab-campo .lab-nota {
+    font-size: 0.85rem;
+    color: var(--cor-texto-suave);
+  }
+  .lab-badge {
+    font-size: 0.85rem;
+    padding: 10px 14px;
+    margin: 0 0 18px;
+    background: var(--cor-acento-suave);
+    border: 1px solid var(--cor-borda);
+  }
+  .lab-badge[data-estado="divergente"],
+  .lab-badge[data-estado="indisponivel"] {
+    background: var(--cor-disclosure-fundo);
+    border-color: var(--cor-disclosure-borda);
+  }
+  .lab-badge ul {
+    margin: 6px 0 0;
+    padding-left: 20px;
+  }
+  .lab-cenario {
+    border: 1px solid var(--cor-borda);
+    padding: 14px 18px 18px;
+    margin: 0 0 18px;
+  }
+  .lab-cenario h3 {
+    font-size: 1rem;
+    margin: 0 0 10px;
+  }
+  .lab-saidas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin: 0 0 14px;
+  }
+  .lab-saidas .metrica-valor {
+    font-size: 1.15rem;
+  }
+  .lab-blocos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+  .lab-bloco {
+    flex: 1 1 240px;
+    min-width: 220px;
+  }
+  .lab-bloco h4 {
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--cor-texto-suave);
+    margin: 0 0 8px;
+  }
+  .lab-campo {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    gap: 2px 10px;
+    margin: 0 0 10px;
+  }
+  .lab-campo label {
+    font-size: 0.88rem;
+  }
+  .lab-campo input,
+  .lab-campo select {
+    font: inherit;
+    font-size: 0.88rem;
+    padding: 3px 6px;
+    border: 1px solid var(--cor-borda);
+    background: var(--cor-papel);
+    color: var(--cor-texto);
+    max-width: 170px;
+  }
+  .lab-campo input[type="checkbox"] {
+    justify-self: end;
+    max-width: none;
+  }
+  .lab-campo input:disabled {
+    color: var(--cor-texto-suave);
+    background: var(--cor-fundo);
+  }
+  .lab-campo input[aria-invalid="true"] {
+    border-color: var(--cor-disclosure-borda);
+  }
+  .lab-campo .lab-original,
+  .lab-campo .lab-nota {
+    grid-column: 1 / -1;
+    font-size: 0.78rem;
+    color: var(--cor-texto-suave);
+  }
+  .lab-acoes {
+    margin: 14px 0 0;
+  }
+  .lab-acoes button {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 5px 12px;
+    border: 1px solid var(--cor-borda);
+    background: var(--cor-papel);
+    color: var(--cor-acento);
+    cursor: pointer;
+  }
+  .lab-acoes button:disabled {
+    color: var(--cor-texto-suave);
+    cursor: default;
+  }
+  .lab-congelado h4,
+  .lab-congelado-nota {
+    font-size: 0.82rem;
+    color: var(--cor-texto-suave);
+  }
+  .lab-congelado h4 {
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin: 0 0 6px;
+  }
+  .lab-congelado ul {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.82rem;
+    color: var(--cor-texto-suave);
+  }
 </style>
 <style>$css_uplot</style>
 </head>
@@ -306,6 +431,25 @@
       formatoY: matrizes[m].formatoY
     });
   }
+})();
+</script>
+<script type="application/json" id="fleet-dados-laboratorio">$dados_laboratorio</script>
+<script>$js_espelho</script>
+<script>$js_fachada</script>
+<script>$js_laboratorio</script>
+<script>
+(function () {
+  "use strict";
+  // Laboratorio da aba Valuation (fatia 5C): os tres <script> acima so entram
+  // na pagina quando ha painel, e este bloco checa cada peca antes de usa-la
+  // -- um relatorio sem laboratorio carrega o payload nulo e sai daqui.
+  var elementoDados = document.getElementById("fleet-dados-laboratorio");
+  if (!elementoDados) { return; }
+  var dados = JSON.parse(elementoDados.textContent);
+  if (!dados) { return; }
+  var raiz = document.querySelector("[data-laboratorio]");
+  if (!raiz || typeof FleetLaboratorio === "undefined") { return; }
+  FleetLaboratorio.iniciar(raiz, dados);
 })();
 </script>
 </body>

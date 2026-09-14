@@ -157,6 +157,22 @@ def _rotulo_linha_da_ponte(catalogo: dict, linha: str, idioma: str) -> str:
     return rotulo
 
 
+def _formato_da_unidade(catalogo: dict, unidade: Any) -> str:
+    """O CÓDIGO de formato (`moeda`, `pp2`, `num0`...) que o catálogo declara
+    para a `unidade` que o contrato usa — a tradução do vocabulário da
+    integração para o de `placeholders`. Unidade que o catálogo não conhece é
+    recusa NOMEADA: o relatório não formata ao acaso um número cuja unidade
+    ninguém declarou (achado F7/A4)."""
+    info = (catalogo.get("unidades") or {}).get(unidade)
+    formato = info.get("formato") if isinstance(info, dict) else None
+    if not formato:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a unidade '{unidade}' em 'unidades' — "
+            "o relatório não formata um número cuja unidade o contrato não declara."
+        )
+    return formato
+
+
 def _espec_de_formato_da_unidade(catalogo: dict, unidade: Any, idioma: str, moeda: str | None) -> dict:
     """A4 (onda de correção da revisão final, achado F7): como formatar um
     número cuja UNIDADE o contrato declara -- `catalogo.unidades.<unidade>.
@@ -173,13 +189,7 @@ def _espec_de_formato_da_unidade(catalogo: dict, unidade: Any, idioma: str, moed
     que o catálogo não conhece é recusa NOMEADA -- em produção pelo QC
     (`unidade_desconhecida`, HARD FAIL, antes de renderizar), e aqui como
     defesa em profundidade, nunca um número formatado ao acaso."""
-    info = (catalogo.get("unidades") or {}).get(unidade)
-    formato = info.get("formato") if isinstance(info, dict) else None
-    if not formato:
-        raise RotuloDoCatalogoAusente(
-            f"catálogo de apresentação sem a unidade '{unidade}' em 'unidades' — "
-            "o relatório não formata um número cuja unidade o contrato não declara."
-        )
+    formato = _formato_da_unidade(catalogo, unidade)
     try:
         return placeholders.especificacao_de_formato(formato, idioma, moeda)
     except placeholders.FormatoInvalido as erro:
@@ -727,7 +737,321 @@ def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
     return "".join(blocos)
 
 
-def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+# --------------------------------------------------------------------------
+# Laboratório da aba Valuation (fatia 5C, item 5, Task 2).
+#
+# O painel é INTERFACE sobre dados já embutidos: um campo por premissa do
+# cenário, agrupado pelos quatro blocos econômicos do catálogo (L5), com o
+# valor original ao lado do editado (L6), e três saídas por cenário que o
+# `laboratorio.js` preenche chamando a FACHADA (`FachadaEspelho.avaliarCaso`).
+# Nenhuma conta de valuation acontece aqui nem lá — toda a metodologia que o
+# laboratório executa vive na camada de integração (E3/emenda do desenho §15),
+# e é por isso que o espelho e a fachada entram na página por LEITURA de
+# `builder.ASSETS_DA_INTEGRACAO`, nunca por cópia.
+#
+# Três decisões que este módulo materializa:
+# - O painel é HTML ESTÁTICO. `laboratorio.js` não constrói campo nenhum: lê
+#   `[data-laboratorio-entrada]`, chama a fachada e escreve as saídas. Quem
+#   sabe que premissa vai em que bloco, com que rótulo, unidade e widget, é o
+#   catálogo — lido aqui, no build.
+# - Premissa que o catálogo não conheça (ou cujo valor não caiba no tipo de
+#   entrada declarado) é EXIBIDA, DESABILITADA e rotulada como tal (L5): o
+#   laboratório nunca inventa unidade nem widget. Ela continua valendo no
+#   cálculo, porque o `caso` embutido é a base de toda simulação e só os
+#   campos editáveis o sobrescrevem.
+# - O que não é vivo nesta fatia (SOTP, reversa, sensibilidades) ganha o
+#   rótulo "congelado nas premissas originais" (L3) — e, num caso com SOTP, o
+#   rótulo cobre também o PREÇO DA MANCHETE, que é o do SOTP e não o do
+#   cenário que o laboratório recalcula.
+# --------------------------------------------------------------------------
+
+def _blocos_do_catalogo(catalogo: dict, idioma: str) -> list:
+    """Os blocos econômicos na ORDEM que o catálogo declara (`blocos.<chave>.
+    ordem`) — nunca a ordem de iteração do dict, que é dado de arquivo, e
+    nunca uma ordem decorada aqui. Desempate pela chave, para que dois blocos
+    com a mesma `ordem` ainda produzam um HTML determinístico."""
+    blocos = catalogo.get("blocos") or {}
+    ordenados = sorted(blocos.items(), key=lambda par: (par[1].get("ordem", 0), par[0]))
+    saida = []
+    for chave, info in ordenados:
+        rotulo = (info.get("rotulo") or {}).get(idioma)
+        if not rotulo:
+            raise RotuloDoCatalogoAusente(
+                f"catálogo de apresentação sem rótulo em '{idioma}' para o bloco '{chave}'.")
+        saida.append((chave, rotulo))
+    return saida
+
+
+def _premissas_da_rota(catalogo: dict, rota: str) -> dict | None:
+    """`catalogo.premissas.<rota>` — o vocabulário editável daquela rota, ou
+    `None` quando o catálogo não conhece a rota. Nesse caso não há
+    laboratório nenhum (e nenhum campo inventado): a página segue sem o
+    painel, com o cabeçalho estático que a 5A já publica."""
+    premissas = (catalogo.get("premissas") or {}).get(rota)
+    return premissas if isinstance(premissas, dict) else None
+
+
+def _valor_exibido_da_premissa(info: dict, valor: Any, catalogo: dict, idioma: str,
+                                moeda: str | None, dicionario: dict) -> str:
+    """O valor ORIGINAL, legível, que fica ao lado do campo editável (L6).
+    Número passa pela unidade que o catálogo declara (a mesma disciplina de
+    `_espec_de_formato_da_unidade`/A4 — nunca "2 casas e nada mais"); opção de
+    escolha vira o rótulo da opção; booleano vira sim/não do dicionário."""
+    entrada = info.get("entrada")
+    if entrada == "escolha":
+        rotulo = ((info.get("rotulos_opcoes") or {}).get(valor) or {}).get(idioma)
+        return rotulo if rotulo else str(valor)
+    if entrada == "booleano":
+        return t(dicionario, "valuation.laboratorio_sim" if valor else "valuation.laboratorio_nao")
+    return placeholders.formatar(
+        valor, _formato_da_unidade(catalogo, info.get("unidade")), idioma, moeda)
+
+
+def _widget_editavel(info: dict, valor: Any, identificador: str, idioma: str) -> str | None:
+    """O campo de entrada de uma premissa CATALOGADA, ou `None` quando o valor
+    declarado não cabe no tipo de entrada que o catálogo anuncia — caso em que
+    o chamador cai no campo desabilitado, em vez de desenhar um widget que
+    mentiria sobre o dado (um `<input type=number>` com texto dentro, por
+    exemplo).
+
+    `type="number"` guarda o valor em notação com PONTO decimal
+    independentemente do idioma da página (é a regra do próprio HTML para o
+    `.value` desse tipo) — então o JSON do caso vai para o atributo como
+    está, e volta do campo do mesmo jeito, sem nenhuma conversão de locale no
+    caminho."""
+    entrada = info.get("entrada")
+    atributos = f'id="{identificador}" data-laboratorio-entrada="{entrada}"'
+    if entrada == "numero":
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            return None
+        literal = html.escape(json.dumps(valor))
+        return (f'<input {atributos} type="number" step="any" value="{literal}" '
+                f'data-laboratorio-original="{literal}">')
+    if entrada == "escolha":
+        opcoes = info.get("opcoes") or []
+        if valor not in opcoes:
+            return None
+        rotulos = info.get("rotulos_opcoes") or {}
+        itens = "".join(
+            f'<option value="{html.escape(str(opcao))}"'
+            f'{" selected" if opcao == valor else ""}>'
+            f'{html.escape((rotulos.get(opcao) or {}).get(idioma) or str(opcao))}</option>'
+            for opcao in opcoes
+        )
+        return (f'<select {atributos} data-laboratorio-original="{html.escape(str(valor))}">'
+                f'{itens}</select>')
+    if entrada == "booleano":
+        if not isinstance(valor, bool):
+            return None
+        return (f'<input {atributos} type="checkbox"{" checked" if valor else ""} '
+                f'data-laboratorio-original="{"true" if valor else "false"}">')
+    return None
+
+
+def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
+                           identificador: str, catalogo: dict, idioma: str,
+                           moeda: str | None, dicionario: dict) -> tuple[str, str | None]:
+    """Um campo do painel, e o BLOCO econômico em que ele entra (`None` quando
+    não é editável). Sem entrada no catálogo — ou com valor fora do tipo de
+    entrada declarado — o campo é mostrado como o caso o declara,
+    DESABILITADO e rotulado; `None` no bloco é o que manda o chamador
+    agrupá-lo à parte, sem que ninguém precise reler o HTML já montado para
+    descobrir o que ele virou."""
+    widget = _widget_editavel(info, valor, identificador, idioma) if info else None
+    if widget is None:
+        # B2 (achado F2 da revisão final da 5A) estendido a este painel: um
+        # valor de TEXTO é um código de vocabulário controlado, e o catálogo é
+        # quem o nomeia. Quando ele não sabe nomear aquele código, o campo diz
+        # isso — nunca imprime o código cru. É o caso de um alias legado
+        # ('spread' por 'gordon'): o gate o aceita e canonicaliza, o cabeçalho
+        # já mostra "Gordon — ...", e mostrar "spread" aqui embaixo faria a
+        # mesma página dizer duas coisas diferentes sobre o mesmo input.
+        # Número e booleano NÃO são código: valem como o caso os declara.
+        bruto = html.escape(
+            t(dicionario, "valuation.laboratorio_valor_nao_rotulavel")
+            if isinstance(valor, str) else _texto_valor(valor))
+        nota = html.escape(t(dicionario, "valuation.laboratorio_nao_editavel_nota"))
+        rotulo = html.escape(
+            ((info.get("rotulo") or {}).get(idioma) or chave) if info else chave)
+        return (
+            f'<div class="lab-campo lab-campo-travado" data-laboratorio-premissa="{html.escape(chave)}">'
+            f'<label for="{identificador}">{rotulo}</label>'
+            f'<input id="{identificador}" type="text" value="{bruto}" disabled>'
+            f'<span class="lab-nota">{nota}</span>'
+            f'</div>'
+        ), None
+    rotulo = html.escape(_rotulo_premissa(catalogo, rota, chave, idioma))
+    original = html.escape(t(
+        dicionario, "valuation.laboratorio_original",
+        valor=_valor_exibido_da_premissa(info, valor, catalogo, idioma, moeda, dicionario)))
+    return (
+        f'<div class="lab-campo" data-laboratorio-premissa="{html.escape(chave)}">'
+        f'<label for="{identificador}">{rotulo}</label>'
+        f'{widget}'
+        f'<span class="lab-original">{original}</span>'
+        f'</div>'
+    ), info.get("bloco")
+
+
+def _saidas_do_cenario_html(dicionario: dict) -> str:
+    """As três saídas que `laboratorio.js` reescreve a cada edição: preço,
+    múltiplo e upside. Nascem com o texto de "sem valor" — o JS as preenche na
+    carga (reproduzindo, aí, exatamente o que o relatório publicou, que é o
+    que o badge acabou de provar) e a cada mudança. Se o badge reprovar, elas
+    FICAM assim: um número recalculado por um motor que discorda do relatório
+    é justamente o que L4 proíbe mostrar."""
+    vazio = html.escape(t(dicionario, "valuation.laboratorio_sem_valor"))
+    campos = [
+        ("preco", "valuation.preco_justo_titulo", True),
+        ("multiplo", "valuation.multiplo_justo_titulo", False),
+        ("upside", "valuation.upside_titulo", True),
+    ]
+    blocos = []
+    for chave, chave_rotulo, sem_nota in campos:
+        nota = "" if sem_nota else f'<span class="metrica-nota" data-laboratorio-saida="{chave}-rotulo"></span>'
+        blocos.append(
+            f'<div class="metrica">'
+            f'<span class="metrica-rotulo">{html.escape(t(dicionario, chave_rotulo))}</span>'
+            f'<span class="metrica-valor" data-laboratorio-saida="{chave}">{vazio}</span>'
+            f'{nota}'
+            f'</div>'
+        )
+    return f'<div class="lab-saidas">{"".join(blocos)}</div>'
+
+
+def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
+                                  premissas_catalogo: dict, catalogo: dict, idioma: str,
+                                  moeda: str | None, dicionario: dict) -> str:
+    campos_por_bloco: dict[str, list] = {}
+    travados: list[str] = []
+    for posicao, (chave, valor) in enumerate(premissas.items()):
+        campo, bloco = _campo_do_laboratorio(
+            rota, chave, valor, premissas_catalogo.get(chave), f"lab-{indice}-{posicao}",
+            catalogo, idioma, moeda, dicionario)
+        if bloco is None:
+            travados.append(campo)
+        else:
+            campos_por_bloco.setdefault(bloco, []).append(campo)
+
+    grupos = []
+    for chave_bloco, rotulo_bloco in _blocos_do_catalogo(catalogo, idioma):
+        campos = campos_por_bloco.get(chave_bloco)
+        if not campos:
+            continue
+        grupos.append(
+            f'<div class="lab-bloco" data-laboratorio-bloco="{html.escape(chave_bloco)}">'
+            f'<h4>{html.escape(rotulo_bloco)}</h4>{"".join(campos)}</div>'
+        )
+    if travados:
+        grupos.append(
+            f'<div class="lab-bloco lab-bloco-travado" data-laboratorio-bloco="">'
+            f'<h4>{html.escape(t(dicionario, "valuation.laboratorio_nao_editavel_titulo"))}</h4>'
+            f'{"".join(travados)}</div>'
+        )
+
+    titulo = html.escape(t(dicionario, "valuation.laboratorio_cenario_titulo", cenario=nome))
+    restaurar = html.escape(t(dicionario, "valuation.laboratorio_restaurar"))
+    return (
+        f'<section class="lab-cenario" data-laboratorio-cenario="{html.escape(nome)}">'
+        f'<h3>{titulo}</h3>'
+        f'{_saidas_do_cenario_html(dicionario)}'
+        f'<div class="lab-blocos">{"".join(grupos)}</div>'
+        f'<p class="lab-acoes"><button type="button" data-laboratorio-restaurar>{restaurar}</button></p>'
+        f'</section>'
+    )
+
+
+def _congelados_html(resultados: dict, dicionario: dict) -> str:
+    """L3/§8.4: o que NÃO é vivo nesta fatia aparece rotulado, nunca omitido —
+    o analista tem de saber que aqueles números não acompanham a edição."""
+    itens = [
+        ("sotp", "valuation.laboratorio_congelado_sotp"),
+        ("reversa", "valuation.laboratorio_congelado_reversa"),
+        ("sensibilidades", "valuation.laboratorio_congelado_sensibilidades"),
+    ]
+    linhas = "".join(
+        f'<li>{html.escape(t(dicionario, chave_texto))}</li>'
+        for campo, chave_texto in itens if resultados.get(campo)
+    )
+    if not linhas:
+        return ""
+    titulo = html.escape(t(dicionario, "valuation.laboratorio_congelado_titulo"))
+    return f'<section class="lab-congelado"><h4>{titulo}</h4><ul>{linhas}</ul></section>'
+
+
+def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+                       dicionario: dict) -> str:
+    """O painel inteiro, ou `""` quando não há laboratório possível (rota que
+    o catálogo não conhece, ou caso sem cenário)."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    premissas_catalogo = _premissas_da_rota(catalogo, rota)
+    cenarios = caso.get("cenarios") or {}
+    if premissas_catalogo is None or not cenarios:
+        return ""
+    moeda = caso.get("moeda")
+
+    paineis = "".join(
+        _cenario_do_laboratorio_html(
+            rota, nome, (bloco or {}).get("premissas") or {}, indice, premissas_catalogo,
+            catalogo, idioma, moeda, dicionario)
+        for indice, (nome, bloco) in enumerate(cenarios.items())
+    )
+    return (
+        f'<section class="laboratorio" data-laboratorio>'
+        f'<h2>{html.escape(t(dicionario, "valuation.laboratorio_titulo"))}</h2>'
+        f'<p class="lab-nota">{html.escape(t(dicionario, "valuation.laboratorio_nota"))}</p>'
+        f'<div class="lab-badge" data-laboratorio-badge role="status" aria-live="polite"></div>'
+        f'{paineis}'
+        f'{_congelados_html(resultados, dicionario)}'
+        f'</section>'
+    )
+
+
+def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+                            dicionario: dict) -> dict | None:
+    """O payload do laboratório: o `caso` e o `resultados` INTEIROS (opacos —
+    este módulo não os interpreta; quem os lê é a fachada, do lado da
+    integração), as três receitas de formatação das saídas, os rótulos dos
+    múltiplos e a prosa de interface que o JS escreve.
+
+    O `resultados` viaja junto porque o badge de paridade (L4) é um FATO
+    medido na máquina de quem abriu o arquivo: a fachada recomputa cada
+    cenário a partir do `caso` e compara com o que o Python publicou. Sem os
+    dois lados na página não há o que comparar.
+
+    Os textos com `{marcador}` vão como MODELO (`t()` sem valores não
+    formata): quem substitui é o JS, com o cenário/chave/números da
+    divergência que a fachada nomeou."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    if _premissas_da_rota(catalogo, rota) is None or not (caso.get("cenarios") or {}):
+        return None
+    moeda = caso.get("moeda")
+    rotulos_multiplos = {
+        chave: _rotulo_multiplo(catalogo, chave, idioma)
+        for chave in sorted((catalogo.get("multiplos") or {}))
+    }
+    return {
+        "idioma": idioma,
+        "caso": caso,
+        "resultados": resultados,
+        "formatos": {
+            "preco": placeholders.especificacao_de_formato("moeda", idioma, moeda),
+            "multiplo": placeholders.especificacao_de_formato("x2", idioma, moeda),
+            "upside": placeholders.especificacao_de_formato("pct1", idioma, moeda),
+        },
+        "rotulosMultiplos": rotulos_multiplos,
+        "textos": {
+            "semValor": t(dicionario, "valuation.laboratorio_sem_valor"),
+            "paridadeOk": t(dicionario, "valuation.laboratorio_paridade_ok"),
+            "paridadeDivergente": t(dicionario, "valuation.laboratorio_paridade_divergente"),
+            "paridadeItem": t(dicionario, "valuation.laboratorio_paridade_item"),
+            "paridadeIndisponivel": t(dicionario, "valuation.laboratorio_paridade_indisponivel"),
+        },
+    }
+
+
+def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
+                     com_laboratorio: bool = False) -> str:
     moeda = caso.get("moeda")
     manchete = resultados["manchete"]
 
@@ -788,6 +1112,18 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
         bloco_multiplos = f'<p class="sotp-nota">{nota_sotp}</p>'
         bloco_rota = ""
 
+    # L3, e o achado 3 da Task 1: num caso com SOTP, `manchete.preco_acao` é o
+    # preço da SOMA DAS PARTES -- que esta fatia deixou congelado --, e não o
+    # preço do cenário que o laboratório recalcula. Sem este rótulo, o
+    # analista veria o preço do cenário se mover logo abaixo de uma manchete
+    # que não se move e concluiria que um dos dois está errado.
+    nota_manchete = ""
+    if com_laboratorio and resultados.get("sotp"):
+        nota_manchete = (
+            f'<p class="lab-congelado-nota">'
+            f'{html.escape(t(dicionario, "valuation.laboratorio_manchete_congelada"))}</p>'
+        )
+
     cenarios = resultados.get("cenarios") or {}
     if len(cenarios) > 1:
         linhas = "".join(
@@ -804,12 +1140,16 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
     else:
         bloco_cenarios = ""
 
+    laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario)
+                   if com_laboratorio else "")
     return (
         f'<section class="valuation-cabecalho">{cabecalho}</section>'
+        f'{nota_manchete}'
         f'<section class="valuation-multiplos">{bloco_multiplos}</section>'
         f'<section class="valuation-rota">{bloco_rota}</section>'
         f'{bloco_cenarios}'
         f'{_paineis_valuation_html(caso, resultados, catalogo, idioma, dicionario)}'
+        f'{laboratorio}'
     )
 
 
@@ -892,7 +1232,8 @@ def _ler_asset(nome: str) -> str:
 
 
 def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
-           exhibits_resolvidos: list | None = None, log_exhibits: list | None = None) -> str:
+           exhibits_resolvidos: list | None = None, log_exhibits: list | None = None,
+           js_da_integracao: dict | None = None) -> str:
     """Compõe o HTML autocontido das três abas a partir só dos contratos já
     carregados/validados por quem chama (`builder.py`).
 
@@ -912,6 +1253,14 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     chamador existente (`tests/test_relatorio_render.py`, anterior a esta
     fatia) sem precisar tocar nele.
 
+    `js_da_integracao` (fatia 5C, item 5, Task 2): `{"espelho": <texto>,
+    "fachada": <texto>}`, LIDOS por `builder.py` de `ASSETS_DA_INTEGRACAO` --
+    o único caminho deste pacote para dentro da integração (E3). Omisso
+    (`None`, o padrão): a página sai SEM laboratório, exatamente como antes
+    desta fatia -- um painel editável sem o motor que o alimenta seria
+    interface morta, então o painel e os dois `<script>` entram ou não
+    entram juntos.
+
     Determinístico por construção: mesma entrada, mesmos bytes — nenhuma
     ordem de `set` não determinística, nenhum relógio, nenhum caminho
     absoluto no HTML emitido, nenhuma id gerada em tempo de execução.
@@ -930,9 +1279,13 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     ticker = html.escape(str(execucao.get("ticker", "")))
     titulo = t(dicionario, "titulo_pagina", empresa=empresa, ticker=ticker)
 
+    laboratorio = (_laboratorio_para_json(caso, resultados, catalogo, idioma, dicionario)
+                   if js_da_integracao else None)
+
     corpo_tese = _tese_html(entrega, achados, idioma, dicionario, titulo) + _exhibits_html(
         exhibits_resolvidos, dicionario)
-    corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario)
+    corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario,
+                                       com_laboratorio=laboratorio is not None)
     corpo_evidencia = _evidencia_html(
         resultados, entrega["ficha_tecnica"], log, log_exhibits, idioma, dicionario)
 
@@ -969,6 +1322,24 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     tem_painel = paineis_valuation["ponte"] is not None or bool(paineis_valuation["matrizes"])
     js_svg = _ler_asset("svg.js") if tem_painel else ""
 
+    # O laboratório (Task 2) paga ~110 KB de espelho + fachada; como o uPlot e
+    # o `svg.js`, só entra na página quando há painel para alimentar. Os dois
+    # módulos da integração chegam como TEXTO, lidos por `builder.py` de
+    # `ASSETS_DA_INTEGRACAO` -- este módulo nunca os localiza no disco, nunca
+    # os copia para `assets/` e nunca os interpreta. `laboratorio.js` é asset
+    # PRÓPRIO do relatório (só interface) e entra pelo mesmo `_ler_asset` do
+    # `svg.js`. Tudo isso entra como VALOR de `string.Template.substitute`,
+    # nunca colado no template: os três arquivos têm `$` no corpo, e um
+    # `$nome` colado no modelo seria lido como marcador.
+    if laboratorio is not None:
+        js_espelho = js_da_integracao["espelho"]
+        js_fachada = js_da_integracao["fachada"]
+        js_laboratorio = _ler_asset("laboratorio.js")
+        dados_laboratorio = _json_embutido(laboratorio)
+    else:
+        js_espelho = js_fachada = js_laboratorio = ""
+        dados_laboratorio = _json_embutido(None)
+
     modelo = (_DIR_ASSETS / "template.html").read_text(encoding="utf-8")
     return string.Template(modelo).substitute(
         idioma=html.escape(str(idioma)),
@@ -984,4 +1355,8 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
         js_graficos=js_graficos,
         js_svg=js_svg,
         dados_exhibits=dados_exhibits,
+        js_espelho=js_espelho,
+        js_fachada=js_fachada,
+        js_laboratorio=js_laboratorio,
+        dados_laboratorio=dados_laboratorio,
     )
