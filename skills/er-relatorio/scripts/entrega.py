@@ -1,6 +1,7 @@
 """Contrato de `entrega.json` (fatia 5A, item 5, Task 3, decisão A1;
 estendido na fatia 5B, item 5, Task 1, G1/G3: `dados` no topo, `exhibits`
-em `analise`).
+em `analise`; e na fatia 5D, item 5, Task 2, D1/D5: a Tese do analista em
+`analise`).
 
 Este módulo NÃO importa nada de `er-valuation` nem do vendor (E3,
 `docs/desenho-arquitetura-v4.md` §15) — `caso` e `resultados` chegam aqui
@@ -22,6 +23,18 @@ ContratoDeExhibitInvalido` como `EntregaInvalida`, para que a recusa
 continue tendo a mesma forma (código 1) que todo o resto do contrato. Ver
 o docstring de `exhibits.py` para o porquê de a dependência ir só nesta
 direção (`entrega.py` -> `exhibits.py`, nunca de volta).
+
+A Tese (5D, D1/D5) também é vocabulário PRÓPRIO deste contrato. A FORMA de
+cada nível — chave desconhecida, tipo, campo obrigatório ausente, vocabulário
+fechado de `tema`/`vetor`/`incorporacao`, exhibit citado que existe,
+`exhibits` XOR `sem_exhibit` — é recusada aqui, código 1, com sugestão por
+`difflib`. O que depende do catálogo ou dos números de `resultados` (o
+vocabulário de vínculo, D2; a ordem da faixa; a cobertura das perguntas, §7;
+preço-alvo sob fronteira de escopo; a reversa) é achado de QC (`qc.py`, D6),
+código 2. A única leitura de `resultados` que a forma exige é
+`resultados.fronteira_de_escopo`: fora da fronteira, `analise.faixa` é
+obrigatória; sob ela, declarar a faixa não é recusa de forma — é o HARD FAIL
+`fronteira_com_preco_alvo`.
 
 `carregar` é o único ponto de entrada deste módulo: lê `<raiz>/entrega.json`,
 confirma que o arquivo resolve DENTRO da raiz de execução (regra
@@ -58,7 +71,7 @@ class EntregaInvalida(Exception):
 # o conteúdo deles pertence ao contrato de `caso.json`/`resultados.json`
 # publicado por `er-valuation` (E3) — este módulo só confirma tipo e, para
 # `resultados`, a versão do sub-contrato. `ledger`/`ficha_tecnica` só têm o
-# tipo confirmado nesta fatia (a 5D detalha o conteúdo dos dois).
+# tipo confirmado nesta fatia (a 5E detalha o conteúdo dos dois).
 #
 # `dados` (5B, G3) é NOVO e OPCIONAL na raiz — por isso fica de fora de
 # `CHAVES_DE_TOPO_OBRIGATORIAS` (uma entrega cujos exhibits são só `engine`
@@ -78,8 +91,59 @@ CHAVES_DE_TOPO: frozenset = frozenset({
 CHAVES_DE_TOPO_OBRIGATORIAS: frozenset = CHAVES_DE_TOPO - {"dados"}
 
 CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma"})
-CHAVES_DE_ANALISE: frozenset = frozenset({"conclusao", "exhibits"})
+
+# --------------------------------------------------------------------------
+# Fatia 5D, item 5, Task 2 (D1/D5): a Tese do analista em `analise`, com
+# vocabulário fechado em todo nível. `?` no plano vira, aqui, "fora de
+# CHAVES_..._OBRIGATORIAS".
+# --------------------------------------------------------------------------
+
+# §7 do desenho: as três alavancas do múltiplo justo são cobertura obrigatória;
+# `especifica` é a pergunta adicional, quando um fator realmente domina a tese.
+# Quantas perguntas e quantas de cada tema é conteúdo (QC, D6), não forma.
+TEMAS_OBRIGATORIOS: frozenset = frozenset({"moat", "crescimento", "rentabilidade_do_crescimento"})
+TEMA_ESPECIFICO: str = "especifica"
+TEMAS_DE_PERGUNTA: frozenset = TEMAS_OBRIGATORIOS | {TEMA_ESPECIFICO}
+
+# §9: o vetor que um Positive/Negative atinge, e se ele está refletido no
+# valuation ou declarado como não incorporado — este, sempre com a razão.
+VETORES: frozenset = frozenset({"crescimento", "moat", "rentabilidade", "risco", "earning_power", "valuation"})
+INCORPORACAO_NAO_INCORPORADA: str = "nao_incorporado"
+INCORPORACOES: frozenset = frozenset({"refletido", INCORPORACAO_NAO_INCORPORADA})
+
+# Cada papel da faixa nomeia um cenário de `resultados.cenarios` (declarado,
+# nunca inferido); os números são os que a integração publicou.
+PAPEIS_DA_FAIXA: tuple = ("piso", "base", "teto")
+
+# §9: "o que mudou desde a análise fornecida" cabe em três linhas.
+MAXIMO_DE_LINHAS_DO_QUE_MUDOU: int = 3
+
+CHAVES_DE_ANALISE: frozenset = frozenset({
+    "conclusao", "exhibits", "faixa", "veredicto", "premissas_decisivas", "positives", "negatives",
+    "perguntas", "riscos", "visao_nao_consensual", "mudou_desde_analise_fornecida",
+})
+# `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as duas
+# últimas são opcionais.
+CHAVES_DE_ANALISE_OBRIGATORIAS: frozenset = CHAVES_DE_ANALISE - {
+    "faixa", "visao_nao_consensual", "mudou_desde_analise_fornecida",
+}
 CHAVES_DE_CONCLUSAO: frozenset = frozenset({"texto"})
+CHAVES_DE_FAIXA: frozenset = frozenset(PAPEIS_DA_FAIXA)
+CHAVES_DE_VEREDICTO: frozenset = frozenset({"texto"})
+CHAVES_DE_PREMISSA_DECISIVA: frozenset = frozenset({"chave", "derivacao"})
+CHAVES_DE_POSITIVE_OU_NEGATIVE: frozenset = frozenset({
+    "afirmacao", "vetor", "mecanismo", "observavel", "incorporacao", "razao",
+})
+CHAVES_DE_POSITIVE_OU_NEGATIVE_OBRIGATORIAS: frozenset = CHAVES_DE_POSITIVE_OU_NEGATIVE - {"razao"}
+CHAVES_DE_PERGUNTA: frozenset = frozenset({
+    "id", "tema", "pergunta", "evidencia", "observavel", "vinculo", "exhibits", "sem_exhibit",
+})
+# D5: `exhibits` XOR `sem_exhibit` — exatamente um dos dois, conferido à parte.
+CHAVES_DE_PERGUNTA_OBRIGATORIAS: frozenset = CHAVES_DE_PERGUNTA - {"exhibits", "sem_exhibit"}
+CHAVES_DE_SEM_EXHIBIT: frozenset = frozenset({"razao"})
+CHAVES_DE_RISCO: frozenset = frozenset({"risco", "observavel"})
+CHAVES_DE_VISAO_NAO_CONSENSUAL: frozenset = frozenset({"texto"})
+CHAVES_DO_QUE_MUDOU: frozenset = frozenset({"linhas"})
 
 # Dicionários de interface/QC deste skill: asset PRÓPRIO do er-relatorio,
 # não da integração — E3 só proíbe importar código/dado de er-valuation ou
@@ -132,6 +196,42 @@ def _exigir_texto_nao_vazio(valor: Any, campo: str) -> str:
     return valor
 
 
+def _exigir_lista(valor: Any, campo: str) -> list:
+    if not isinstance(valor, list):
+        raise EntregaInvalida(f"'{campo}' não é uma lista: {valor!r}.")
+    return valor
+
+
+def _exigir_lista_de_textos(valor: Any, campo: str) -> list:
+    """Lista NÃO VAZIA de textos não vazios — `vinculo`, `mecanismo`,
+    `exhibits` de uma pergunta e as linhas do que mudou."""
+    if not isinstance(valor, list) or not valor or not all(isinstance(v, str) and v.strip() for v in valor):
+        raise EntregaInvalida(f"'{campo}' tem de ser uma lista não vazia de textos não vazios: {valor!r}.")
+    return valor
+
+
+def _exigir_do_vocabulario(valor: Any, vocabulario: frozenset, campo: str) -> str:
+    if isinstance(valor, str) and valor in vocabulario:
+        return valor
+    sugestao = difflib.get_close_matches(str(valor), sorted(vocabulario), n=1)
+    dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+    raise EntregaInvalida(
+        f"'{campo}' fora do vocabulário fechado: {valor!r}.{dica}"
+        f"Valores aceitos: {', '.join(sorted(vocabulario))}."
+    )
+
+
+def _objeto_fechado(valor: Any, permitidas: frozenset, obrigatorias: frozenset, onde: str) -> dict:
+    """Objeto, sem chave fora de `permitidas`, com toda chave de
+    `obrigatorias` — a forma de todo nível da Tese."""
+    objeto = _exigir_objeto(valor, onde)
+    _recusar_chave_desconhecida(objeto, permitidas, onde)
+    for campo in sorted(obrigatorias):
+        if campo not in objeto:
+            raise EntregaInvalida(f"campo obrigatório ausente em '{onde}': '{campo}'.")
+    return objeto
+
+
 def _validar_execucao(execucao: Any) -> None:
     execucao = _exigir_objeto(execucao, "execucao")
     _recusar_chave_desconhecida(execucao, CHAVES_DE_EXECUCAO, "execucao")
@@ -151,28 +251,135 @@ def _validar_execucao(execucao: Any) -> None:
         )
 
 
-def _validar_analise(analise: Any) -> None:
-    analise = _exigir_objeto(analise, "analise")
-    _recusar_chave_desconhecida(analise, CHAVES_DE_ANALISE, "analise")
-    if "conclusao" not in analise:
-        raise EntregaInvalida("campo obrigatório ausente em 'analise': 'conclusao'.")
-    if "exhibits" not in analise:
-        raise EntregaInvalida("campo obrigatório ausente em 'analise': 'exhibits'.")
+def _validar_positive_ou_negative(valor: Any, onde: str) -> None:
+    item = _objeto_fechado(valor, CHAVES_DE_POSITIVE_OU_NEGATIVE, CHAVES_DE_POSITIVE_OU_NEGATIVE_OBRIGATORIAS, onde)
+    _exigir_texto_nao_vazio(item["afirmacao"], f"{onde}.afirmacao")
+    _exigir_do_vocabulario(item["vetor"], VETORES, f"{onde}.vetor")
+    _exigir_lista_de_textos(item["mecanismo"], f"{onde}.mecanismo")
+    _exigir_texto_nao_vazio(item["observavel"], f"{onde}.observavel")
+    incorporacao = _exigir_do_vocabulario(item["incorporacao"], INCORPORACOES, f"{onde}.incorporacao")
+    if incorporacao == INCORPORACAO_NAO_INCORPORADA and "razao" not in item:
+        raise EntregaInvalida(
+            f"campo obrigatório ausente em '{onde}': 'razao' — um item "
+            f"'{INCORPORACAO_NAO_INCORPORADA}' declara por que não está no valuation (§9)."
+        )
+    if "razao" in item:
+        _exigir_texto_nao_vazio(item["razao"], f"{onde}.razao")
 
-    conclusao = _exigir_objeto(analise["conclusao"], "analise.conclusao")
-    _recusar_chave_desconhecida(conclusao, CHAVES_DE_CONCLUSAO, "analise.conclusao")
-    if "texto" not in conclusao:
-        raise EntregaInvalida("campo obrigatório ausente em 'analise.conclusao': 'texto'.")
+
+def _validar_pergunta(valor: Any, onde: str, ids_de_exhibit: list[str]) -> None:
+    pergunta = _objeto_fechado(valor, CHAVES_DE_PERGUNTA, CHAVES_DE_PERGUNTA_OBRIGATORIAS, onde)
+    _exigir_texto_nao_vazio(pergunta["id"], f"{onde}.id")
+    _exigir_do_vocabulario(pergunta["tema"], TEMAS_DE_PERGUNTA, f"{onde}.tema")
+    for campo in ("pergunta", "evidencia", "observavel"):
+        _exigir_texto_nao_vazio(pergunta[campo], f"{onde}.{campo}")
+    _exigir_lista_de_textos(pergunta["vinculo"], f"{onde}.vinculo")
+
+    # D5 (§10: "pelo menos um exhibit útil ou uma decisão explícita de que
+    # visualização não acrescenta"): exatamente um dos dois.
+    tem_exhibits = "exhibits" in pergunta
+    if tem_exhibits and "sem_exhibit" in pergunta:
+        raise EntregaInvalida(
+            f"'{onde}' declara 'exhibits' e 'sem_exhibit' ao mesmo tempo: cada pergunta cita os "
+            "exhibits que a respondem OU declara a razão de nenhum acrescentar — nunca os dois."
+        )
+    if not tem_exhibits and "sem_exhibit" not in pergunta:
+        raise EntregaInvalida(
+            f"'{onde}' não declara 'exhibits' nem 'sem_exhibit': cada pergunta cita os exhibits "
+            "que a respondem ou declara a razão de nenhum acrescentar."
+        )
+    if tem_exhibits:
+        declarados = sorted(set(ids_de_exhibit))
+        for indice, exhibit_id in enumerate(_exigir_lista_de_textos(pergunta["exhibits"], f"{onde}.exhibits")):
+            if exhibit_id in declarados:
+                continue
+            sugestao = difflib.get_close_matches(exhibit_id, declarados, n=1)
+            dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+            raise EntregaInvalida(
+                f"'{onde}.exhibits.{indice}' cita um exhibit que não existe em 'analise.exhibits': "
+                f"'{exhibit_id}'.{dica}Exhibits declarados: {', '.join(declarados) or '(nenhum)'}."
+            )
+    else:
+        sem_exhibit = _objeto_fechado(pergunta["sem_exhibit"], CHAVES_DE_SEM_EXHIBIT,
+                                      CHAVES_DE_SEM_EXHIBIT, f"{onde}.sem_exhibit")
+        _exigir_texto_nao_vazio(sem_exhibit["razao"], f"{onde}.sem_exhibit.razao")
+
+
+def _validar_analise(analise: Any, resultados: dict) -> None:
+    """`analise` (A1 + 5B/G1 + 5D/D1-D5): vocabulário fechado em todo nível.
+    `resultados` só é lido para a condicional da faixa (D1/D3)."""
+    analise = _objeto_fechado(analise, CHAVES_DE_ANALISE, CHAVES_DE_ANALISE_OBRIGATORIAS, "analise")
+
+    # D1/D3: uma faixa de preços é preço-alvo. Fora da fronteira de escopo ela é
+    # exigida; sob ela, declará-la é o HARD FAIL `fronteira_com_preco_alvo` — a
+    # forma continua validada, e o QC nomeia o problema.
+    if resultados["fronteira_de_escopo"] is None and "faixa" not in analise:
+        raise EntregaInvalida(
+            "campo obrigatório ausente em 'analise': 'faixa' — fora da fronteira de escopo, a Tese "
+            "declara a faixa piso–base–teto pelos nomes dos cenários de 'resultados.cenarios'."
+        )
+
+    conclusao = _objeto_fechado(analise["conclusao"], CHAVES_DE_CONCLUSAO, CHAVES_DE_CONCLUSAO, "analise.conclusao")
     _exigir_texto_nao_vazio(conclusao["texto"], "analise.conclusao.texto")
+
+    if "faixa" in analise:
+        faixa = _objeto_fechado(analise["faixa"], CHAVES_DE_FAIXA, CHAVES_DE_FAIXA, "analise.faixa")
+        for papel in PAPEIS_DA_FAIXA:
+            _exigir_texto_nao_vazio(faixa[papel], f"analise.faixa.{papel}")
+
+    veredicto = _objeto_fechado(analise["veredicto"], CHAVES_DE_VEREDICTO, CHAVES_DE_VEREDICTO, "analise.veredicto")
+    _exigir_texto_nao_vazio(veredicto["texto"], "analise.veredicto.texto")
 
     # 5B/G1: vocabulário fechado por exhibit/série/overlay/dataset é
     # responsabilidade de `exhibits.py` (ver o docstring do módulo, e o de
     # `exhibits.py`, para o porquê da relançada em vez de duplicação ou
-    # import circular).
+    # import circular). Antes das perguntas: são os ids que elas citam.
     try:
         exhibits.validar_exhibits(analise["exhibits"])
     except exhibits.ContratoDeExhibitInvalido as erro:
         raise EntregaInvalida(str(erro)) from erro
+    ids_de_exhibit = [exhibit["id"] for exhibit in analise["exhibits"]]
+
+    for indice, premissa in enumerate(_exigir_lista(analise["premissas_decisivas"], "analise.premissas_decisivas")):
+        onde = f"analise.premissas_decisivas.{indice}"
+        premissa = _objeto_fechado(premissa, CHAVES_DE_PREMISSA_DECISIVA, CHAVES_DE_PREMISSA_DECISIVA, onde)
+        _exigir_texto_nao_vazio(premissa["chave"], f"{onde}.chave")
+        _exigir_texto_nao_vazio(premissa["derivacao"], f"{onde}.derivacao")
+
+    for lado in ("positives", "negatives"):
+        for indice, item in enumerate(_exigir_lista(analise[lado], f"analise.{lado}")):
+            _validar_positive_ou_negative(item, f"analise.{lado}.{indice}")
+
+    perguntas = _exigir_lista(analise["perguntas"], "analise.perguntas")
+    for indice, pergunta in enumerate(perguntas):
+        _validar_pergunta(pergunta, f"analise.perguntas.{indice}", ids_de_exhibit)
+    ids = [pergunta["id"] for pergunta in perguntas]
+    repetidos = sorted({ident for ident in ids if ids.count(ident) > 1})
+    if repetidos:
+        raise EntregaInvalida(
+            f"'analise.perguntas' repete o id '{repetidos[0]}': cada pergunta tem um id próprio."
+        )
+
+    for indice, risco in enumerate(_exigir_lista(analise["riscos"], "analise.riscos")):
+        onde = f"analise.riscos.{indice}"
+        risco = _objeto_fechado(risco, CHAVES_DE_RISCO, CHAVES_DE_RISCO, onde)
+        _exigir_texto_nao_vazio(risco["risco"], f"{onde}.risco")
+        _exigir_texto_nao_vazio(risco["observavel"], f"{onde}.observavel")
+
+    if "visao_nao_consensual" in analise:
+        visao = _objeto_fechado(analise["visao_nao_consensual"], CHAVES_DE_VISAO_NAO_CONSENSUAL,
+                                CHAVES_DE_VISAO_NAO_CONSENSUAL, "analise.visao_nao_consensual")
+        _exigir_texto_nao_vazio(visao["texto"], "analise.visao_nao_consensual.texto")
+
+    if "mudou_desde_analise_fornecida" in analise:
+        onde = "analise.mudou_desde_analise_fornecida"
+        mudou = _objeto_fechado(analise["mudou_desde_analise_fornecida"], CHAVES_DO_QUE_MUDOU, CHAVES_DO_QUE_MUDOU, onde)
+        linhas = _exigir_lista_de_textos(mudou["linhas"], f"{onde}.linhas")
+        if len(linhas) > MAXIMO_DE_LINHAS_DO_QUE_MUDOU:
+            raise EntregaInvalida(
+                f"'{onde}.linhas' tem {len(linhas)} linhas: no máximo {MAXIMO_DE_LINHAS_DO_QUE_MUDOU} "
+                "(§9 do desenho — só o que é material)."
+            )
 
 
 def _validar(entrega: Any) -> None:
@@ -181,10 +388,10 @@ def _validar(entrega: Any) -> None:
     -> campos de topo obrigatórios -> versão da entrega -> `execucao`
     (vocabulário, campos, dicionário do idioma) -> `caso` (só tipo) ->
     identidade de ticker entre `caso`/`execucao` (B7, quando `caso` declara
-    um) -> `resultados` (tipo + versão do sub-contrato) -> `dados` (5B/G3,
-    só quando presente -- é o único campo de topo opcional) -> `analise`
-    (vocabulário completo desta fatia, incluindo `exhibits`, 5B/G1) ->
-    `ledger`/`ficha_tecnica` (só tipo).
+    um) -> `resultados` (tipo + versão do sub-contrato + presença de
+    `fronteira_de_escopo`, 5D) -> `dados` (5B/G3, só quando presente -- é o
+    único campo de topo opcional) -> `analise` (vocabulário completo, incluindo
+    `exhibits`, 5B/G1, e a Tese, 5D/D1-D5) -> `ledger`/`ficha_tecnica` (só tipo).
     """
     if not isinstance(entrega, dict):
         raise EntregaInvalida(
@@ -239,6 +446,17 @@ def _validar(entrega: Any) -> None:
             f"Este builder só lê '{VERSAO_CONTRATO_RESULTADOS}'."
         )
 
+    # 5D, Task 2 (D1/D3): a presença exigida de `analise.faixa` depende deste
+    # campo, que a integração publica sempre (`null` sem fronteira). Ausente, o
+    # contrato não diz se a faixa é exigida ou proibida — recusa nomeada, nunca
+    # "ausente = sem fronteira" em silêncio.
+    if "fronteira_de_escopo" not in resultados:
+        raise EntregaInvalida(
+            "'resultados.fronteira_de_escopo' ausente: o contrato 'resultados/1' o publica "
+            "sempre (null quando o caso não declara fronteira), e é ele que decide se "
+            "'analise.faixa' é exigida."
+        )
+
     # 5B/G3: `dados` é o único campo de topo OPCIONAL (comentário de
     # `CHAVES_DE_TOPO_OBRIGATORIAS` acima) -- só validado quando presente.
     if "dados" in entrega:
@@ -247,7 +465,7 @@ def _validar(entrega: Any) -> None:
         except exhibits.ContratoDeExhibitInvalido as erro:
             raise EntregaInvalida(str(erro)) from erro
 
-    _validar_analise(entrega["analise"])
+    _validar_analise(entrega["analise"], resultados)
 
     if not isinstance(entrega["ledger"], list):
         raise EntregaInvalida(f"'ledger' não é uma lista: {entrega['ledger']!r}.")

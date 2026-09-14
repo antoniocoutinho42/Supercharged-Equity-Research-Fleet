@@ -934,11 +934,13 @@
   },
   "limitacoes": {
     "reversa_com_degrau": {
+      "afeta": "reversa",
       "rotulo": {
         "pt-BR": "Reversa não calculada: com degrau, a leitura do que o preço embute precificaria sem o degrau e deixaria de corresponder à manchete (combinação não implementada)"
       }
     },
     "reversa_na_rota_rampa": {
+      "afeta": "reversa",
       "rotulo": {
         "pt-BR": "Reversa não calculada: a rota rampa ainda não define quais eixos a composição bifásica admite reverter (combinação não implementada)"
       }

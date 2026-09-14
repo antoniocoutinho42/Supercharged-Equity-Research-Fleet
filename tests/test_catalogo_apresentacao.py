@@ -155,6 +155,24 @@ def test_limitacoes_do_catalogo_sao_exatamente_as_que_reversa_indisponivel_pode_
     _rotulos_em_todo_idioma("limitacoes")
 
 
+def test_toda_limitacao_declara_o_bloco_que_suprime_e_as_da_reversa_sao_as_do_gate():
+    """Fatia 5D, Task 2 (E3). O QC do relatório decide entre o HARD FAIL
+    `analise_sem_reversa` e o disclosure `limitacao_metodologica` lendo `afeta`
+    — o bloco de `resultados` que a limitação suprime —, nunca o nome da chave:
+    que `reversa_com_degrau` é uma limitação DE REVERSA é saber da integração.
+    A trava: toda limitação declara `afeta`; as que declaram `"reversa"` são
+    exatamente o registro que `reversa_indisponivel` consulta; e tudo o que ela
+    devolve sobre as fixtures está entre elas. Uma limitação de reversa nova no
+    gate sem a declaração, ou uma declaração que esqueça uma delas, reprova aqui."""
+    for chave, info in CAT["limitacoes"].items():
+        assert isinstance(info.get("afeta"), str) and info["afeta"].strip(), chave
+    da_reversa = {chave for chave, info in CAT["limitacoes"].items() if info["afeta"] == "reversa"}
+    assert da_reversa == set(LIMITACOES_DE_REVERSA), da_reversa ^ set(LIMITACOES_DE_REVERSA)
+    devolvidas = {reversa_indisponivel(carregar(FIXTURES / nome)) for nome in CASOS} - {None}
+    assert devolvidas, "nenhuma fixture com limitação — trava vacuamente verde?"
+    assert devolvidas <= da_reversa, devolvidas - da_reversa
+
+
 def test_todo_motivo_de_recusa_tem_rotulo_em_todo_idioma():
     """Onda de correção da revisão final da 5C (F2): o laboratório diz por que
     um cenário foi recusado, com o rótulo que o catálogo dá ao código que a

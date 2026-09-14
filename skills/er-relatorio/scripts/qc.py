@@ -39,8 +39,19 @@ si (fonte/fórmula/chave -> número) mora em `exhibits.py`
 captura `exhibits.SerieInvalida` por item, acumulando todo achado da
 entrega inteira) quanto por `exhibits.resolver` (caminho de produção da
 Task 2/3, que deixa a exceção propagar).
+
+Fatia 5D, item 5, Task 2 (as regras da §11 que pertencem à Tese, D6):
+`perguntas_da_tese_incompletas`, `vinculo_fora_do_vocabulario`,
+`faixa_fora_de_ordem`, `fronteira_com_preco_alvo` e `analise_sem_reversa`
+(HARD FAIL); `limitacao_metodologica` (REQUIRED DISCLOSURE);
+`tese_dependente_de_uma_premissa` (QUALITY WARNING). Mais duas referências da
+Tese que não resolvem, da família de `overlay_nao_resolvido`:
+`premissa_decisiva_fora_do_cenario` e `limitacao_desconhecida` (HARD FAIL).
+`_campos_de_prosa` cobre todo campo de texto da Tese. Ver `_achados_da_tese`.
 """
 
+import json
+import math
 import re
 from typing import NamedTuple
 
@@ -114,17 +125,52 @@ def _achado_hash(entrega: dict) -> Achado | None:
                   {"hash_caso": hash_calculado, "hash_resultados": hash_publicado})
 
 
+def _objeto(valor) -> dict:
+    return valor if isinstance(valor, dict) else {}
+
+
+def _lista(valor) -> list:
+    return valor if isinstance(valor, list) else []
+
+
 def _campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
     """Todo campo de prosa de `analise` sujeito a `numero_sem_proveniencia`/
-    `placeholder_nao_resolvido`/`placeholder_malformado` — nesta fatia só
-    `conclusao.texto` (A7); a Task 4 estende esta lista conforme mais campos
-    de `analise` entrarem no contrato, sem mudar a forma desta função."""
-    analise = entrega.get("analise") or {}
-    conclusao = analise.get("conclusao") or {}
-    texto = conclusao.get("texto")
-    if isinstance(texto, str):
-        return [("analise.conclusao.texto", texto)]
-    return []
+    `placeholder_nao_resolvido`/`placeholder_malformado` — `conclusao.texto`
+    desde a 5A (A7) e, desde a 5D (Task 2, D1), todo campo de TEXTO da Tese, na
+    ordem da aba (D7). Identificador e vocabulário (`id`, `tema`, `vetor`,
+    `incorporacao`, `vinculo`, `mecanismo`, `chave`, os nomes da faixa, os ids de
+    exhibit) não são prosa e não entram.
+
+    Tolerante a forma: o QC também roda sobre entregas montadas direto em teste,
+    sem `entrega.carregar` — o que não é texto simplesmente não é colhido."""
+    analise = _objeto(entrega.get("analise"))
+    campos: list[tuple[str, str]] = []
+
+    def _texto(onde: str, valor) -> None:
+        if isinstance(valor, str):
+            campos.append((onde, valor))
+
+    _texto("analise.conclusao.texto", _objeto(analise.get("conclusao")).get("texto"))
+    _texto("analise.veredicto.texto", _objeto(analise.get("veredicto")).get("texto"))
+    for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
+        _texto(f"analise.premissas_decisivas.{indice}.derivacao", _objeto(premissa).get("derivacao"))
+    for lado in ("positives", "negatives"):
+        for indice, item in enumerate(_lista(analise.get(lado))):
+            for campo in ("afirmacao", "observavel", "razao"):
+                _texto(f"analise.{lado}.{indice}.{campo}", _objeto(item).get(campo))
+    for indice, pergunta in enumerate(_lista(analise.get("perguntas"))):
+        pergunta = _objeto(pergunta)
+        for campo in ("pergunta", "evidencia", "observavel"):
+            _texto(f"analise.perguntas.{indice}.{campo}", pergunta.get(campo))
+        _texto(f"analise.perguntas.{indice}.sem_exhibit.razao", _objeto(pergunta.get("sem_exhibit")).get("razao"))
+    for indice, risco in enumerate(_lista(analise.get("riscos"))):
+        for campo in ("risco", "observavel"):
+            _texto(f"analise.riscos.{indice}.{campo}", _objeto(risco).get(campo))
+    _texto("analise.visao_nao_consensual.texto", _objeto(analise.get("visao_nao_consensual")).get("texto"))
+    linhas = _lista(_objeto(analise.get("mudou_desde_analise_fornecida")).get("linhas"))
+    for indice, linha in enumerate(linhas):
+        _texto(f"analise.mudou_desde_analise_fornecida.linhas.{indice}", linha)
+    return campos
 
 
 # B11 (achado S3): formatos aceitáveis por unidade DE PREMISSA (catálogo,
@@ -686,6 +732,254 @@ def _achados_exhibits(entrega: dict) -> list[Achado]:
     return achados
 
 
+# --------------------------------------------------------------------------
+# Fatia 5D, item 5, Task 2 (D1, D2, D4, D6): as regras da §11 que pertencem à
+# Tese. A FORMA da Tese é recusa de contrato (`entrega.py`, código 1); aqui só
+# o CONTEÚDO — o que depende do catálogo e dos números que a integração
+# publicou. E3: nenhum nome de premissa, nenhum limiar e nenhuma regra de
+# admissão de reversa moram neste módulo. O vocabulário de vínculo sai do
+# catálogo (`catalogo.premissas.<rota>` ∪ `catalogo.blocos`, D2), e o que torna
+# uma limitação "de reversa" é a declaração `catalogo.limitacoes.<chave>.afeta`
+# da integração — nunca o nome da chave.
+# --------------------------------------------------------------------------
+
+# §7 do desenho: de três a cinco perguntas — as três alavancas, cada uma uma
+# vez, e até duas específicas.
+MINIMO_DE_PERGUNTAS: int = 3
+MAXIMO_DE_PERGUNTAS: int = 5
+MAXIMO_DE_PERGUNTAS_ESPECIFICAS: int = 2
+
+# O bloco de `resultados` que a Análise exige (§5: o M4 entrega "valuation +
+# reversa + sensibilidades"; §11: fair value sem reversa é HARD FAIL). É nome de
+# contrato `resultados/1` — a chave cuja presença o QC confere, e o valor que uma
+# limitação declara em `afeta` quando é ela que o suprime —, não metodologia:
+# POR QUE a reversa é impossível num caso é saber só da integração.
+BLOCO_DA_REVERSA: str = "reversa"
+
+# O campo de `resultados/1` que é preço por ação (`manchete.preco_acao`,
+# `cenarios.<nome>.valor.preco_acao`, `sotp.preco_acao`). Sob fronteira de
+# escopo (D3), um placeholder que o resolva é preço-alvo.
+CAMPO_DE_PRECO_POR_ACAO: str = "preco_acao"
+
+_SEM_VALOR: str = "—"
+
+
+def _numero_finito(valor) -> bool:
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor)
+
+
+def _premissas_da_rota(resultados: dict, catalogo: dict) -> dict:
+    """`catalogo.premissas.<resultados.rota>` — as premissas que o catálogo
+    declara para a rota que a integração publicou (vazio para rota que ele não
+    conhece)."""
+    rota = resultados.get("rota")
+    if not isinstance(rota, str):
+        return {}
+    return _objeto(_objeto(catalogo.get("premissas")).get(rota))
+
+
+def _achados_perguntas_da_tese(analise: dict) -> list[Achado]:
+    """`perguntas_da_tese_incompletas` (HARD FAIL; §7, e §11: "perguntas da tese
+    ausentes"): de três a cinco perguntas, cada tema obrigatório exatamente uma
+    vez, no máximo duas específicas. Um achado só, com o retrato inteiro — cada
+    critério aparece nos params, o que falhou e o que não falhou."""
+    temas = [_objeto(pergunta).get("tema") for pergunta in _lista(analise.get("perguntas"))]
+    obrigatorios = sorted(contrato_entrega.TEMAS_OBRIGATORIOS)
+    ausentes = [tema for tema in obrigatorios if temas.count(tema) == 0]
+    repetidos = [tema for tema in obrigatorios if temas.count(tema) > 1]
+    especificas = temas.count(contrato_entrega.TEMA_ESPECIFICO)
+    if (MINIMO_DE_PERGUNTAS <= len(temas) <= MAXIMO_DE_PERGUNTAS and not ausentes and not repetidos
+            and especificas <= MAXIMO_DE_PERGUNTAS_ESPECIFICAS):
+        return []
+    return [Achado("HARD_FAIL", "perguntas_da_tese_incompletas", "analise.perguntas", {
+        "quantidade": len(temas), "minimo": MINIMO_DE_PERGUNTAS, "maximo": MAXIMO_DE_PERGUNTAS,
+        "temas_obrigatorios": ", ".join(obrigatorios),
+        "temas_ausentes": ", ".join(ausentes) or _SEM_VALOR,
+        "temas_repetidos": ", ".join(repetidos) or _SEM_VALOR,
+        "especificas": especificas, "maximo_especificas": MAXIMO_DE_PERGUNTAS_ESPECIFICAS,
+    })]
+
+
+def _achados_vinculo_fora_do_vocabulario(analise: dict, resultados: dict, catalogo: dict) -> list[Achado]:
+    """`vinculo_fora_do_vocabulario` (HARD FAIL, D2; §11: pergunta "sem vínculo
+    econômico"): todo item de `perguntas[].vinculo` e de `positives`/
+    `negatives[].mecanismo` é premissa da rota no catálogo ou bloco econômico do
+    catálogo. Uma premissa nova numa v10 entra pelo catálogo, e o vínculo a
+    aceita sem tocar neste módulo."""
+    vocabulario = set(_premissas_da_rota(resultados, catalogo)) | set(_objeto(catalogo.get("blocos")))
+    rota = str(resultados.get("rota"))
+    aceitos = ", ".join(sorted(vocabulario))
+
+    listas = [(f"analise.perguntas.{indice}.vinculo", _objeto(pergunta).get("vinculo"))
+              for indice, pergunta in enumerate(_lista(analise.get("perguntas")))]
+    for lado in ("positives", "negatives"):
+        listas += [(f"analise.{lado}.{indice}.mecanismo", _objeto(item).get("mecanismo"))
+                   for indice, item in enumerate(_lista(analise.get(lado)))]
+
+    achados: list[Achado] = []
+    for onde, itens in listas:
+        for posicao, item in enumerate(_lista(itens)):
+            if isinstance(item, str) and item in vocabulario:
+                continue
+            achados.append(Achado("HARD_FAIL", "vinculo_fora_do_vocabulario", f"{onde}.{posicao}",
+                                  {"item": str(item), "rota": rota, "aceitos": aceitos}))
+    return achados
+
+
+def _achados_premissas_decisivas(analise: dict, resultados: dict, catalogo: dict) -> list[Achado]:
+    """`premissa_decisiva_fora_do_cenario` (HARD FAIL, D1): a `chave` de cada
+    premissa decisiva é premissa da rota no catálogo e está declarada no cenário
+    da manchete (`resultados.manchete.cenario`, que existe também sob fronteira)
+    — o número mostrado ao lado dela é o desse cenário. Não é regra da §11: é a
+    referência da Tese que não resolve, da família de `overlay_nao_resolvido`."""
+    premissas_da_rota = _premissas_da_rota(resultados, catalogo)
+    cenario = _objeto(resultados.get("manchete")).get("cenario")
+    cenario_da_manchete = _objeto(resultados.get("cenarios")).get(cenario) if isinstance(cenario, str) else None
+    premissas_do_cenario = _objeto(_objeto(cenario_da_manchete).get("premissas"))
+
+    achados: list[Achado] = []
+    for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
+        chave = _objeto(premissa).get("chave")
+        if isinstance(chave, str) and chave in premissas_da_rota and chave in premissas_do_cenario:
+            continue
+        achados.append(Achado("HARD_FAIL", "premissa_decisiva_fora_do_cenario",
+                              f"analise.premissas_decisivas.{indice}.chave",
+                              {"chave": str(chave), "rota": str(resultados.get("rota")), "cenario": str(cenario)}))
+    return achados
+
+
+def _achados_faixa(entrega: dict, idioma: str) -> list[Achado]:
+    """`faixa_fora_de_ordem` (HARD FAIL, D1/D6; §11: "inconsistência estrutural"):
+    cada ponta da faixa nomeia um cenário de `resultados.cenarios` com preço
+    publicado, os preços seguem `piso ≤ base ≤ teto` — comparação entre outputs
+    que a integração publicou, nenhuma conta de valuation — e a base é o cenário
+    da manchete. Um achado só, com os três nomes e os três preços."""
+    faixa = _objeto(entrega.get("analise")).get("faixa")
+    if not isinstance(faixa, dict):
+        return []
+    resultados = _objeto(entrega.get("resultados"))
+    cenarios = _objeto(resultados.get("cenarios"))
+    cenario_da_manchete = _objeto(resultados.get("manchete")).get("cenario")
+    moeda = _objeto(entrega.get("caso")).get("moeda")
+
+    nomes = {papel: faixa.get(papel) for papel in contrato_entrega.PAPEIS_DA_FAIXA}
+    precos = {}
+    for papel, nome in nomes.items():
+        cenario = cenarios.get(nome) if isinstance(nome, str) else None
+        preco = _objeto(_objeto(cenario).get("valor")).get(CAMPO_DE_PRECO_POR_ACAO)
+        precos[papel] = preco if _numero_finito(preco) else None
+
+    piso, base, teto = (precos[papel] for papel in contrato_entrega.PAPEIS_DA_FAIXA)
+    em_ordem = None not in (piso, base, teto) and piso <= base <= teto
+    if em_ordem and nomes["base"] == cenario_da_manchete:
+        return []
+
+    params = {papel: str(nome) for papel, nome in nomes.items()}
+    for papel, preco in precos.items():
+        params[f"preco_{papel}"] = (placeholders.formatar(preco, "moeda", idioma, moeda)
+                                    if preco is not None else _SEM_VALOR)
+    params["cenario_manchete"] = str(cenario_da_manchete)
+    return [Achado("HARD_FAIL", "faixa_fora_de_ordem", "analise.faixa", params)]
+
+
+def _achados_fronteira_com_preco_alvo(entrega: dict) -> list[Achado]:
+    """`fronteira_com_preco_alvo` (HARD FAIL, D3; §14: fair value por ação como
+    conclusão principal sob fronteira declarada): sob
+    `resultados.fronteira_de_escopo`, a Tese não declara `faixa`, e nenhum texto
+    dela tem um placeholder que resolva um preço por ação. O preço de tela
+    (`caso:preco.valor`) não é preço-alvo e continua permitido. Fora da
+    fronteira, `faixa` ausente é recusa de forma (`entrega.py`)."""
+    fronteira = _objeto(entrega.get("resultados")).get("fronteira_de_escopo")
+    if fronteira is None:
+        return []
+    classe = str(fronteira.get("classe")) if isinstance(fronteira, dict) else str(fronteira)
+    analise = _objeto(entrega.get("analise"))
+
+    achados: list[Achado] = []
+    if "faixa" in analise:
+        achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", "analise.faixa", {
+            "classe": classe, "trecho": json.dumps(analise["faixa"], ensure_ascii=False, sort_keys=True),
+        }))
+    for onde, texto in _campos_de_prosa(entrega):
+        for placeholder in _PADRAO_PLACEHOLDER_RECONHECIDO.finditer(texto):
+            if placeholder.group(1) == "livre":
+                continue
+            caminho = placeholder.group(2).split("|", 1)[0].strip()
+            if caminho.rsplit(".", 1)[-1] == CAMPO_DE_PRECO_POR_ACAO:
+                achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", onde,
+                                      {"classe": classe, "trecho": placeholder.group(0)}))
+    return achados
+
+
+def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """D4: a reversa que a Análise exige, e as limitações que a tornam impossível.
+
+    Para cada chave de `resultados.limitacoes` — publicada pela integração, que
+    é quem decide (`caso.reversa_indisponivel`) —, o catálogo declara o rótulo e
+    o bloco de `resultados` que ela suprime (`afeta`):
+
+    - declarada: REQUIRED DISCLOSURE `limitacao_metodologica`, com o rótulo do
+      catálogo (§11: "metodologia especial ou limitação de escopo");
+    - não declarada (sem entrada, sem rótulo no idioma, ou sem `afeta`): HARD
+      FAIL `limitacao_desconhecida` — o relatório não sabe o que ela significa
+      nem se ela justifica um bloco ausente, e a correção é do catálogo;
+    - `resultados.reversa` ausente sem nenhuma limitação declarada com
+      `afeta == "reversa"`: HARD FAIL `analise_sem_reversa`. `limitacoes`
+      ausente conta como nenhuma: a regra falha fechada.
+
+    O nome da chave nunca é lido. `reversa_com_degrau` suprime a reversa porque a
+    integração o declara; uma limitação futura de outro assunto (5F) não muda
+    esta regra."""
+    declaradas = _objeto(catalogo.get("limitacoes"))
+    publicadas = _lista(resultados.get("limitacoes"))
+    blocos_suprimidos: set[str] = set()
+    por_limitacao: list[Achado] = []
+    for indice, chave in enumerate(publicadas):
+        onde = f"resultados.limitacoes.{indice}"
+        declaracao = _objeto(declaradas.get(chave)) if isinstance(chave, str) else {}
+        rotulo = _objeto(declaracao.get("rotulo")).get(idioma)
+        afeta = declaracao.get("afeta")
+        if not (isinstance(rotulo, str) and rotulo.strip() and isinstance(afeta, str) and afeta.strip()):
+            por_limitacao.append(Achado("HARD_FAIL", "limitacao_desconhecida", onde,
+                                        {"limitacao": str(chave), "idioma": idioma}))
+            continue
+        blocos_suprimidos.add(afeta)
+        por_limitacao.append(Achado("REQUIRED_DISCLOSURE", "limitacao_metodologica", onde,
+                                    {"limitacao": chave, "rotulo": rotulo}))
+
+    achados: list[Achado] = []
+    if resultados.get(BLOCO_DA_REVERSA) is None and BLOCO_DA_REVERSA not in blocos_suprimidos:
+        achados.append(Achado("HARD_FAIL", "analise_sem_reversa", f"resultados.{BLOCO_DA_REVERSA}", {
+            "limitacoes": ", ".join(str(chave) for chave in publicadas) or _SEM_VALOR,
+        }))
+    return achados + por_limitacao
+
+
+def _achados_tese_dependente_de_uma_premissa(analise: dict) -> list[Achado]:
+    """`tese_dependente_de_uma_premissa` (QUALITY WARNING, §11): todas as
+    perguntas ligadas a um vínculo de um item só — e ao mesmo item."""
+    vinculos = [_objeto(pergunta).get("vinculo") for pergunta in _lista(analise.get("perguntas"))]
+    de_um_item = [vinculo[0] for vinculo in vinculos
+                  if isinstance(vinculo, list) and len(vinculo) == 1 and isinstance(vinculo[0], str)]
+    if not vinculos or len(de_um_item) != len(vinculos) or len(set(de_um_item)) != 1:
+        return []
+    return [Achado("QUALITY_WARNING", "tese_dependente_de_uma_premissa", "analise.perguntas",
+                   {"item": de_um_item[0]})]
+
+
+def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """As regras de D6, na ordem do plano."""
+    analise = _objeto(entrega.get("analise"))
+    resultados = _objeto(entrega.get("resultados"))
+    return (_achados_perguntas_da_tese(analise)
+            + _achados_vinculo_fora_do_vocabulario(analise, resultados, catalogo)
+            + _achados_premissas_decisivas(analise, resultados, catalogo)
+            + _achados_faixa(entrega, idioma)
+            + _achados_fronteira_com_preco_alvo(entrega)
+            + _achados_reversa_e_limitacoes(resultados, catalogo, idioma)
+            + _achados_tese_dependente_de_uma_premissa(analise))
+
+
 def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Achado]:
     """Roda as regras de QC; devolve os achados em ordem determinística
     (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
@@ -714,6 +1008,8 @@ def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Acha
     achado_bases = _achado_bases_divergentes(resultados)
     if achado_bases is not None:
         achados.append(achado_bases)
+
+    achados.extend(_achados_da_tese(entrega, catalogo, idioma))
 
     achado_autocontido = _achado_autocontido(html)
     if achado_autocontido is not None:

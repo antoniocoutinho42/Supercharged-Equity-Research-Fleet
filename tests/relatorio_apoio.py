@@ -10,8 +10,18 @@ Só este arquivo, dentro de `tests/`, importa `er-valuation`
 (`tests/test_relatorio_fronteira.py`) só varre
 `skills/er-relatorio/scripts/`; testes não são a camada do relatório (E3
 governa o PRODUTO, não a suíte que o exercita).
+
+Fatia 5D, item 5, Task 2: uma Análise válida exige mais do que o caso — a Tese
+do analista (D1) e a reversa que a metodologia pede (D4, HARD FAIL
+`analise_sem_reversa`). `montar_entrega` passa a compor as duas por padrão: a
+Tese de `_tese_padrao`, e o bloco `reversa` de `com_bloco_de_reversa_valido`
+sempre que o gate o admite (`caso.reversa_indisponivel` devolve `None`) e o caso
+ainda não o declara. Onde o gate não o admite (`caso_degrau`, `caso_rampa`), a
+entrega sai sem reversa e com o disclosure nomeado da limitação — nunca com a
+regra enfraquecida e nunca com a fixture editada.
 """
 
+import copy
 import json
 import re
 import sys
@@ -26,7 +36,11 @@ import qc  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
+from caso import CAMPOS_DE_MERCADO_OBRIGATORIOS, reversa_indisponivel  # noqa: E402
 from caso import carregar as carregar_caso  # noqa: E402
+
+CATALOGO = json.loads(
+    (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
 
 _PADRAO_ESTILO_BLOCO = re.compile(r'(<style\b[^>]*>)(.*?)(</style\s*>)', re.IGNORECASE | re.DOTALL)
 
@@ -71,8 +85,113 @@ def listas_de_chaves_de_diagnostico(no, caminho: tuple = ()):
             yield from listas_de_chaves_de_diagnostico(item, caminho + (indice,))
 
 
+# --------------------------------------------------------------------------
+# Fatia 5D, Task 1 (a trava se-e-só-se de D4, em tests/test_valuation_contrato.py)
+# — movido para cá na Task 2, sem reescrever: o mesmo construtor serve à trava da
+# integração e à composição da reversa que a Análise exige.
+# --------------------------------------------------------------------------
+
+_MODELO_DE_REVERSA = json.loads((FIXTURES / "caso_reversa_firm.json").read_text(encoding="utf-8"))
+
+
+def com_bloco_de_reversa_valido(caso: dict) -> dict:
+    """`caso` com o bloco 'reversa' de `caso_reversa_firm.json`, adaptado a ele.
+
+    O bloco não carrega premissa por eixo: `eixos` são nomes, e a premissa que
+    cada eixo resolve em cada rota mora em `reversa.RESOLVER_POR_EIXO` (wacc/ke,
+    roic/roe, g, cap). Os quatro eixos seguem como estão; o que se adapta é o
+    que o bloco aponta no caso — `cenario` vira o cenário da manchete
+    (`cenario_base`, ou o único declarado) — e o `mercado` que a reversa exige:
+    `rf`/`erp` do modelo onde o caso não os declara, porque sem eles o gate
+    recusaria a reversa por forma, não por limitação."""
+    c = copy.deepcopy(caso)
+    reversa = copy.deepcopy(_MODELO_DE_REVERSA["reversa"])
+    reversa["cenario"] = c.get("cenario_base") or next(iter(c["cenarios"]))
+    c["reversa"] = reversa
+    mercado = dict(c.get("mercado") or {})
+    for campo in CAMPOS_DE_MERCADO_OBRIGATORIOS:
+        if mercado.get(campo) is None:
+            mercado[campo] = _MODELO_DE_REVERSA["mercado"][campo]
+    c["mercado"] = mercado
+    return c
+
+
 IDIOMA_PADRAO = "pt-BR"
 TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."
+# Sob fronteira de escopo (D3) a conclusão é condicional: citar o preço por ação
+# seria o HARD FAIL `fronteira_com_preco_alvo`.
+TEXTO_CONCLUSAO_SOB_FRONTEIRA = "Conclusão condicional, sem preço-alvo de manchete sob fronteira de escopo."
+
+
+def _tese_padrao(resultados: dict) -> dict:
+    """Uma Tese válida (D1) para o `resultados` que `avaliar()` acabou de
+    publicar — e que não dispara, ela mesma, regra nenhuma (armadilha 2 do
+    briefing da Task 2):
+
+    - nenhum dígito em texto nenhum (senão `numero_sem_proveniencia`);
+    - vínculos e mecanismos só com blocos econômicos do catálogo, que são
+      vocabulário de toda rota (D2), e distintos entre as perguntas (senão
+      `tese_dependente_de_uma_premissa`);
+    - faixa com nomes de `resultados.cenarios`: a base no cenário da manchete, o
+      piso e o teto nos cenários de menor e de maior preço — os três coincidem num
+      caso de cenário único —, e nenhuma faixa sob fronteira de escopo (D3);
+    - uma premissa decisiva: a primeira premissa da rota, na ordem do catálogo,
+      que o cenário da manchete declara;
+    - todas as perguntas com `sem_exhibit` — um exhibit passado a
+      `montar_entrega` fica fora das perguntas, como antes da 5D.
+    """
+    blocos = sorted(CATALOGO["blocos"], key=lambda bloco: CATALOGO["blocos"][bloco]["ordem"])
+    earning_power, crescimento, custo_de_capital, duracao = blocos[:4]
+    cenario_da_manchete = resultados["manchete"]["cenario"]
+    premissas_do_cenario = resultados["cenarios"][cenario_da_manchete]["premissas"]
+    premissa_decisiva = next(chave for chave in CATALOGO["premissas"][resultados["rota"]]
+                             if chave in premissas_do_cenario)
+    sem_exhibit = {"razao": "Evidência qualitativa; um gráfico não acrescenta informação."}
+
+    tese = {
+        "veredicto": {"texto": "O preço de tela fica abaixo do que o cenário da manchete sustenta."},
+        "premissas_decisivas": [
+            {"chave": premissa_decisiva, "derivacao": "Calibrada pelo histórico normalizado da companhia."},
+        ],
+        "positives": [{
+            "afirmacao": "A expansão da capacidade sustenta o crescimento do volume.",
+            "vetor": "crescimento", "mecanismo": [crescimento],
+            "observavel": "Utilização da capacidade instalada.",
+            "incorporacao": "refletido",
+        }],
+        "negatives": [{
+            "afirmacao": "A entrada de um concorrente pode comprimir a margem.",
+            "vetor": "rentabilidade", "mecanismo": [earning_power],
+            "observavel": "Margem bruta trimestral.",
+            "incorporacao": "nao_incorporado",
+            "razao": "Sem evidência suficiente para calibrar a compressão.",
+        }],
+        "perguntas": [
+            {"id": "moat", "tema": "moat",
+             "pergunta": "A vantagem de custo resiste à entrada de um concorrente?",
+             "evidencia": "Participação estável frente aos rivais do setor.",
+             "observavel": "Perda de participação para um entrante.",
+             "vinculo": [duracao], "sem_exhibit": dict(sem_exhibit)},
+            {"id": "crescimento", "tema": "crescimento",
+             "pergunta": "Quanto a demanda ainda comporta de expansão da capacidade?",
+             "evidencia": "Carteira de pedidos acima da capacidade instalada.",
+             "observavel": "Utilização da capacidade instalada.",
+             "vinculo": [crescimento], "sem_exhibit": dict(sem_exhibit)},
+            {"id": "rentabilidade", "tema": "rentabilidade_do_crescimento",
+             "pergunta": "O capital da expansão rende acima do seu custo?",
+             "evidencia": "Retorno incremental das expansões recentes.",
+             "observavel": "Retorno sobre o capital das novas unidades.",
+             "vinculo": [crescimento, custo_de_capital], "sem_exhibit": dict(sem_exhibit)},
+        ],
+        "riscos": [
+            {"risco": "Regulação tarifária mais restritiva.", "observavel": "Decisões do regulador setorial."},
+        ],
+    }
+    if resultados["fronteira_de_escopo"] is None:
+        precos = {nome: cenario["valor"]["preco_acao"] for nome, cenario in resultados["cenarios"].items()}
+        tese["faixa"] = {"piso": min(precos, key=precos.get), "base": cenario_da_manchete,
+                         "teto": max(precos, key=precos.get)}
+    return tese
 
 
 def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
@@ -80,7 +199,9 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     texto_conclusao: str | None = None,
                     mutar_caso: Callable[[dict], None] | None = None,
                     dados: dict | None = None,
-                    exhibits: list | None = None) -> dict:
+                    exhibits: list | None = None,
+                    tese: dict | None = None,
+                    compor_reversa: bool = True) -> dict:
     """Monta um `entrega.json` válido (dict) a partir de uma fixture de caso.
 
     Roda `avaliar()` pelo caminho de produção — o `resultados` embutido
@@ -90,7 +211,8 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     receber o dict.
 
     `texto_conclusao` default cita `manchete.preco_acao` em `moeda` — o
-    único número na prosa, sempre com proveniência.
+    único número na prosa, sempre com proveniência. Sob fronteira de escopo
+    (5D, D3), o default é `TEXTO_CONCLUSAO_SOB_FRONTEIRA`, sem preço.
 
     `mutar_caso` (onda de correção da revisão final, B2): quando dado, roda
     ANTES de `avaliar()`, mutando o `caso` já carregado in-place (ex.:
@@ -106,14 +228,32 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     `dados` fica DE FORA da entrega (é o único campo de topo opcional, ver
     `entrega.CHAVES_DE_TOPO_OBRIGATORIAS`) e `exhibits` vira `[]` (campo
     obrigatório em `analise`, mas uma análise sem gráfico nenhum é válida —
-    G10 do desenho). Isto preserva TODO teste existente que chama
-    `montar_entrega` sem os dois argumentos novos: a entrega continua
-    idêntica à de antes desta fatia, byte a byte.
+    G10 do desenho).
+
+    `tese` (5D, Task 2, D1): os blocos da Tese em `analise`, além de
+    `conclusao` e `exhibits` — por padrão (`None`), `_tese_padrao`. Dado, entra
+    como está, para que um teste declare exatamente a Tese que quer exercer.
+
+    `compor_reversa` (5D, Task 2, D4): por padrão, depois de `mutar_caso`, o
+    bloco `reversa` é composto por `com_bloco_de_reversa_valido` quando o caso
+    não o declara e o gate o admite. `False` monta a Análise sem a reversa que o
+    gate admite — a entrega que o HARD FAIL `analise_sem_reversa` recusa; não há
+    como usá-lo para fazer uma entrega passar.
     """
     caso = carregar_caso(FIXTURES / nome_fixture)
     if mutar_caso is not None:
         mutar_caso(caso)
+    if compor_reversa and caso.get("reversa") is None and reversa_indisponivel(caso) is None:
+        caso = com_bloco_de_reversa_valido(caso)
     resultados = avaliar(caso)
+
+    conclusao_padrao = (TEXTO_CONCLUSAO_PADRAO if resultados["fronteira_de_escopo"] is None
+                        else TEXTO_CONCLUSAO_SOB_FRONTEIRA)
+    analise = {
+        "conclusao": {"texto": texto_conclusao or conclusao_padrao},
+        "exhibits": exhibits if exhibits is not None else [],
+    }
+    analise.update(tese if tese is not None else _tese_padrao(resultados))
 
     entrega_dict = {
         "versao_contrato": "entrega/1",
@@ -124,10 +264,7 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         },
         "caso": caso,
         "resultados": resultados,
-        "analise": {
-            "conclusao": {"texto": texto_conclusao or TEXTO_CONCLUSAO_PADRAO},
-            "exhibits": exhibits if exhibits is not None else [],
-        },
+        "analise": analise,
         "ledger": [],
         "ficha_tecnica": {},
     }

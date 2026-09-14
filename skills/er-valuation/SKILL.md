@@ -197,8 +197,8 @@ convenção que já mora aqui):
   mesmo registro de recusas que o gate aplica (`caso.LIMITACOES_DE_REVERSA`),
   nunca uma lista paralela; a trava de `tests/test_valuation_contrato.py`
   confere, fixture a fixture, que a chave sai publicada se e só se o gate
-  recusa um bloco `reversa` válido. O relatório lê a chave e o rótulo; a
-  regra fica aqui.
+  recusa um bloco `reversa` válido. O relatório lê a chave, o rótulo e a
+  declaração `afeta` do catálogo; a regra fica aqui.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
 `tests/fixtures/caso_*.json`.
@@ -208,8 +208,12 @@ Conhecimento metodológico que o relatório precisa exibir mas não calcula
 canônica — `convencoes_terminais`, fonte única, nunca duplicado por rota —,
 rótulo e base de cada múltiplo, severidade e rótulo de cada diagnóstico,
 texto do disclosure de divergência de base e o nome da chave que o dispara,
-rótulo de cada classe de fronteira de escopo — `fronteiras_de_escopo` — e de
-cada limitação — `limitacoes`)
+rótulo de cada classe de fronteira de escopo — `fronteiras_de_escopo` — e, de
+cada limitação — `limitacoes` —, o rótulo e o bloco de `resultados` que ela
+suprime, `afeta`: é por essa declaração, nunca pelo nome da chave, que a QC do
+relatório sabe que uma limitação justifica a reversa ausente; a trava de
+`tests/test_catalogo_apresentacao.py` amarra as que declaram `"reversa"` ao
+registro que `caso.reversa_indisponivel` consulta)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

@@ -90,6 +90,45 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
   "resultados": {},
   "analise": {
     "conclusao": {"texto": "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."},
+    "faixa": {"piso": "base", "base": "base", "teto": "base"},
+    "veredicto": {"texto": "O preço de tela embute um retorno sobre o capital abaixo do que a companhia sustenta."},
+    "premissas_decisivas": [
+      {"chave": "roic", "derivacao": "Média normalizada do retorno sobre o capital investido no ciclo."}
+    ],
+    "positives": [
+      {"afirmacao": "A expansão da capacidade sustenta o crescimento do volume.",
+       "vetor": "crescimento", "mecanismo": ["g", "crescimento_reinvestimento"],
+       "observavel": "Utilização da capacidade instalada.", "incorporacao": "refletido"}
+    ],
+    "negatives": [
+      {"afirmacao": "A entrada de um concorrente pode comprimir a margem.",
+       "vetor": "rentabilidade", "mecanismo": ["roic"],
+       "observavel": "Margem bruta trimestral.", "incorporacao": "nao_incorporado",
+       "razao": "Sem evidência suficiente para calibrar a compressão."}
+    ],
+    "perguntas": [
+      {"id": "moat", "tema": "moat",
+       "pergunta": "A vantagem de custo resiste à entrada de um concorrente?",
+       "evidencia": "Participação estável frente aos rivais do setor.",
+       "observavel": "Perda de participação para um entrante.",
+       "vinculo": ["roic", "n"],
+       "sem_exhibit": {"razao": "Evidência qualitativa; um gráfico não acrescenta informação."}},
+      {"id": "crescimento", "tema": "crescimento",
+       "pergunta": "Quanto a demanda ainda comporta de expansão da capacidade?",
+       "evidencia": "Carteira de pedidos acima da capacidade instalada.",
+       "observavel": "Utilização da capacidade instalada.",
+       "vinculo": ["g"],
+       "sem_exhibit": {"razao": "A série de utilização é curta demais para um gráfico."}},
+      {"id": "rentabilidade", "tema": "rentabilidade_do_crescimento",
+       "pergunta": "O capital da expansão rende acima do seu custo?",
+       "evidencia": "Retorno incremental das expansões recentes.",
+       "observavel": "Retorno sobre o capital das novas unidades.",
+       "vinculo": ["roic", "wacc"],
+       "sem_exhibit": {"razao": "Evidência qualitativa; um gráfico não acrescenta informação."}}
+    ],
+    "riscos": [
+      {"risco": "Regulação tarifária mais restritiva.", "observavel": "Decisões do regulador setorial."}
+    ],
     "exhibits": []
   },
   "ledger": [],
@@ -98,19 +137,49 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
 ```
 
 Vocabulário fechado em todo nível que este contrato define (topo,
-`execucao`, `analise`, `analise.conclusao`, `analise.exhibits[]` e cada
-série/overlay, `dados.<id>`) — chave desconhecida é recusada pelo nome, com
-sugestão. `caso` e `resultados` são opacos: este
-módulo só confirma que são objetos e que `resultados.versao_contrato` é
-`"resultados/1"` — o conteúdo pertence ao contrato de `er-valuation`, nunca
-revalidado aqui. Exceção pontual: quando `caso` declara um `ticker`, ele
-tem de bater com `execucao.ticker` (identidade da empresa que o título da
-página nomeia e a que o valuation avaliou). `execucao.idioma` precisa ter
-dicionário em `assets/i18n/<idioma>.json`. `ledger`/`ficha_tecnica` só têm o
-tipo confirmado nesta fatia (lista / objeto); a fatia 5D detalha o conteúdo
-dos dois. Produzir a entrega em produção é `er-analise` (item 8); nesta
-fatia, `tests/relatorio_apoio.py` monta raízes de teste rodando `avaliar()`
-de verdade sobre uma fixture de caso.
+`execucao`, `analise` e cada bloco da Tese, `analise.conclusao`,
+`analise.exhibits[]` e cada série/overlay, `dados.<id>`) — chave desconhecida
+é recusada pelo nome, com sugestão. `caso` e `resultados` são opacos: este
+módulo só confirma que são objetos, que `resultados.versao_contrato` é
+`"resultados/1"` e que `resultados.fronteira_de_escopo` está presente (é ele
+que decide se `analise.faixa` é exigida) — o conteúdo pertence ao contrato de
+`er-valuation`, nunca revalidado aqui. Exceção pontual: quando `caso` declara
+um `ticker`, ele tem de bater com `execucao.ticker` (identidade da empresa que
+o título da página nomeia e a que o valuation avaliou). `execucao.idioma`
+precisa ter dicionário em `assets/i18n/<idioma>.json`. `ledger`/`ficha_tecnica`
+só têm o tipo confirmado (lista / objeto); a fatia 5E detalha o conteúdo dos
+dois. Produzir a entrega em produção é `er-analise` (item 8); por ora,
+`tests/relatorio_apoio.py` monta raízes de teste rodando `avaliar()` de verdade
+sobre uma fixture de caso, com uma Tese válida e a reversa onde o gate a admite.
+
+## A Tese (`analise`, fatia 5D)
+
+A Tese é declaração do analista, com vocabulário fechado em todo nível. A
+**forma** abaixo é recusa de contrato (`RC=1`, nomeando o campo, com sugestão);
+o **conteúdo** — o que depende do catálogo e dos números publicados — é QC
+(`RC=2`, ver a tabela de QC).
+
+| Nível | Chaves | Forma |
+|---|---|---|
+| `analise` | `conclusao`, `exhibits`, `veredicto`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo` |
+| `faixa` | `piso`, `base`, `teto` | cada um o NOME de um cenário de `resultados.cenarios` — o número vem de lá, nunca do analista |
+| `veredicto` | `texto` | o preço de tela, a data e a fonte vêm de `caso.preco` |
+| `premissas_decisivas[]` | `chave`, `derivacao` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC) |
+| `positives[]`, `negatives[]` | `afirmacao`, `vetor`, `mecanismo`, `observavel`, `incorporacao` obrigatórias; `razao` | `vetor` ∈ `crescimento`, `moat`, `rentabilidade`, `risco`, `earning_power`, `valuation`; `mecanismo` lista não vazia; `incorporacao` ∈ `refletido`, `nao_incorporado` — este exige `razao` |
+| `perguntas[]` | `id`, `tema`, `pergunta`, `evidencia`, `observavel`, `vinculo` obrigatórias; `exhibits` **ou** `sem_exhibit` | `tema` ∈ `moat`, `crescimento`, `rentabilidade_do_crescimento`, `especifica`; `id` único; `vinculo` lista não vazia; `exhibits` cita ids de `analise.exhibits`; `sem_exhibit` é `{"razao": ...}`; nunca os dois, nunca nenhum |
+| `riscos[]` | `risco`, `observavel` | |
+| `visao_nao_consensual` | `texto` | |
+| `mudou_desde_analise_fornecida` | `linhas` | de uma a três linhas |
+
+**O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
+Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) ou blocos
+econômicos (`catalogo.blocos`) — o vocabulário vem do catálogo, nunca deste
+skill. Um exhibit não declara vínculo. Todo campo de texto da Tese passa pelos
+placeholders auditáveis, como a conclusão. A Análise exige a reversa
+(`resultados.reversa`); quando o caso a torna impossível, a integração publica a
+limitação em `resultados.limitacoes`, e o catálogo declara o bloco que ela
+suprime (`catalogo.limitacoes.<chave>.afeta`) — a entrega sai com o disclosure,
+nunca calada.
 
 **`analise.exhibits` é OBRIGATÓRIO** (fatia 5B): uma análise sem gráfico
 nenhum declara `[]` **em voz alta**, como o `cenario_base` já faz — nunca
@@ -167,8 +236,7 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
     ],
     "overlays": [{"chave": "resultados:manchete.preco_acao", "rotulo": "preço justo"}],
     "nota_janela": "só os últimos 4 anos têm dado comparável",
-    "caption": "fonte: demonstrações auditadas",
-    "vinculo": ["pergunta-2"]
+    "caption": "fonte: demonstrações auditadas"
   }]
 }
 ```
@@ -176,7 +244,7 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
 | Nível | Chaves | Notas |
 |---|---|---|
 | `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` só tem o tipo confirmado nesta fatia (item 7 detalha) |
-| `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption`, `vinculo` opcionais | `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela` |
+| `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption` opcionais | `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela`; o exhibit não declara vínculo (5D, D5) — a pergunta da tese que ele responde o cita em `perguntas[].exhibits` |
 | série `direta` | `derivacao`, `fonte` (`"<dataset>.<campo>"`) | o campo, verbatim; `null` é ponto ausente legítimo (travessão no gráfico) |
 | série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval` |
 | série `engine` | `derivacao`, `chave` (`"resultados:<caminho>"`) | tem de resolver num **número finito** ou lista deles |
@@ -218,14 +286,24 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 | `series_de_datasets_incompativeis` | HARD FAIL | duas séries do mesmo exhibit vindas de datasets cujo `x` difere |
 | `overlay_nao_resolvido` | HARD FAIL | `chave` de overlay que não resolve num número finito |
 | `relatorio_nao_autocontido` | HARD FAIL | referência (`src`/`href`/`srcset`/`data`/`url()`/`@import`) que não é `#fragmento` nem URI `data:`; ou, no miolo de um `<script>`, chamada de rede (`fetch`, `XMLHttpRequest`, `WebSocket`, `Worker`, `importScripts`, `EventSource`, `sendBeacon`) ou atribuição de `src`/`srcset`/`href` a um endereço externo |
+| `perguntas_da_tese_incompletas` | HARD FAIL | menos de 3 ou mais de 5 perguntas; tema obrigatório (`moat`, `crescimento`, `rentabilidade_do_crescimento`) ausente ou repetido; mais de 2 perguntas `especifica` (§7) |
+| `vinculo_fora_do_vocabulario` | HARD FAIL | item de `perguntas[].vinculo` ou de `positives`/`negatives[].mecanismo` que não é premissa da rota (`catalogo.premissas.<rota>`) nem bloco econômico (`catalogo.blocos`) |
+| `premissa_decisiva_fora_do_cenario` | HARD FAIL | `premissas_decisivas[].chave` que não é premissa da rota no catálogo declarada no cenário da manchete |
+| `faixa_fora_de_ordem` | HARD FAIL | ponta da faixa que não nomeia um cenário publicado com preço; preço de `piso` acima do de `base`, ou de `base` acima do de `teto`; `base` diferente do cenário da manchete |
+| `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou placeholder de `preco_acao` em qualquer texto da Tese (o preço de tela, `caso:preco.valor`, continua permitido) |
+| `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente sem nenhuma limitação publicada que o catálogo declare com `afeta: "reversa"` — a decisão lê a declaração, nunca o nome da chave |
+| `limitacao_desconhecida` | HARD FAIL | chave de `resultados.limitacoes` que o catálogo não declara com rótulo no idioma e com `afeta` |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
+| `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
+| `tese_dependente_de_uma_premissa` | QUALITY WARNING | todas as perguntas com o mesmo `vinculo` de um item só |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 `params` substituídos) — nunca hardcoded (§16.1); o "porquê" metodológico de
 `divergencia_de_base_degrau` vem do catálogo
-(`catalogo.disclosures.divergencia_de_base_degrau.texto`), não do
-dicionário do relatório. `qc.json` sai sempre, em ordem determinística,
+(`catalogo.disclosures.divergencia_de_base_degrau.texto`), e o de
+`limitacao_metodologica` também (`catalogo.limitacoes.<chave>.rotulo`) —
+nunca do dicionário do relatório. `qc.json` sai sempre, em ordem determinística,
 mesmo quando o builder recusa emitir o HTML.
 
 ## As três abas (`render.py`)
@@ -274,7 +352,9 @@ Não está aqui e não é resumida aqui. Todo conhecimento metodológico que
 este relatório precisa exibir (bloco/unidade/rótulo de premissa, rótulo e
 base de múltiplo, rótulo de convenção terminal, severidade e rótulo de
 diagnóstico, texto do disclosure de divergência de base e a chave que o
-dispara) vem de
+dispara, o vocabulário de vínculo das perguntas da tese — premissas da rota e
+blocos econômicos —, e o rótulo e o bloco suprimido, `afeta`, de cada
+limitação) vem de
 `skills/er-valuation/assets/catalogo_apresentacao.json` — lido via
 `ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A fonte canônica da
 metodologia é `skills/er-multiplos-justos/SKILL.md`; da orquestração,

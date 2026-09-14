@@ -20,8 +20,7 @@ FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
 from caso import (  # noqa: E402
-    CAMPOS_DE_MERCADO_OBRIGATORIOS, LIMITACOES_DE_REVERSA, TV_CANON, CasoInvalido, carregar,
-    reversa_indisponivel, validar,
+    LIMITACOES_DE_REVERSA, TV_CANON, CasoInvalido, carregar, reversa_indisponivel, validar,
 )
 import diagnosticos  # noqa: E402
 
@@ -218,29 +217,11 @@ def test_fronteira_de_escopo_declarada_sai_publicada_como_o_gate_a_validou():
     assert avaliar(caso)["fronteira_de_escopo"] == fronteira
 
 
-_MODELO_DE_REVERSA = json.loads((FIXTURES / "caso_reversa_firm.json").read_text(encoding="utf-8"))
-
-
-def _com_bloco_de_reversa_valido(caso: dict) -> dict:
-    """`caso` com o bloco 'reversa' de `caso_reversa_firm.json`, adaptado a ele.
-
-    O bloco não carrega premissa por eixo: `eixos` são nomes, e a premissa que
-    cada eixo resolve em cada rota mora em `reversa.RESOLVER_POR_EIXO` (wacc/ke,
-    roic/roe, g, cap). Os quatro eixos seguem como estão; o que se adapta é o
-    que o bloco aponta no caso — `cenario` vira o cenário da manchete
-    (`cenario_base`, ou o único declarado) — e o `mercado` que a reversa exige:
-    `rf`/`erp` do modelo onde o caso não os declara, porque sem eles o gate
-    recusaria a reversa por forma, não por limitação."""
-    c = copy.deepcopy(caso)
-    reversa = copy.deepcopy(_MODELO_DE_REVERSA["reversa"])
-    reversa["cenario"] = c.get("cenario_base") or next(iter(c["cenarios"]))
-    c["reversa"] = reversa
-    mercado = dict(c.get("mercado") or {})
-    for campo in CAMPOS_DE_MERCADO_OBRIGATORIOS:
-        if mercado.get(campo) is None:
-            mercado[campo] = _MODELO_DE_REVERSA["mercado"][campo]
-    c["mercado"] = mercado
-    return c
+# O construtor do bloco 'reversa' de teste mora em `tests/relatorio_apoio.py` desde
+# a fatia 5D, Task 2: é o mesmo que compõe, nas entregas de teste do relatório, a
+# reversa que a Análise exige (D4) — uma cópia aqui divergiria da de lá.
+sys.path.insert(0, str(RAIZ / "tests"))
+from relatorio_apoio import com_bloco_de_reversa_valido  # noqa: E402
 
 
 def test_limitacao_de_reversa_e_publicada_se_e_so_se_o_gate_recusa_reversa_valida(resultados):
@@ -259,7 +240,7 @@ def test_limitacao_de_reversa_e_publicada_se_e_so_se_o_gate_recusa_reversa_valid
     for nome, (caso, r) in resultados.items():
         publicadas = [chave for chave in r["limitacoes"] if chave in LIMITACOES_DE_REVERSA]
         try:
-            validar(_com_bloco_de_reversa_valido(caso))
+            validar(com_bloco_de_reversa_valido(caso))
             recusa = None
         except CasoInvalido as erro:
             recusa = str(erro)

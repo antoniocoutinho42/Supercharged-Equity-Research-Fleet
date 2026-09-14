@@ -96,8 +96,12 @@ DERIVACOES: frozenset = frozenset({"direta", "derivada", "engine"})
 # aqui, "não está em CHAVES_..._OBRIGATORIAS".
 # --------------------------------------------------------------------------
 
+# Fatia 5D, item 5, Task 2 (D5): `vinculo` saiu deste vocabulário. A 5B o
+# validava aqui como lista de textos, à espera das perguntas da tese; com elas
+# no contrato, a ligação mora só na pergunta (`analise.perguntas[].exhibits`) —
+# duas declarações da mesma ligação divergiriam.
 CHAVES_DE_EXHIBIT: frozenset = frozenset({
-    "id", "pergunta", "tipo", "series", "overlays", "nota_janela", "caption", "vinculo",
+    "id", "pergunta", "tipo", "series", "overlays", "nota_janela", "caption",
 })
 CHAVES_DE_EXHIBIT_OBRIGATORIAS: frozenset = frozenset({"id", "pergunta", "tipo", "series"})
 
@@ -258,16 +262,6 @@ def _validar_exhibit(valor: Any, onde: str) -> None:
         _exigir_texto_nao_vazio(exhibit["nota_janela"], f"{onde}.nota_janela")
     if "caption" in exhibit:
         _exigir_texto_nao_vazio(exhibit["caption"], f"{onde}.caption")
-    if "vinculo" in exhibit:
-        # G5: só validado como lista de textos -- o cruzamento com ids
-        # reais de pergunta da tese é da 5D (nesta fatia não existem
-        # perguntas para cruzar).
-        vinculo = exhibit["vinculo"]
-        valido = isinstance(vinculo, list) and all(isinstance(v, str) and v.strip() for v in vinculo)
-        if not valido:
-            raise ContratoDeExhibitInvalido(
-                f"'{onde}.vinculo' tem de ser uma lista de textos não vazios: {vinculo!r}."
-            )
 
 
 def _validar_serie(valor: Any, onde: str) -> None:

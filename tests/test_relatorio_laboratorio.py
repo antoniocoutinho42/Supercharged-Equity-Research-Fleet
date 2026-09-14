@@ -52,9 +52,13 @@ DICIONARIO = placeholders.carregar_dicionario("pt-BR")
 # — a fixture mais completa, e a única que exercita o rótulo de congelado nos
 # três itens de uma vez.
 FIXTURE = "caso_reversa_firm.json"
-# Rota equity, sem SOTP, sem reversa e sem sensibilidades: discrimina "rotula o
-# que existe" de "rotula sempre".
-FIXTURE_SEM_CONGELADO = "caso_minimo_equity.json"
+# Sem SOTP, sem reversa e sem sensibilidades: discrimina "rotula o que existe" de
+# "rotula sempre". Fatia 5D, Task 2: era a de rota equity (`caso_minimo_equity.
+# json`), mas a entrega de teste passou a compor a reversa que a Análise exige
+# onde o gate a admite (D4), e o laboratório congela essa reversa. Uma entrega
+# válida sem nada congelado agora vem de uma fixture em que o gate não admite
+# reversa: a de rota rampa, que emite com o disclosure nomeado da limitação.
+FIXTURE_SEM_CONGELADO = "caso_rampa.json"
 FIXTURE_SOTP = "caso_sotp_homogeneo.json"
 
 SEM_NODE = shutil.which("node") is None
@@ -268,7 +272,7 @@ def test_um_valor_que_o_catalogo_nao_sabe_nomear_nao_vaza_o_codigo_cru():
 
 def test_o_que_nao_e_vivo_aparece_rotulado_como_congelado():
     """§8.4 manda rotular o precomputado. A fixture tem reversa e
-    sensibilidades; a de rota equity não tem nenhum dos três, e ali o bloco
+    sensibilidades; a de rota rampa não tem nenhum dos três, e ali o bloco
     não pode aparecer — um rótulo constante não informaria nada."""
     painel = _painel(_pagina()[0])
     assert render.t(DICIONARIO, "valuation.laboratorio_congelado_titulo") in painel
