@@ -137,13 +137,16 @@ def _carregar(entrega_dict: dict, tmp_path: Path) -> dict:
 # limitação que torna a reversa impossível (D4) em `caso_degrau` e `caso_rampa`. Desde a
 # 5F (D3), também o da curva iso-valor não calculada nas duas SOTP: a reversa composta
 # sobre o cenário consolidado deixa um eixo primário sem raiz, e a integração publica
-# `iso_nao_calculada` em `resultados.limitacoes`.
+# `iso_nao_calculada` em `resultados.limitacoes`. E, desde a 5F (Task 4, D11), o da premissa
+# central fora do ponto central da grade em `caso_reversa_firm`: a grade 2D tem o ROIC em
+# quatro pontos em torno de 12, e um eixo de comprimento par não tem ponto central.
 # --------------------------------------------------------------------------
 
 _ACHADOS_DA_ENTREGA_PADRAO = {
     "caso_degrau.json": [("REQUIRED_DISCLOSURE", "divergencia_de_base_degrau"),
                          ("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
     "caso_rampa.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
+    "caso_reversa_firm.json": [("REQUIRED_DISCLOSURE", "premissa_central_fora_do_ponto_central_da_grade")],
     "caso_sotp_homogeneo.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
     "caso_sotp_safra.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
 }
@@ -816,6 +819,10 @@ _CAMPOS_NOVOS_DE_PROSA = [
     ("exhibits", 0, "series", 0, "rotulo"),
     ("exhibits", 0, "series", 1, "formula_nota"),
     ("exhibits", 0, "overlays", 0, "rotulo"),
+    # Fatia 5F, Task 4 (D12): o julgamento do que está no preço, que a Valuation exibe — a Tese
+    # padrão o declara porque a entrega tem a reversa.
+    ("o_que_esta_no_preco", "julgamento"),
+    ("o_que_esta_no_preco", "observavel"),
 ]
 
 

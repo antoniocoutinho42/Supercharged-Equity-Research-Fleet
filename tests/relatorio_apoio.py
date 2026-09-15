@@ -290,6 +290,14 @@ def _tese_padrao(resultados: dict) -> dict:
         precos = {nome: cenario["valor"]["preco_acao"] for nome, cenario in resultados["cenarios"].items()}
         tese["faixa"] = {"piso": min(precos, key=precos.get), "base": cenario_da_manchete,
                          "teto": max(precos, key=precos.get)}
+    # Fatia 5F, Task 4 (D12): o julgamento do que está no preço é opcional e só cabe com a
+    # reversa; a Tese padrão o declara sempre que ela existe, para a aba Valuation exercê-lo.
+    if resultados.get("reversa") is not None:
+        tese["o_que_esta_no_preco"] = {
+            "julgamento": "A reconciliação que exige menos violência às âncoras observáveis é a do custo de "
+                          "capital, e não a do crescimento.",
+            "observavel": "O custo de capital implícito nos próximos resultados trimestrais.",
+        }
     return tese
 
 
@@ -401,8 +409,16 @@ def completar_ledger(entrega_dict: dict) -> dict:
 
     analise = entrega_dict["analise"]
     cenario = entrega_dict["resultados"]["manchete"]["cenario"]
+    # 5F (D13): a premissa decisiva de uma parte de SOTP mora no caso em
+    # `sotp.partes.<índice>.premissas.<chave>`, com o índice da parte que ela nomeia.
+    partes = [parte["nome"] for parte in (entrega_dict["resultados"].get("sotp") or {}).get("partes", [])]
     for premissa in analise.get("premissas_decisivas", []):
-        caminho = f"cenarios.{cenario}.premissas.{premissa['chave']}"
+        if "parte" in premissa:
+            if premissa["parte"] not in partes:
+                continue
+            caminho = f"sotp.partes.{partes.index(premissa['parte'])}.premissas.{premissa['chave']}"
+        else:
+            caminho = f"cenarios.{cenario}.premissas.{premissa['chave']}"
         sustentam = [registro for registro in registros if caminho in registro.get("usado_em", [])]
         confirmada = any(registro.get("contraprova_de") == alvo["id"]
                          and registro["fonte"]["identidade"] != alvo["fonte"]["identidade"]

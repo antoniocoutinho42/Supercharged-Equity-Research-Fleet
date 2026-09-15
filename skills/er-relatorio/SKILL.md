@@ -145,6 +145,9 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
     "riscos": [
       {"risco": "Regulação tarifária mais restritiva.", "observavel": "Decisões do regulador setorial."}
     ],
+    "o_que_esta_no_preco": {
+      "julgamento": "A reconciliação que exige menos violência às âncoras observáveis é a do custo de capital, e não a do crescimento.",
+      "observavel": "O custo de capital implícito nos próximos resultados trimestrais."},
     "exhibits": []
   },
   "ledger": {
@@ -217,20 +220,21 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 
 | Nível | Chaves | Forma |
 |---|---|---|
-| `analise` | `conclusao`, `exhibits`, `veredicto`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo` |
+| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida` e `o_que_esta_no_preco` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
 | `faixa` | `piso`, `base`, `teto` | cada um o NOME de um cenário de `resultados.cenarios` — o número vem de lá, nunca do analista |
 | `veredicto` | `texto` | o preço de tela, a data e a fonte vêm de `caso.preco` |
-| `premissas_decisivas[]` | `chave`, `derivacao` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC) |
+| `premissas_decisivas[]` | `chave`, `derivacao` obrigatórias; `parte` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC); com `parte` — o nome de uma parte de `resultados.sotp.partes`, texto não vazio —, premissa da rota da parte, declarada nela (QC), com o número e a contraprova da parte (`sotp.partes.<índice>.premissas.<chave>` no caso) |
 | `positives[]`, `negatives[]` | `afirmacao`, `vetor`, `mecanismo`, `observavel`, `incorporacao` obrigatórias; `razao` | `vetor` ∈ `crescimento`, `moat`, `rentabilidade`, `risco`, `earning_power`, `valuation`; `mecanismo` lista não vazia; `incorporacao` ∈ `refletido`, `nao_incorporado` — este exige `razao` |
 | `perguntas[]` | `id`, `tema`, `pergunta`, `evidencia`, `observavel`, `vinculo` obrigatórias; `exhibits` **ou** `sem_exhibit` | `tema` ∈ `moat`, `crescimento`, `rentabilidade_do_crescimento`, `especifica`; `id` único; `vinculo` lista não vazia; `exhibits` cita ids de `analise.exhibits`; `sem_exhibit` é `{"razao": ...}`; nunca os dois, nunca nenhum |
 | `riscos[]` | `risco`, `observavel` | |
 | `visao_nao_consensual` | `texto` | |
 | `mudou_desde_analise_fornecida` | `linhas` | de uma a três linhas |
+| `o_que_esta_no_preco` | `julgamento`, `observavel` | opcional, e só com `resultados.reversa` (sem ela, recusa de forma): qual reconciliação exige a menor violência às âncoras observáveis, e o observável que a testaria — os dois textos são prosa auditável, que a Valuation exibe ao fim do que está no preço |
 
 **O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
-Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) ou blocos
-econômicos (`catalogo.blocos`) — o vocabulário vem do catálogo, nunca deste
-skill. Um exhibit não declara vínculo. Todo campo de texto da Tese — e, de cada
+Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) — num SOTP,
+também das rotas das partes — ou blocos econômicos (`catalogo.blocos`) — o
+vocabulário vem do catálogo, nunca deste skill. Um exhibit não declara vínculo. Todo campo de texto da Tese — e, de cada
 exhibit, que a aba desenha sob as perguntas, `pergunta`, `nota_janela`,
 `caption` e os textos que o gráfico escreve (`formula_nota`, o `rotulo` da série
 `engine` e o do overlay), além do texto da fronteira de escopo que a Conclusão
@@ -388,10 +392,10 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `placeholder_nao_resolvido` | HARD FAIL | caminho inexistente ou valor não numérico |
 | `placeholder_malformado` | HARD FAIL | `{{...}}` que não é um placeholder reconhecido |
 | `numero_sem_proveniencia` | HARD FAIL | dígito na prosa de `analise` fora de placeholder |
-| `diagnostico_sem_chave` | HARD FAIL | `diagnosticos_chaves`/`diagnosticos_unicos_chaves` ausente, com comprimento diferente do `diagnosticos`/`diagnosticos_unicos` correspondente, ou com `null` num item — em QUALQUER par publicado em `resultados.json` (varredura recursiva); ou `degrau.diagnosticos_chaves` ausente num cenário com degrau |
+| `diagnostico_sem_chave` | HARD FAIL | `diagnosticos_chaves`/`diagnosticos_unicos_chaves` ausente, com comprimento diferente do `diagnosticos`/`diagnosticos_unicos` correspondente, ou com `null` num item — em QUALQUER par publicado em `resultados.json` (varredura recursiva); ou `degrau.diagnosticos_chaves` ausente num cenário com degrau; ou `conservacao_capital.diagnosticos_chaves` ausente num cenário com a conservação de capital |
 | `degrau_sem_divergencia_de_base` | HARD FAIL | cenário com `degrau` sem `divergencia_de_base_%` numérico |
 | `formato_incompativel_com_unidade` | HARD FAIL | formato de placeholder não bate com a unidade do valor |
-| `multiplos_com_bases_diferentes` | HARD FAIL | `manchete.multiplo.base` ≠ `mercado_tela.base` |
+| `multiplos_com_bases_diferentes` | HARD FAIL | `manchete.multiplo.base` ≠ `mercado_tela.base`; e também `manchete.multiplo_forward.base` ≠ `mercado_tela_forward.base`, quando os dois existem — um achado por par |
 | `unidade_desconhecida` | HARD FAIL | `unidade` de uma grade 2D fora de `catalogo.unidades` |
 | `serie_nao_rastreavel` | HARD FAIL | `fonte`/`chave` de série que não resolve, ou série `engine` que resolve em algo que não é número finito |
 | `formula_invalida` | HARD FAIL | fórmula fora da gramática fechada, nome fora do dataset, campos de comprimentos diferentes, `null`/não-finito num campo lido, divisão por zero |
@@ -400,8 +404,8 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `overlay_nao_resolvido` | HARD FAIL | `chave` de overlay que não resolve num número finito |
 | `relatorio_nao_autocontido` | HARD FAIL | referência (`src`/`href`/`srcset`/`data`/`url()`/`@import`) que não é `#fragmento` nem URI `data:`; ou, no miolo de um `<script>`, chamada de rede (`fetch`, `XMLHttpRequest`, `WebSocket`, `Worker`, `importScripts`, `EventSource`, `sendBeacon`) ou atribuição de `src`/`srcset`/`href` a um endereço externo |
 | `perguntas_da_tese_incompletas` | HARD FAIL | menos de 3 ou mais de 5 perguntas; tema obrigatório (`moat`, `crescimento`, `rentabilidade_do_crescimento`) ausente ou repetido; mais de 2 perguntas `especifica` (§7) |
-| `vinculo_fora_do_vocabulario` | HARD FAIL | item de `perguntas[].vinculo` ou de `positives`/`negatives[].mecanismo` que não é premissa da rota (`catalogo.premissas.<rota>`) nem bloco econômico (`catalogo.blocos`) |
-| `premissa_decisiva_fora_do_cenario` | HARD FAIL | `premissas_decisivas[].chave` que não é premissa da rota no catálogo declarada no cenário da manchete |
+| `vinculo_fora_do_vocabulario` | HARD FAIL | item de `perguntas[].vinculo` ou de `positives`/`negatives[].mecanismo` que não é premissa da rota (`catalogo.premissas.<rota>`) — num SOTP, também das rotas das partes — nem bloco econômico (`catalogo.blocos`) |
+| `premissa_decisiva_fora_do_cenario` | HARD FAIL | `premissas_decisivas[].chave` que não é premissa da rota no catálogo declarada no cenário da manchete; com `parte`, a parte não está em `resultados.sotp.partes` (pelo nome), ou a chave não é premissa da rota dela declarada nas premissas dela |
 | `faixa_fora_de_ordem` | HARD FAIL | ponta da faixa que não nomeia um cenário publicado com preço; preço de `piso` acima do de `base`, ou de `base` acima do de `teto`; `base` diferente do cenário da manchete |
 | `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou um número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`) chegando à Tese por um dos três lugares — placeholder `resultados:` num texto da lista de prosa, `chave` de série `engine` ou `chave` de overlay; o achado nomeia o lugar, o caminho e a unidade da família. A decisão lê o mapa, nunca o nome do campo; o preço e o múltiplo de tela não estão nele e continuam permitidos, e `livre:` fica fora |
 | `fronteira_de_escopo_desconhecida` | HARD FAIL | sob fronteira de escopo, o catálogo não rotula a classe no idioma da entrega ou não publica `conclusoes_de_valor` — sem o mapa nenhum número de valor seria reconhecido, e a regra falha fechada |
@@ -414,6 +418,7 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `referencia_fora_do_ledger` | HARD FAIL | id que o ledger não tem, citado em `insumos`, `conflito.vencedor`, `contraprova_de`, `analise.consenso.registros` ou `dados.<id>.ledger` |
 | `dataset_sem_proveniencia` | HARD FAIL | dataset usado por série `direta` ou `derivada` com `ledger` vazio |
 | `insumos_do_caso_desconhecidos` | HARD FAIL | o catálogo não publica `insumos_do_caso` na forma do contrato — sem o mapa nenhum insumo seria exigido, e as regras de proveniência falham fechadas |
+| `eixos_de_reversa_desconhecidos` | HARD FAIL | `resultados.reversa` publicada e o catálogo sem `eixos_de_reversa` na forma — `obrigatorio` booleano e rótulo no idioma para cada eixo publicado —: sem a declaração nenhum eixo seria obrigatório, e a regra do eixo obrigatório sem raiz falha fechada |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
@@ -423,9 +428,13 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `sem_contraprova_independente` | REQUIRED DISCLOSURE | premissa decisiva cujo número no caso (`cenarios.<manchete.cenario>.premissas.<chave>`) não tem registro com `contraprova_de` apontando para um registro que o sustenta, vindo de outra `fonte.identidade` e com o mesmo `valor` dele (pela tolerância da reconciliação) ou com `reconciliacao` declarada — a mesma identidade não conta, e uma fonte que diverge sem reconciliação não confirma; com o rótulo da premissa no catálogo |
 | `lacuna_material` | REQUIRED DISCLOSURE | lacuna cuja materialidade declara `exige_disclosure` — com a `descricao` e o `tratamento`, e o campo de cada um na lista de prosa (`params.campos_de_prosa`) |
 | `consenso_indisponivel` | REQUIRED DISCLOSURE | `analise.consenso.ausente` — com a âncora substituta, a razão e o campo dela na lista de prosa; sem consenso, o confronto temporal da reversa fica indisponível |
+| `conservacao_de_capital_nao_fecha` | REQUIRED DISCLOSURE | um por cenário cuja `conservacao_capital.diagnosticos_chaves` traz a chave que `catalogo.disclosures.conservacao_de_capital.chave` nomeia — o limiar é do motor, e o relatório não compara limiar nenhum; a mensagem imprime o `gap_%` publicado, o rótulo do ano-base do capex (`catalogo.anos_base_do_capex`) e o texto do catálogo |
+| `premissa_central_fora_do_ponto_central_da_grade` | REQUIRED DISCLOSURE | uma por grade 1D ou 2D que não perturba o cenário da manchete (`caso.sensibilidades.cenario` ≠ `resultados.manchete.cenario`) ou que tem um eixo cuja lista de pontos não é ímpar com a premissa do cenário no meio — igualdade exata, os dois números saem do mesmo caso; nomeia a grade, os dois cenários e os eixos fora do centro pelos rótulos do catálogo |
+| `eixo_obrigatorio_da_reversa_sem_raiz` | REQUIRED DISCLOSURE | eixo que `catalogo.eixos_de_reversa` declara `obrigatorio`, publicado sem `resolucao.resolveu` verdadeiro — a regra lê a flag, nunca o nome do eixo; com o rótulo do eixo e o de `leitura.motivo` (`catalogo.motivos_da_leitura`) |
 | `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
 | `tese_dependente_de_uma_premissa` | QUALITY WARNING | todas as perguntas com o mesmo `vinculo` de um item só |
 | `concentracao_de_fontes` | QUALITY WARNING | uma `fonte.identidade` sustenta mais de `qc.LIMIAR_DE_CONCENTRACAO_DE_FONTES` (metade) dos insumos do caso, quando há ao menos `qc.MINIMO_DE_INSUMOS_PARA_CONCENTRACAO` (quatro) |
+| `sensibilidade_pouco_informativa` | QUALITY WARNING | uma por grade 1D ou 2D cujas células ficam todas dentro de `qc.TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA` (1%, relativa) do preço publicado do cenário que a grade perturba |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 `params` substituídos) — nunca hardcoded (§16.1); o "porquê" metodológico de
@@ -439,7 +448,7 @@ mesmo quando o builder recusa emitir o HTML.
 
 A §11 do desenho lista o que o QC impõe, em três níveis. A tabela abaixo dá dono a cada item,
 pelo texto do desenho: os códigos de QC que o garantem, o mecanismo fora do QC (o gate do caso, a
-CI, o badge do laboratório) ou a pendência, com o dono (`5F`, `item 6` ou `item 8`) e a razão. A
+CI, o badge do laboratório) ou a pendência, com o dono (`item 6` ou `item 8`) e a razão. A
 trava `tests/test_relatorio_cobertura_11.py` lê a §11, as duas tabelas e o `qc.py`: os itens de
 cada nível são os do desenho, todo código citado existe no `qc.py` com o nível da linha e tem
 mensagem no dicionário, todo código que o `qc.py` constrói aparece numa das duas tabelas, e toda
@@ -456,15 +465,15 @@ pendência tem dono permitido e razão.
 | HARD FAIL | fair value sem reversa / custo de capital implícito quando a metodologia exigir | `analise_sem_reversa`, `limitacao_desconhecida` | o gate do caso recusa uma reversa sem o eixo do custo de capital implícito (`caso.EIXO_OBRIGATORIO`) | — |
 | HARD FAIL | números materialmente conflitantes sem reconciliação ou disclosure | `insumo_nao_reconciliado`, `conflito_de_fontes_silenciado`, `insumo_sustentado_pela_fonte_vencida`, `referencia_fora_do_ledger` | — | — |
 | HARD FAIL | fronteira de escopo declarada com fair value por ação como conclusão principal | `fronteira_com_preco_alvo`, `fronteira_de_escopo_desconhecida` | — | — |
-| REQUIRED DISCLOSURE | conservação de capital que não fecha | — | — | **5F**: a conservação de capital entra com o restante da aba Valuation |
+| REQUIRED DISCLOSURE | conservação de capital que não fecha | `conservacao_de_capital_nao_fecha` | a integração publica a chave por presença do alerta do motor, e o laboratório a acende e apaga ao vivo, com o badge comparando a lista (5F) | — |
 | REQUIRED DISCLOSURE | ausência de contraprova independente | `sem_contraprova_independente` | — | — |
-| REQUIRED DISCLOSURE | premissa central fora do ponto central da grade | — | — | **5F**: é item da Valuation, junto das sensibilidades |
+| REQUIRED DISCLOSURE | premissa central fora do ponto central da grade | `premissa_central_fora_do_ponto_central_da_grade` | — | — |
 | REQUIRED DISCLOSURE | gap material que não inviabiliza o valuation | `lacuna_material`, `consenso_indisponivel` | — | — |
 | REQUIRED DISCLOSURE | metodologia especial ou limitação de escopo | `limitacao_metodologica`, `fronteira_de_escopo_declarada`, `divergencia_de_base_degrau` | — | — |
 | REQUIRED DISCLOSURE | input relevante baseado em estimativa em vez de dado observado | `insumo_estimado` | — | — |
 | QUALITY WARNING | exhibit fraco | `serie_curta_sem_nota_janela` | — | **item 8**: o resto é julgamento editorial sobre o exhibit — um gráfico que não responde à pergunta, ou um tipo mal escolhido |
 | QUALITY WARNING | concentração excessiva de fontes | `concentracao_de_fontes` | — | — |
-| QUALITY WARNING | sensibilidade pouco informativa | — | — | **5F**: é item da Valuation, junto das sensibilidades |
+| QUALITY WARNING | sensibilidade pouco informativa | `sensibilidade_pouco_informativa` | — | — |
 | QUALITY WARNING | tese muito dependente de uma única premissa | `tese_dependente_de_uma_premissa` | — | — |
 | QUALITY WARNING | pergunta de tese pouco discriminante | — | — | **item 8**: julgamento editorial sobre a pergunta, sem critério mecânico declarado |
 | QUALITY WARNING | Positives/Negatives pouco ligados ao valuation | — | — | **item 8**: julgamento editorial; o mecanismo fora do vocabulário do valuation já é HARD FAIL (o vínculo) |
@@ -477,6 +486,8 @@ Os códigos de QC que servem a outras seções do desenho:
 |---|---|---|
 | `relatorio_nao_autocontido` | HARD FAIL | §9 e §2: arquivo único autocontido, zero rede |
 | `placeholder_em_dado_da_tese` | HARD FAIL | §9 e §6.3: o consenso e o ledger que a Tese exibe são dado atribuído, nunca prosa com placeholder |
+| `eixo_obrigatorio_da_reversa_sem_raiz` | REQUIRED DISCLOSURE | §9: o que está no preço, com o custo de capital implícito sempre — um alvo de mercado inalcançável nesse eixo é leitura do preço, e sai declarado |
+| `eixos_de_reversa_desconhecidos` | HARD FAIL | §9: o que está no preço — sem a declaração dos eixos no catálogo, a regra do eixo obrigatório sem raiz falha fechada |
 
 ## As três abas (`render.py`)
 

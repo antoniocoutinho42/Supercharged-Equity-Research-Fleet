@@ -74,6 +74,16 @@ WARNING). Nenhum vocabulário de evidência mora aqui: o que é insumo sai do ma
 `catalogo.insumos_do_caso` (`placeholders.insumos_do_caso`), e "é estimativa" e
 "lacuna que vira disclosure" saem das flags do contrato `ledger/1` que `avaliar`
 recebe (`entrega.ler_contrato_do_ledger`). Ver `_achados_do_ledger`.
+
+Fatia 5F, item 5, Task 4 (D4, D5, D6, D11, D13): as regras da §11 que pertencem à
+Valuation — `conservacao_de_capital_nao_fecha`, `premissa_central_fora_do_ponto_
+central_da_grade` e `eixo_obrigatorio_da_reversa_sem_raiz` (REQUIRED DISCLOSURE),
+`sensibilidade_pouco_informativa` (QUALITY WARNING) e `eixos_de_reversa_desconhecidos`
+(HARD FAIL). `multiplos_com_bases_diferentes` passa a cobrir o par forward; a premissa
+decisiva, o vínculo e a contraprova passam a ler as partes de SOTP. Nenhum limiar de
+metodologia: a conservação acende pela chave que a integração publica, o eixo
+obrigatório pela flag do catálogo, e o ponto central por igualdade exata entre dois
+números do mesmo caso. Ver `_achados_da_valuation`.
 """
 
 import json
@@ -587,7 +597,15 @@ def _achado_autocontido(html: str | None) -> Achado | None:
                   {"trecho": trecho.strip(), "valor": valor})
 
 
-def _achado_bases_divergentes(resultados: dict) -> Achado | None:
+# Os pares "múltiplo justo da manchete × múltiplo de tela" que a página mostra lado a lado:
+# o corrente (B12) e, desde a 5F (D5), o forward. Nomes do contrato `resultados/1`.
+PARES_DE_MULTIPLOS: tuple[tuple[str, str], ...] = (
+    ("multiplo", "mercado_tela"),
+    ("multiplo_forward", "mercado_tela_forward"),
+)
+
+
+def _achados_bases_divergentes(resultados: dict) -> list[Achado]:
     """`multiplos_com_bases_diferentes` (HARD FAIL) -- B12 (achado S4): o
     múltiplo justo da manchete (`manchete.multiplo`) e o múltiplo de tela
     (`mercado_tela`) têm de comparar a MESMA base (`ebitda`/`nopat`/`pl`/…)
@@ -596,19 +614,23 @@ def _achado_bases_divergentes(resultados: dict) -> Achado | None:
     'pl' ao lado de um múltiplo justo em base 'ebitda' renderizava os dois
     números lado a lado, rc 0, contrato quebrado sem aviso nenhum. Ausente
     (SOTP, sem `manchete.multiplo`) não dispara -- não há par para comparar.
+
+    Fatia 5F, Task 4 (D5): a mesma regra vale para o par forward
+    (`manchete.multiplo_forward` × `mercado_tela_forward`), quando os dois
+    existem — sem métrica forward declarada a tela forward é `null`, e não há
+    par. Um achado por par divergente, na ordem de `PARES_DE_MULTIPLOS`.
     """
-    manchete = resultados.get("manchete") or {}
-    multiplo = manchete.get("multiplo")
-    mercado_tela = resultados.get("mercado_tela")
-    if not isinstance(multiplo, dict) or not isinstance(mercado_tela, dict):
-        return None
-    base_manchete = multiplo.get("base")
-    base_mercado_tela = mercado_tela.get("base")
-    if base_manchete == base_mercado_tela:
-        return None
-    return Achado("HARD_FAIL", "multiplos_com_bases_diferentes", "resultados.manchete.multiplo.base", {
-        "base_manchete": str(base_manchete), "base_mercado_tela": str(base_mercado_tela),
-    })
+    manchete = _objeto(resultados.get("manchete"))
+    achados: list[Achado] = []
+    for campo_justo, campo_de_tela in PARES_DE_MULTIPLOS:
+        justo, de_tela = manchete.get(campo_justo), resultados.get(campo_de_tela)
+        if not isinstance(justo, dict) or not isinstance(de_tela, dict) or justo.get("base") == de_tela.get("base"):
+            continue
+        achados.append(Achado("HARD_FAIL", "multiplos_com_bases_diferentes", f"resultados.manchete.{campo_justo}.base", {
+            "campo_justo": f"manchete.{campo_justo}", "campo_de_tela": campo_de_tela,
+            "base_manchete": str(justo.get("base")), "base_mercado_tela": str(de_tela.get("base")),
+        }))
+    return achados
 
 
 def _achados_unidade_desconhecida(resultados: dict, catalogo: dict) -> list[Achado]:
@@ -740,8 +762,10 @@ MAXIMO_DE_PERGUNTAS_ESPECIFICAS: int = 2
 # reversa + sensibilidades"; §11: fair value sem reversa é HARD FAIL). É nome de
 # contrato `resultados/1` — a chave cuja presença o QC confere, e o valor que uma
 # limitação declara em `afeta` quando é ela que o suprime —, não metodologia:
-# POR QUE a reversa é impossível num caso é saber só da integração.
-BLOCO_DA_REVERSA: str = "reversa"
+# POR QUE a reversa é impossível num caso é saber só da integração. Declarado em
+# `entrega.py` desde a 5F (D12), cuja forma também o lê: o julgamento do que está no
+# preço só cabe com a reversa.
+BLOCO_DA_REVERSA: str = contrato_entrega.BLOCO_DA_REVERSA
 
 # De onde cada ponta da faixa lê o seu preço (D1): `resultados.cenarios.<nome>.
 # valor.preco_acao`, o caminho que o contrato da faixa declara. É leitura de
@@ -765,14 +789,47 @@ def _numero_finito(valor) -> bool:
     return isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor)
 
 
+def _premissas_da_rota_no_catalogo(rota, catalogo: dict) -> dict:
+    """`catalogo.premissas.<rota>` — vazio para rota que o catálogo não conhece, ou que
+    não é texto."""
+    if not isinstance(rota, str):
+        return {}
+    return _objeto(_objeto(catalogo.get("premissas")).get(rota))
+
+
 def _premissas_da_rota(resultados: dict, catalogo: dict) -> dict:
     """`catalogo.premissas.<resultados.rota>` — as premissas que o catálogo
     declara para a rota que a integração publicou (vazio para rota que ele não
     conhece)."""
-    rota = resultados.get("rota")
-    if not isinstance(rota, str):
-        return {}
-    return _objeto(_objeto(catalogo.get("premissas")).get(rota))
+    return _premissas_da_rota_no_catalogo(resultados.get("rota"), catalogo)
+
+
+# Fatia 5F, Task 4 (D13): as partes de SOTP. `resultados.sotp.partes[*]` publica `nome`
+# (único pelo gate), `rota` e `premissas`, na ordem em que o caso declara as partes —
+# leitura de contrato, nunca de metodologia.
+
+def _parte_do_sotp(resultados: dict, nome) -> tuple[int, dict] | None:
+    """O índice e a parte de `resultados.sotp.partes` cujo `nome` é `nome` — ou `None`,
+    fora do SOTP ou quando nenhuma parte tem esse nome. O índice é o da parte no caso:
+    `sotp.py` publica as partes na ordem em que o caso as declara."""
+    if not isinstance(nome, str):
+        return None
+    for indice, parte in enumerate(_lista(_objeto(resultados.get("sotp")).get("partes"))):
+        if isinstance(parte, dict) and parte.get("nome") == nome:
+            return indice, parte
+    return None
+
+
+def _rotas_do_valuation(resultados: dict) -> list[str]:
+    """A rota do caso e, num SOTP, a de cada parte — sem repetição, na ordem publicada:
+    as rotas cujas premissas o vínculo e o mecanismo da Tese podem nomear."""
+    candidatas = [resultados.get("rota")]
+    candidatas += [_objeto(parte).get("rota") for parte in _lista(_objeto(resultados.get("sotp")).get("partes"))]
+    rotas: list[str] = []
+    for rota in candidatas:
+        if isinstance(rota, str) and rota not in rotas:
+            rotas.append(rota)
+    return rotas
 
 
 def _achados_perguntas_da_tese(analise: dict) -> list[Achado]:
@@ -802,9 +859,16 @@ def _achados_vinculo_fora_do_vocabulario(analise: dict, resultados: dict, catalo
     econômico"): todo item de `perguntas[].vinculo` e de `positives`/
     `negatives[].mecanismo` é premissa da rota no catálogo ou bloco econômico do
     catálogo. Uma premissa nova numa v10 entra pelo catálogo, e o vínculo a
-    aceita sem tocar neste módulo."""
-    vocabulario = set(_premissas_da_rota(resultados, catalogo)) | set(_objeto(catalogo.get("blocos")))
-    rota = str(resultados.get("rota"))
+    aceita sem tocar neste módulo.
+
+    Fatia 5F, Task 4 (D13): num SOTP, as premissas das rotas das partes também são
+    vocabulário — a premissa decisiva de uma parte é da rota dela, e a pergunta que
+    se liga a ela aponta para a mesma variável."""
+    rotas = _rotas_do_valuation(resultados)
+    vocabulario = set(_objeto(catalogo.get("blocos")))
+    for rota_do_valuation in rotas:
+        vocabulario |= set(_premissas_da_rota_no_catalogo(rota_do_valuation, catalogo))
+    rota = ", ".join(rotas) or str(resultados.get("rota"))
     aceitos = ", ".join(sorted(vocabulario))
 
     listas = [(f"analise.perguntas.{indice}.vinculo", _objeto(pergunta).get("vinculo"))
@@ -828,7 +892,11 @@ def _achados_premissas_decisivas(analise: dict, resultados: dict, catalogo: dict
     premissa decisiva é premissa da rota no catálogo e está declarada no cenário
     da manchete (`resultados.manchete.cenario`, que existe também sob fronteira)
     — o número mostrado ao lado dela é o desse cenário. Não é regra da §11: é a
-    referência da Tese que não resolve, da família de `overlay_nao_resolvido`."""
+    referência da Tese que não resolve, da família de `overlay_nao_resolvido`.
+
+    Fatia 5F, Task 4 (D13): com `parte`, a premissa é da parte de SOTP que ela nomeia —
+    a parte está em `resultados.sotp.partes`, e a chave é premissa da rota DELA no
+    catálogo, declarada nas premissas dela. O número mostrado é o dessa parte."""
     premissas_da_rota = _premissas_da_rota(resultados, catalogo)
     cenario = _objeto(resultados.get("manchete")).get("cenario")
     cenario_da_manchete = _objeto(resultados.get("cenarios")).get(cenario) if isinstance(cenario, str) else None
@@ -836,12 +904,22 @@ def _achados_premissas_decisivas(analise: dict, resultados: dict, catalogo: dict
 
     achados: list[Achado] = []
     for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
-        chave = _objeto(premissa).get("chave")
-        if isinstance(chave, str) and chave in premissas_da_rota and chave in premissas_do_cenario:
+        premissa = _objeto(premissa)
+        chave = premissa.get("chave")
+        rota, parte_nomeada = str(resultados.get("rota")), _SEM_VALOR
+        aceitas, declaradas = premissas_da_rota, premissas_do_cenario
+        if "parte" in premissa:
+            parte_nomeada = str(premissa.get("parte"))
+            encontrada = _parte_do_sotp(resultados, premissa.get("parte"))
+            parte = encontrada[1] if encontrada is not None else {}
+            rota = str(parte.get("rota")) if encontrada is not None else _SEM_VALOR
+            aceitas = _premissas_da_rota_no_catalogo(parte.get("rota"), catalogo)
+            declaradas = _objeto(parte.get("premissas"))
+        if isinstance(chave, str) and chave in aceitas and chave in declaradas:
             continue
         achados.append(Achado("HARD_FAIL", "premissa_decisiva_fora_do_cenario",
                               f"analise.premissas_decisivas.{indice}.chave",
-                              {"chave": str(chave), "rota": str(resultados.get("rota")), "cenario": str(cenario)}))
+                              {"chave": str(chave), "rota": rota, "cenario": str(cenario), "parte": parte_nomeada}))
     return achados
 
 
@@ -1285,27 +1363,54 @@ def _confirma(contraprova: dict, alvo: dict | None) -> bool:
     return mesmo_numero or "reconciliacao" in contraprova
 
 
+def _caminho_da_premissa_de_parte_no_caso(indice_da_parte: int, chave: str) -> str:
+    """Onde o caso declara a premissa de uma parte de SOTP (fatia 5F, Task 4, D13):
+    `sotp.partes.<índice>.premissas.<chave>`, com o índice da parte em
+    `resultados.sotp.partes` (`_parte_do_sotp`). A integração publica as partes na ordem
+    do caso, e o gate recusa chave com `.` ou `*`: o caminho nunca é ambíguo."""
+    return ".".join(("sotp", "partes", str(indice_da_parte), "premissas", chave))
+
+
+def _rotulo_da_premissa(premissas_da_rota: dict, chave, idioma: str) -> str:
+    """O rótulo do catálogo de uma premissa da rota, ou o travessão: a mensagem de um aviso
+    nunca mostra a chave crua, e o catálogo cobre o vocabulário que o gate aceita."""
+    info = _objeto(premissas_da_rota.get(chave)) if isinstance(chave, str) else {}
+    rotulo = _objeto(info.get("rotulo")).get(idioma)
+    return rotulo if isinstance(rotulo, str) and rotulo.strip() else _SEM_VALOR
+
+
 def _achados_sem_contraprova_independente(entrega: dict, registros: list, catalogo: dict,
                                           idioma: str) -> list[Achado]:
+    """Fatia 5F, Task 4 (D13): com `parte`, o número da premissa mora na parte de SOTP — o
+    caminho é o dela no caso, e o rótulo, o da rota dela. Uma parte que não existe já é o
+    HARD FAIL `premissa_decisiva_fora_do_cenario`, e aqui não gera aviso."""
     resultados = _objeto(entrega.get("resultados"))
     cenario = str(_objeto(resultados.get("manchete")).get("cenario"))
-    premissas_da_rota = _premissas_da_rota(resultados, catalogo)
+    premissas_da_rota_do_caso = _premissas_da_rota(resultados, catalogo)
 
     achados: list[Achado] = []
     for posicao, premissa in enumerate(_lista(_objeto(entrega.get("analise")).get("premissas_decisivas"))):
-        chave = _objeto(premissa).get("chave")
-        caminho = _caminho_da_premissa_no_caso(cenario, str(chave))
+        premissa = _objeto(premissa)
+        chave = premissa.get("chave")
+        if "parte" in premissa:
+            encontrada = _parte_do_sotp(resultados, premissa.get("parte"))
+            if encontrada is None:
+                continue
+            indice_da_parte, parte = encontrada
+            caminho = _caminho_da_premissa_de_parte_no_caso(indice_da_parte, str(chave))
+            premissas_da_rota = _premissas_da_rota_no_catalogo(parte.get("rota"), catalogo)
+        else:
+            caminho = _caminho_da_premissa_no_caso(cenario, str(chave))
+            premissas_da_rota = premissas_da_rota_do_caso
         sustentam = {registro["id"]: registro for _indice, registro in registros
                      if caminho in _caminhos_usados(registro) and isinstance(registro.get("id"), str)}
         if any(_confirma(registro, sustentam.get(registro["contraprova_de"])) for _indice, registro in registros
                if isinstance(registro.get("contraprova_de"), str)):
             continue
-        info = _objeto(premissas_da_rota.get(chave)) if isinstance(chave, str) else {}
-        rotulo = _objeto(info.get("rotulo")).get(idioma)
         achados.append(Achado("REQUIRED_DISCLOSURE", "sem_contraprova_independente",
                               f"analise.premissas_decisivas.{posicao}.chave", {
                                   "chave": str(chave),
-                                  "rotulo": rotulo if isinstance(rotulo, str) and rotulo.strip() else _SEM_VALOR,
+                                  "rotulo": _rotulo_da_premissa(premissas_da_rota, chave, idioma),
                                   "caminho": caminho,
                               }))
     return achados
@@ -1412,6 +1517,191 @@ def _achados_do_ledger(entrega: dict, catalogo: dict, contrato, idioma: str) -> 
     return achados
 
 
+# --------------------------------------------------------------------------
+# Fatia 5F, item 5, Task 4 (D4, D6, D11): as regras da §11 que pertencem à Valuation. O
+# relatório compara números publicados ou declarados e nunca guarda limiar de
+# metodologia: a conservação de capital acende pela chave que a integração publica (o
+# limiar é do motor), o eixo obrigatório da reversa sai da flag do catálogo, e o ponto
+# central da grade é igualdade exata entre dois números do mesmo caso.
+# --------------------------------------------------------------------------
+
+# §11, QUALITY WARNING "sensibilidade pouco informativa": uma grade cujas células ficam
+# todas dentro de 1% (relativo, `math.isclose`) do preço publicado do cenário que ela
+# perturba. Limiar baixo de propósito: só acende a grade que praticamente não move o preço
+# — a amplitude certa é do analista (vendor §4). Regra de QC do Fleet, não metodologia:
+# por isso mora aqui, nomeada.
+TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA: float = 0.01
+
+
+def _grades_de_sensibilidade(resultados: dict) -> list[tuple[str, list, list]]:
+    """`(onde, eixos, valores)` de cada grade de `resultados.sensibilidades`, as 1D e depois
+    as 2D, na ordem publicada. `eixos` é `[(premissa, pontos)]` — um eixo na 1D, dois na 2D
+    (x e depois y) —, e `valores`, o preço por ação de cada célula. Leitura do contrato de
+    `sensibilidades.py`, nunca conta."""
+    sensibilidades = _objeto(resultados.get("sensibilidades"))
+    grades: list[tuple[str, list, list]] = []
+    for indice, grade in enumerate(_lista(sensibilidades.get("grades_1d"))):
+        grade = _objeto(grade)
+        pontos = [_objeto(ponto) for ponto in _lista(grade.get("pontos"))]
+        grades.append((f"resultados.sensibilidades.grades_1d.{indice}",
+                       [(grade.get("premissa"), [ponto.get("x") for ponto in pontos])],
+                       [ponto.get("valor") for ponto in pontos]))
+    for indice, grade in enumerate(_lista(sensibilidades.get("grades_2d"))):
+        grade = _objeto(grade)
+        celulas = [_objeto(celula) for linha in _lista(grade.get("celulas")) for celula in _lista(linha)]
+        grades.append((f"resultados.sensibilidades.grades_2d.{indice}",
+                       [(grade.get("premissa_x"), _lista(grade.get("pontos_x"))),
+                        (grade.get("premissa_y"), _lista(grade.get("pontos_y")))],
+                       [celula.get("valor") for celula in celulas]))
+    return grades
+
+
+def _centrado(pontos: list, premissa) -> bool:
+    """D11, leitura (a) do achado 9: a lista de pontos do eixo tem comprimento ímpar, e o
+    ponto do meio é a premissa do cenário. Igualdade exata — os dois números saem do mesmo
+    caso, a regra com que `render._base_da_grade` marca a célula-base."""
+    if len(pontos) % 2 == 0 or not _numero_declarado(premissa):
+        return False
+    meio = pontos[len(pontos) // 2]
+    return _numero_declarado(meio) and meio == premissa
+
+
+def _achados_das_grades(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """As duas regras sobre as grades de sensibilidade, grade a grade:
+
+    - REQUIRED DISCLOSURE `premissa_central_fora_do_ponto_central_da_grade` (§11; D11): a
+      grade está centrada quando perturba o cenário da manchete (`caso.sensibilidades.
+      cenario == resultados.manchete.cenario`) e, em todo eixo, está centrada na premissa
+      desse cenário (`_centrado`). Senão, um aviso, com o cenário da grade, o da manchete e
+      os eixos fora do centro, pelos rótulos do catálogo.
+    - QUALITY WARNING `sensibilidade_pouco_informativa` (§11): toda célula dentro de
+      `TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA` do preço publicado do cenário que a
+      grade perturba (`resultados.cenarios.<cenário>.valor.preco_acao`)."""
+    resultados = _objeto(entrega.get("resultados"))
+    grades = _grades_de_sensibilidade(resultados)
+    if not grades:
+        return []
+    caso = _objeto(entrega.get("caso"))
+    cenario_da_grade = _objeto(caso.get("sensibilidades")).get("cenario")
+    cenario_da_manchete = _objeto(resultados.get("manchete")).get("cenario")
+    nome = cenario_da_grade if isinstance(cenario_da_grade, str) else None
+    premissas = _objeto(_objeto(_objeto(caso.get("cenarios")).get(nome)).get("premissas"))
+    preco = _objeto(_objeto(_objeto(resultados.get("cenarios")).get(nome)).get("valor")).get("preco_acao")
+    premissas_da_rota = _premissas_da_rota(resultados, catalogo)
+
+    achados: list[Achado] = []
+    for onde, eixos, valores in grades:
+        rotulos = [_rotulo_da_premissa(premissas_da_rota, premissa, idioma) for premissa, _pontos in eixos]
+        grade = " × ".join(rotulos)
+        fora_do_centro = [rotulo for (premissa, pontos), rotulo in zip(eixos, rotulos)
+                          if not _centrado(pontos, premissas.get(premissa) if isinstance(premissa, str) else None)]
+        if cenario_da_grade != cenario_da_manchete or fora_do_centro:
+            achados.append(Achado("REQUIRED_DISCLOSURE", "premissa_central_fora_do_ponto_central_da_grade", onde, {
+                "grade": grade, "cenario_da_grade": str(cenario_da_grade),
+                "cenario_manchete": str(cenario_da_manchete), "eixos": ", ".join(fora_do_centro) or _SEM_VALOR,
+            }))
+        if valores and _numero_finito(preco) and all(
+                _numero_finito(valor) and math.isclose(valor, preco, rel_tol=TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA)
+                for valor in valores):
+            achados.append(Achado("QUALITY_WARNING", "sensibilidade_pouco_informativa", onde, {
+                "grade": grade, "cenario": str(cenario_da_grade),
+                "tolerancia_fmt": placeholders.formatar(TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA, "pct0", idioma),
+            }))
+    return achados
+
+
+def _achados_conservacao_de_capital(resultados: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """REQUIRED DISCLOSURE `conservacao_de_capital_nao_fecha` (§11: "conservação de capital
+    que não fecha"; D6): um aviso por cenário cuja `conservacao_capital.diagnosticos_chaves`
+    traz a chave que o catálogo nomeia (`disclosures.conservacao_de_capital.chave`) — o
+    molde de `_achados_divergencia_de_base`. O limiar (10%) é do motor; a integração
+    publica a chave por presença do alerta, também ao vivo no laboratório (§8.4), e esta
+    função não compara limiar nenhum. A mensagem imprime o `gap_%` publicado, o rótulo do
+    ano-base do capex e o texto do catálogo.
+
+    Um bloco `conservacao_capital` sem `diagnosticos_chaves` é HARD FAIL
+    `diagnostico_sem_chave`: `_pares_diagnosticos` só vê listas `diagnosticos`, que este
+    bloco não tem, e o disclosure não pode sumir calado (armadilha 1 da Task 4)."""
+    achados: list[Achado] = []
+    for nome, cenario in _objeto(resultados.get("cenarios")).items():
+        bloco = _objeto(cenario).get("conservacao_capital")
+        if bloco is None:
+            continue
+        onde = f"resultados.cenarios.{nome}.conservacao_capital"
+        chaves = _objeto(bloco).get("diagnosticos_chaves")
+        if not isinstance(chaves, list):
+            achados.append(Achado("HARD_FAIL", "diagnostico_sem_chave", f"{onde}.diagnosticos_chaves", {
+                "razao": "'diagnosticos_chaves' ausente (esperada ao lado de todo 'conservacao_capital')"}))
+            continue
+        declaracao = catalogo["disclosures"]["conservacao_de_capital"]
+        if declaracao["chave"] not in chaves:
+            continue
+        gap, ano_base = bloco.get("gap_%"), bloco.get("ano_base")
+        rotulo = _objeto(_objeto(_objeto(catalogo.get("anos_base_do_capex")).get(
+            ano_base if isinstance(ano_base, str) else None)).get("rotulo")).get(idioma)
+        achados.append(Achado("REQUIRED_DISCLOSURE", "conservacao_de_capital_nao_fecha", f"{onde}.gap_%", {
+            "cenario": nome,
+            "gap": round(gap, 1) if _numero_finito(gap) else None,
+            "gap_fmt": placeholders.formatar(gap, "pp1", idioma) if _numero_finito(gap) else _SEM_VALOR,
+            "ano_base": str(ano_base),
+            "ano_base_rotulo": rotulo if isinstance(rotulo, str) and rotulo.strip() else _SEM_VALOR,
+            "texto": declaracao["texto"][idioma],
+        }))
+    return achados
+
+
+def _achados_eixos_da_reversa(resultados: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """D4 (§9: o que está no preço, "custo de capital implícito sempre"; N9 da revisão da
+    5D): um alvo de mercado inalcançável é leitura do preço, não reversa ausente.
+
+    - REQUIRED DISCLOSURE `eixo_obrigatorio_da_reversa_sem_raiz`: eixo que o catálogo declara
+      `obrigatorio` (`eixos_de_reversa.<eixo>.obrigatorio`, travado contra
+      `caso.EIXO_OBRIGATORIO`) publicado sem `resolucao.resolveu` verdadeiro. Leva o rótulo
+      do eixo e o de `leitura.motivo`. A regra lê a flag, nunca o nome do eixo.
+    - HARD FAIL `eixos_de_reversa_desconhecidos`: com a reversa publicada, o catálogo não
+      declara na forma cada eixo publicado — `obrigatorio` booleano e rótulo no idioma. Sem a
+      declaração nenhum eixo seria obrigatório, e a regra falha fechada."""
+    reversa = resultados.get(BLOCO_DA_REVERSA)
+    if not isinstance(reversa, dict):
+        return []
+    eixos = _objeto(reversa.get("eixos"))
+    declarados = catalogo.get("eixos_de_reversa")
+
+    def _declarado(nome) -> bool:
+        info = _objeto(declarados.get(nome)) if isinstance(declarados, dict) and isinstance(nome, str) else {}
+        rotulo = _objeto(info.get("rotulo")).get(idioma)
+        return isinstance(info.get("obrigatorio"), bool) and isinstance(rotulo, str) and bool(rotulo.strip())
+
+    if not isinstance(declarados, dict) or not declarados or not all(_declarado(nome) for nome in eixos):
+        return [Achado("HARD_FAIL", "eixos_de_reversa_desconhecidos", f"resultados.{BLOCO_DA_REVERSA}.eixos", {
+            "eixos": ", ".join(str(nome) for nome in eixos) or _SEM_VALOR, "idioma": idioma})]
+
+    motivos = _objeto(catalogo.get("motivos_da_leitura"))
+    achados: list[Achado] = []
+    for nome, eixo in eixos.items():
+        if not declarados[nome]["obrigatorio"] or _objeto(_objeto(eixo).get("resolucao")).get("resolveu") is True:
+            continue
+        motivo = _objeto(_objeto(eixo).get("leitura")).get("motivo")
+        rotulo_do_motivo = _objeto(_objeto(motivos.get(motivo if isinstance(motivo, str) else None)).get(
+            "rotulo")).get(idioma)
+        achados.append(Achado("REQUIRED_DISCLOSURE", "eixo_obrigatorio_da_reversa_sem_raiz",
+                              f"resultados.{BLOCO_DA_REVERSA}.eixos.{nome}.resolucao.resolveu", {
+                                  "eixo": nome, "rotulo": declarados[nome]["rotulo"][idioma], "motivo": str(motivo),
+                                  "motivo_rotulo": (rotulo_do_motivo if isinstance(rotulo_do_motivo, str)
+                                                    and rotulo_do_motivo.strip() else _SEM_VALOR),
+                              }))
+    return achados
+
+
+def _achados_da_valuation(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """As regras da Task 4 que leem os blocos da aba Valuation, na ordem da aba: a
+    conservação de capital (cenários), as grades de sensibilidade e o que está no preço."""
+    resultados = _objeto(entrega.get("resultados"))
+    return (_achados_conservacao_de_capital(resultados, catalogo, idioma)
+            + _achados_das_grades(entrega, catalogo, idioma)
+            + _achados_eixos_da_reversa(resultados, catalogo, idioma))
+
+
 def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | None = None) -> list[Achado]:
     """Roda as regras de QC; devolve os achados em ordem determinística
     (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
@@ -1443,9 +1733,8 @@ def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | No
     achados.extend(_achados_unidade_desconhecida(resultados, catalogo))
     achados.extend(_achados_divergencia_de_base(resultados, catalogo, idioma))
 
-    achado_bases = _achado_bases_divergentes(resultados)
-    if achado_bases is not None:
-        achados.append(achado_bases)
+    achados.extend(_achados_bases_divergentes(resultados))
+    achados.extend(_achados_da_valuation(entrega, catalogo, idioma))
 
     achados.extend(_achados_da_tese(entrega, catalogo, idioma))
     achados.extend(_achados_do_ledger(entrega, catalogo, contrato, idioma))

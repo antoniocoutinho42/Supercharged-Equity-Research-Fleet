@@ -53,6 +53,18 @@ def codigos_de(qc_json: dict) -> set:
     return {a["codigo"] for a in qc_json["achados"]}
 
 
+# Fatia 5F, Task 4 (D11): a grade 2D de `caso_reversa_firm` tem o ROIC em quatro pontos em torno de 12 — um
+# eixo de comprimento par não tem ponto central —, e toda entrega sobre essa fixture emite com o aviso da
+# §11 ("premissa central fora do ponto central da grade"). Nomeado aqui, nunca filtrado.
+ACHADOS_DE_CASO_REVERSA_FIRM = [
+    ("REQUIRED_DISCLOSURE", "premissa_central_fora_do_ponto_central_da_grade", "resultados.sensibilidades.grades_2d.0"),
+]
+
+
+def achados_nomeados(qc_json: dict) -> list:
+    return [(a["nivel"], a["codigo"], a["onde"]) for a in qc_json["achados"]]
+
+
 # --------------------------------------------------------------------------
 # Formatação pt-BR (placeholders.formatar) — unidade, sem CLI.
 # --------------------------------------------------------------------------
@@ -122,7 +134,7 @@ def test_emite_para_entrega_valida(tmp_path):
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert (raiz / "relatorio.html").exists()
     qc_json = ler_qc(raiz)
-    assert qc_json["achados"] == []
+    assert achados_nomeados(qc_json) == ACHADOS_DE_CASO_REVERSA_FIRM
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     assert "R$ 61,91" in html
 
@@ -137,7 +149,7 @@ def test_livre_com_digito_nao_dispara_numero_sem_provenencia(tmp_path):
     resultado = rodar_builder(raiz)
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
-    assert ler_qc(raiz)["achados"] == []
+    assert achados_nomeados(ler_qc(raiz)) == ACHADOS_DE_CASO_REVERSA_FIRM
 
 
 def test_saida_e_deterministica(tmp_path):
@@ -266,7 +278,7 @@ def test_placeholder_quebrado_por_quebra_de_linha_agora_resolve(tmp_path):
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     qc_json = ler_qc(raiz)
-    assert qc_json["achados"] == []
+    assert achados_nomeados(qc_json) == ACHADOS_DE_CASO_REVERSA_FIRM
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     # B6 (achado F10): o invariante é sobre a PROSA que o relatório
     # escreveu, não sobre a página -- ver `apoio.prosa_da_pagina`.
@@ -312,7 +324,7 @@ def test_alias_legado_de_tv_emite_com_rotulo_canonico(tmp_path):
     resultado = rodar_builder(raiz)
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
-    assert ler_qc(raiz)["achados"] == []
+    assert achados_nomeados(ler_qc(raiz)) == ACHADOS_DE_CASO_REVERSA_FIRM
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     assert CATALOGO["convencoes_terminais"]["gordon"]["pt-BR"] in html
     # Escopo, não lista de exclusão (B6): o alias não pode aparecer na PROSA
@@ -401,6 +413,9 @@ def test_ticker_da_execucao_igual_ao_caso_emite(tmp_path):
 def test_resultados_de_outro_caso_falha(tmp_path):
     entrega_dict = apoio.montar_entrega("caso_reversa_firm.json")
     entrega_dict["resultados"] = apoio.resultados_de("caso_minimo_firm.json")
+    # Fatia 5F, Task 4 (D12): os resultados trocados não têm reversa, e o julgamento do que está no preço
+    # que a Tese padrão declara seria recusa de forma (código 1) antes do QC — este teste exerce o hash.
+    del entrega_dict["analise"]["o_que_esta_no_preco"]
     raiz = tmp_path / "resultados_trocados"
     apoio.escrever_raiz(raiz, entrega_dict)
 
@@ -555,7 +570,7 @@ def test_formato_pp_em_premissa_pp_emite(tmp_path):
     resultado = rodar_builder(raiz)
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
-    assert ler_qc(raiz)["achados"] == []
+    assert achados_nomeados(ler_qc(raiz)) == ACHADOS_DE_CASO_REVERSA_FIRM
     wacc = entrega_dict["caso"]["cenarios"]["base"]["premissas"]["wacc"]
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     assert f"WACC de {placeholders.formatar(wacc, 'pp1', 'pt-BR')} no cenário-base." in html
@@ -954,7 +969,7 @@ def test_exemplo_de_entrega_do_skill_md_emite(tmp_path):
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
     assert (raiz / "relatorio.html").exists()
-    assert ler_qc(raiz)["achados"] == []
+    assert achados_nomeados(ler_qc(raiz)) == ACHADOS_DE_CASO_REVERSA_FIRM
 
 
 def test_exemplo_da_gramatica_de_exhibits_do_skill_md_emite(tmp_path):
@@ -972,7 +987,7 @@ def test_exemplo_da_gramatica_de_exhibits_do_skill_md_emite(tmp_path):
     resultado = rodar_builder(raiz)
 
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
-    assert ler_qc(raiz)["achados"] == []
+    assert achados_nomeados(ler_qc(raiz)) == ACHADOS_DE_CASO_REVERSA_FIRM
     html = (raiz / "relatorio.html").read_text(encoding="utf-8")
     assert fragmento["analise"]["exhibits"][0]["pergunta"] in html
 

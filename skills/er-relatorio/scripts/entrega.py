@@ -31,10 +31,15 @@ fechado de `tema`/`vetor`/`incorporacao`, exhibit citado que existe,
 `difflib`. O que depende do catálogo ou dos números de `resultados` (o
 vocabulário de vínculo, D2; a ordem da faixa; a cobertura das perguntas, §7;
 preço-alvo sob fronteira de escopo; a reversa) é achado de QC (`qc.py`, D6),
-código 2. A única leitura de `resultados` que a forma exige é
+código 2. A forma lê duas coisas de `resultados`. A primeira é
 `resultados.fronteira_de_escopo`: fora da fronteira, `analise.faixa` é
 obrigatória; sob ela, declarar a faixa não é recusa de forma — é o HARD FAIL
-`fronteira_com_preco_alvo`.
+`fronteira_com_preco_alvo`. A segunda, desde a 5F (D12), é a presença de
+`resultados.reversa`: o julgamento do que está no preço
+(`analise.o_que_esta_no_preco`) é opcional, e declará-lo sem a reversa que ele
+lê é recusa de forma. Da premissa decisiva de uma parte de SOTP
+(`premissas_decisivas[].parte`, D13) a forma confere só o texto; se a parte
+existe e declara a premissa é QC.
 
 O ledger (5E, D1) tem a forma do contrato `ledger/1` do `er-evidencia`, que
 `builder.py` lê e entrega a `carregar`: as chaves de cada nível e os
@@ -134,16 +139,27 @@ MAXIMO_DE_LINHAS_DO_QUE_MUDOU: int = 3
 CHAVES_DE_ANALISE: frozenset = frozenset({
     "conclusao", "exhibits", "faixa", "veredicto", "consenso", "premissas_decisivas", "positives",
     "negatives", "perguntas", "riscos", "visao_nao_consensual", "mudou_desde_analise_fornecida",
+    "o_que_esta_no_preco",
 })
-# `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as duas
-# últimas são opcionais.
+# `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as outras
+# três são opcionais — `o_que_esta_no_preco` (5F, D12) só cabe com a reversa.
 CHAVES_DE_ANALISE_OBRIGATORIAS: frozenset = CHAVES_DE_ANALISE - {
-    "faixa", "visao_nao_consensual", "mudou_desde_analise_fornecida",
+    "faixa", "visao_nao_consensual", "mudou_desde_analise_fornecida", "o_que_esta_no_preco",
 }
 CHAVES_DE_CONCLUSAO: frozenset = frozenset({"texto"})
 CHAVES_DE_FAIXA: frozenset = frozenset(PAPEIS_DA_FAIXA)
 CHAVES_DE_VEREDICTO: frozenset = frozenset({"texto"})
-CHAVES_DE_PREMISSA_DECISIVA: frozenset = frozenset({"chave", "derivacao"})
+# 5F, D13: `parte`, opcional, endereça a premissa decisiva a uma parte de SOTP pelo
+# nome que `resultados.sotp.partes[*].nome` publica.
+CHAVES_DE_PREMISSA_DECISIVA: frozenset = frozenset({"chave", "derivacao", "parte"})
+CHAVES_DE_PREMISSA_DECISIVA_OBRIGATORIAS: frozenset = CHAVES_DE_PREMISSA_DECISIVA - {"parte"}
+# 5F, D12 (§9; vendor §5b, item 5): o julgamento comparativo do analista — qual
+# reconciliação exige a menor violência às âncoras observáveis — e o observável que
+# o testaria.
+CHAVES_DO_QUE_ESTA_NO_PRECO: frozenset = frozenset({"julgamento", "observavel"})
+# O bloco de `resultados` que esse julgamento lê: nome do contrato `resultados/1`, o
+# mesmo que o QC confere em `analise_sem_reversa` (`qc.BLOCO_DA_REVERSA`).
+BLOCO_DA_REVERSA: str = "reversa"
 CHAVES_DE_POSITIVE_OU_NEGATIVE: frozenset = frozenset({
     "afirmacao", "vetor", "mecanismo", "observavel", "incorporacao", "razao",
 })
@@ -590,9 +606,10 @@ def _validar_pergunta(valor: Any, onde: str, ids_de_exhibit: list[str]) -> None:
 
 
 def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger) -> None:
-    """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4): vocabulário fechado em todo nível.
-    `resultados` só é lido para a condicional da faixa (D1/D3); o contrato do ledger,
-    para a âncora do consenso ausente."""
+    """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4 + 5F/D12-D13): vocabulário fechado em todo
+    nível. `resultados` só é lido para a condicional da faixa (D1/D3) e para a presença da
+    reversa que o julgamento do que está no preço lê (D12); o contrato do ledger, para a
+    âncora do consenso ausente."""
     analise = _objeto_fechado(analise, CHAVES_DE_ANALISE, CHAVES_DE_ANALISE_OBRIGATORIAS, "analise")
 
     # D1/D3: uma faixa de preços é preço-alvo. Fora da fronteira de escopo ela é
@@ -629,9 +646,11 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger)
 
     for indice, premissa in enumerate(_exigir_lista(analise["premissas_decisivas"], "analise.premissas_decisivas")):
         onde = f"analise.premissas_decisivas.{indice}"
-        premissa = _objeto_fechado(premissa, CHAVES_DE_PREMISSA_DECISIVA, CHAVES_DE_PREMISSA_DECISIVA, onde)
+        premissa = _objeto_fechado(premissa, CHAVES_DE_PREMISSA_DECISIVA, CHAVES_DE_PREMISSA_DECISIVA_OBRIGATORIAS, onde)
         _exigir_texto_nao_vazio(premissa["chave"], f"{onde}.chave")
         _exigir_texto_nao_vazio(premissa["derivacao"], f"{onde}.derivacao")
+        if "parte" in premissa:
+            _exigir_texto_nao_vazio(premissa["parte"], f"{onde}.parte")
 
     for lado in ("positives", "negatives"):
         for indice, item in enumerate(_exigir_lista(analise[lado], f"analise.{lado}")):
@@ -667,6 +686,20 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger)
                 f"'{onde}.linhas' tem {len(linhas)} linhas: no máximo {MAXIMO_DE_LINHAS_DO_QUE_MUDOU} "
                 "(§9 do desenho — só o que é material)."
             )
+
+    # 5F, D12: opcional; declarado, lê a reversa — sem ela o julgamento não tem o que ler.
+    if "o_que_esta_no_preco" in analise:
+        onde = "analise.o_que_esta_no_preco"
+        if resultados.get(BLOCO_DA_REVERSA) is None:
+            raise EntregaInvalida(
+                f"'{onde}' declarado sem 'resultados.{BLOCO_DA_REVERSA}': o julgamento do que está no preço "
+                "lê a reversa, e esta entrega não a publica — retire o bloco, ou rode o valuation com a "
+                "reversa no caso."
+            )
+        bloco = _objeto_fechado(analise["o_que_esta_no_preco"], CHAVES_DO_QUE_ESTA_NO_PRECO,
+                                CHAVES_DO_QUE_ESTA_NO_PRECO, onde)
+        for campo in sorted(CHAVES_DO_QUE_ESTA_NO_PRECO):
+            _exigir_texto_nao_vazio(bloco[campo], f"{onde}.{campo}")
 
 
 def _validar(entrega: Any, contrato: ContratoDoLedger) -> None:
