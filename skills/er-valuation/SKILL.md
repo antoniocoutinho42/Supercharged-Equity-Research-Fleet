@@ -243,6 +243,29 @@ que o exerça; nenhum caminho com duas unidades; o mapa não cobre `mercado_tela
 nem o que o caso declara; e toda célula de grade é coberta pela família da
 unidade que a grade publica.
 
+**Insumos do caso (`insumos_do_caso`).** Quais números do **caso** exigem
+proveniência — o "número material do valuation" da §11 do desenho — também é
+declaração desta camada, nunca do relatório: uma lista de padrões de caminho do
+caso, com a gramática de `conclusoes_de_valor` (`*` casa exatamente um segmento;
+o índice de lista é segmento). Insumo é o número que o motor ou o gate consome
+para produzir ou balizar um número publicado: preço, métrica-base, ações e ponte;
+toda premissa numérica de cenário, de parte de SOTP e do vetor `blended` da
+materialidade; o topo do SOTP (custos corporativos, participações não
+consolidadas e o desconto de holding, quando declarado); os números do degrau; e,
+de `mercado`, `rf`, `erp` e a banda de beta observado, que alimentam a âncora
+macro do gp e o beta implícito da reversa. Fica fora a configuração de execução
+— os pontos declarados das grades de sensibilidade e o teto de células
+(`limite_de_celulas`) —, e texto nunca é insumo. Todo insumo mapeado é material:
+um limiar seria o relatório estimando impacto no valuation. O mapa é para o QC
+do relatório: de cada folha numérica do caso que ele cobre, o QC exige o registro
+do ledger que a sustenta (`ledger/1`, o contrato do `er-evidencia`, em
+`skills/er-evidencia/assets/contrato_ledger.json`). As travas de
+`tests/test_catalogo_apresentacao.py`, sobre as fixtures: toda folha numérica do
+caso é insumo pelo mapa ou tem ali a razão declarada para não ser (um número novo
+no caso reprova); nenhum padrão sem folha que o exerça; nenhum caminho casado por
+dois padrões; e toda premissa `entrada: numero` presente nas fixtures cai no
+mapa.
+
 ## Escopo desta fatia
 
 Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`

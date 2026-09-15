@@ -123,7 +123,7 @@ def test_chaves_de_topo_do_catalogo():
     assert set(CAT.keys()) == {
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
-        "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor",
+        "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
     }
 
 
@@ -361,6 +361,141 @@ def test_celula_de_grade_e_coberta_pela_familia_da_unidade_que_a_grade_publica()
                 nome, ".".join(caminho), grade["unidade"], _familias_que_cobrem(caminho))
             vistas[caminho[1]] += 1
     assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5E, Task 1 (D2 do plano docs/superpowers/plans/2026-09-14-v4-item5e-
+# evidencia.md). Quais números do CASO exigem proveniência — o "número material
+# do valuation" da §11, que a §18.5 quer com proveniência, reconciliação e
+# justificativa da fonte — é saber da integração, nunca do relatório. O catálogo
+# publica `insumos_do_caso`, uma lista de padrões de caminho do caso com a
+# gramática de `conclusoes_de_valor` (`*` casa exatamente um segmento; o índice de
+# lista é segmento). Todo insumo mapeado é material: um limiar de materialidade
+# seria o relatório estimando impacto no valuation. O QC do relatório (Task 2) lê
+# o mapa sobre as folhas numéricas do caso e exige, de cada uma, o registro do
+# ledger que a sustenta. As travas abaixo varrem o CASO, não o `resultados`, e
+# amarram o mapa às fixtures: toda folha numérica é insumo pelo mapa ou tem, aqui,
+# a razão declarada para não ser (um número novo no caso reprova AQUI até alguém
+# decidir se ele exige proveniência); nenhum padrão sem folha que o exerça; nenhum
+# caminho casado por dois padrões; e nenhuma premissa numérica fora do mapa.
+# --------------------------------------------------------------------------
+
+# O que o caso declara e NÃO é insumo do valuation, com a razão. Insumo é o número
+# que o motor ou o gate consome para produzir ou balizar um número publicado: fato
+# sobre a companhia ou o mercado, ou premissa do analista. Padrões exatos, `*` por
+# segmento — uma razão larga demais absolveria em silêncio um número novo que é
+# insumo.
+_NAO_SAO_INSUMOS: dict[str, tuple[str, ...]] = {
+    "configuração de execução — os pontos declarados de uma grade de sensibilidade dizem onde o motor é "
+    "chamado, não afirmam nada sobre a companhia nem sobre o mercado": (
+        "sensibilidades.grades_1d.*.pontos.*",
+        "sensibilidades.grades_2d.*.pontos_x.*",
+        "sensibilidades.grades_2d.*.pontos_y.*"),
+}
+
+
+def _insumos_que_cobrem(caminho: tuple) -> list[str]:
+    return [padrao for padrao in CAT["insumos_do_caso"] if _casa(tuple(padrao.split(".")), caminho)]
+
+
+def _vetores_de_premissas(no, caminho: tuple = (), rota=None):
+    """`(caminho, rota, premissas)` de todo vetor de premissas do caso — o de cada
+    cenário, o de cada parte de SOTP e o `blended` da materialidade —, com a rota que
+    o gate aplica a ele: a do objeto mais próximo que declara `rota` (a parte de SOTP
+    declara a sua; o cenário e o `blended` usam a do caso)."""
+    if isinstance(no, dict):
+        rota = no.get("rota", rota)
+        for chave, valor in no.items():
+            if chave == "premissas" and isinstance(valor, dict):
+                yield caminho + (chave,), rota, valor
+            else:
+                yield from _vetores_de_premissas(valor, caminho + (str(chave),), rota)
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            yield from _vetores_de_premissas(valor, caminho + (str(indice),), rota)
+
+
+def test_o_mapa_de_insumos_do_caso_declara_padroes_bem_formados_que_nunca_casam_o_mesmo_caminho():
+    """A forma do mapa, a gramática de `conclusoes_de_valor`: uma lista não vazia de
+    padrões textuais, cada segmento não vazio e sem espaço nas bordas, `*` casando
+    exatamente um segmento e nunca `**` — o casador do relatório compara segmento a
+    segmento, com o mesmo número de segmentos. E nenhum par de padrões casa o mesmo
+    caminho: cada folha é coberta por um padrão só, então tirar um padrão sempre
+    descobre as folhas dele, e nunca um vizinho as cobre calado."""
+    mapa = CAT["insumos_do_caso"]
+    assert isinstance(mapa, list) and mapa, mapa
+    declarados = []
+    for padrao in mapa:
+        assert isinstance(padrao, str), padrao
+        segmentos = tuple(padrao.split("."))
+        assert all(segmento and segmento.strip() == segmento and segmento != "**" for segmento in segmentos), padrao
+        declarados.append(segmentos)
+    assert len(set(declarados)) == len(declarados), "padrão repetido no mapa"
+    for a, b in itertools.combinations(declarados, 2):
+        casam_o_mesmo_caminho = len(a) == len(b) and all(x == y or "*" in (x, y) for x, y in zip(a, b))
+        assert not casam_o_mesmo_caminho, (".".join(a), ".".join(b))
+
+
+def test_toda_folha_numerica_do_caso_e_insumo_pelo_mapa_ou_tem_razao_para_nao_ser():
+    """A trava de D2, fixture a fixture: toda folha numérica do caso é insumo pelo mapa
+    (`catalogo.insumos_do_caso`) ou tem a razão declarada em `_NAO_SAO_INSUMOS` — nunca
+    as duas, nunca nenhuma. Um número novo no caso (um bloco novo, um campo novo do
+    degrau ou do SOTP) reprova aqui, nomeando a folha, até alguém decidir se ele exige
+    proveniência."""
+    sem_classificacao, nos_dois_lados, vistas = [], [], {"insumo": 0, "nao_insumo": 0}
+    for nome in CASOS:
+        caso, _resultados = _caso_e_resultados(nome)
+        for caminho, valor in _folhas_numericas(caso):
+            insumos = _insumos_que_cobrem(caminho)
+            razoes = [razao for razao, padroes in _NAO_SAO_INSUMOS.items()
+                      if any(_casa(tuple(padrao.split(".")), caminho) for padrao in padroes)]
+            vistas["insumo"] += bool(insumos)
+            vistas["nao_insumo"] += bool(razoes)
+            folha = f"{nome}: {'.'.join(caminho)} = {valor!r}"
+            if insumos and razoes:
+                nos_dois_lados.append(f"{folha} — mapa {insumos}; não é, por {razoes}")
+            elif not insumos and not razoes:
+                sem_classificacao.append(folha)
+    assert not sem_classificacao, (
+        "número do caso sem classificação — é insumo do valuation (catalogo.insumos_do_caso) "
+        "ou não é (declare a razão em _NAO_SAO_INSUMOS)?\n" + "\n".join(sem_classificacao))
+    assert not nos_dois_lados, "\n".join(nos_dois_lados)
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
+
+
+def test_todo_padrao_de_insumos_do_caso_e_exercido_por_alguma_fixture():
+    """Nenhum padrão ocioso: todo padrão do mapa casa alguma folha numérica do caso de
+    alguma fixture. Um padrão que nada exerce é declaração que nenhuma trava confere —
+    um caminho digitado errado passaria por insumo mapeado sem mapear nada."""
+    exercidos = set()
+    for nome in CASOS:
+        caso, _resultados = _caso_e_resultados(nome)
+        for caminho, _valor in _folhas_numericas(caso):
+            exercidos.update(_insumos_que_cobrem(caminho))
+    ociosos = [padrao for padrao in CAT["insumos_do_caso"] if padrao not in exercidos]
+    assert not ociosos, f"padrão de insumos_do_caso que nenhuma fixture exerce: {ociosos}"
+
+
+def test_toda_premissa_numerica_das_fixtures_e_insumo_pelo_mapa():
+    """Toda premissa `entrada: numero` do catálogo da rota, presente num vetor de
+    premissas de uma fixture — cenário, parte de SOTP ou `blended` —, cai no MAPA. Ter
+    razão declarada não basta: premissa numérica move o valuation, e nenhuma razão de
+    `_NAO_SAO_INSUMOS` a absolve. Uma premissa nova numa v10, ou um vetor novo de
+    premissas no caso, que o mapa não cubra reprova aqui."""
+    fora_do_mapa, rotas_vistas = [], set()
+    for nome in CASOS:
+        caso, _resultados = _caso_e_resultados(nome)
+        for caminho, rota, premissas in _vetores_de_premissas(caso):
+            for premissa, valor in premissas.items():
+                if CAT["premissas"][rota][premissa]["entrada"] != "numero":
+                    continue
+                rotas_vistas.add(rota)
+                if not _insumos_que_cobrem(caminho + (premissa,)):
+                    fora_do_mapa.append(f"{nome}: {'.'.join(caminho + (premissa,))} = {valor!r} (rota {rota})")
+    assert not fora_do_mapa, (
+        "premissa numérica fora de catalogo.insumos_do_caso — premissa move o valuation, e nenhuma razão "
+        "de _NAO_SAO_INSUMOS a absolve:\n" + "\n".join(fora_do_mapa))
+    assert rotas_vistas == set(CAT["premissas"]), f"trava vacuamente verde em alguma rota: {rotas_vistas}"
 
 
 def test_todo_motivo_de_recusa_tem_rotulo_em_todo_idioma():

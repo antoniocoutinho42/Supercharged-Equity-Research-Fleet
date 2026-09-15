@@ -998,5 +998,27 @@
       "sotp.partes.*.vp_fase1",
       "sotp.partes.*.valor_fase2_no_ano_T"
     ]
-  }
+  },
+  "insumos_do_caso": [
+    "preco.valor",
+    "metrica_base.valor",
+    "acoes_diluidas",
+    "ponte.*",
+    "cenarios.*.premissas.*",
+    "mercado.rf",
+    "mercado.erp",
+    "mercado.beta_observado.*",
+    "degrau.indice_atual.valor",
+    "degrau.piso_teorico",
+    "degrau.indice_alvo.valor",
+    "degrau.anos",
+    "degrau.vpa.valor",
+    "degrau.fx",
+    "degrau.m.*.valor",
+    "sotp.partes.*.metrica_base.valor",
+    "sotp.partes.*.premissas.*",
+    "sotp.topo.*",
+    "sotp.materialidade.blended.metrica_base.valor",
+    "sotp.materialidade.blended.premissas.*"
+  ]
 }
