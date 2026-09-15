@@ -27,7 +27,17 @@ normaliza saída.
   str}`) do wrapper, ao lado do payload do motor: o ponto único onde
   perguntar "este eixo resolveu?" sem ter que conhecer os quatro shapes
   possíveis (raiz, raiz vazia, CAP alcançável/fora da faixa, CAP
-  indefinido por spread não positivo).
+  indefinido por spread não positivo). Ao lado dos dois, a chave `leitura`
+  (`reversa.leitura_do_eixo`), a forma normalizada que o relatório lê para
+  mostrar o que está no preço sem aprender as saídas do motor: `premissa`,
+  `unidade` e `unidade_da_curvatura` (chaves de `catalogo.unidades`),
+  `motivo` (`reversa.MOTIVOS_DA_LEITURA`), `raizes` (`valor`,
+  `identificacao` de `reversa.IDENTIFICACOES`, `intervalo`, `curvatura` —
+  cada raiz pareada com a identificação pela ordem em que o motor as
+  devolve), `tangenciais`, `cap_anos` e, no eixo de custo de capital, `beta`
+  (`valor`, `posicao` de `reversa.POSICOES_NA_BANDA`, `distancia`, `banda`,
+  `unidade`). Com um eixo primário sem raiz, o teto do crescimento gratuito
+  roda e publica também `chave`, o múltiplo que carrega.
 - **Grades de sensibilidade** — constrói, célula a célula no motor, as
   grades 1D e 2D de preço por ação que o caso declarar. Cada célula é um
   subprocesso do motor — a soma de células declaradas (`grades_1d` +
@@ -192,7 +202,7 @@ convenção que já mora aqui):
 - `fronteira_de_escopo` — o bloco que o gate validou, ou `null`; sempre
   publicado (ver "Contrato do caso").
 - `limitacoes` — lista de chaves, sempre publicada e possivelmente vazia, das
-  limitações que o caso impõe à entrega. Hoje só a da reversa, que a Análise
+  limitações que o caso impõe à entrega. Primeiro a da reversa, que a Análise
   exige mas o gate recusa em combinações não implementadas:
   `reversa_na_rota_rampa` (rota `rampa`) e `reversa_com_degrau` (bloco
   `degrau`). Quem decide é `caso.reversa_indisponivel(caso)`, que consulta o
@@ -202,8 +212,14 @@ convenção que já mora aqui):
   recusa um bloco `reversa` válido — nas condições que as fixtures
   exercitam. Fora delas a falha é fechada: o gate recusa a reversa,
   `limitacoes` sai vazia e a Análise não emite (`analise_sem_reversa`). Por
-  isso toda limitação nova entra com uma fixture que a exercite (a trava já o
-  exige das registradas). O relatório lê a chave, o rótulo e a declaração
+  isso toda limitação nova entra com uma fixture, ou uma variante composta de
+  `tests/relatorio_apoio.py`, que a exercite (a trava já o exige das
+  registradas). Depois dela, as da leitura da reversa publicada
+  (`reversa.limitacoes_da_leitura`, registro `reversa.LIMITACOES_DA_LEITURA`):
+  hoje `iso_nao_calculada`, com o gatilho do teto — um eixo primário sem
+  raiz, quando o motor manda rodar o teto e a curva iso-valor e o Fleet só
+  roda o teto. As duas famílias nunca coexistem: uma limitação de reversa
+  implica caso sem reversa. O relatório lê a chave, o rótulo e a declaração
   `afeta` do catálogo; a regra fica aqui.
 
 Schema completo: `tests/test_valuation_contrato.py`, sobre as fixtures de
@@ -219,7 +235,12 @@ cada limitação — `limitacoes` —, o rótulo e o bloco de `resultados` que e
 suprime, `afeta`: é por essa declaração, nunca pelo nome da chave, que a QC do
 relatório sabe que uma limitação justifica a reversa ausente; a trava de
 `tests/test_catalogo_apresentacao.py` amarra as que declaram `"reversa"` ao
-registro que `caso.reversa_indisponivel` consulta)
+registro que `caso.reversa_indisponivel` consulta, e as que declaram `"iso"`
+a `reversa.LIMITACOES_DA_LEITURA`; e os vocabulários da leitura da reversa —
+`eixos_de_reversa`, com o rótulo e `obrigatorio` amarrado a
+`caso.EIXO_OBRIGATORIO`; `motivos_da_leitura`, `identificacoes` e
+`posicoes_na_banda`, as tuplas de `reversa.py`; e `teto_do_crescimento_gratuito`,
+com rótulo e texto)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

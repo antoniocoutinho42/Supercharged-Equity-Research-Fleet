@@ -46,13 +46,26 @@ igualado ao `g` do cenário — o caso-limite RiR_TV → 0, forma fechada do
 teto do crescimento gratuito (`teto_do_crescimento_gratuito`; chave
 `teto_do_crescimento_gratuito` no resultado de `reverter`, presente só
 quando o gatilho dispara).
+
+Fatia 5F, Task 1 (D2/D3 do plano `docs/superpowers/plans/2026-09-15-v4-item5f-
+valuation.md`): cada eixo ganha também a chave `leitura` (`leitura_do_eixo`), AO
+LADO do payload do motor e de `resolucao`, com a mesma disciplina — nenhuma chave do
+motor é removida, renomeada ou reformatada. É a forma normalizada que o relatório lê
+para mostrar "o que está no preço" sem aprender as quatro saídas do `rev`: códigos
+(`MOTIVOS_DA_LEITURA`, `IDENTIFICACOES`, `POSICOES_NA_BANDA`) que o catálogo rotula,
+números com a unidade declarada (uma chave de `catalogo.unidades`) e raiz e
+identificação pareadas pela ordem em que o motor as devolve. O teto ganha `chave` (o
+múltiplo que publica), e o gatilho dele é também o da limitação `iso_nao_calculada`
+(`LIMITACOES_DA_LEITURA`): a curva iso-valor, que o motor manda rodar junto do teto,
+não é calculada pelo Fleet — e isso sai publicado em `resultados.limitacoes`, nunca
+omitido.
 """
 
-from typing import Any
+from typing import Any, Callable
 
 import diagnosticos
 from caso import EIXOS_DE_REVERSA
-from motor import _campo_do_multiplo, _exigir_valor, rodar
+from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 
 Caso = dict[str, Any]
 
@@ -110,6 +123,58 @@ RENTABILIDADE_TERMINAL_INFINITA: float = 1e6
 # `raizes_*` nem `sugestao`) e não entra nesta checagem — consultá-lo aqui
 # seria olhar uma chave que ele nunca tem.
 EIXOS_PRIMARIOS: frozenset = frozenset({"rentabilidade", "crescimento"})
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 1 (D2): os vocabulários da `leitura` de cada eixo. Tuplas DESTE
+# módulo, rotuladas pelo catálogo (`motivos_da_leitura`, `identificacoes`,
+# `posicoes_na_banda`) e travadas contra ele por igualdade de conjunto em
+# tests/test_catalogo_apresentacao.py — o relatório rotula o código e nunca lê a
+# prosa do motor nem as palavras de `beta_implicito`.
+# --------------------------------------------------------------------------
+
+# As saídas do `rev` que `_motivo_do_eixo` distingue: raiz ou não nos três eixos
+# percentuais, e as quatro do eixo 'cap'.
+MOTIVOS_DA_LEITURA: tuple[str, ...] = (
+    "raiz_na_faixa", "sem_raiz_na_faixa",
+    "cap_na_faixa", "cap_na_faixa_decrescente", "cap_fora_da_faixa", "cap_indefinido",
+)
+
+# As classes de `identificacao()` do motor: a largura relativa do intervalo
+# compatível com o alvo ± a tolerância abaixo de 5%, abaixo de 20%, ou acima.
+IDENTIFICACOES: tuple[str, ...] = ("forte", "moderada", "fraca")
+
+# Código da posição do beta implícito contra a banda -> as palavras que
+# `beta_implicito.posicao_na_banda` publica desde a fatia B (os testes da 3B as
+# leem, e elas ficam como estão). Uma tabela só, lida nos dois sentidos.
+_POSICAO_EM_PALAVRAS: dict[str, str] = {
+    "abaixo": "abaixo",
+    "acima": "acima",
+    "dentro": "dentro",
+    "sem_banda": "banda não declarada",
+    "sem_raiz": "sem raiz",
+}
+POSICOES_NA_BANDA: tuple[str, ...] = tuple(_POSICAO_EM_PALAVRAS)
+_POSICAO_POR_PALAVRAS: dict[str, str] = {palavras: codigo for codigo, palavras in _POSICAO_EM_PALAVRAS.items()}
+
+# O eixo 'cap' numérico: a `direcao` que o motor escreve decide se o número mede
+# vantagem competitiva (o valor cresce com n) ou os anos de destruição de valor
+# que o preço tolera (o valor decresce com n). Os dois literais do ramo `cap` do
+# `rev`, verbatim — conferidos contra o motor em tests/test_valuation_reversa.py.
+_MOTIVO_DO_CAP_POR_DIRECAO: dict[str, str] = {
+    "valor cresce com n (spread positivo)": "cap_na_faixa",
+    "valor DECRESCE com n — interpretação invertida: n maior destrói valor": "cap_na_faixa_decrescente",
+}
+
+# As unidades da leitura, chaves de `catalogo.unidades`: a raiz, o intervalo e o
+# toque tangencial em pontos percentuais (`raizes_*_%`, a unidade das premissas
+# que eles resolvem); o CAP em anos interpolados; a curvatura e o beta, números.
+_UNIDADE_DA_RAIZ = "pp"
+_UNIDADE_DO_CAP = "anos_fracionarios"
+_UNIDADE_DA_CURVATURA = "curvatura"
+_UNIDADE_DO_BETA = "beta"
+
+# `identificacao()` chaveia o intervalo pela tolerância (`intervalo_para_alvo_±1%`).
+_PREFIXO_DO_INTERVALO = "intervalo_para_alvo_±"
 
 
 def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
@@ -210,7 +275,7 @@ def _posicao_e_distancia(beta: float, banda: list | None) -> tuple[str, float | 
     mínimo < máximo; `None` quando o caso não declarou `beta_observado`.
     """
     if banda is None:
-        return "banda não declarada", None
+        return "sem_banda", None
     minimo, maximo = banda
     if beta < minimo:
         return "abaixo", minimo - beta
@@ -248,7 +313,7 @@ def _beta_implicito(saida_eixo: dict, variavel: str, mercado: dict) -> dict:
                 f"sem raiz para {variavel} — beta implícito não calculável "
                 "(ver 'sem_solucao'/'sugestao' neste mesmo eixo)"
             ),
-            "posicao_na_banda": "sem raiz",
+            "posicao_na_banda": _POSICAO_EM_PALAVRAS["sem_raiz"],
             "distancia": None,
         }
 
@@ -263,7 +328,7 @@ def _beta_implicito(saida_eixo: dict, variavel: str, mercado: dict) -> dict:
     resultado = {
         "valor": beta,
         "algebra": algebra,
-        "posicao_na_banda": posicao,
+        "posicao_na_banda": _POSICAO_EM_PALAVRAS[posicao],
         "distancia": distancia,
         "raiz_usada": raiz_usada,
     }
@@ -305,24 +370,25 @@ def _resolucao(nome_eixo: str, variavel: str, saida: dict) -> dict:
     não-vazia, portanto resolvida (mesma checagem `not raizes` que
     `_beta_implicito` já usa, para a mesma lista).
     """
-    if nome_eixo == "cap":
-        if "erro" in saida:
-            return {
-                "resolveu": False,
-                "motivo": "CAP implícito indefinido: spread do eixo não é positivo.",
-            }
-        if isinstance(saida.get("CAP_implicito_anos"), str):
-            return {
-                "resolveu": False,
-                "motivo": "CAP implícito fora da faixa de anos (1-60).",
-            }
+    # Fatia 5F, Task 1: a decisão é a de `_motivo_do_eixo`, o classificador único que
+    # a `leitura` também lê; as frases e o `resolveu` de cada saída não mudam.
+    motivo = _motivo_do_eixo(nome_eixo, variavel, saida)
+    if motivo == "cap_indefinido":
+        return {
+            "resolveu": False,
+            "motivo": "CAP implícito indefinido: spread do eixo não é positivo.",
+        }
+    if motivo == "cap_fora_da_faixa":
+        return {
+            "resolveu": False,
+            "motivo": "CAP implícito fora da faixa de anos (1-60).",
+        }
+    if motivo in ("cap_na_faixa", "cap_na_faixa_decrescente"):
         return {
             "resolveu": True,
             "motivo": "CAP implícito dentro da faixa de anos (1-60).",
         }
-
-    raizes = saida.get(f"raizes_{variavel}_%")
-    if raizes:
+    if motivo == "raiz_na_faixa":
         return {
             "resolveu": True,
             "motivo": f"raiz encontrada na faixa de busca de '{variavel}'.",
@@ -331,6 +397,155 @@ def _resolucao(nome_eixo: str, variavel: str, saida: dict) -> dict:
         "resolveu": False,
         "motivo": f"sem raiz na faixa de busca de '{variavel}'.",
     }
+
+
+def _motivo_do_eixo(nome_eixo: str, variavel: str, saida: dict) -> str:
+    """O código de `MOTIVOS_DA_LEITURA` para a saída do motor num eixo — o
+    classificador ÚNICO das saídas do `rev` (fatia 5F, Task 1): `_resolucao` e
+    `leitura_do_eixo` leem a mesma decisão, nunca duas cópias dela.
+
+    Eixo 'cap' (ramo `cap` do `rev`): `erro` (spread não positivo sob book) ->
+    `cap_indefinido`; `CAP_implicito_anos` texto (fora de 1-60, nas duas direções
+    da série) -> `cap_fora_da_faixa`; número -> `cap_na_faixa`, ou
+    `cap_na_faixa_decrescente` quando o motor declara que o valor decresce com n.
+    Uma `direcao` fora das duas que o motor escreve é `MotorFalhou` nomeado: a
+    leitura não chuta o que o número mede. Os três eixos percentuais:
+    `raizes_<variavel>_%` não vazia -> `raiz_na_faixa`; vazia ->
+    `sem_raiz_na_faixa` (lista vazia ou não, nunca o valor: `[0.0]` resolve). Um
+    eixo só com toque tangencial continua sem raiz; o toque sai em
+    `leitura.tangenciais`.
+    """
+    if nome_eixo == "cap":
+        if "erro" in saida:
+            return "cap_indefinido"
+        if isinstance(saida.get("CAP_implicito_anos"), str):
+            return "cap_fora_da_faixa"
+        direcao = saida.get("direcao")
+        if direcao not in _MOTIVO_DO_CAP_POR_DIRECAO:
+            raise MotorFalhou(
+                f"eixo 'cap' da reversa com 'direcao' fora das duas que o motor escreve: {direcao!r}. "
+                "Sem ela a leitura não sabe se o CAP implícito mede vantagem competitiva ou os anos de "
+                "destruição de valor que o preço tolera."
+            )
+        return _MOTIVO_DO_CAP_POR_DIRECAO[direcao]
+    return "raiz_na_faixa" if saida.get(f"raizes_{variavel}_%") else "sem_raiz_na_faixa"
+
+
+def _identificacao_da_raiz(identificacao: dict) -> dict:
+    """`identificacao`, `intervalo` e `curvatura` de uma raiz, lidos do dict que
+    `identificacao()` do motor devolveu para ela. Sem derivadas na vizinhança o
+    motor devolve só `{nota}`: os três saem `null`, nunca inventados. Uma classe
+    fora de `IDENTIFICACOES` é `MotorFalhou` nomeado — o catálogo não a rotula."""
+    if "identificacao" not in identificacao:
+        return {"identificacao": None, "intervalo": None, "curvatura": None}
+    classe = identificacao["identificacao"]
+    if classe not in IDENTIFICACOES:
+        raise MotorFalhou(
+            f"identificação de raiz fora do vocabulário da leitura da reversa: {classe!r}. "
+            f"Classes conhecidas: {', '.join(IDENTIFICACOES)}."
+        )
+    intervalo = next((valor for chave, valor in identificacao.items()
+                      if chave.startswith(_PREFIXO_DO_INTERVALO)), None)
+    return {
+        "identificacao": classe,
+        "intervalo": list(intervalo) if intervalo is not None else None,
+        "curvatura": identificacao.get("curvatura_d2M_dx2"),
+    }
+
+
+def leitura_do_eixo(nome_eixo: str, rota: str, saida: dict, banda: list | None = None) -> dict:
+    """A leitura normalizada de um eixo (fatia 5F, Task 1, D2), montada sobre o que
+    o motor devolveu para ele — mais `beta_implicito`, no eixo de custo de capital —
+    e publicada AO LADO desse payload, nunca no lugar dele.
+
+    Todo eixo: `{"premissa", "unidade", "unidade_da_curvatura", "motivo", "raizes",
+    "tangenciais", "cap_anos"}`. `unidade` vale para `raizes[].valor`,
+    `raizes[].intervalo`, `tangenciais` e `cap_anos`; `unidade_da_curvatura`, para
+    `raizes[].curvatura`. As duas são chaves de `catalogo.unidades`: o relatório
+    formata pela unidade declarada, nunca pelo nome do campo.
+
+    Eixos percentuais: `premissa` é a variável resolvida (`RESOLVER_POR_EIXO`); cada
+    raiz de `raizes_<variavel>_%` pareia com a identificação de mesma POSIÇÃO em
+    `identificacao_por_raiz` — os dois nascem da mesma lista de raízes, na mesma
+    ordem, e a chave do segundo é o número formatado, nunca reformatado aqui para
+    achar o par; comprimentos diferentes são `MotorFalhou`. `tangenciais` são os
+    `x_%` dos toques sem cruzamento. Eixo 'cap': `premissa` nula, `raizes` e
+    `tangenciais` vazias, `cap_anos` número só quando o CAP fecha na faixa. Eixo de
+    custo de capital: também `beta` — `{valor, posicao, distancia, banda, unidade}`,
+    lido de `beta_implicito` (a posição pelo código de `POSICOES_NA_BANDA`) e da
+    banda declarada em `mercado.beta_observado`, que o chamador passa em `banda`.
+    """
+    variavel = RESOLVER_POR_EIXO[nome_eixo][rota]
+    motivo = _motivo_do_eixo(nome_eixo, variavel, saida)
+    if nome_eixo == "cap":
+        return {
+            "premissa": None,
+            "unidade": _UNIDADE_DO_CAP,
+            "unidade_da_curvatura": _UNIDADE_DA_CURVATURA,
+            "motivo": motivo,
+            "raizes": [],
+            "tangenciais": [],
+            "cap_anos": (saida["CAP_implicito_anos"]
+                         if motivo in ("cap_na_faixa", "cap_na_faixa_decrescente") else None),
+        }
+
+    valores = saida.get(f"raizes_{variavel}_%") or []
+    identificacoes = list((saida.get("identificacao_por_raiz") or {}).values())
+    if len(identificacoes) != len(valores):
+        raise MotorFalhou(
+            f"eixo '{nome_eixo}' da reversa com {len(valores)} raiz(es) em 'raizes_{variavel}_%' e "
+            f"{len(identificacoes)} em 'identificacao_por_raiz': a leitura pareia raiz e identificação "
+            "pela posição, e sem o mesmo comprimento o par seria inventado."
+        )
+    leitura = {
+        "premissa": variavel,
+        "unidade": _UNIDADE_DA_RAIZ,
+        "unidade_da_curvatura": _UNIDADE_DA_CURVATURA,
+        "motivo": motivo,
+        "raizes": [{"valor": valor, **_identificacao_da_raiz(identificacao)}
+                   for valor, identificacao in zip(valores, identificacoes)],
+        "tangenciais": [toque["x_%"] for toque in saida.get(f"raizes_tangenciais_{variavel}_%") or []],
+        "cap_anos": None,
+    }
+    if nome_eixo == EIXO_DO_CUSTO_DE_CAPITAL:
+        beta = saida["beta_implicito"]
+        leitura["beta"] = {
+            "valor": beta["valor"],
+            "posicao": _POSICAO_POR_PALAVRAS[beta["posicao_na_banda"]],
+            "distancia": beta["distancia"],
+            "banda": list(banda) if banda is not None else None,
+            "unidade": _UNIDADE_DO_BETA,
+        }
+    return leitura
+
+
+def _algum_eixo_primario_sem_raiz(resultado_da_reversa: dict) -> bool:
+    """O gatilho do teto do crescimento gratuito — e da curva iso-valor, que o motor
+    manda rodar junto dele na `sugestao` de um eixo primário sem raiz: algum eixo de
+    `EIXOS_PRIMARIOS` declarado voltou com `sugestao`. Uma função só, lida por
+    `reverter` (o teto) e por `LIMITACOES_DA_LEITURA` (a iso) — uma segunda cópia da
+    condição poderia divergir (a lição do FIX 2 da 3B)."""
+    eixos = resultado_da_reversa["eixos"]
+    return any("sugestao" in eixos[nome_eixo] for nome_eixo in EIXOS_PRIMARIOS if nome_eixo in eixos)
+
+
+# Fatia 5F, Task 1 (D3): chave pública de cada limitação da LEITURA da reversa -> o
+# gatilho dela sobre o que `reverter` devolveu. As chaves são vocabulário de
+# `resultados.limitacoes`, rotuladas pelo catálogo com `afeta: "iso"` (igualdade de
+# conjunto travada em tests/test_catalogo_apresentacao.py). Ligar o `iso` do motor
+# pede decisões próprias (faixa de g, número de pontos, transição) e um painel novo;
+# até lá, a curva que falta sai declarada.
+LIMITACOES_DA_LEITURA: dict[str, Callable[[dict], bool]] = {
+    "iso_nao_calculada": _algum_eixo_primario_sem_raiz,
+}
+
+
+def limitacoes_da_leitura(resultado_da_reversa: dict) -> list[str]:
+    """As chaves de `LIMITACOES_DA_LEITURA` cujo gatilho vale para
+    `resultado_da_reversa` (o que `reverter` devolveu), na ordem do registro —
+    `avaliar.py` as publica em `resultados.limitacoes`, depois da limitação que
+    suprime a reversa."""
+    return [chave for chave, gatilho in LIMITACOES_DA_LEITURA.items() if gatilho(resultado_da_reversa)]
 
 
 def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
@@ -430,6 +645,9 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
 
     return {
         "multiplo": _exigir_valor(saida, campo_multiplo),
+        # Fatia 5F, Task 1 (D2): a chave do múltiplo, para o relatório rotulá-lo pelo
+        # catálogo sem aprender a tradução rota/métrica -> campo.
+        "chave": campo_multiplo,
         "premissas_alteradas": premissas_alteradas,
         "leitura": leitura,
         "diagnosticos": diagnosticos_lista,
@@ -466,6 +684,8 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     1+3) — ao lado do que o motor devolveu, nunca no lugar de nada: o
     ponto uniforme onde perguntar "este eixo produziu valor utilizável?"
     sem ter que conhecer os quatro shapes possíveis (ver `_resolucao`).
+    Desde a 5F, também `leitura` (`leitura_do_eixo`), a forma normalizada da
+    mesma saída, que o relatório lê para mostrar o que está no preço.
     No eixo de custo de capital, acrescenta também `beta_implicito` — as
     duas são passthrough puro do motor mais essas adições nomeadas, nunca
     uma reformatação do que o motor pôs. A terceira adição é de topo, não
@@ -517,17 +737,14 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
             saida["beta_implicito"] = _beta_implicito(saida, variavel, mercado)
 
         saida["resolucao"] = _resolucao(nome_eixo, variavel, saida)
+        # Fatia 5F, Task 1 (D2): a leitura normalizada, também ao lado.
+        saida["leitura"] = leitura_do_eixo(nome_eixo, rota, saida, mercado.get("beta_observado"))
 
         eixos[nome_eixo] = saida
 
     resultado: dict = {"alvo": alvo, "eixos": eixos}
 
-    algum_primario_sem_raiz = any(
-        "sugestao" in eixos[nome_eixo]
-        for nome_eixo in EIXOS_PRIMARIOS
-        if nome_eixo in eixos
-    )
-    if algum_primario_sem_raiz:
+    if _algum_eixo_primario_sem_raiz(resultado):
         resultado["teto_do_crescimento_gratuito"] = teto_do_crescimento_gratuito(
             caso, nome_cenario, nd_efetivo
         )

@@ -414,8 +414,167 @@ def test_payload_do_motor_permanece_integro_com_resolucao_ao_lado(cenario_de_tes
     for nome_eixo in ("custo_capital", "crescimento", "rentabilidade", "cap"):
         direto = _saida_direta_do_eixo(c, nome_eixo, 500.0)
         eixo = r["eixos"][nome_eixo]
-        extras = {"resolucao"} | ({"beta_implicito"} if nome_eixo == "custo_capital" else set())
-        assert "resolucao" in eixo, nome_eixo  # a adicao em si tem de estar la
+        extras = {"resolucao", "leitura"} | ({"beta_implicito"} if nome_eixo == "custo_capital" else set())
+        assert "resolucao" in eixo and "leitura" in eixo, nome_eixo  # as adicoes em si tem de estar la
         assert set(eixo) - extras == set(direto), nome_eixo
         for chave, valor in direto.items():
             assert eixo[chave] == valor, f"{nome_eixo}.{chave}"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 1 (D2/D3 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): a `leitura` de cada eixo diz o mesmo que o payload do motor ao
+# lado; o teto publica a chave do múltiplo; e a curva iso-valor que o motor manda
+# rodar junto do teto sai como limitação publicada, com o mesmo gatilho.
+# --------------------------------------------------------------------------
+
+import functools  # noqa: E402
+import json  # noqa: E402
+
+from avaliar import avaliar  # noqa: E402
+from motor import MotorFalhou  # noqa: E402
+from reversa import RESOLVER_POR_EIXO, _beta_implicito, leitura_do_eixo  # noqa: E402
+
+sys.path.insert(0, str(RAIZ / "tests"))
+from relatorio_apoio import carregar_fixture_ou_variante  # noqa: E402
+
+_EIXOS_PERCENTUAIS = ("custo_capital", "crescimento", "rentabilidade")
+_CRESCE = "valor cresce com n (spread positivo)"
+_DECRESCE = "valor DECRESCE com n — interpretação invertida: n maior destrói valor"
+
+
+@functools.lru_cache(maxsize=None)
+def _publicado_serializado(nome: str) -> str:
+    caso = carregar_fixture_ou_variante(nome)
+    return json.dumps({"caso": caso, "resultados": avaliar(caso)}, ensure_ascii=False)
+
+
+def _publicado(nome: str) -> tuple[dict, dict]:
+    par = json.loads(_publicado_serializado(nome))
+    return par["caso"], par["resultados"]
+
+
+@pytest.mark.parametrize("nome", ["caso_reversa_firm.json", "reversa_sem_raiz"])
+def test_a_leitura_de_cada_eixo_diz_o_que_o_payload_do_motor_ao_lado_diz(nome):
+    """Premissa, raiz e identificação contra o payload do motor: a raiz é a de
+    `raizes_<var>_%`, na ordem, e identificação, intervalo e curvatura são os que o
+    motor calculou para AQUELA raiz — a chave do motor é o número com três casas."""
+    caso, resultados = _publicado(nome)
+    raizes_conferidas = 0
+    for nome_eixo in _EIXOS_PERCENTUAIS:
+        eixo = resultados["reversa"]["eixos"][nome_eixo]
+        leitura = eixo["leitura"]
+        variavel = RESOLVER_POR_EIXO[nome_eixo][caso["rota"]]
+        assert (leitura["premissa"], leitura["unidade"]) == (variavel, "pp"), nome_eixo
+        assert [raiz["valor"] for raiz in leitura["raizes"]] == eixo[f"raizes_{variavel}_%"], nome_eixo
+        for raiz in leitura["raizes"]:
+            do_motor = eixo["identificacao_por_raiz"][f"{raiz['valor']:.3f}%"]
+            assert (raiz["identificacao"], raiz["intervalo"], raiz["curvatura"]) == (
+                do_motor["identificacao"], do_motor["intervalo_para_alvo_±1%"],
+                do_motor["curvatura_d2M_dx2"]), (nome_eixo, raiz)
+            raizes_conferidas += 1
+    cap = resultados["reversa"]["eixos"]["cap"]["leitura"]
+    assert (cap["premissa"], cap["unidade"], cap["raizes"]) == (None, "anos_fracionarios", [])
+    if nome == "caso_reversa_firm.json":
+        assert raizes_conferidas >= 3, "fixture sem raiz — a trava do par raiz x identificação ficou vácua"
+
+
+def test_reversa_sem_raiz_publica_os_eixos_sem_raiz_o_teto_com_a_chave_e_a_iso_como_limitacao():
+    """N9 e D3 sobre a sonda P7 da revisão da 5D: o alvo inalcançável é resultado
+    publicado, não omissão."""
+    _caso_da_variante, resultados = _publicado("reversa_sem_raiz")
+    eixos = resultados["reversa"]["eixos"]
+    for nome_eixo in _EIXOS_PERCENTUAIS:
+        leitura = eixos[nome_eixo]["leitura"]
+        assert (leitura["motivo"], leitura["raizes"]) == ("sem_raiz_na_faixa", []), nome_eixo
+    beta = eixos["custo_capital"]["leitura"]["beta"]
+    assert (beta["valor"], beta["posicao"], beta["distancia"]) == (None, "sem_raiz", None)
+    assert (eixos["cap"]["leitura"]["motivo"], eixos["cap"]["leitura"]["cap_anos"]) == (
+        "cap_na_faixa", eixos["cap"]["CAP_implicito_anos"])
+    teto = resultados["reversa"]["teto_do_crescimento_gratuito"]
+    assert teto["chave"] == resultados["manchete"]["multiplo"]["chave"] == "EV/EBITDA_curr"
+    assert "iso_nao_calculada" in resultados["limitacoes"]
+
+
+def test_caso_reversa_firm_nao_publica_teto_nem_iso_e_le_o_beta_contra_a_banda():
+    caso, resultados = _publicado("caso_reversa_firm.json")
+    eixos = resultados["reversa"]["eixos"]
+    assert "teto_do_crescimento_gratuito" not in resultados["reversa"]
+    assert "iso_nao_calculada" not in resultados["limitacoes"]
+    assert [eixos[nome]["leitura"]["motivo"] for nome in _EIXOS_PERCENTUAIS] == ["raiz_na_faixa"] * 3
+    beta_do_wrapper = eixos["custo_capital"]["beta_implicito"]
+    assert eixos["custo_capital"]["leitura"]["beta"] == {
+        "valor": beta_do_wrapper["valor"], "posicao": "abaixo", "distancia": beta_do_wrapper["distancia"],
+        "banda": caso["mercado"]["beta_observado"], "unidade": "beta"}
+    assert (eixos["cap"]["leitura"]["motivo"], eixos["cap"]["leitura"]["cap_anos"]) == (
+        "cap_na_faixa", eixos["cap"]["CAP_implicito_anos"])
+
+
+@pytest.mark.parametrize("banda,posicao,distancia", [
+    ([0.1, 0.4], "acima", pytest.approx(3.0 / 5.5 - 0.4)),
+    ([0.5, 0.6], "dentro", 0.0),
+    ([0.9, 1.3], "abaixo", pytest.approx(0.9 - 3.0 / 5.5)),
+    (None, "sem_banda", None),
+], ids=["acima", "dentro", "abaixo", "sem_banda"])
+def test_a_posicao_do_beta_sai_pelo_codigo_do_vocabulario(banda, posicao, distancia):
+    """As posições que nenhuma fixture alcança, sobre um payload no formato do motor:
+    raiz de WACC em 15% com rf 12 e erp 5,5 dá beta implícito (15 − 12) ÷ 5,5 ≈ 0,545."""
+    saida = {"raizes_wacc_%": [15.0], "identificacao_por_raiz": {"15.000%": {"nota": "derivadas indisponíveis"}}}
+    saida["beta_implicito"] = _beta_implicito(saida, "wacc", {"rf": 12.0, "erp": 5.5, "beta_observado": banda})
+    beta = leitura_do_eixo("custo_capital", "firm", saida, banda)["beta"]
+    assert (beta["posicao"], beta["distancia"], beta["banda"], beta["unidade"]) == (posicao, distancia, banda, "beta")
+
+
+@pytest.mark.parametrize("saida,motivo,cap_anos", [
+    ({"CAP_implicito_anos": 12.5, "direcao": _CRESCE}, "cap_na_faixa", 12.5),
+    ({"CAP_implicito_anos": 7.9, "direcao": _DECRESCE}, "cap_na_faixa_decrescente", 7.9),
+    ({"CAP_implicito_anos": ">60 — alvo incompatível com estas premissas sob esta convenção (máx em n=60: 12.14)",
+      "direcao": _CRESCE}, "cap_fora_da_faixa", None),
+    ({"CAP_implicito_anos": "não cruza em n≤60 (faixa 5.69–8.55)", "direcao": _DECRESCE}, "cap_fora_da_faixa", None),
+    ({"erro": "CAP implícito indefinido: spread = -4.0 p.p. ≤ 0.", "alvo_normalizado": 10.0}, "cap_indefinido", None),
+], ids=["crescente", "decrescente", "texto_crescente", "texto_decrescente", "erro"])
+def test_as_saidas_do_cap_viram_motivo_e_anos(saida, motivo, cap_anos):
+    leitura = leitura_do_eixo("cap", "firm", saida)
+    assert (leitura["motivo"], leitura["cap_anos"], leitura["premissa"], leitura["raizes"]) == (
+        motivo, cap_anos, None, [])
+
+
+def test_o_cap_decrescente_do_motor_de_verdade_e_lido_como_decrescente():
+    """O literal da direção decrescente conferido contra o motor, não contra uma cópia
+    dele: ROIC 8 abaixo do WACC 12 em convergência, com preço 40, faz o valor cair com n
+    e o CAP fechar em 7,9 anos de destruição de valor tolerados."""
+    c = _caso()
+    c["cenarios"]["base"]["premissas"].update({"roic": 8.0, "wacc": 12.0, "tv": "convergencia"})
+    c["preco"]["valor"] = 40.0
+    c["reversa"]["eixos"] = ["cap"]
+    cap = reverter(c, "base", 500.0)["eixos"]["cap"]
+    assert cap["direcao"] == _DECRESCE
+    assert (cap["leitura"]["motivo"], cap["leitura"]["cap_anos"]) == ("cap_na_faixa_decrescente", 7.9)
+    assert cap["resolucao"]["resolveu"] is True
+
+
+def test_identificacao_indisponivel_e_toque_tangencial_saem_sem_numero_inventado():
+    """`identificacao()` sem derivadas devolve só `{nota}`: identificação, intervalo e
+    curvatura saem nulos. Um eixo só com toque tangencial não tem raiz — o toque sai em
+    `tangenciais`."""
+    com_nota = leitura_do_eixo("crescimento", "firm", {
+        "raizes_g_%": [4.2],
+        "identificacao_por_raiz": {"4.200%": {"nota": "derivadas indisponíveis na vizinhança da raiz"}}})
+    assert com_nota["motivo"] == "raiz_na_faixa"
+    assert com_nota["raizes"] == [{"valor": 4.2, "identificacao": None, "intervalo": None, "curvatura": None}]
+
+    so_toque = leitura_do_eixo("rentabilidade", "equity", {
+        "raizes_roe_%": [],
+        "raizes_tangenciais_roe_%": [{"x_%": 18.4, "residuo": 1e-07, "nota": "toque sem cruzamento"}]})
+    assert (so_toque["premissa"], so_toque["motivo"], so_toque["raizes"], so_toque["tangenciais"]) == (
+        "roe", "sem_raiz_na_faixa", [], [18.4])
+
+
+@pytest.mark.parametrize("nome_eixo,saida", [
+    ("crescimento", {"raizes_g_%": [4.2, 6.1], "identificacao_por_raiz": {"4.200%": {"identificacao": "forte"}}}),
+    ("crescimento", {"raizes_g_%": [4.2], "identificacao_por_raiz": {"4.200%": {"identificacao": "nula"}}}),
+    ("cap", {"CAP_implicito_anos": 9.0, "direcao": "valor oscila com n"}),
+], ids=["raiz_sem_par", "identificacao_desconhecida", "direcao_desconhecida"])
+def test_a_leitura_recusa_nomeando_a_saida_que_nao_sabe_ler(nome_eixo, saida):
+    with pytest.raises(MotorFalhou):
+        leitura_do_eixo(nome_eixo, "firm", saida)

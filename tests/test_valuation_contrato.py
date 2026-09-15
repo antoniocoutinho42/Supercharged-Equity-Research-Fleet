@@ -23,6 +23,12 @@ from caso import (  # noqa: E402
     LIMITACOES_DE_REVERSA, TV_CANON, CasoInvalido, carregar, reversa_indisponivel, validar,
 )
 import diagnosticos  # noqa: E402
+from reversa import limitacoes_da_leitura  # noqa: E402
+
+# O construtor do bloco 'reversa' de teste e as variantes compostas (D14 da 5F) moram em
+# `tests/relatorio_apoio.py`: são os mesmos que compõem as entregas de teste do relatório.
+sys.path.insert(0, str(RAIZ / "tests"))
+from relatorio_apoio import VARIANTES_DO_CASO, carregar_fixture_ou_variante, com_bloco_de_reversa_valido  # noqa: E402
 
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
 MANIFEST = json.loads((RAIZ / "skills" / "er-multiplos-justos" / "manifest_vendor.json").read_text(encoding="utf-8"))
@@ -35,7 +41,9 @@ def _sha(obj):
 
 @pytest.fixture(scope="module")
 def resultados():
-    return {nome: (carregar(FIXTURES / nome), avaliar(carregar(FIXTURES / nome))) for nome in CASOS}
+    """As fixtures e, desde a 5F, as variantes compostas: `nome -> (caso, resultados)`."""
+    return {nome: (carregar_fixture_ou_variante(nome), avaliar(carregar_fixture_ou_variante(nome)))
+            for nome in CASOS + sorted(VARIANTES_DO_CASO)}
 
 
 def test_versao_e_origem_em_todo_resultado(resultados):
@@ -196,13 +204,21 @@ def test_cenario_base_de_tipo_errado_e_recusado():
 # --------------------------------------------------------------------------
 
 def test_fronteira_de_escopo_e_limitacoes_sao_sempre_publicadas(resultados):
-    """Campo de contrato ausente não some em silêncio: toda fixture publica os
-    dois. Nenhuma declara fronteira (`null`), e `limitacoes` é exatamente o que
-    `caso.reversa_indisponivel` devolve, numa lista — vazia quando `None`."""
+    """Campo de contrato ausente não some em silêncio: toda fixture (e variante)
+    publica os dois. Nenhuma declara fronteira (`null`), e `limitacoes` é exatamente
+    o que `caso.reversa_indisponivel` devolve, numa lista — vazia quando `None` —,
+    seguido, desde a 5F (D3), do que `reversa.limitacoes_da_leitura` devolve sobre a
+    reversa publicada. As duas famílias têm de aparecer, senão a igualdade seria
+    vacuamente verde de um dos lados."""
+    vistas = {"da_reversa": 0, "da_leitura": 0}
     for nome, (caso, r) in resultados.items():
         assert "fronteira_de_escopo" in r and r["fronteira_de_escopo"] is None, nome
         chave = reversa_indisponivel(caso)
-        assert r["limitacoes"] == ([] if chave is None else [chave]), nome
+        da_leitura = limitacoes_da_leitura(r["reversa"]) if "reversa" in r else []
+        assert r["limitacoes"] == ([] if chave is None else [chave]) + da_leitura, nome
+        vistas["da_reversa"] += chave is not None
+        vistas["da_leitura"] += bool(da_leitura)
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
 
 
 def test_fronteira_de_escopo_declarada_sai_publicada_como_o_gate_a_validou():
@@ -215,13 +231,6 @@ def test_fronteira_de_escopo_declarada_sai_publicada_como_o_gate_a_validou():
     caso["fronteira_de_escopo"] = copy.deepcopy(fronteira)
     validar(caso)
     assert avaliar(caso)["fronteira_de_escopo"] == fronteira
-
-
-# O construtor do bloco 'reversa' de teste mora em `tests/relatorio_apoio.py` desde
-# a fatia 5D, Task 2: é o mesmo que compõe, nas entregas de teste do relatório, a
-# reversa que a Análise exige (D4) — uma cópia aqui divergiria da de lá.
-sys.path.insert(0, str(RAIZ / "tests"))
-from relatorio_apoio import com_bloco_de_reversa_valido  # noqa: E402
 
 
 def test_limitacao_de_reversa_e_publicada_se_e_so_se_o_gate_recusa_reversa_valida(resultados):

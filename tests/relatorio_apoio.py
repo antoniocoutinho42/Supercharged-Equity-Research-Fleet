@@ -45,7 +45,7 @@ import qc  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
-from caso import CAMPOS_DE_MERCADO_OBRIGATORIOS, reversa_indisponivel  # noqa: E402
+from caso import CAMPOS_DE_MERCADO_OBRIGATORIOS, reversa_indisponivel, validar  # noqa: E402
 from caso import carregar as carregar_caso  # noqa: E402
 
 CATALOGO = json.loads(
@@ -125,6 +125,44 @@ def com_bloco_de_reversa_valido(caso: dict) -> dict:
             mercado[campo] = _MODELO_DE_REVERSA["mercado"][campo]
     c["mercado"] = mercado
     return c
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F (D14): variantes compostas, não fixture nova. Uma fixture nova entraria em
+# toda parametrização da suíte, e editar fixture é proibido; as travas do catálogo
+# (`tests/test_catalogo_apresentacao.py`) iteram as fixtures E estas variantes, para que
+# todo padrão novo seja exercido por algum caso real. Cada variante é (fixture-base,
+# composição): a composição recebe o caso carregado e devolve uma cópia composta.
+# --------------------------------------------------------------------------
+
+def _reversa_sem_raiz(caso: dict) -> dict:
+    """A sonda P7 da revisão da 5D (N9): `caso_minimo_firm` com a reversa composta e preço
+    0,5. Os três eixos percentuais saem sem raiz (o alvo fica abaixo do mínimo atingível),
+    o teto do crescimento gratuito roda e a curva iso-valor fica como limitação publicada;
+    o CAP ainda fecha."""
+    c = com_bloco_de_reversa_valido(caso)
+    c["preco"]["valor"] = 0.5
+    return c
+
+
+VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
+    "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
+}
+
+
+def caso_da_variante(nome: str) -> dict:
+    """O caso da variante `nome`: a fixture-base carregada (e validada), composta e validada de
+    novo — uma variante que o gate recusa não é caso."""
+    fixture, compor = VARIANTES_DO_CASO[nome]
+    caso = compor(carregar_caso(FIXTURES / fixture))
+    validar(caso)
+    return caso
+
+
+def carregar_fixture_ou_variante(nome: str) -> dict:
+    """O caso de uma fixture (`caso_*.json`, pelo nome do arquivo) ou de uma variante (pelo nome
+    em `VARIANTES_DO_CASO`) — o ponto único por onde as travas iteram as duas coisas."""
+    return caso_da_variante(nome) if nome in VARIANTES_DO_CASO else carregar_caso(FIXTURES / nome)
 
 
 IDIOMA_PADRAO = "pt-BR"

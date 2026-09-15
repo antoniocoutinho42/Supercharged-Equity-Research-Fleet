@@ -23,7 +23,14 @@ from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM, avaliar
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 from caso import CLASSES_DE_FRONTEIRA_DE_ESCOPO, LIMITACOES_DE_REVERSA, reversa_indisponivel  # noqa: E402
+from caso import EIXO_OBRIGATORIO, EIXOS_DE_REVERSA  # noqa: E402
 import diagnosticos  # noqa: E402
+import reversa  # noqa: E402
+
+# Fatia 5F (D14): as travas que varrem o que o wrapper publica iteram as fixtures E as
+# variantes compostas do apoio — um padrão novo que só uma variante exerce não fica ocioso.
+sys.path.insert(0, str(RAIZ / "tests"))
+from relatorio_apoio import VARIANTES_DO_CASO, carregar_fixture_ou_variante  # noqa: E402
 
 # A2 (onda de correção da revisão final): o conjunto canônico do MOTOR,
 # importado em processo — não por subprocesso — com bytecode desligado.
@@ -56,6 +63,7 @@ AVISOS_RAMPA = {"aviso_colheita", "aviso_delator", "aviso_gp"}
 # uma lista à mão.
 CHAVES_DO_DEGRAU = set(_CHAVES_DO_DEGRAU_ORDEM)
 CASOS = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
+CASOS_E_VARIANTES = CASOS + sorted(VARIANTES_DO_CASO)
 
 
 def test_versao_da_metodologia_bate_com_o_vendor():
@@ -107,15 +115,21 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
     fato emite pode faltar em `CAT["multiplos"]` (upgrade tripwire: o
     wrapper passando a emitir uma chave nova sem catálogo revisado reprova
     aqui)."""
-    vistas = set()
-    for nome in CASOS:
-        r = avaliar(carregar(FIXTURES / nome))
+    vistas, tetos = set(), 0
+    for nome in CASOS_E_VARIANTES:
+        _caso, r = _caso_e_resultados(nome)
         for cenario in r["cenarios"].values():
             vistas.update(cenario.get("multiplos", {}))
         if "multiplo" in r["manchete"]:
             vistas.add(r["manchete"]["multiplo"]["chave"])
         vistas.add(r["mercado_tela"]["chave"])
+        # Fatia 5F, Task 1 (D2): a chave do múltiplo que o teto do crescimento gratuito publica.
+        teto = (r.get("reversa") or {}).get("teto_do_crescimento_gratuito")
+        if teto is not None:
+            vistas.add(teto["chave"])
+            tetos += 1
     assert vistas, "nenhuma chave de múltiplo vista — fixtures vazias?"
+    assert tetos, "nenhum teto publicado nas fixtures e variantes — a chave do teto ficou sem trava"
     assert vistas <= set(CAT["multiplos"]), vistas - set(CAT["multiplos"])
 
 
@@ -124,6 +138,8 @@ def test_chaves_de_topo_do_catalogo():
         "versao_contrato", "metodologia", "idiomas", "blocos", "rotas", "convencoes_terminais",
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
+        "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
+        "teto_do_crescimento_gratuito",
     }
 
 
@@ -146,14 +162,18 @@ def test_fronteiras_de_escopo_do_catalogo_sao_exatamente_as_classes_do_gate():
     _rotulos_em_todo_idioma("fronteiras_de_escopo")
 
 
-def test_limitacoes_do_catalogo_sao_exatamente_as_que_reversa_indisponivel_pode_devolver():
-    """O registro que `reversa_indisponivel` consulta tem de ser exatamente o
-    catálogo, e toda chave que ela de fato devolve sobre as fixtures tem de
-    estar nele — uma chave devolvida por fora do registro também reprova."""
-    assert set(CAT["limitacoes"]) == set(LIMITACOES_DE_REVERSA)
-    devolvidas = {reversa_indisponivel(carregar(FIXTURES / nome)) for nome in CASOS} - {None}
-    assert devolvidas, "nenhuma fixture com limitação — trava vacuamente verde?"
-    assert devolvidas <= set(CAT["limitacoes"]), devolvidas - set(CAT["limitacoes"])
+def test_limitacoes_do_catalogo_sao_exatamente_as_dos_dois_registros_e_todas_sao_publicadas():
+    """O catálogo rotula exatamente os dois registros de limitação da integração — o que
+    `caso.reversa_indisponivel` consulta e, desde a 5F (N3), o da leitura da reversa
+    (`reversa.LIMITACOES_DA_LEITURA`) —, e toda chave dos dois sai publicada em
+    `resultados.limitacoes` de alguma fixture ou variante: uma limitação registrada que
+    nenhum caso exerce é declaração que nenhuma trava confere, e uma chave publicada por
+    fora dos registros também reprova."""
+    registradas = set(LIMITACOES_DE_REVERSA) | set(reversa.LIMITACOES_DA_LEITURA)
+    assert not set(LIMITACOES_DE_REVERSA) & set(reversa.LIMITACOES_DA_LEITURA)
+    assert set(CAT["limitacoes"]) == registradas, set(CAT["limitacoes"]) ^ registradas
+    publicadas = {chave for nome in CASOS_E_VARIANTES for chave in _caso_e_resultados(nome)[1]["limitacoes"]}
+    assert publicadas == registradas, publicadas ^ registradas
     _rotulos_em_todo_idioma("limitacoes")
 
 
@@ -170,6 +190,9 @@ def test_toda_limitacao_declara_o_bloco_que_suprime_e_as_da_reversa_sao_as_do_ga
         assert isinstance(info.get("afeta"), str) and info["afeta"].strip(), chave
     da_reversa = {chave for chave, info in CAT["limitacoes"].items() if info["afeta"] == "reversa"}
     assert da_reversa == set(LIMITACOES_DE_REVERSA), da_reversa ^ set(LIMITACOES_DE_REVERSA)
+    # Fatia 5F, Task 1 (N3): as que declaram "iso" são exatamente o registro da leitura da reversa.
+    da_iso = {chave for chave, info in CAT["limitacoes"].items() if info["afeta"] == "iso"}
+    assert da_iso == set(reversa.LIMITACOES_DA_LEITURA), da_iso ^ set(reversa.LIMITACOES_DA_LEITURA)
     devolvidas = {reversa_indisponivel(carregar(FIXTURES / nome)) for nome in CASOS} - {None}
     assert devolvidas, "nenhuma fixture com limitação — trava vacuamente verde?"
     assert devolvidas <= da_reversa, devolvidas - da_reversa
@@ -223,8 +246,8 @@ _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco decla
 @functools.lru_cache(maxsize=None)
 def _caso_e_resultados_serializados(nome: str) -> str:
     """`avaliar()` roda o motor por subprocesso; cacheado, e devolvido como JSON
-    para que cada teste receba a sua cópia."""
-    caso = carregar(FIXTURES / nome)
+    para que cada teste receba a sua cópia. `nome` é fixture ou variante (D14 da 5F)."""
+    caso = carregar_fixture_ou_variante(nome)
     return json.dumps({"caso": caso, "resultados": avaliar(caso)}, ensure_ascii=False)
 
 
@@ -300,7 +323,7 @@ def test_o_mapa_nao_cobre_o_multiplo_de_tela_nem_o_que_o_caso_declara():
     de tela — e nada do que o caso declara (premissa, preço, métrica, bloco) é
     conclusão de valor."""
     vistas = {"mercado_tela": 0, "caso": 0}
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         caso, resultados = _caso_e_resultados(nome)
         for caminho, valor in _folhas_numericas(resultados):
             if caminho[0] == "mercado_tela":
@@ -319,7 +342,7 @@ def test_toda_folha_numerica_publicada_e_conclusao_de_valor_pelo_mapa_ou_tem_raz
     número novo (a 5F publica valor ponderado e cross-check) reprova aqui até alguém
     decidir de que lado ele está; e nenhum padrão do mapa fica sem folha que o exerça."""
     sem_classificacao, nos_dois_lados, padroes_exercidos = [], [], set()
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         caso, resultados = _caso_e_resultados(nome)
         for caminho, valor in _folhas_numericas(resultados):
             familias = _familias_que_cobrem(caminho)
@@ -349,7 +372,7 @@ def test_celula_de_grade_e_coberta_pela_familia_da_unidade_que_a_grade_publica()
     da unidade que a grade publica. Um v10 que troque a métrica da grade reprova aqui
     até o mapa ser revisto."""
     vistas = {"grades_1d": 0, "grades_2d": 0}
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         _caso, resultados = _caso_e_resultados(nome)
         for caminho, _valor in _folhas_numericas(resultados):
             if not (_casa(("sensibilidades", "*", "*", "pontos", "*", "valor"), caminho)
@@ -443,7 +466,7 @@ def test_toda_folha_numerica_do_caso_e_insumo_pelo_mapa_ou_tem_razao_para_nao_se
     degrau ou do SOTP) reprova aqui, nomeando a folha, até alguém decidir se ele exige
     proveniência."""
     sem_classificacao, nos_dois_lados, vistas = [], [], {"insumo": 0, "nao_insumo": 0}
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         caso, _resultados = _caso_e_resultados(nome)
         for caminho, valor in _folhas_numericas(caso):
             insumos = _insumos_que_cobrem(caminho)
@@ -468,7 +491,7 @@ def test_todo_padrao_de_insumos_do_caso_e_exercido_por_alguma_fixture():
     alguma fixture. Um padrão que nada exerce é declaração que nenhuma trava confere —
     um caminho digitado errado passaria por insumo mapeado sem mapear nada."""
     exercidos = set()
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         caso, _resultados = _caso_e_resultados(nome)
         for caminho, _valor in _folhas_numericas(caso):
             exercidos.update(_insumos_que_cobrem(caminho))
@@ -483,7 +506,7 @@ def test_toda_premissa_numerica_das_fixtures_e_insumo_pelo_mapa():
     `_NAO_SAO_INSUMOS` a absolve. Uma premissa nova numa v10, ou um vetor novo de
     premissas no caso, que o mapa não cubra reprova aqui."""
     fora_do_mapa, rotas_vistas = [], set()
-    for nome in CASOS:
+    for nome in CASOS_E_VARIANTES:
         caso, _resultados = _caso_e_resultados(nome)
         for caminho, rota, premissas in _vetores_de_premissas(caso):
             for premissa, valor in premissas.items():
@@ -693,3 +716,58 @@ def test_limiares_nao_existe_mais_no_catalogo():
     'limiares' vazia (`{}`) ainda seria uma superfície de contrato morta;
     o catálogo não a declara mais."""
     assert "limiares" not in CAT
+
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 1 (D2/D3/D4 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): o que está no preço lido pela integração. O relatório mostra cada
+# eixo, motivo, identificação e posição pelo rótulo daqui e formata cada número pela
+# unidade que a leitura declara; os vocabulários são as tuplas de `reversa.py`, e o
+# eixo obrigatório é o do gate — nunca o nome `custo_capital` lido pelo relatório.
+# --------------------------------------------------------------------------
+
+def test_eixos_de_reversa_do_catalogo_sao_os_do_gate_com_o_obrigatorio_do_gate():
+    assert set(CAT["eixos_de_reversa"]) == EIXOS_DE_REVERSA
+    for eixo, info in CAT["eixos_de_reversa"].items():
+        assert isinstance(info.get("obrigatorio"), bool), eixo
+    assert {eixo for eixo, info in CAT["eixos_de_reversa"].items() if info["obrigatorio"]} == {EIXO_OBRIGATORIO}
+    _rotulos_em_todo_idioma("eixos_de_reversa")
+
+
+@pytest.mark.parametrize("secao,vocabulario", [
+    ("motivos_da_leitura", reversa.MOTIVOS_DA_LEITURA),
+    ("identificacoes", reversa.IDENTIFICACOES),
+    ("posicoes_na_banda", reversa.POSICOES_NA_BANDA),
+])
+def test_vocabularios_da_leitura_da_reversa_sao_as_tuplas_da_integracao(secao, vocabulario):
+    assert len(set(vocabulario)) == len(vocabulario), vocabulario
+    assert set(CAT[secao]) == set(vocabulario), set(CAT[secao]) ^ set(vocabulario)
+    _rotulos_em_todo_idioma(secao)
+
+
+def test_teto_do_crescimento_gratuito_tem_rotulo_e_texto_em_todo_idioma():
+    teto = CAT["teto_do_crescimento_gratuito"]
+    assert set(teto) == {"rotulo", "texto"}, sorted(teto)
+    for idioma in CAT["idiomas"]:
+        assert teto["rotulo"].get(idioma, "").strip() and teto["texto"].get(idioma, "").strip(), idioma
+
+
+def test_toda_unidade_que_a_leitura_da_reversa_publica_esta_no_catalogo():
+    """A leitura declara a unidade de cada número — raiz, curvatura, CAP, beta — e o
+    relatório formata por ela. Toda unidade publicada nas fixtures e variantes está no
+    vocabulário `unidades`, e a da raiz é a da premissa que ela resolve: a raiz de WACC sai
+    formatada como a premissa WACC."""
+    vistas = set()
+    for nome in CASOS_E_VARIANTES:
+        caso, resultados = _caso_e_resultados(nome)
+        for eixo in (resultados.get("reversa") or {}).get("eixos", {}).values():
+            leitura = eixo["leitura"]
+            unidades = {leitura["unidade"], leitura["unidade_da_curvatura"]} | (
+                {leitura["beta"]["unidade"]} if "beta" in leitura else set())
+            assert unidades <= set(CAT["unidades"]), (nome, unidades - set(CAT["unidades"]))
+            if leitura["premissa"] is not None:
+                assert leitura["unidade"] == CAT["premissas"][caso["rota"]][leitura["premissa"]]["unidade"], (
+                    nome, leitura["premissa"])
+            vistas |= unidades
+    assert {"pp", "anos_fracionarios", "curvatura", "beta"} <= vistas, f"trava vacuamente verde: {vistas}"

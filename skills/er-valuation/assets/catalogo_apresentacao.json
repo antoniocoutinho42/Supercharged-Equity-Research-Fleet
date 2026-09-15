@@ -79,6 +79,15 @@
     },
     "fração": {
       "formato": "pct1"
+    },
+    "anos_fracionarios": {
+      "formato": "num1"
+    },
+    "beta": {
+      "formato": "num2"
+    },
+    "curvatura": {
+      "formato": "num2"
     }
   },
   "ponte": {
@@ -950,6 +959,122 @@
       "rotulo": {
         "pt-BR": "Reversa não calculada: a rota rampa ainda não define quais eixos a composição bifásica admite reverter (combinação não implementada)"
       }
+    },
+    "iso_nao_calculada": {
+      "afeta": "iso",
+      "rotulo": {
+        "pt-BR": "Curva iso-valor não calculada: com um eixo primário da reversa sem raiz, a metodologia pede o teto do crescimento gratuito e a curva iso-valor; o teto sai publicado, e a curva que mostra a partir de que crescimento o alvo passa a ter solução não é calculada (combinação não implementada)"
+      }
+    }
+  },
+  "eixos_de_reversa": {
+    "custo_capital": {
+      "obrigatorio": true,
+      "rotulo": {
+        "pt-BR": "Custo de capital implícito"
+      }
+    },
+    "crescimento": {
+      "obrigatorio": false,
+      "rotulo": {
+        "pt-BR": "Crescimento implícito"
+      }
+    },
+    "rentabilidade": {
+      "obrigatorio": false,
+      "rotulo": {
+        "pt-BR": "Rentabilidade implícita"
+      }
+    },
+    "cap": {
+      "obrigatorio": false,
+      "rotulo": {
+        "pt-BR": "CAP implícito (anos de vantagem competitiva)"
+      }
+    }
+  },
+  "motivos_da_leitura": {
+    "raiz_na_faixa": {
+      "rotulo": {
+        "pt-BR": "Raiz encontrada na faixa de busca"
+      }
+    },
+    "sem_raiz_na_faixa": {
+      "rotulo": {
+        "pt-BR": "Sem raiz na faixa de busca: o alvo de mercado é incompatível com as demais premissas sob esta convenção"
+      }
+    },
+    "cap_na_faixa": {
+      "rotulo": {
+        "pt-BR": "CAP implícito dentro da faixa de 1 a 60 anos"
+      }
+    },
+    "cap_na_faixa_decrescente": {
+      "rotulo": {
+        "pt-BR": "CAP implícito dentro da faixa de 1 a 60 anos, com o valor decrescendo em n: mede os anos de destruição de valor que o preço tolera, não vantagem competitiva"
+      }
+    },
+    "cap_fora_da_faixa": {
+      "rotulo": {
+        "pt-BR": "CAP implícito fora da faixa de 1 a 60 anos: o alvo é incompatível com estas premissas sob esta convenção"
+      }
+    },
+    "cap_indefinido": {
+      "rotulo": {
+        "pt-BR": "CAP implícito indefinido: sem retorno acima do custo de capital não existe período de vantagem competitiva a medir"
+      }
+    }
+  },
+  "identificacoes": {
+    "forte": {
+      "rotulo": {
+        "pt-BR": "Identificação forte: a raiz é bem identificada no local"
+      }
+    },
+    "moderada": {
+      "rotulo": {
+        "pt-BR": "Identificação moderada: leia a raiz junto com o intervalo"
+      }
+    },
+    "fraca": {
+      "rotulo": {
+        "pt-BR": "Identificação fraca: a função é quase plana e a raiz é ruído com cara de precisão; leia com a curvatura"
+      }
+    }
+  },
+  "posicoes_na_banda": {
+    "abaixo": {
+      "rotulo": {
+        "pt-BR": "Abaixo da banda de beta observado"
+      }
+    },
+    "acima": {
+      "rotulo": {
+        "pt-BR": "Acima da banda de beta observado"
+      }
+    },
+    "dentro": {
+      "rotulo": {
+        "pt-BR": "Dentro da banda de beta observado"
+      }
+    },
+    "sem_banda": {
+      "rotulo": {
+        "pt-BR": "Banda de beta observado não declarada"
+      }
+    },
+    "sem_raiz": {
+      "rotulo": {
+        "pt-BR": "Sem raiz de custo de capital: beta implícito não calculável"
+      }
+    }
+  },
+  "teto_do_crescimento_gratuito": {
+    "rotulo": {
+      "pt-BR": "Teto do crescimento gratuito"
+    },
+    "texto": {
+      "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. Nenhuma hipótese de crescimento pago chega a este múltiplo; a distância entre ele e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
     }
   },
   "conclusoes_de_valor": {

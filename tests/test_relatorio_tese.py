@@ -134,13 +134,18 @@ def _carregar(entrega_dict: dict, tmp_path: Path) -> dict:
 # A entrega padrão do apoio: válida no contrato e sem disparar regra nenhuma por
 # conta própria (armadilha 2 do briefing). Os únicos achados são os disclosures
 # NOMEADOS que o próprio caso impõe — o de divergência de base do degrau, e o da
-# limitação que torna a reversa impossível (D4) em `caso_degrau` e `caso_rampa`.
+# limitação que torna a reversa impossível (D4) em `caso_degrau` e `caso_rampa`. Desde a
+# 5F (D3), também o da curva iso-valor não calculada nas duas SOTP: a reversa composta
+# sobre o cenário consolidado deixa um eixo primário sem raiz, e a integração publica
+# `iso_nao_calculada` em `resultados.limitacoes`.
 # --------------------------------------------------------------------------
 
 _ACHADOS_DA_ENTREGA_PADRAO = {
     "caso_degrau.json": [("REQUIRED_DISCLOSURE", "divergencia_de_base_degrau"),
                          ("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
     "caso_rampa.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
+    "caso_sotp_homogeneo.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
+    "caso_sotp_safra.json": [("REQUIRED_DISCLOSURE", "limitacao_metodologica")],
 }
 
 

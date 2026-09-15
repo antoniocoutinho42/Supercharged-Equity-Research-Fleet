@@ -114,7 +114,7 @@ import diagnosticos
 from caso import CasoInvalido, _tv_canon, carregar, reversa_indisponivel
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
-from reversa import alvo_de_mercado, reverter
+from reversa import alvo_de_mercado, limitacoes_da_leitura, reverter
 
 # `sensibilidades.calcular` NÃO entra aqui em cima: `sensibilidades.py` faz
 # `from avaliar import precificar_equity, precificar_firm` no topo dela — um
@@ -1062,9 +1062,14 @@ def avaliar(caso: dict) -> dict:
     # limitações do caso, rotuladas pelo catálogo: hoje só a que torna a
     # reversa inadmissível, publicada exatamente como
     # `caso.reversa_indisponivel` a devolve — nunca decidida aqui.
+    # Fatia 5F, Task 1 (D3): depois da limitação que suprime a reversa, as da LEITURA
+    # da reversa publicada (`reversa.limitacoes_da_leitura` — hoje a curva iso-valor
+    # não calculada, com o gatilho do teto). As duas famílias nunca coexistem: uma
+    # limitação de reversa implica caso sem reversa.
     resultado["fronteira_de_escopo"] = caso.get("fronteira_de_escopo")
     limitacao_da_reversa = reversa_indisponivel(caso)
-    resultado["limitacoes"] = [] if limitacao_da_reversa is None else [limitacao_da_reversa]
+    resultado["limitacoes"] = ([] if limitacao_da_reversa is None else [limitacao_da_reversa]) + (
+        limitacoes_da_leitura(resultado["reversa"]) if "reversa" in resultado else [])
 
     return resultado
 
