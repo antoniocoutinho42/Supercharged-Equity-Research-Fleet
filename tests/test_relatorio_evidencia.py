@@ -549,6 +549,28 @@ def test_conflito_e_so_de_valores_numericos_do_mesmo_claim_e_periodo_sem_vencedo
     assert bool(_do_codigo(_achados(entrega_dict), "conflito_de_fontes_silenciado")) is dispara
 
 
+def test_registro_vencido_que_sustenta_insumo_sem_reconciliacao_e_hard_fail():
+    """Revisão da 5E (F3): o conflito declara o vencedor, mas o caso continua com o número do
+    registro vencido."""
+    entrega_dict = _entrega()
+    alvo = _que_sustenta(entrega_dict, "preco.valor")
+    alvo["conflito"] = {"vencedor": "vencedor", "razao": "A fonte primária publica o número revisado."}
+    _registros(entrega_dict).append(_concorrente(alvo, alvo["valor"] + 1.0, ident="vencedor"))
+    achados = _achados(entrega_dict)
+    assert _do_codigo(achados, "conflito_de_fontes_silenciado") == []
+    assert _como(_do_codigo(achados, "insumo_sustentado_pela_fonte_vencida")) == [
+        ("HARD_FAIL", f"ledger.registros.{_indice(entrega_dict, alvo)}", {
+            "id": alvo["id"], "vencedor": "vencedor", "claim": alvo["claim"], "periodo": alvo["periodo"],
+            "caminhos": ", ".join(f"'{caminho}'" for caminho in alvo["usado_em"])})]
+
+    alvo["reconciliacao"] = {"texto": "O caso usa o fechamento, que a fonte vencedora revisou."}
+    assert _do_codigo(_achados(entrega_dict), "insumo_sustentado_pela_fonte_vencida") == []
+
+    del alvo["reconciliacao"]
+    alvo["conflito"]["vencedor"] = alvo["id"]
+    assert _do_codigo(_achados(entrega_dict), "insumo_sustentado_pela_fonte_vencida") == []
+
+
 # --- referencia_fora_do_ledger (HARD FAIL) ---------------------------------
 
 def _citar_em_insumos(entrega_dict: dict, ident: str) -> str:
@@ -639,7 +661,8 @@ def test_registro_estimado_que_sustenta_insumo_e_disclosure_com_o_claim():
     registro["estatuto"] = ESTATUTO_ESTIMADO
     assert _como(_do_codigo(_achados(entrega_dict), "insumo_estimado")) == [
         ("REQUIRED_DISCLOSURE", f"ledger.registros.{_indice(entrega_dict, registro)}",
-         {"id": registro["id"], "claim": registro["claim"]})]
+         {"id": registro["id"], "claim": registro["claim"],
+          "valor_fmt": placeholders.formatar(registro["valor"], "num4", "pt-BR"), "unidade": registro["unidade"]})]
 
 
 def test_registro_estimado_que_nao_sustenta_insumo_nao_e_disclosure():
@@ -647,6 +670,40 @@ def test_registro_estimado_que_nao_sustenta_insumo_nao_e_disclosure():
     (consenso,) = [r for r in _registros(entrega_dict) if r["id"] in entrega_dict["analise"]["consenso"]["registros"]]
     consenso["estatuto"] = ESTATUTO_ESTIMADO
     assert _do_codigo(_achados(entrega_dict), "insumo_estimado") == []
+
+
+def test_estimativa_que_alimenta_o_registro_de_um_insumo_pelos_insumos_e_disclosure():
+    """Revisão da 5E (F2): o número calculado a partir de uma estimativa é "baseado em estimativa"
+    (§11), também em dois níveis e com um ciclo declarado."""
+    entrega_dict = _entrega()
+    registro = _que_sustenta(entrega_dict, "preco.valor")
+    intermediario = _concorrente(registro, 1.0, ident="intermediario", claim="Ajuste intermediário",
+                                 estatuto=ESTATUTO_COM_FORMULA, formula="soma dos ajustes", insumos=["ingrediente"])
+    ingrediente = _concorrente(registro, 2.0, ident="ingrediente", claim="Ajuste do analista",
+                               estatuto=ESTATUTO_OBSERVADO, insumos=[registro["id"]])
+    registro.update(estatuto=ESTATUTO_COM_FORMULA, formula="último preço mais os ajustes", insumos=["intermediario"])
+    _registros(entrega_dict).extend([intermediario, ingrediente])
+    assert _do_codigo(_achados(entrega_dict), "insumo_estimado") == []
+
+    ingrediente["estatuto"] = ESTATUTO_ESTIMADO
+    assert [a.onde for a in _do_codigo(_achados(entrega_dict), "insumo_estimado")] == [
+        f"ledger.registros.{_indice(entrega_dict, ingrediente)}"]
+
+
+def test_placeholder_em_dado_do_ledger_que_a_tese_exibe_e_hard_fail():
+    """Revisão da 5E (F4): a Tese mostra os campos do registro como dado — um placeholder sairia cru."""
+    entrega_dict = _entrega()
+    (consenso,) = [r for r in _registros(entrega_dict) if r["id"] in entrega_dict["analise"]["consenso"]["registros"]]
+    consenso["claim"] = "Preço-alvo médio de R$ 72,00 para 12 meses"
+    estimado = _que_sustenta(entrega_dict, "preco.valor")
+    estimado["estatuto"] = ESTATUTO_ESTIMADO
+    assert _do_codigo(_achados(entrega_dict), "placeholder_em_dado_da_tese") == []
+
+    consenso["claim"] = "Preço-alvo médio ({{resultados:manchete.preco_acao|moeda}})"
+    estimado["claim"] = "Preço estimado ({{caso:preco.valor|moeda}})"
+    esperado = sorted((_indice(entrega_dict, r), r["id"]) for r in (consenso, estimado))
+    assert _como(_do_codigo(_achados(entrega_dict), "placeholder_em_dado_da_tese")) == [
+        ("HARD_FAIL", f"ledger.registros.{indice}.claim", {"id": ident, "campo": "claim"}) for indice, ident in esperado]
 
 
 # --- sem_contraprova_independente (REQUIRED DISCLOSURE) --------------------

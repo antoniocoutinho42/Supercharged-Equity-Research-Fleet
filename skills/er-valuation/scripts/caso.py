@@ -495,6 +495,7 @@ def validar(caso: Caso) -> None:
             f"{type(caso).__name__}: {caso!r}."
         )
 
+    _validar_chaves_enderecaveis(caso)
     _validar_campos_de_topo(caso)
     _validar_sem_chaves_de_topo_desconhecidas(caso)
 
@@ -537,6 +538,27 @@ def validar(caso: Caso) -> None:
     _validar_sensibilidades(caso, cenarios, rota)
     _validar_sotp(caso, cenarios)
     _validar_fronteira_de_escopo(caso)
+
+
+def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
+    """Revisão da 5E (F1): nenhuma chave do caso contém '.' nem é '*'. O caminho de um número do
+    caso — em `catalogo.insumos_do_caso`, no `usado_em` do ledger e nos placeholders
+    `{{caso:...}}` — separa segmentos por '.' e usa '*' como curinga; um cenário chamado
+    'base.2026' tirava as premissas dele do mapa de insumos, e elas moviam o preço sem
+    proveniência."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            if isinstance(chave, str) and ("." in chave or chave == "*"):
+                raise CasoInvalido(
+                    f"chave '{chave}' em '{caminho}': nenhuma chave do caso pode conter '.' nem ser '*' — o "
+                    "caminho de um número do caso separa segmentos por '.' e usa '*' como curinga, e um número "
+                    "sob essa chave não seria endereçável pelo mapa de insumos, pelo ledger nem pelos "
+                    "placeholders. Renomeie a chave (por exemplo, 'base_2026' em vez de 'base.2026')."
+                )
+            _validar_chaves_enderecaveis(valor, f"{caminho}.{chave}")
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            _validar_chaves_enderecaveis(valor, f"{caminho}.{indice}")
 
 
 def _validar_campos_de_topo(caso: Caso) -> None:

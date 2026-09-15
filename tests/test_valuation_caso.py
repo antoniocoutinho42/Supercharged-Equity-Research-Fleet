@@ -41,6 +41,22 @@ def test_campo_obrigatorio_ausente_recusa(campo):
         validar(c)
 
 
+@pytest.mark.parametrize("renomear,chave", [
+    pytest.param(lambda c: c["cenarios"].__setitem__("base.2026", c["cenarios"].pop("base")), "base.2026",
+                 id="cenario-com-ponto"),
+    pytest.param(lambda c: c["ponte"].__setitem__("linha.extra", 1.0), "linha.extra", id="chave-extra-da-ponte"),
+    pytest.param(lambda c: c["cenarios"].__setitem__("*", c["cenarios"].pop("base")), "*", id="curinga"),
+])
+def test_chave_com_ponto_ou_curinga_recusa(renomear, chave):
+    """Revisão da 5E (F1): o caminho pontuado de um número do caso não endereça essa chave, e os
+    números sob ela sairiam do mapa de insumos em silêncio."""
+    c = _firm()
+    renomear(c)
+    with pytest.raises(CasoInvalido) as erro:
+        validar(c)
+    assert f"chave '{chave}'" in str(erro.value)
+
+
 def test_tv_ausente_recusa_por_ser_escolha_sem_default():
     c = _firm()
     del c["cenarios"]["base"]["premissas"]["tv"]

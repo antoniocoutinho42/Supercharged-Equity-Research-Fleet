@@ -1153,6 +1153,29 @@ def _achados_conflito_de_fontes_silenciado(registros: list) -> list[Achado]:
             achados.append(Achado("HARD_FAIL", "conflito_de_fontes_silenciado", f"ledger.registros.{membros[0][0]}", {
                 "claim": claim, "periodo": periodo, "ids": ", ".join(f"'{ident}'" for ident in ids),
             }))
+        elif divergem:
+            achados += _achados_insumo_sustentado_pela_fonte_vencida(claim, periodo, membros, vencedores, ids)
+    return achados
+
+
+def _achados_insumo_sustentado_pela_fonte_vencida(claim: str, periodo: str, membros: list, vencedores: list,
+                                                  ids: list) -> list[Achado]:
+    """Revisão da 5E (F3): um conflito com vencedor declarado não absolve o registro vencido que
+    continua sustentando um número do caso. Todo membro do grupo com `usado_em` é o vencedor,
+    declara o mesmo número dele ou traz `reconciliacao`; fora disso, HARD FAIL nomeando o registro
+    usado e o vencedor — o valuation usaria o número que o próprio ledger declarou vencido."""
+    vencedor = next(v for v in vencedores if isinstance(v, str) and v in ids)
+    valor_do_vencedor = next(registro["valor"] for _indice, registro in membros if registro.get("id") == vencedor)
+    achados: list[Achado] = []
+    for indice, registro in membros:
+        caminhos = [caminho for caminho in _caminhos_usados(registro) if isinstance(caminho, str)]
+        if (not caminhos or registro.get("id") == vencedor or "reconciliacao" in registro
+                or _mesmo_numero(registro["valor"], valor_do_vencedor)):
+            continue
+        achados.append(Achado("HARD_FAIL", "insumo_sustentado_pela_fonte_vencida", f"ledger.registros.{indice}", {
+            "id": str(registro.get("id")), "vencedor": vencedor, "claim": claim, "periodo": periodo,
+            "caminhos": ", ".join(f"'{caminho}'" for caminho in caminhos),
+        }))
     return achados
 
 
@@ -1188,16 +1211,59 @@ def _achados_dataset_sem_proveniencia(entrega: dict) -> list[Achado]:
             for dataset_id in usados if not _lista(_objeto(dados.get(dataset_id)).get("ledger"))]
 
 
-def _achados_insumo_estimado(registros: list, insumos: dict, contrato) -> list[Achado]:
-    achados: list[Achado] = []
-    for indice, registro in registros:
+def _registros_estimados_que_sustentam_insumo(registros: list, insumos: dict, contrato) -> list:
+    """Os `(índice, registro)` de estatuto com `e_estimativa` que sustentam um insumo do caso, na
+    ordem do ledger: o registro com `usado_em` num insumo ou qualquer registro que ele cita em
+    `insumos`, transitivamente e protegido contra ciclo (revisão da 5E, F2 — a §11 fala em input
+    "baseado em" estimativa). Decide pela flag do contrato, nunca pelo nome do estatuto."""
+    por_id = {registro["id"]: (indice, registro) for indice, registro in registros
+              if isinstance(registro.get("id"), str)}
+    alcancados: set = set()
+    pilha = [(indice, registro) for indice, registro in registros
+             if any(isinstance(caminho, str) and caminho in insumos for caminho in _caminhos_usados(registro))]
+    while pilha:
+        indice, registro = pilha.pop()
+        if indice in alcancados:
+            continue
+        alcancados.add(indice)
+        pilha += [por_id[ident] for ident in _lista(registro.get("insumos")) if isinstance(ident, str) and ident in por_id]
+
+    def estimado(registro: dict) -> bool:
         estatuto = registro.get("estatuto")
         flags = contrato.estatutos.get(estatuto) if isinstance(estatuto, str) else None
-        if not (flags and flags["e_estimativa"]):
-            continue
-        if any(isinstance(caminho, str) and caminho in insumos for caminho in _caminhos_usados(registro)):
-            achados.append(Achado("REQUIRED_DISCLOSURE", "insumo_estimado", f"ledger.registros.{indice}",
-                                  {"id": str(registro.get("id")), "claim": str(registro.get("claim"))}))
+        return bool(flags and flags["e_estimativa"])
+
+    return [(indice, registro) for indice, registro in registros if indice in alcancados and estimado(registro)]
+
+
+def _achados_insumo_estimado(estimados: list, idioma: str) -> list[Achado]:
+    """Um aviso por registro estimado que sustenta insumo, com o valor e a unidade que ele declara: a
+    Tese mostra o número do registro ao lado do claim (revisão da 5E, F4)."""
+    return [Achado("REQUIRED_DISCLOSURE", "insumo_estimado", f"ledger.registros.{indice}", {
+                "id": str(registro.get("id")), "claim": str(registro.get("claim")),
+                "valor_fmt": _numero_no_idioma(registro.get("valor"), idioma), "unidade": str(registro.get("unidade")),
+            }) for indice, registro in estimados]
+
+
+def _achados_placeholder_em_dado_da_tese(analise: dict, registros: list, estimados: list) -> list[Achado]:
+    """Revisão da 5E (F4): a Tese mostra campos de registros do ledger como dado — a linha do
+    consenso (`claim`, `periodo`, `unidade`, `fonte.identidade`) e o aviso de estimativa (`claim`,
+    `unidade`) — e não resolve placeholder neles. Um `{{...}}` ali sairia cru: HARD FAIL nomeando o
+    campo."""
+    citados = {ident for ident in _lista(_objeto(analise.get("consenso")).get("registros")) if isinstance(ident, str)}
+    indices_estimados = {indice for indice, _registro in estimados}
+    achados: list[Achado] = []
+    for indice, registro in registros:
+        campos: list[str] = []
+        if isinstance(registro.get("id"), str) and registro["id"] in citados:
+            campos += ["claim", "periodo", "unidade", "fonte.identidade"]
+        if indice in indices_estimados:
+            campos += [campo for campo in ("claim", "unidade") if campo not in campos]
+        for campo in campos:
+            valor = _objeto(registro.get("fonte")).get("identidade") if campo == "fonte.identidade" else registro.get(campo)
+            if isinstance(valor, str) and "{{" in valor:
+                achados.append(Achado("HARD_FAIL", "placeholder_em_dado_da_tese", f"ledger.registros.{indice}.{campo}",
+                                      {"id": str(registro.get("id")), "campo": campo}))
     return achados
 
 
@@ -1335,9 +1401,10 @@ def _achados_do_ledger(entrega: dict, catalogo: dict, contrato, idioma: str) -> 
     achados += (_achados_conflito_de_fontes_silenciado(registros)
                 + _achados_referencia_fora_do_ledger(entrega, registros)
                 + _achados_dataset_sem_proveniencia(entrega))
-    if insumos is not None:
-        achados += _achados_insumo_estimado(registros, insumos, contrato)
-    achados += (_achados_sem_contraprova_independente(entrega, registros, catalogo, idioma)
+    estimados = [] if insumos is None else _registros_estimados_que_sustentam_insumo(registros, insumos, contrato)
+    achados += (_achados_placeholder_em_dado_da_tese(analise, registros, estimados)
+                + _achados_insumo_estimado(estimados, idioma)
+                + _achados_sem_contraprova_independente(entrega, registros, catalogo, idioma)
                 + _achados_lacuna_material(ledger, contrato)
                 + _achados_consenso_indisponivel(analise))
     if insumos is not None:

@@ -417,7 +417,9 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
-| `insumo_estimado` | REQUIRED DISCLOSURE | registro cujo estatuto declara `e_estimativa` e cujo `usado_em` nomeia insumo do caso — com o `claim` |
+| `insumo_estimado` | REQUIRED DISCLOSURE | registro cujo estatuto declara `e_estimativa` e que sustenta insumo do caso — direto, pelo `usado_em`, ou pelos `insumos` de um registro que o sustenta, transitivamente (a §11 diz "baseado em estimativa") — com o `claim`, o valor e a unidade do registro estimado |
+| `insumo_sustentado_pela_fonte_vencida` | HARD FAIL | num grupo de conflito com vencedor declarado, registro vencido com `usado_em`, sem `reconciliacao` e com número diferente do vencedor |
+| `placeholder_em_dado_da_tese` | HARD FAIL | placeholder no `claim`, `periodo`, `unidade` ou `fonte.identidade` de registro que o consenso cita, ou no `claim` ou na `unidade` de registro estimado que sustenta insumo — a Tese mostra esses campos como dado, sem resolver placeholder |
 | `sem_contraprova_independente` | REQUIRED DISCLOSURE | premissa decisiva cujo número no caso (`cenarios.<manchete.cenario>.premissas.<chave>`) não tem registro com `contraprova_de` apontando para um registro que o sustenta, vindo de outra `fonte.identidade` e com o mesmo `valor` dele (pela tolerância da reconciliação) ou com `reconciliacao` declarada — a mesma identidade não conta, e uma fonte que diverge sem reconciliação não confirma; com o rótulo da premissa no catálogo |
 | `lacuna_material` | REQUIRED DISCLOSURE | lacuna cuja materialidade declara `exige_disclosure` — com a `descricao` e o `tratamento`, e o campo de cada um na lista de prosa (`params.campos_de_prosa`) |
 | `consenso_indisponivel` | REQUIRED DISCLOSURE | `analise.consenso.ausente` — com a âncora substituta, a razão e o campo dela na lista de prosa; sem consenso, o confronto temporal da reversa fica indisponível |
@@ -452,7 +454,7 @@ pendência tem dono permitido e razão.
 | HARD FAIL | inconsistência estrutural que torne o valuation matematicamente inválido | `resultados_nao_correspondem_ao_caso`, `multiplos_com_bases_diferentes`, `unidade_desconhecida`, `formato_incompativel_com_unidade`, `diagnostico_sem_chave`, `degrau_sem_divergencia_de_base`, `faixa_fora_de_ordem`, `premissa_decisiva_fora_do_cenario` | as recusas do gate do caso (`caso.CasoInvalido`, na integração): um caso incoerente nem chega ao motor | — |
 | HARD FAIL | perguntas da tese ausentes ou sem vínculo econômico | `perguntas_da_tese_incompletas`, `vinculo_fora_do_vocabulario` | — | — |
 | HARD FAIL | fair value sem reversa / custo de capital implícito quando a metodologia exigir | `analise_sem_reversa`, `limitacao_desconhecida` | o gate do caso recusa uma reversa sem o eixo do custo de capital implícito (`caso.EIXO_OBRIGATORIO`) | — |
-| HARD FAIL | números materialmente conflitantes sem reconciliação ou disclosure | `insumo_nao_reconciliado`, `conflito_de_fontes_silenciado`, `referencia_fora_do_ledger` | — | — |
+| HARD FAIL | números materialmente conflitantes sem reconciliação ou disclosure | `insumo_nao_reconciliado`, `conflito_de_fontes_silenciado`, `insumo_sustentado_pela_fonte_vencida`, `referencia_fora_do_ledger` | — | — |
 | HARD FAIL | fronteira de escopo declarada com fair value por ação como conclusão principal | `fronteira_com_preco_alvo`, `fronteira_de_escopo_desconhecida` | — | — |
 | REQUIRED DISCLOSURE | conservação de capital que não fecha | — | — | **5F**: a conservação de capital entra com o restante da aba Valuation |
 | REQUIRED DISCLOSURE | ausência de contraprova independente | `sem_contraprova_independente` | — | — |
@@ -474,6 +476,7 @@ Os códigos de QC que servem a outras seções do desenho:
 | Código | Nível | Onde o desenho o pede |
 |---|---|---|
 | `relatorio_nao_autocontido` | HARD FAIL | §9 e §2: arquivo único autocontido, zero rede |
+| `placeholder_em_dado_da_tese` | HARD FAIL | §9 e §6.3: o consenso e o ledger que a Tese exibe são dado atribuído, nunca prosa com placeholder |
 
 ## As três abas (`render.py`)
 
