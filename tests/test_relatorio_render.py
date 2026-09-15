@@ -39,7 +39,7 @@ def _preparar(nome_fixture: str, **kwargs):
     depois de uma primeira passada de QC limpa (html=None)."""
     entrega_dict = apoio.montar_entrega(nome_fixture, **kwargs)
     _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
     return entrega_dict, achados, log
 
@@ -137,7 +137,7 @@ def test_saida_e_byte_identica_em_duas_composicoes():
 ])
 def test_referencia_nao_autocontida_e_hard_fail_em_qualquer_forma(html_texto):
     entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_texto)
     assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
@@ -149,7 +149,7 @@ def test_referencia_nao_autocontida_e_hard_fail_em_qualquer_forma(html_texto):
 ])
 def test_referencia_autocontida_nao_dispara(html_texto):
     entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_texto)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
@@ -164,7 +164,7 @@ def test_atribuicao_data_dentro_de_script_nao_dispara_falso_positivo():
     html_com_script = (
         "<script>var data=1,src=2,href=3;function f(){data=src+href;}</script>"
     )
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_com_script)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_com_script)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 
@@ -189,7 +189,7 @@ def test_atribuicao_data_dentro_de_script_nao_dispara_falso_positivo():
 ])
 def test_busca_de_recurso_no_miolo_de_script_e_hard_fail(html_texto):
     entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_texto)
     assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
@@ -204,7 +204,7 @@ def test_busca_de_recurso_no_miolo_de_script_e_hard_fail(html_texto):
 ])
 def test_miolo_de_script_sem_busca_de_recurso_nao_dispara(html_texto):
     entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_texto)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_texto)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), html_texto
 
 
@@ -214,7 +214,7 @@ def test_src_externo_na_propria_tag_script_ainda_dispara_mesmo_com_data_no_corpo
     neutralizado, nunca a tag em si."""
     entrega_dict, _achados, _log = _preparar("caso_reversa_firm.json")
     html_com_script = '<script src="https://evil.example.com/x.js">var data=1;</script>'
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=html_com_script)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=html_com_script)
     assert any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 
@@ -224,7 +224,7 @@ def test_nenhum_recurso_externo():
     entrega_dict, achados, log = _preparar("caso_reversa_firm.json")
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=pagina)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=pagina)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 

@@ -36,6 +36,14 @@ código 2. A única leitura de `resultados` que a forma exige é
 obrigatória; sob ela, declarar a faixa não é recusa de forma — é o HARD FAIL
 `fronteira_com_preco_alvo`.
 
+O ledger (5E, D1) tem a forma do contrato `ledger/1` do `er-evidencia`, que
+`builder.py` lê e entrega a `carregar`: as chaves de cada nível e os
+vocabulários fechados vêm do contrato lido, nunca de uma cópia aqui — e "exige
+fórmula" é a flag do estatuto, nunca o nome dele. O consenso (D4) e o confronto
+(D5) são vocabulário deste contrato; `ficha_tecnica` saiu dele (D6). O que
+depende dos números do caso ou do catálogo — proveniência, reconciliação,
+conflito, contraprova — é achado de QC, código 2.
+
 `carregar` é o único ponto de entrada deste módulo: lê `<raiz>/entrega.json`,
 confirma que o arquivo resolve DENTRO da raiz de execução (regra
 inviolável 6), valida o contrato (vocabulário fechado em todo nível que
@@ -47,8 +55,11 @@ escreve nada — quem escreve é `builder.py`.
 import difflib
 import hashlib
 import json
+import math
+import re
+from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, NoReturn
 
 import exhibits
 
@@ -70,25 +81,27 @@ class EntregaInvalida(Exception):
 # contrato define (A1). `caso` e `resultados` não ganham vocabulário aqui:
 # o conteúdo deles pertence ao contrato de `caso.json`/`resultados.json`
 # publicado por `er-valuation` (E3) — este módulo só confirma tipo e, para
-# `resultados`, a versão do sub-contrato. `ledger`/`ficha_tecnica` só têm o
-# tipo confirmado nesta fatia (a 5E detalha o conteúdo dos dois).
+# `resultados`, a versão do sub-contrato. O `ledger` tem a forma do contrato
+# `ledger/1` do `er-evidencia` (5E, D1), lido e nunca copiado — ver o bloco da
+# 5E abaixo; `ficha_tecnica` saiu do contrato (5E, D6).
 #
 # `dados` (5B, G3) é NOVO e OPCIONAL na raiz — por isso fica de fora de
 # `CHAVES_DE_TOPO_OBRIGATORIAS` (uma entrega cujos exhibits são só `engine`
 # não precisa de `dados` nenhum: `engine` lê `resultados` direto, nunca um
 # dataset local). `exhibits` (5B, G1) é NOVO em `analise`, mas OBRIGATÓRIO
-# lá (mesma disciplina de `ledger`/`ficha_tecnica`: sempre presente, lista
-# vazia quando a análise não tem exhibit nenhum -- G10 do desenho, "não há
-# gráfico obrigatório").
+# lá (mesma disciplina do `ledger`: sempre presente, vazio quando não há o
+# que declarar -- G10 do desenho, "não há gráfico obrigatório"). `confronto`
+# (5E, D5) é o outro campo de topo opcional: só existe quando uma análise
+# anterior foi fornecida.
 # --------------------------------------------------------------------------
 
 VERSAO_CONTRATO: str = "entrega/1"
 VERSAO_CONTRATO_RESULTADOS: str = "resultados/1"
 
 CHAVES_DE_TOPO: frozenset = frozenset({
-    "versao_contrato", "execucao", "caso", "resultados", "analise", "ledger", "ficha_tecnica", "dados",
+    "versao_contrato", "execucao", "caso", "resultados", "analise", "ledger", "dados", "confronto",
 })
-CHAVES_DE_TOPO_OBRIGATORIAS: frozenset = CHAVES_DE_TOPO - {"dados"}
+CHAVES_DE_TOPO_OBRIGATORIAS: frozenset = CHAVES_DE_TOPO - {"dados", "confronto"}
 
 CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma"})
 
@@ -119,8 +132,8 @@ PAPEIS_DA_FAIXA: tuple = ("piso", "base", "teto")
 MAXIMO_DE_LINHAS_DO_QUE_MUDOU: int = 3
 
 CHAVES_DE_ANALISE: frozenset = frozenset({
-    "conclusao", "exhibits", "faixa", "veredicto", "premissas_decisivas", "positives", "negatives",
-    "perguntas", "riscos", "visao_nao_consensual", "mudou_desde_analise_fornecida",
+    "conclusao", "exhibits", "faixa", "veredicto", "consenso", "premissas_decisivas", "positives",
+    "negatives", "perguntas", "riscos", "visao_nao_consensual", "mudou_desde_analise_fornecida",
 })
 # `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as duas
 # últimas são opcionais.
@@ -144,6 +157,47 @@ CHAVES_DE_SEM_EXHIBIT: frozenset = frozenset({"razao"})
 CHAVES_DE_RISCO: frozenset = frozenset({"risco", "observavel"})
 CHAVES_DE_VISAO_NAO_CONSENSUAL: frozenset = frozenset({"texto"})
 CHAVES_DO_QUE_MUDOU: frozenset = frozenset({"linhas"})
+
+# --------------------------------------------------------------------------
+# Fatia 5E, item 5, Task 2 (D1, D4, D5): o ledger, o consenso e o confronto.
+#
+# A FORMA do ledger é do `er-evidencia` (§3.2 do desenho: "dona do schema do
+# ledger"), publicada como dado em `contrato_ledger.json`. `builder.py` a lê
+# pela constante dos assets externos e a entrega a `carregar`. Nenhuma chave de
+# nível e nenhum vocabulário daquele contrato é copiado para cá: as chaves
+# aceitas e obrigatórias de cada nível, as classes de fonte, os tipos de
+# localizador, os estatutos, as materialidades e as âncoras do consenso vêm do
+# contrato lido, e "exige fórmula" é a flag `exige_formula` do estatuto, nunca
+# o nome dele. Daqui é só o TIPO de cada campo, que o contrato não declara.
+#
+# O consenso (D4) é bloco da Tese: cita os registros que o sustentam ou declara
+# a âncora substituta, do vocabulário do contrato do ledger. O confronto (D5) é
+# processo do Fleet (§12, a quarentena), com a classificação fechada aqui, como
+# o vocabulário da Tese.
+# --------------------------------------------------------------------------
+
+VERSAO_CONTRATO_LEDGER: str = "ledger/1"
+
+# Os NOMES das seções pelas quais este relatório lê o contrato do ledger — a
+# forma do contrato, nunca o conteúdo dele.
+NIVEIS_DO_LEDGER: tuple = ("ledger", "registro", "fonte", "localizador", "reconciliacao", "conflito", "lacuna")
+VOCABULARIOS_EM_LISTA_DO_LEDGER: tuple = ("classes_de_fonte", "tipos_de_localizador", "ancoras_do_consenso")
+FLAGS_DE_ESTATUTO: tuple = ("exige_formula", "e_estimativa")
+FLAGS_DE_MATERIALIDADE: tuple = ("exige_disclosure",)
+
+CHAVES_DE_CONSENSO: frozenset = frozenset({"registros", "ausente"})
+CHAVES_DE_CONSENSO_AUSENTE: frozenset = frozenset({"ancora", "razao"})
+
+# §12: "o confronto resultante classifica cada divergência em: dado novo · premissa
+# revista · erro anterior · pergunta anterior resolvida pelo observável".
+CLASSIFICACOES_DE_DIVERGENCIA: frozenset = frozenset({
+    "dado_novo", "premissa_revista", "erro_anterior", "pergunta_resolvida",
+})
+CHAVES_DE_CONFRONTO: frozenset = frozenset({"analise_fornecida", "divergencias"})
+CHAVES_DA_ANALISE_FORNECIDA: frozenset = frozenset({"identificacao", "data"})
+CHAVES_DE_DIVERGENCIA: frozenset = frozenset({"item", "classificacao", "anterior", "atual", "explicacao"})
+
+_PADRAO_DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 # Dicionários de interface/QC deste skill: asset PRÓPRIO do er-relatorio,
 # não da integração — E3 só proíbe importar código/dado de er-valuation ou
@@ -232,6 +286,236 @@ def _objeto_fechado(valor: Any, permitidas: frozenset, obrigatorias: frozenset, 
     return objeto
 
 
+class ContratoDoLedgerInvalido(Exception):
+    """O contrato do ledger lido não tem a forma pela qual este relatório o lê — a versão, os
+    níveis com as listas `obrigatorias`/`opcionais`, os vocabulários e as flags de estatuto e de
+    materialidade. Não é defeito da entrega: `builder.py` o reporta como código 1, e o QC falha
+    fechado com ele — nunca lê um contrato pela metade."""
+
+
+class ContratoDoLedger(NamedTuple):
+    """O contrato `ledger/1` como o relatório o lê (`ler_contrato_do_ledger`)."""
+    versao: str
+    niveis: dict  # nível -> (chaves aceitas, chaves obrigatórias)
+    classes_de_fonte: frozenset
+    tipos_de_localizador: frozenset
+    ancoras_do_consenso: frozenset
+    estatutos: dict  # estatuto -> {flag: bool}
+    materialidades: dict  # materialidade -> {flag: bool}
+
+
+def _recusar_contrato_do_ledger(motivo: str) -> NoReturn:
+    raise ContratoDoLedgerInvalido(f"contrato do ledger fora da forma que o relatório lê: {motivo}.")
+
+
+def _lista_de_textos_do_contrato(valor: Any) -> bool:
+    return isinstance(valor, list) and all(isinstance(item, str) and item for item in valor)
+
+
+def _vocabulario_com_flags(vocabularios: dict, nome: str, flags: tuple) -> dict:
+    vocabulario = vocabularios.get(nome)
+    if not isinstance(vocabulario, dict) or not vocabulario:
+        _recusar_contrato_do_ledger(f"o vocabulário '{nome}' não é um objeto não vazio")
+    for entrada, declaradas in vocabulario.items():
+        if not isinstance(declaradas, dict) or not all(isinstance(declaradas.get(flag), bool) for flag in flags):
+            _recusar_contrato_do_ledger(f"'{nome}.{entrada}' não declara as flags {', '.join(flags)} como booleanas")
+    return {entrada: {flag: declaradas[flag] for flag in flags} for entrada, declaradas in vocabulario.items()}
+
+
+def ler_contrato_do_ledger(contrato: Any) -> ContratoDoLedger:
+    """Lê o contrato `ledger/1` (o dict de `contrato_ledger.json`) e devolve o que o relatório usa
+    dele; levanta `ContratoDoLedgerInvalido` nomeando a primeira parte fora da forma. É a única
+    leitura do contrato neste pacote: `carregar` a usa para a forma da entrega, e o QC para as
+    flags."""
+    if not isinstance(contrato, dict):
+        _recusar_contrato_do_ledger(f"o documento não é um objeto ({type(contrato).__name__})")
+    versao = contrato.get("versao_contrato")
+    if versao != VERSAO_CONTRATO_LEDGER:
+        _recusar_contrato_do_ledger(f"'versao_contrato' é {versao!r}, e este builder só lê '{VERSAO_CONTRATO_LEDGER}'")
+    niveis_declarados, vocabularios = contrato.get("niveis"), contrato.get("vocabularios")
+    if not isinstance(niveis_declarados, dict) or not isinstance(vocabularios, dict):
+        _recusar_contrato_do_ledger("'niveis' e 'vocabularios' têm de ser objetos")
+
+    niveis = {}
+    for nome in NIVEIS_DO_LEDGER:
+        nivel = niveis_declarados.get(nome)
+        if not (isinstance(nivel, dict) and _lista_de_textos_do_contrato(nivel.get("obrigatorias"))
+                and _lista_de_textos_do_contrato(nivel.get("opcionais"))):
+            _recusar_contrato_do_ledger(f"o nível '{nome}' não declara as listas de textos 'obrigatorias' e 'opcionais'")
+        obrigatorias = frozenset(nivel["obrigatorias"])
+        niveis[nome] = (obrigatorias | frozenset(nivel["opcionais"]), obrigatorias)
+
+    listas = {}
+    for nome in VOCABULARIOS_EM_LISTA_DO_LEDGER:
+        vocabulario = vocabularios.get(nome)
+        if not (_lista_de_textos_do_contrato(vocabulario) and vocabulario):
+            _recusar_contrato_do_ledger(f"o vocabulário '{nome}' não é uma lista não vazia de textos")
+        listas[nome] = frozenset(vocabulario)
+
+    return ContratoDoLedger(
+        versao=versao, niveis=niveis, classes_de_fonte=listas["classes_de_fonte"],
+        tipos_de_localizador=listas["tipos_de_localizador"], ancoras_do_consenso=listas["ancoras_do_consenso"],
+        estatutos=_vocabulario_com_flags(vocabularios, "estatutos", FLAGS_DE_ESTATUTO),
+        materialidades=_vocabulario_com_flags(vocabularios, "materialidades", FLAGS_DE_MATERIALIDADE))
+
+
+def _exigir_data(valor: Any, campo: str) -> str:
+    """`AAAA-MM-DD`, e uma data que o calendário tem (`2026-02-30` é recusa)."""
+    if isinstance(valor, str) and _PADRAO_DATA.fullmatch(valor):
+        try:
+            date.fromisoformat(valor)
+            return valor
+        except ValueError:
+            pass
+    raise EntregaInvalida(f"'{campo}' fora do formato AAAA-MM-DD, ou não é uma data do calendário: {valor!r}.")
+
+
+def _numero(valor: Any) -> bool:
+    """Número finito de JSON — booleano não é número."""
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor)
+
+
+def _nivel_do_ledger(valor: Any, contrato: ContratoDoLedger, nivel: str, onde: str) -> dict:
+    """Objeto fechado pelas chaves que o contrato do ledger declara para `nivel`."""
+    aceitas, obrigatorias = contrato.niveis[nivel]
+    return _objeto_fechado(valor, aceitas, obrigatorias, onde)
+
+
+def _exigir_ids_unicos(itens: list, onde: str, razao: str) -> None:
+    ids = [item["id"] for item in itens]
+    repetidos = sorted({ident for ident in ids if ids.count(ident) > 1})
+    if repetidos:
+        raise EntregaInvalida(f"'{onde}' repete o id '{repetidos[0]}': {razao}")
+
+
+def _validar_registro(valor: Any, onde: str, contrato: ContratoDoLedger) -> None:
+    """Um registro do ledger (D1). As chaves são as do contrato; os tipos, e as condicionais
+    que o contrato declara por flag, conferidos aqui."""
+    registro = _nivel_do_ledger(valor, contrato, "registro", onde)
+    for campo in ("id", "claim", "periodo", "unidade", "justificativa_da_fonte"):
+        _exigir_texto_nao_vazio(registro.get(campo), f"{onde}.{campo}")
+
+    fonte = _nivel_do_ledger(registro.get("fonte"), contrato, "fonte", f"{onde}.fonte")
+    _exigir_texto_nao_vazio(fonte.get("identidade"), f"{onde}.fonte.identidade")
+    _exigir_do_vocabulario(fonte.get("classe"), contrato.classes_de_fonte, f"{onde}.fonte.classe")
+
+    localizador = _nivel_do_ledger(registro.get("localizador"), contrato, "localizador", f"{onde}.localizador")
+    _exigir_do_vocabulario(localizador.get("tipo"), contrato.tipos_de_localizador, f"{onde}.localizador.tipo")
+    _exigir_texto_nao_vazio(localizador.get("valor"), f"{onde}.localizador.valor")
+    if "parametros" in localizador:
+        _exigir_objeto(localizador["parametros"], f"{onde}.localizador.parametros")
+
+    _exigir_data(registro.get("data_acesso"), f"{onde}.data_acesso")
+
+    moeda = registro.get("moeda")
+    if moeda is not None and not (isinstance(moeda, str) and moeda.strip()):
+        raise EntregaInvalida(f"'{onde}.moeda' tem de ser um texto não vazio ou null: {moeda!r}.")
+
+    valor_do_registro = registro.get("valor")
+    if valor_do_registro is not None and not _numero(valor_do_registro):
+        raise EntregaInvalida(
+            f"'{onde}.valor' tem de ser um número ou null — booleano não é número: {valor_do_registro!r}.")
+
+    estatuto = _exigir_do_vocabulario(registro.get("estatuto"), frozenset(contrato.estatutos), f"{onde}.estatuto")
+    if contrato.estatutos[estatuto]["exige_formula"]:
+        if "formula" not in registro:
+            raise EntregaInvalida(
+                f"campo obrigatório ausente em '{onde}': 'formula' — o estatuto '{estatuto}' exige a fórmula do cálculo.")
+    else:
+        for campo in ("formula", "insumos"):
+            if campo in registro:
+                raise EntregaInvalida(
+                    f"'{onde}.{campo}' só cabe num registro cujo estatuto exige fórmula, e o estatuto "
+                    f"'{estatuto}' não exige.")
+    if "formula" in registro:
+        _exigir_texto_nao_vazio(registro["formula"], f"{onde}.formula")
+    if "insumos" in registro:
+        _exigir_lista_de_textos(registro["insumos"], f"{onde}.insumos")
+
+    if "usado_em" in registro:
+        _exigir_lista_de_textos(registro["usado_em"], f"{onde}.usado_em")
+        if not _numero(valor_do_registro):
+            raise EntregaInvalida(
+                f"'{onde}.usado_em' exige 'valor' numérico: um registro que sustenta um número do caso declara "
+                f"esse número, e aqui 'valor' é {valor_do_registro!r}.")
+
+    if "reconciliacao" in registro:
+        reconciliacao = _nivel_do_ledger(registro["reconciliacao"], contrato, "reconciliacao", f"{onde}.reconciliacao")
+        _exigir_texto_nao_vazio(reconciliacao.get("texto"), f"{onde}.reconciliacao.texto")
+    if "conflito" in registro:
+        conflito = _nivel_do_ledger(registro["conflito"], contrato, "conflito", f"{onde}.conflito")
+        _exigir_texto_nao_vazio(conflito.get("vencedor"), f"{onde}.conflito.vencedor")
+        _exigir_texto_nao_vazio(conflito.get("razao"), f"{onde}.conflito.razao")
+    if "contraprova_de" in registro:
+        _exigir_texto_nao_vazio(registro["contraprova_de"], f"{onde}.contraprova_de")
+
+
+def _validar_lacuna(valor: Any, onde: str, contrato: ContratoDoLedger) -> None:
+    lacuna = _nivel_do_ledger(valor, contrato, "lacuna", onde)
+    for campo in ("id", "descricao", "tratamento"):
+        _exigir_texto_nao_vazio(lacuna.get(campo), f"{onde}.{campo}")
+    _exigir_do_vocabulario(lacuna.get("materialidade"), frozenset(contrato.materialidades), f"{onde}.materialidade")
+
+
+def _validar_ledger(valor: Any, contrato: ContratoDoLedger) -> None:
+    """D1: o ledger na forma do contrato lido. Se um id citado existe, se um número do caso tem
+    proveniência e se o registro reconcilia com ele é QC (`qc.py`), código 2."""
+    ledger = _nivel_do_ledger(valor, contrato, "ledger", "ledger")
+    if ledger.get("versao_contrato") != contrato.versao:
+        raise EntregaInvalida(
+            f"'ledger.versao_contrato' incompatível: {ledger.get('versao_contrato')!r}. Este builder só lê "
+            f"'{contrato.versao}'.")
+    registros = _exigir_lista(ledger.get("registros"), "ledger.registros")
+    for indice, registro in enumerate(registros):
+        _validar_registro(registro, f"ledger.registros.{indice}", contrato)
+    _exigir_ids_unicos(registros, "ledger.registros",
+                       "cada registro tem um id próprio — é por ele que os insumos de um cálculo, o vencedor de "
+                       "um conflito, a contraprova, o consenso e os datasets o citam.")
+    lacunas = _exigir_lista(ledger.get("lacunas"), "ledger.lacunas")
+    for indice, lacuna in enumerate(lacunas):
+        _validar_lacuna(lacuna, f"ledger.lacunas.{indice}", contrato)
+    _exigir_ids_unicos(lacunas, "ledger.lacunas", "cada lacuna tem um id próprio.")
+
+
+def _validar_consenso(valor: Any, contrato: ContratoDoLedger) -> None:
+    """D4 (§9: "consenso como referência externa"; §6.3): o consenso cita os registros do ledger
+    que o sustentam OU declara a âncora observável que entra no lugar dele, com a razão —
+    exatamente um dos dois. Se os ids citados existem é QC (`referencia_fora_do_ledger`)."""
+    onde = "analise.consenso"
+    consenso = _objeto_fechado(valor, CHAVES_DE_CONSENSO, frozenset(), onde)
+    tem_registros, tem_ausente = "registros" in consenso, "ausente" in consenso
+    if tem_registros and tem_ausente:
+        raise EntregaInvalida(
+            f"'{onde}' declara 'registros' e 'ausente' ao mesmo tempo: o consenso cita os registros do ledger "
+            "que o sustentam OU declara a âncora que entra no lugar dele — nunca os dois.")
+    if not tem_registros and not tem_ausente:
+        raise EntregaInvalida(
+            f"'{onde}' não declara 'registros' nem 'ausente': o consenso cita os registros do ledger que o "
+            "sustentam ou declara a âncora observável que entra no lugar dele (§6.3).")
+    if tem_registros:
+        _exigir_lista_de_textos(consenso["registros"], f"{onde}.registros")
+        return
+    ausente = _objeto_fechado(consenso["ausente"], CHAVES_DE_CONSENSO_AUSENTE, CHAVES_DE_CONSENSO_AUSENTE,
+                              f"{onde}.ausente")
+    _exigir_do_vocabulario(ausente["ancora"], contrato.ancoras_do_consenso, f"{onde}.ausente.ancora")
+    _exigir_texto_nao_vazio(ausente["razao"], f"{onde}.ausente.razao")
+
+
+def _validar_confronto(valor: Any) -> None:
+    """D5 (§12, decisão 20): a análise fornecida e cada divergência com a classificação fechada."""
+    confronto = _objeto_fechado(valor, CHAVES_DE_CONFRONTO, CHAVES_DE_CONFRONTO, "confronto")
+    fornecida = _objeto_fechado(confronto["analise_fornecida"], CHAVES_DA_ANALISE_FORNECIDA,
+                                CHAVES_DA_ANALISE_FORNECIDA, "confronto.analise_fornecida")
+    _exigir_texto_nao_vazio(fornecida["identificacao"], "confronto.analise_fornecida.identificacao")
+    _exigir_data(fornecida["data"], "confronto.analise_fornecida.data")
+    for indice, divergencia in enumerate(_exigir_lista(confronto["divergencias"], "confronto.divergencias")):
+        onde = f"confronto.divergencias.{indice}"
+        divergencia = _objeto_fechado(divergencia, CHAVES_DE_DIVERGENCIA, CHAVES_DE_DIVERGENCIA, onde)
+        _exigir_do_vocabulario(divergencia["classificacao"], CLASSIFICACOES_DE_DIVERGENCIA, f"{onde}.classificacao")
+        for campo in ("item", "anterior", "atual", "explicacao"):
+            _exigir_texto_nao_vazio(divergencia[campo], f"{onde}.{campo}")
+
+
 def _validar_execucao(execucao: Any) -> None:
     execucao = _exigir_objeto(execucao, "execucao")
     _recusar_chave_desconhecida(execucao, CHAVES_DE_EXECUCAO, "execucao")
@@ -305,9 +589,10 @@ def _validar_pergunta(valor: Any, onde: str, ids_de_exhibit: list[str]) -> None:
         _exigir_texto_nao_vazio(sem_exhibit["razao"], f"{onde}.sem_exhibit.razao")
 
 
-def _validar_analise(analise: Any, resultados: dict) -> None:
-    """`analise` (A1 + 5B/G1 + 5D/D1-D5): vocabulário fechado em todo nível.
-    `resultados` só é lido para a condicional da faixa (D1/D3)."""
+def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger) -> None:
+    """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4): vocabulário fechado em todo nível.
+    `resultados` só é lido para a condicional da faixa (D1/D3); o contrato do ledger,
+    para a âncora do consenso ausente."""
     analise = _objeto_fechado(analise, CHAVES_DE_ANALISE, CHAVES_DE_ANALISE_OBRIGATORIAS, "analise")
 
     # D1/D3: uma faixa de preços é preço-alvo. Fora da fronteira de escopo ela é
@@ -329,6 +614,8 @@ def _validar_analise(analise: Any, resultados: dict) -> None:
 
     veredicto = _objeto_fechado(analise["veredicto"], CHAVES_DE_VEREDICTO, CHAVES_DE_VEREDICTO, "analise.veredicto")
     _exigir_texto_nao_vazio(veredicto["texto"], "analise.veredicto.texto")
+
+    _validar_consenso(analise["consenso"], contrato)
 
     # 5B/G1: vocabulário fechado por exhibit/série/overlay/dataset é
     # responsabilidade de `exhibits.py` (ver o docstring do módulo, e o de
@@ -382,22 +669,23 @@ def _validar_analise(analise: Any, resultados: dict) -> None:
             )
 
 
-def _validar(entrega: Any) -> None:
+def _validar(entrega: Any, contrato: ContratoDoLedger) -> None:
     """Valida o dict já carregado de `entrega.json`; levanta `EntregaInvalida`
     na primeira violação. Ordem: raiz é objeto -> chaves de topo desconhecidas
     -> campos de topo obrigatórios -> versão da entrega -> `execucao`
     (vocabulário, campos, dicionário do idioma) -> `caso` (só tipo) ->
     identidade de ticker entre `caso`/`execucao` (B7, quando `caso` declara
     um) -> `resultados` (tipo + versão do sub-contrato + presença de
-    `fronteira_de_escopo`, 5D) -> `dados` (5B/G3, só quando presente -- é o
-    único campo de topo opcional) -> `analise` (vocabulário completo, incluindo
-    `exhibits`, 5B/G1, e a Tese, 5D/D1-D5) -> `ledger`/`ficha_tecnica` (só tipo).
+    `fronteira_de_escopo`, 5D) -> `dados` (5B/G3, só quando presente) ->
+    `analise` (vocabulário completo, incluindo `exhibits`, 5B/G1, a Tese,
+    5D/D1-D5, e o consenso, 5E/D4) -> `ledger` (o contrato `ledger/1`, 5E/D1)
+    -> `confronto` (5E/D5, só quando presente — e exigido pelo que mudou).
     """
     if not isinstance(entrega, dict):
         raise EntregaInvalida(
             "entrega.json inválido: o documento raiz tem de ser um objeto "
             "(com as chaves versao_contrato, execucao, caso, resultados, "
-            f"analise, ledger, ficha_tecnica), não {type(entrega).__name__}: "
+            f"analise, ledger), não {type(entrega).__name__}: "
             f"{entrega!r}."
         )
 
@@ -465,15 +753,27 @@ def _validar(entrega: Any) -> None:
         except exhibits.ContratoDeExhibitInvalido as erro:
             raise EntregaInvalida(str(erro)) from erro
 
-    _validar_analise(entrega["analise"], resultados)
+    _validar_analise(entrega["analise"], resultados, contrato)
+    _validar_ledger(entrega["ledger"], contrato)
 
-    if not isinstance(entrega["ledger"], list):
-        raise EntregaInvalida(f"'ledger' não é uma lista: {entrega['ledger']!r}.")
-    _exigir_objeto(entrega["ficha_tecnica"], "ficha_tecnica")
+    # D5: o que mudou desde a análise fornecida, sem o confronto que classifica
+    # cada divergência, é afirmação solta.
+    if "confronto" in entrega:
+        _validar_confronto(entrega["confronto"])
+    elif "mudou_desde_analise_fornecida" in entrega["analise"]:
+        raise EntregaInvalida(
+            "'analise.mudou_desde_analise_fornecida' exige 'confronto' na raiz da entrega: o que mudou desde a "
+            "análise fornecida sai do confronto que classifica cada divergência (§12) — sem ele, é afirmação solta."
+        )
 
 
-def carregar(raiz: Path) -> Entrega:
+def carregar(raiz: Path, contrato_ledger: Any) -> Entrega:
     """Lê e valida `<raiz>/entrega.json`; devolve o dict. Nunca escreve nada.
+
+    `contrato_ledger` (5E, D1): o dict do contrato `ledger/1` do `er-evidencia`, que
+    `builder.py` lê pela constante dos assets externos — a forma do ledger é validada
+    contra ele, nunca contra uma cópia deste pacote. Fora da forma que o relatório lê,
+    `ContratoDoLedgerInvalido`, antes de olhar a raiz.
 
     Regra inviolável 6: `raiz` é a ÚNICA raiz de execução aceita. Um
     `entrega.json` cujo caminho resolvido (`Path.resolve()`, que segue
@@ -482,6 +782,7 @@ def carregar(raiz: Path) -> Entrega:
     elevado no Windows; o teste que cobre isso pula, declarando a razão
     (o CI, em Ubuntu, roda sempre).
     """
+    contrato = ler_contrato_do_ledger(contrato_ledger)
     raiz = Path(raiz)
     if not raiz.is_dir():
         raise EntregaInvalida(f"raiz de execução não é um diretório: '{raiz}'.")
@@ -506,5 +807,5 @@ def carregar(raiz: Path) -> Entrega:
     except json.JSONDecodeError as erro:
         raise EntregaInvalida(f"'entrega.json' não é um JSON válido: {erro}.") from erro
 
-    _validar(entrega)
+    _validar(entrega, contrato)
     return entrega

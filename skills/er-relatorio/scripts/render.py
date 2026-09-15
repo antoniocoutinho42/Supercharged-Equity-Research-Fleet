@@ -347,8 +347,8 @@ def _json_embutido(dados: Any) -> str:
 
 
 def _texto_valor(valor) -> str:
-    """Texto de exibição de um valor de dado OPACO (entrada de `log` ou de
-    `ficha_tecnica`) — nunca interpretado, só tornado legível. `None` vira
+    """Texto de exibição de um valor de dado OPACO (entrada de `log`) —
+    nunca interpretado, só tornado legível. `None` vira
     texto vazio; escalar vira `str()`; dict/list vira JSON compacto
     determinístico (chaves ordenadas), para caber numa célula de tabela."""
     if valor is None:
@@ -1758,15 +1758,15 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
 
 
 # --------------------------------------------------------------------------
-# Aba Evidência: metodologia (`resultados.origem.metodologia`),
-# `ficha_tecnica` (conteúdo opaco nesta fatia — só o tipo é contrato; a 5D
-# detalha) e o log de resolução dos placeholders de toda a prosa (a conclusão
+# Aba Evidência: metodologia (`resultados.origem.metodologia`), a ficha
+# técnica e o log de resolução dos placeholders de toda a prosa (a conclusão
 # até a 5D, Task 3; desde então, também os textos da Tese e dos exhibits), em
-# tabela.
+# tabela. Fatia 5E, Task 2 (D6): `ficha_tecnica` saiu do contrato `entrega/1`
+# — a ficha é da execução, e quem a compõe é o builder (Task 3) —, e até lá a
+# seção sai vazia, sem ler nada da entrega.
 # --------------------------------------------------------------------------
 
-def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, log_exhibits: list,
-                     idioma: str, dicionario: dict) -> str:
+def _evidencia_html(resultados: dict, log: list, log_exhibits: list, idioma: str, dicionario: dict) -> str:
     metodologia = resultados["origem"]["metodologia"]
     nome = html.escape(str(metodologia.get("nome", "")))
     versao = html.escape(str(metodologia.get("versao", "")))
@@ -1777,14 +1777,7 @@ def _evidencia_html(resultados: dict, ficha_tecnica: dict, log: list, log_exhibi
         f'</section>'
     )
 
-    if ficha_tecnica:
-        linhas_ficha = "".join(
-            f'<tr><th>{html.escape(str(chave))}</th><td>{html.escape(_texto_valor(valor))}</td></tr>'
-            for chave, valor in ficha_tecnica.items()
-        )
-        corpo_ficha = f'<table class="ficha-tecnica"><tbody>{linhas_ficha}</tbody></table>'
-    else:
-        corpo_ficha = f'<p>{html.escape(t(dicionario, "evidencia.ficha_tecnica_vazia"))}</p>'
+    corpo_ficha = f'<p>{html.escape(t(dicionario, "evidencia.ficha_tecnica_vazia"))}</p>'
     bloco_ficha = (
         f'<section class="ficha-tecnica-bloco">'
         f'<h2>{html.escape(t(dicionario, "evidencia.ficha_tecnica_titulo"))}</h2>'
@@ -1896,8 +1889,7 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     corpo_tese = _tese_html(entrega, catalogo, achados, idioma, dicionario, titulo, prosa, exhibits_resolvidos)
     corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario,
                                        com_laboratorio=laboratorio is not None)
-    corpo_evidencia = _evidencia_html(
-        resultados, entrega["ficha_tecnica"], log, log_exhibits, idioma, dicionario)
+    corpo_evidencia = _evidencia_html(resultados, log, log_exhibits, idioma, dicionario)
 
     # Os painéis SVG da Valuation entram no MESMO `<script type="application/
     # json">` dos exhibits (uma chave a mais, `paineis_valuation`) — nunca um

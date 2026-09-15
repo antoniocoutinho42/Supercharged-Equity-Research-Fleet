@@ -10,9 +10,10 @@ description: >-
   o CLI `builder.py` que emite `relatorio.html` + `qc.json` a partir de uma
   raiz de execução — ou recusa, nomeando a razão. Item 5 do v4, fatias 5A
   (contrato + QC + render das três abas), 5B (exhibits, uPlot e os painéis
-  SVG da Valuation), 5C (laboratório) e 5D (a Tese: perguntas, faixa,
-  veredicto, fronteira de escopo e a aba renderizada), com as ondas de
-  correção das revisões finais.
+  SVG da Valuation), 5C (laboratório), 5D (a Tese: perguntas, faixa,
+  veredicto, fronteira de escopo e a aba renderizada) e 5E (o ledger
+  `ledger/1` do `er-evidencia`, a proveniência dos insumos do caso, o
+  consenso e o confronto), com as ondas de correção das revisões finais.
   NÃO use para o relatório de 2 abas em produção (esse é
   `er-relatorio-html`, v3); não use para rodar o valuation (`er-valuation`)
   nem para o workflow da análise (`er-analise`).
@@ -83,7 +84,7 @@ Códigos de saída:
 |---|---|---|
 | `0` | QC sem `HARD_FAIL` | `relatorio.html` + `qc.json` |
 | `2` | QC achou `HARD_FAIL` | só `qc.json` |
-| `1` | uso incorreto, ou `entrega.json` ausente/malformado/fora da raiz/versão incompatível/idioma sem dicionário/`execucao.ticker` divergente de `caso.ticker` | nada |
+| `1` | uso incorreto, ou `entrega.json` ausente/malformado/fora da raiz/versão incompatível/idioma sem dicionário/`execucao.ticker` divergente de `caso.ticker`, ou o contrato do ledger ilegível ou fora da forma que o relatório lê | nada |
 
 A razão de uma recusa código `1` sai em stderr, nomeando o campo (e, para
 chave desconhecida, uma sugestão por `difflib`). Regra inviolável 6: o
@@ -104,6 +105,7 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
     "conclusao": {"texto": "Valor justo de {{resultados:manchete.preco_acao|moeda}} por ação."},
     "faixa": {"piso": "base", "base": "base", "teto": "base"},
     "veredicto": {"texto": "O preço de tela embute um retorno sobre o capital abaixo do que a companhia sustenta."},
+    "consenso": {"registros": ["consenso-ebitda-2026"]},
     "premissas_decisivas": [
       {"chave": "roic", "derivacao": "Média normalizada do retorno sobre o capital investido no ciclo."}
     ],
@@ -143,8 +145,43 @@ escrita de `relatorio.html`/`qc.json` passa através de um symlink.
     ],
     "exhibits": []
   },
-  "ledger": [],
-  "ficha_tecnica": {}
+  "ledger": {
+    "versao_contrato": "ledger/1",
+    "registros": [
+      {"id": "preco-b3", "claim": "Preço de fechamento da ação",
+       "fonte": {"identidade": "B3", "classe": "api"},
+       "localizador": {"tipo": "endpoint", "valor": "equity.price.historical", "parametros": {"symbol": "SINT3"}},
+       "data_acesso": "2026-08-21", "periodo": "2026-08-21", "moeda": "BRL", "unidade": "R$ por ação",
+       "estatuto": "reported", "valor": 55.0,
+       "justificativa_da_fonte": "A bolsa é a fonte primária do preço negociado.",
+       "usado_em": ["preco.valor"]},
+      {"id": "roic-dfp", "claim": "Retorno sobre o capital investido normalizado",
+       "fonte": {"identidade": "Demonstrações auditadas", "classe": "filing"},
+       "localizador": {"tipo": "documento", "valor": "DFP de 2025, nota de capital investido"},
+       "data_acesso": "2026-08-20", "periodo": "2023-2025", "moeda": null, "unidade": "pp",
+       "estatuto": "calculated", "formula": "média do NOPAT sobre o capital investido, de 2023 a 2025",
+       "valor": 12.0,
+       "justificativa_da_fonte": "As demonstrações auditadas são a fonte do lucro e do capital da própria companhia.",
+       "usado_em": ["cenarios.base.premissas.roic"]},
+      {"id": "roic-release", "claim": "Retorno sobre o capital investido normalizado",
+       "fonte": {"identidade": "Release de resultados", "classe": "release"},
+       "localizador": {"tipo": "documento", "valor": "Release do quarto trimestre de 2025"},
+       "data_acesso": "2026-08-20", "periodo": "2023-2025", "moeda": null, "unidade": "pp",
+       "estatuto": "reported", "valor": 12.0,
+       "justificativa_da_fonte": "A companhia publica o indicador com a mesma definição, por outra via.",
+       "contraprova_de": "roic-dfp"},
+      {"id": "consenso-ebitda-2026", "claim": "Consenso de EBITDA",
+       "fonte": {"identidade": "Provedor de consenso", "classe": "api"},
+       "localizador": {"tipo": "endpoint", "valor": "equity.estimates.consensus", "parametros": {"symbol": "SINT3"}},
+       "data_acesso": "2026-08-21", "periodo": "2026E", "moeda": "BRL", "unidade": "R$ milhões",
+       "estatuto": "reported", "valor": 1100.0,
+       "justificativa_da_fonte": "A expectativa de mercado vem do consenso dos analistas que cobrem a companhia."}
+    ],
+    "lacunas": [
+      {"id": "segmentos", "descricao": "A companhia não publica a abertura da receita por segmento.",
+       "materialidade": "nao_material", "tratamento": "A análise usa o consolidado, e a limitação fica declarada."}
+    ]
+  }
 }
 ```
 
@@ -158,11 +195,16 @@ que decide se `analise.faixa` é exigida) — o conteúdo pertence ao contrato d
 `er-valuation`, nunca revalidado aqui. Exceção pontual: quando `caso` declara
 um `ticker`, ele tem de bater com `execucao.ticker` (identidade da empresa que
 o título da página nomeia e a que o valuation avaliou). `execucao.idioma`
-precisa ter dicionário em `assets/i18n/<idioma>.json`. `ledger`/`ficha_tecnica`
-só têm o tipo confirmado (lista / objeto); a fatia 5E detalha o conteúdo dos
-dois. Produzir a entrega em produção é `er-analise` (item 8); por ora,
-`tests/relatorio_apoio.py` monta raízes de teste rodando `avaliar()` de verdade
-sobre uma fixture de caso, com uma Tese válida e a reversa onde o gate a admite.
+precisa ter dicionário em `assets/i18n/<idioma>.json`. O `ledger` tem a forma
+do contrato `ledger/1` do `er-evidencia`, e `analise.consenso` é obrigatório (ver
+"O ledger, o consenso e o confronto"); `ficha_tecnica` não faz parte do
+contrato — uma entrega que a declare é recusada. Produzir a entrega em produção
+é `er-analise` (item 8); por ora, `tests/relatorio_apoio.py` monta raízes de
+teste rodando `avaliar()` de verdade sobre uma fixture de caso, com uma Tese
+válida, a reversa onde o gate a admite, e o ledger e o consenso derivados do
+mapa dos insumos do caso. No exemplo acima, o teste que o executa troca `caso` e
+`resultados` pelos de uma fixture e completa o ledger só com os insumos do caso
+real que o exemplo não nomeia.
 
 ## A Tese (`analise`, fatia 5D)
 
@@ -203,6 +245,40 @@ ausente em 'analise': 'exhibits'`). `dados` é o único campo de topo
 OPCIONAL: uma análise cujos exhibits são todos `engine` (leem `resultados`
 direto) não precisa de dataset nenhum.
 
+## O ledger, o consenso e o confronto (fatia 5E)
+
+O **ledger** tem a forma do contrato `ledger/1`, que é do `er-evidencia` (§3.2 do
+desenho) e mora em `skills/er-evidencia/assets/contrato_ledger.json`. O builder o
+lê por `ASSETS_DA_INTEGRACAO["contrato_ledger"]` e valida a entrega contra ele —
+nunca contra uma cópia neste skill. As chaves aceitas e obrigatórias de cada nível
+e os vocabulários fechados vêm do contrato; este skill confere os tipos. A forma é
+recusa de contrato (`RC=1`, nomeando o campo, com sugestão); o conteúdo é QC.
+
+| Nível | Forma |
+|---|---|
+| `ledger` | `versao_contrato` (a do contrato, `"ledger/1"`), `registros`, `lacunas` |
+| `ledger.registros[]` | `id` (único), `claim`, `periodo`, `unidade` e `justificativa_da_fonte`, textos; `fonte`; `localizador`; `data_acesso` em `AAAA-MM-DD`; `moeda`, texto ou `null`; `estatuto`, do vocabulário do contrato; `valor`, número ou `null` (booleano não é número); `formula` **se e só se** o estatuto declara `exige_formula`, e `insumos` (ids) só nesse caso; `usado_em` (caminhos do caso, com o índice de lista como segmento) exige `valor` numérico; `reconciliacao`, `conflito` e `contraprova_de` (um id) opcionais |
+| `fonte` | `identidade` (texto) e `classe` (vocabulário `classes_de_fonte`) |
+| `localizador` | `tipo` (vocabulário `tipos_de_localizador`), `valor` (texto) e `parametros` (objeto, opcional) |
+| `reconciliacao` | `texto` |
+| `conflito` | `vencedor` (um id) e `razao` |
+| `ledger.lacunas[]` | `id` (único), `descricao`, `materialidade` (vocabulário do contrato) e `tratamento` |
+| `analise.consenso` | `{"registros": [ids]}` **ou** `{"ausente": {"ancora", "razao"}}`, nunca os dois; `ancora` do vocabulário `ancoras_do_consenso` |
+| `confronto` (opcional, na raiz) | `analise_fornecida` (`identificacao`, `data` em `AAAA-MM-DD`) e `divergencias[]` (`item`, `classificacao` ∈ `dado_novo`, `premissa_revista`, `erro_anterior`, `pergunta_resolvida`, `anterior`, `atual`, `explicacao`); `analise.mudou_desde_analise_fornecida` exige o confronto |
+| `dados.<id>.ledger` | lista dos ids dos registros que sustentam o dataset |
+
+**Quais números exigem proveniência é declaração da integração:** o mapa
+`catalogo.insumos_do_caso`, com a gramática de `conclusoes_de_valor`. Cada folha
+numérica do caso que ele cobre precisa de um registro cujo `usado_em` a nomeie,
+com o mesmo número. **A doutrina de evidência é do contrato:** estimativa, fórmula
+e lacuna que vira disclosure saem das flags `e_estimativa`, `exige_formula` e
+`exige_disclosure`, nunca do nome de um estatuto ou de uma materialidade. **Prosa
+e dado:** a `descricao` e o `tratamento` de uma lacuna e a `razao` do consenso
+ausente são prosa auditável da Tese (lista de prosa); os demais textos do ledger e
+os do confronto são dado da Evidência (§9) e podem citar números. A **ficha
+técnica** não é declarada: é da execução, e a Evidência a mostra vazia até o
+builder compô-la.
+
 ## Placeholders auditáveis (A7)
 
 `{{resultados:<caminho>|<formato>}}`, `{{caso:<caminho>|<formato>}}`,
@@ -234,9 +310,21 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
 
 ```json
 "dados": {
-  "fin": {"ledger": [], "x": ["2021", "2022", "2023", "2024"],
+  "fin": {"ledger": ["dfp-2021-2024"], "x": ["2021", "2022", "2023", "2024"],
           "campos": {"receita": [100.0, 110.0, 120.0, 130.0],
                      "ebitda": [20.0, 23.0, 27.0, 31.0]}}
+},
+"ledger": {
+  "versao_contrato": "ledger/1",
+  "registros": [
+    {"id": "dfp-2021-2024", "claim": "Receita e EBITDA anuais",
+     "fonte": {"identidade": "Demonstrações auditadas", "classe": "filing"},
+     "localizador": {"tipo": "documento", "valor": "DFPs de 2021 a 2024, demonstração do resultado"},
+     "data_acesso": "2026-08-20", "periodo": "2021-2024", "moeda": "BRL", "unidade": "R$ milhões",
+     "estatuto": "reported", "valor": null,
+     "justificativa_da_fonte": "As demonstrações auditadas são a fonte primária do resultado histórico."}
+  ],
+  "lacunas": []
 },
 "analise": {
   "exhibits": [{
@@ -259,7 +347,7 @@ nenhum** — ela diz DE ONDE o número vem, e o builder o lê:
 
 | Nível | Chaves | Notas |
 |---|---|---|
-| `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` só tem o tipo confirmado nesta fatia (item 7 detalha) |
+| `dados.<id>` | `ledger`, `x`, `campos` — todas obrigatórias | `x` é o eixo (número ou texto); `campos.<nome>` é uma lista paralela a `x`; `ledger` é a lista dos ids dos registros do ledger que sustentam o dataset — um dataset usado por série `direta` ou `derivada` sem nenhum é `dataset_sem_proveniencia` |
 | `analise.exhibits[]` | `id`, `pergunta`, `tipo`, `series` obrigatórias; `overlays`, `nota_janela`, `caption` opcionais | `id` único; `tipo` ∈ `linha`, `barras`, `area`, `empilhado`, `dispersao`, `tabela`; o exhibit não declara vínculo (5D, D5) — a pergunta da tese que ele responde o cita em `perguntas[].exhibits`, e ele é desenhado sob ela; `pergunta`, `nota_janela` e `caption` são prosa auditável (dígito só por placeholder) |
 | série `direta` | `derivacao`, `fonte` (`"<dataset>.<campo>"`) | o campo, verbatim; `null` é ponto ausente legítimo (travessão no gráfico) |
 | série `derivada` | `derivacao`, `fonte` (**só o id do dataset**), `formula`, `formula_nota` | fórmula fechada: `+ - * /`, menos unário, parênteses, número e nome de campo do MESMO dataset — nunca `eval`; `formula_nota` é prosa auditável (o gráfico a escreve na legenda) |
@@ -310,11 +398,23 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 | `fronteira_de_escopo_desconhecida` | HARD FAIL | sob fronteira de escopo, o catálogo não rotula a classe no idioma da entrega ou não publica `conclusoes_de_valor` — sem o mapa nenhum número de valor seria reconhecido, e a regra falha fechada |
 | `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente sem nenhuma limitação publicada que o catálogo declare com `afeta: "reversa"` — a decisão lê a declaração, nunca o nome da chave |
 | `limitacao_desconhecida` | HARD FAIL | chave de `resultados.limitacoes` que o catálogo não declara com rótulo no idioma e com `afeta` |
+| `insumo_sem_proveniencia` | HARD FAIL | folha numérica do caso que `catalogo.insumos_do_caso` cobre sem registro do ledger cujo `usado_em` a nomeie — booleano não é folha numérica, e o índice de lista é segmento |
+| `usado_em_fora_dos_insumos` | HARD FAIL | caminho de `usado_em` que não nomeia uma folha numérica do caso coberta pelo mapa: o caso não tem esse número, ou ele não é insumo |
+| `insumo_nao_reconciliado` | HARD FAIL | `valor` do registro diferente do número do caso naquele caminho (`math.isclose` com `qc.TOLERANCIA_RELATIVA_DE_RECONCILIACAO` e `qc.TOLERANCIA_ABSOLUTA_DE_RECONCILIACAO`), sem `reconciliacao` |
+| `conflito_de_fontes_silenciado` | HARD FAIL | registros do mesmo `claim` e `periodo`, com `valor` numérico e algum par fora da mesma tolerância, sem nenhum deles declarar `conflito.vencedor` dentre os ids do grupo — um achado por grupo |
+| `referencia_fora_do_ledger` | HARD FAIL | id que o ledger não tem, citado em `insumos`, `conflito.vencedor`, `contraprova_de`, `analise.consenso.registros` ou `dados.<id>.ledger` |
+| `dataset_sem_proveniencia` | HARD FAIL | dataset usado por série `direta` ou `derivada` com `ledger` vazio |
+| `insumos_do_caso_desconhecidos` | HARD FAIL | o catálogo não publica `insumos_do_caso` na forma do contrato — sem o mapa nenhum insumo seria exigido, e as regras de proveniência falham fechadas |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
+| `insumo_estimado` | REQUIRED DISCLOSURE | registro cujo estatuto declara `e_estimativa` e cujo `usado_em` nomeia insumo do caso — com o `claim` |
+| `sem_contraprova_independente` | REQUIRED DISCLOSURE | premissa decisiva cujo número no caso (`cenarios.<manchete.cenario>.premissas.<chave>`) não tem registro com `contraprova_de` apontando para um registro que o sustenta, vindo de outra `fonte.identidade` e com o mesmo `valor` dele (pela tolerância da reconciliação) ou com `reconciliacao` declarada — a mesma identidade não conta, e uma fonte que diverge sem reconciliação não confirma; com o rótulo da premissa no catálogo |
+| `lacuna_material` | REQUIRED DISCLOSURE | lacuna cuja materialidade declara `exige_disclosure` — com a `descricao` e o `tratamento`, e o campo de cada um na lista de prosa (`params.campos_de_prosa`) |
+| `consenso_indisponivel` | REQUIRED DISCLOSURE | `analise.consenso.ausente` — com a âncora substituta, a razão e o campo dela na lista de prosa; sem consenso, o confronto temporal da reversa fica indisponível |
 | `serie_curta_sem_nota_janela` | QUALITY WARNING | série com menos de 10 pontos e exhibit sem `nota_janela` |
 | `tese_dependente_de_uma_premissa` | QUALITY WARNING | todas as perguntas com o mesmo `vinculo` de um item só |
+| `concentracao_de_fontes` | QUALITY WARNING | uma `fonte.identidade` sustenta mais de `qc.LIMIAR_DE_CONCENTRACAO_DE_FONTES` (metade) dos insumos do caso, quando há ao menos `qc.MINIMO_DE_INSUMOS_PARA_CONCENTRACAO` (quatro) |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 `params` substituídos) — nunca hardcoded (§16.1); o "porquê" metodológico de
@@ -379,9 +479,10 @@ título da matriz. A decisão é uma só (`render._leitura_condicional`): quem e
 o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome
 de campo decide.
 
-**Evidência** — metodologia, ficha técnica, o log de resolução de **todo**
-placeholder da prosa (conclusão, textos da Tese e dos exhibits) e a
-rastreabilidade série a série dos exhibits.
+**Evidência** — metodologia, ficha técnica (vazia até o builder compô-la: a
+ficha é da execução e saiu do contrato na fatia 5E), o log de resolução de
+**todo** placeholder da prosa (conclusão, textos da Tese, do consenso ausente,
+das lacunas e dos exhibits) e a rastreabilidade série a série dos exhibits.
 
 `assets/template.html` é a casca estática — CSS e JS
 100% inline, nenhum `src`/`href`/`url()`/`@import` que não seja
@@ -397,9 +498,9 @@ caminho), nunca um `KeyError` cru.
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `scripts/entrega.py` | Contrato de `entrega.json`: carrega, valida, recusa; `sha256_canonico`; identidade de ticker |
+| `scripts/entrega.py` | Contrato de `entrega.json`: carrega, valida, recusa; `sha256_canonico`; identidade de ticker; a leitura do contrato `ledger/1` (`ler_contrato_do_ledger`), contra o qual valida o ledger, o consenso e o confronto |
 | `scripts/exhibits.py` | Contrato de `analise.exhibits`/`entrega.dados`; avaliador fechado da fórmula (`ast`, nunca `eval`); resolve série/overlay em número e produz o log de rastreabilidade |
-| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem; e o leitor do mapa das conclusões de valor (`conclusoes_de_valor`/`conclusao_de_valor`), que o QC e a tela consultam sob fronteira de escopo |
+| `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem; e o leitor do mapa das conclusões de valor (`conclusoes_de_valor`/`conclusao_de_valor`), que o QC e a tela consultam sob fronteira de escopo; e o do mapa dos insumos do caso (`insumos_do_caso`/`insumo_do_caso`), com o mesmo casador de padrão, que o QC consulta para exigir proveniência |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
 | `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados; embute o payload dos exhibits e dos painéis |
 | `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, decide o exit code |
@@ -420,9 +521,14 @@ base de múltiplo, rótulo de convenção terminal, severidade e rótulo de
 diagnóstico, texto do disclosure de divergência de base e a chave que o
 dispara, o vocabulário de vínculo das perguntas da tese — premissas da rota e
 blocos econômicos —, o rótulo e o bloco suprimido, `afeta`, de cada
-limitação, e o mapa das conclusões de valor — quais números de `resultados`,
-em que unidade, são leitura condicional sob fronteira de escopo) vem de
+limitação, o mapa das conclusões de valor — quais números de `resultados`,
+em que unidade, são leitura condicional sob fronteira de escopo — e o mapa dos
+insumos do caso — quais números do caso exigem proveniência) vem de
 `skills/er-valuation/assets/catalogo_apresentacao.json` — lido via
-`ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A fonte canônica da
+`ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A doutrina de evidência que o QC
+aplica — classes de fonte, estatutos, materialidades, âncoras do consenso e as
+flags que decidem estimativa, fórmula e lacuna que vira disclosure — vem do
+contrato `ledger/1` do `er-evidencia`
+(`skills/er-evidencia/assets/contrato_ledger.json`), pela mesma constante. A fonte canônica da
 metodologia é `skills/er-multiplos-justos/SKILL.md`; da orquestração,
 `skills/er-valuation/SKILL.md`. Desenho: `docs/desenho-arquitetura-v4.md`.

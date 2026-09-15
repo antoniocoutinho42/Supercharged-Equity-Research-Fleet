@@ -67,7 +67,7 @@ def _preparar_com_exhibits(exhibits_decl, dados=None, texto_conclusao=None):
 
     _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
 
     exhibits_resolvidos, log_exhibits = exhibits.resolver(entrega_dict)
@@ -215,7 +215,7 @@ def test_nenhum_recurso_externo_com_exhibits_e_uplot_embutido():
         [EXHIBIT_LINHA, EXHIBIT_TABELA], dados=DADOS_RECEITA)
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", exhibits_resolvidos, log_exhibits)
 
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=pagina)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=pagina)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 

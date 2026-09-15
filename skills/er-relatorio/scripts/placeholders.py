@@ -350,12 +350,24 @@ def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
       desde a 5D (Task 3, achado 4) — os exhibits são desenhados dentro da aba Tese,
       sob as perguntas —, e os textos que o gráfico escreve ali, na legenda e no
       cabeçalho da tabela, desde a onda de correção (F3 e N12): a `formula_nota` de
-      uma série derivada, o `rotulo` de uma série engine e o `rotulo` de um overlay.
+      uma série derivada, o `rotulo` de uma série engine e o `rotulo` de um overlay;
+    - a razão do consenso ausente (`analise.consenso.ausente.razao`) e, de cada lacuna
+      do ledger, `descricao` e `tratamento`, desde a 5E (Task 2, D3/D4): a Tese os
+      exibe — a razão ao lado do consenso, a lacuna material entre os avisos
+      obrigatórios —, e um número ali é número sem proveniência como em qualquer texto
+      da Tese. O disclosure que os cita (`lacuna_material`, `consenso_indisponivel`)
+      carrega o `onde` de cada um, para a Tese exibir o texto resolvido por esta lista.
 
     Identificador e vocabulário (`id`, `tema`, `vetor`, `incorporacao`, `vinculo`,
-    `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit, a classe da fronteira)
-    não são prosa e não entram. O nome de campo que rotula uma série direta é
-    identificador de `dados` (contrato da 5E) e também não entra.
+    `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit, a classe da fronteira,
+    a âncora do consenso, a materialidade) não são prosa e não entram. O nome de campo
+    que rotula uma série direta é identificador de `dados` e também não entra.
+
+    Os textos dos registros do ledger (o `claim`, a justificativa da fonte, a
+    reconciliação, a razão de um conflito) e os do confronto também não entram: são dado
+    da aba Evidência, onde a §9 permite a linguagem interna, e nunca prosa da Tese. Da
+    Tese, eles só aparecem como dado — o `claim` de um insumo estimado, os campos
+    estruturados de um registro de consenso.
 
     Tolerante a forma: o QC também roda sobre entregas montadas direto em teste,
     sem `entrega.carregar` — o que não é texto simplesmente não é colhido."""
@@ -371,6 +383,11 @@ def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
         _texto(f"resultados.fronteira_de_escopo.{campo}", fronteira.get(campo))
     _texto("analise.conclusao.texto", _objeto(analise.get("conclusao")).get("texto"))
     _texto("analise.veredicto.texto", _objeto(analise.get("veredicto")).get("texto"))
+    _texto("analise.consenso.ausente.razao",
+           _objeto(_objeto(analise.get("consenso")).get("ausente")).get("razao"))
+    for indice, lacuna in enumerate(_lista(_objeto(entrega.get("ledger")).get("lacunas"))):
+        for campo in ("descricao", "tratamento"):
+            _texto(f"ledger.lacunas.{indice}.{campo}", _objeto(lacuna).get(campo))
     for indice, premissa in enumerate(_lista(analise.get("premissas_decisivas"))):
         _texto(f"analise.premissas_decisivas.{indice}.derivacao", _objeto(premissa).get("derivacao"))
     for lado in ("positives", "negatives"):
@@ -472,6 +489,48 @@ def conclusao_de_valor(caminho: str, mapa: MapaDeConclusoesDeValor) -> tuple[str
     valor?", e a dúvida sai como leitura condicional, nunca como preço-alvo."""
     segmentos = tuple(caminho.split("."))
     for unidade, padrao in mapa:
-        if len(padrao) == len(segmentos) and all(p == s or "*" in (p, s) for p, s in zip(padrao, segmentos)):
+        if _casa_padrao(padrao, segmentos):
             return unidade, ".".join(padrao)
+    return None
+
+
+def _casa_padrao(padrao: tuple[str, ...], segmentos: tuple[str, ...]) -> bool:
+    """O casamento de caminho dos dois mapas que a integração publica com a mesma gramática —
+    as conclusões de valor e os insumos do caso: segmento a segmento, com o mesmo número de
+    segmentos, e `*` casando qualquer segmento DOS DOIS LADOS. Um só casador para os dois
+    mapas (fatia 5E, Task 2), para que a gramática nunca divirja entre eles."""
+    return len(padrao) == len(segmentos) and all(p == s or "*" in (p, s) for p, s in zip(padrao, segmentos))
+
+
+# --------------------------------------------------------------------------
+# Os insumos do caso que a integração declara (fatia 5E, item 5, Task 2, D2).
+#
+# Quais números do CASO exigem proveniência — o "número material do valuation" da
+# §11 — é saber da integração, que os publica no catálogo de apresentação
+# (`insumos_do_caso`: `[<padrão>]`, a gramática de `conclusoes_de_valor`) e os trava
+# contra as fixtures (`tests/test_catalogo_apresentacao.py`). O QC lê o mapa por estas
+# duas funções: nenhuma regra do relatório reconhece insumo pelo nome do campo.
+# --------------------------------------------------------------------------
+
+MapaDeInsumosDoCaso = list[tuple[str, ...]]
+
+
+def insumos_do_caso(catalogo: Any) -> MapaDeInsumosDoCaso | None:
+    """Os segmentos de cada padrão de `catalogo.insumos_do_caso`, na ordem declarada — ou
+    `None` quando o catálogo não publica o mapa na forma do contrato (uma lista não vazia de
+    padrões textuais não vazios). Quem chama decide o que a ausência significa — o QC
+    reprova —; este módulo nunca a trata como "nenhum número é insumo"."""
+    mapa = catalogo.get("insumos_do_caso") if isinstance(catalogo, dict) else None
+    if not isinstance(mapa, list) or not mapa or not all(isinstance(padrao, str) and padrao for padrao in mapa):
+        return None
+    return [tuple(padrao.split(".")) for padrao in mapa]
+
+
+def insumo_do_caso(caminho: str, mapa: MapaDeInsumosDoCaso) -> str | None:
+    """O padrão do `mapa` que cobre `caminho` (pontuado, com o índice de lista como segmento),
+    ou `None` quando o número não é insumo do valuation."""
+    segmentos = tuple(caminho.split("."))
+    for padrao in mapa:
+        if _casa_padrao(padrao, segmentos):
+            return ".".join(padrao)
     return None

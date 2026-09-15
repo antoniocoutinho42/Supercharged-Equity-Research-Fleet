@@ -425,7 +425,7 @@ def _preparar_mutado(nome_fixture: str, mutar_caso):
     fontes = {"resultados": entrega_dict["resultados"], "caso": entrega_dict["caso"]}
     _resolvido, log, _erros = placeholders.resolver(
         entrega_dict["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
     return entrega_dict, achados, log
 
@@ -552,7 +552,7 @@ def test_nenhum_recurso_externo_com_os_paineis_e_o_svg_embutido():
     entrega_dict, achados, log = _preparar(FIXTURE)
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
-    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, html=pagina)
+    achados_com_html = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=pagina)
     assert not any(a.codigo == "relatorio_nao_autocontido" for a in achados_com_html), achados_com_html
 
 
@@ -666,7 +666,7 @@ def test_unidade_de_grade_fora_do_catalogo_e_hard_fail_nomeado():
     entrega_dict = apoio.montar_entrega(FIXTURE)
     entrega_dict["resultados"]["sensibilidades"]["grades_2d"][0]["unidade"] = "múltiplo EV/EBITDA"
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "unidade_desconhecida")
     assert achado.nivel == "HARD_FAIL"
@@ -711,7 +711,7 @@ def test_varredura_de_prosa_ignora_o_bundle_mas_pega_o_corpo():
                "series": [{"derivacao": "direta", "fonte": "fin.receita"}]}
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
     resolvidos, log_exhibits = exhibits_mod.resolver(entrega_dict)
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
 
     pagina = render.compor(entrega_dict, CATALOGO, achados, [], "pt-BR", resolvidos, log_exhibits)

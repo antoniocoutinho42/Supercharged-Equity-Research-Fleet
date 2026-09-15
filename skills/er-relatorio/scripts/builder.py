@@ -5,9 +5,10 @@
   (as três abas — Tese, Valuation, Evidência — via `render.compor`) e `qc.json`.
 - código 2: `entrega.json` válido mas o QC achou HARD FAIL — escreve só
   `qc.json` (regra inviolável 2: nenhum `relatorio.html` sai).
-- código 1: uso incorreto, `entrega.json` ausente/malformado/incompatível, ou
-  um asset PRÓPRIO do skill (dicionário/catálogo) sem a chave que o render
-  precisa — nada é escrito; a razão sai em stderr, nomeando o campo/chave,
+- código 1: uso incorreto, `entrega.json` ausente/malformado/incompatível, o
+  contrato do ledger (`ledger/1`, do `er-evidencia`) ilegível ou fora da forma
+  que o relatório lê, ou um asset PRÓPRIO do skill (dicionário/catálogo) sem a
+  chave que o render precisa — nada é escrito; a razão sai em stderr, nomeando o campo/chave,
   com sugestão quando aplicável.
 
 QC roda em DUAS passadas (A8, regra inviolável 2): a primeira, com
@@ -54,15 +55,27 @@ RAIZ_DO_REPO = Path(__file__).resolve().parents[3]
 # integracao_ou_do_vendor` reprova a cópia por sha256 (não por nome), e é
 # essa a intenção. Toda a metodologia que o laboratório executa continua do
 # lado da integração (E3); o relatório só embute e chama.
+#
+# Fatia 5E, Task 2: o contrato `ledger/1` entra pela mesma porta. Ele é do
+# `er-evidencia` (§3.2 do desenho, "dono do schema do ledger"): o relatório
+# valida a forma do ledger contra ele e decide pelas flags que ele declara, e
+# por isso o lê daqui a cada build — nunca o copia para dentro do skill.
 ASSETS_DA_INTEGRACAO = {
     "catalogo": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json",
     "espelho": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "motor_espelho.js",
     "fachada": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "espelho_fachada.js",
+    "contrato_ledger": RAIZ_DO_REPO / "skills" / "er-evidencia" / "assets" / "contrato_ledger.json",
 }
 
 
 def _carregar_catalogo() -> dict:
     return json.loads(ASSETS_DA_INTEGRACAO["catalogo"].read_text(encoding="utf-8"))
+
+
+def _carregar_contrato_ledger() -> dict:
+    """O contrato `ledger/1`, como dado, lido de `ASSETS_DA_INTEGRACAO` a cada build. A forma
+    dele é conferida por `entrega.ler_contrato_do_ledger`, dentro de `entrega.carregar`."""
+    return json.loads(ASSETS_DA_INTEGRACAO["contrato_ledger"].read_text(encoding="utf-8"))
 
 
 def _carregar_js_da_integracao() -> dict:
@@ -165,9 +178,17 @@ def main(argv: list[str] | None = None) -> int:
     # saída de uma rodada anterior no lugar.
     _remover_saida_anterior(Path(args.raiz))
 
+    # Fatia 5E, Task 2: o contrato do ledger antes da entrega — é contra ele que a
+    # forma do ledger é validada. Ilegível ou fora da forma, código 1.
     try:
-        entrega_dict = contrato_entrega.carregar(args.raiz)
-    except EntregaInvalida as erro:
+        contrato_ledger = _carregar_contrato_ledger()
+    except (OSError, json.JSONDecodeError) as erro:
+        print(f"não foi possível ler o contrato do ledger: {erro}.", file=sys.stderr)
+        return 1
+
+    try:
+        entrega_dict = contrato_entrega.carregar(args.raiz, contrato_ledger)
+    except (EntregaInvalida, contrato_entrega.ContratoDoLedgerInvalido) as erro:
         print(str(erro), file=sys.stderr)
         return 1
 
@@ -196,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     # renderizado ainda, então `relatorio_nao_autocontido` não pode disparar
     # aqui (qc.avaliar trata html=None como "regra ainda não examinável").
     # Um HARD FAIL desta fase já recusa emitir, sem nunca chamar render.compor.
-    achados = qc.avaliar(entrega_dict, catalogo, html=None)
+    achados = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=None)
     if any(achado.nivel == "HARD_FAIL" for achado in achados):
         qc_json = _montar_qc_json(achados, dicionario)
         try:
@@ -236,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     # demais regras são puras sobre `entrega`/`catalogo` e não podem mudar
     # de resultado entre as duas passadas -- `achados_finais` é sempre
     # `achados` com, no máximo, esse único achado extra ao final.
-    achados_finais = qc.avaliar(entrega_dict, catalogo, html=pagina)
+    achados_finais = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=pagina)
 
     qc_json = _montar_qc_json(achados_finais, dicionario)
     try:

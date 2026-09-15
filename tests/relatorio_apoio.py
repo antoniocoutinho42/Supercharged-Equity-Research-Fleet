@@ -19,10 +19,19 @@ sempre que o gate o admite (`caso.reversa_indisponivel` devolve `None`) e o caso
 ainda não o declara. Onde o gate não o admite (`caso_degrau`, `caso_rampa`), a
 entrega sai sem reversa e com o disclosure nomeado da limitação — nunca com a
 regra enfraquecida e nunca com a fixture editada.
+
+Fatia 5E, item 5, Task 2: a entrega também exige o ledger `ledger/1` do
+`er-evidencia` e o consenso da Tese. `montar_entrega` os compõe por padrão
+(`completar_ledger`), derivados do mapa `catalogo.insumos_do_caso` sobre o caso
+já composto — nunca de uma lista por fixture: um padrão novo no mapa se cobre
+sozinho, e uma fixture nova também. O contrato é lido uma vez, aqui
+(`CONTRATO_LEDGER`), e o estatuto, a classe e o tipo de localizador dos registros
+compostos saem dele, nunca de um literal.
 """
 
 import copy
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -41,6 +50,8 @@ from caso import carregar as carregar_caso  # noqa: E402
 
 CATALOGO = json.loads(
     (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
+CONTRATO_LEDGER = json.loads(
+    (RAIZ / "skills" / "er-evidencia" / "assets" / "contrato_ledger.json").read_text(encoding="utf-8"))
 
 _PADRAO_ESTILO_BLOCO = re.compile(r'(<style\b[^>]*>)(.*?)(</style\s*>)', re.IGNORECASE | re.DOTALL)
 
@@ -194,6 +205,138 @@ def _tese_padrao(resultados: dict) -> dict:
     return tese
 
 
+# --------------------------------------------------------------------------
+# Fatia 5E, Task 2: o ledger padrão e o consenso padrão.
+#
+# Armadilha 1 do briefing: o ledger que o apoio compõe não pode, ele mesmo,
+# disparar regra nenhuma — nem concentração (identidades distintas), nem
+# contraprova (a premissa decisiva ganha a de outra identidade), nem estimativa
+# (o estatuto sem nenhuma flag), nem reconciliação (o `valor` é o do caso), nem
+# referência quebrada. O percurso das folhas e o casamento de padrão abaixo são
+# deste apoio, e não os do QC, de propósito: o teste que cruza os dois
+# (`tests/test_relatorio_evidencia.py`) só discrimina se as duas derivações do
+# mapa forem independentes.
+# --------------------------------------------------------------------------
+
+_VOCABULARIOS_DO_LEDGER = CONTRATO_LEDGER["vocabularios"]
+# O estatuto sem nenhuma flag: não exige fórmula e não é estimativa.
+ESTATUTO_OBSERVADO = next(nome for nome, flags in _VOCABULARIOS_DO_LEDGER["estatutos"].items()
+                          if not any(flags.values()))
+DATA_DE_ACESSO_PADRAO = "2026-09-11"
+
+
+def _mesmo_valor(a, b) -> bool:
+    """Dois números declarados iguais pela tolerância da reconciliação do QC (as constantes
+    nomeadas de `qc.py`)."""
+    numeros = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (a, b))
+    return numeros and math.isclose(a, b, rel_tol=qc.TOLERANCIA_RELATIVA_DE_RECONCILIACAO,
+                                    abs_tol=qc.TOLERANCIA_ABSOLUTA_DE_RECONCILIACAO)
+
+
+def ledger_vazio() -> dict:
+    return {"versao_contrato": CONTRATO_LEDGER["versao_contrato"], "registros": [], "lacunas": []}
+
+
+def _folhas_numericas_do_caso(no, caminho: tuple = ()):
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            yield from _folhas_numericas_do_caso(valor, caminho + (str(chave),))
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            yield from _folhas_numericas_do_caso(valor, caminho + (str(indice),))
+    elif isinstance(no, (int, float)) and not isinstance(no, bool):
+        yield caminho, no
+
+
+def insumos_do_caso(caso: dict) -> list[tuple[str, float]]:
+    """`(caminho, valor)` de toda folha numérica do caso que `catalogo.insumos_do_caso`
+    cobre (`*` casa exatamente um segmento; o índice de lista é segmento), na ordem do
+    caso."""
+    padroes = [tuple(padrao.split(".")) for padrao in CATALOGO["insumos_do_caso"]]
+    return [(".".join(caminho), valor) for caminho, valor in _folhas_numericas_do_caso(caso)
+            if any(len(padrao) == len(caminho) and all(p in ("*", s) for p, s in zip(padrao, caminho))
+                   for padrao in padroes)]
+
+
+def registro_do_ledger(ident: str, claim: str, identidade: str, valor, **campos) -> dict:
+    """Um registro `ledger/1` válido na forma, com o estatuto sem flag, a primeira classe
+    de fonte e o primeiro tipo de localizador do contrato; `campos` completa ou
+    substitui."""
+    registro = {
+        "id": ident, "claim": claim,
+        "fonte": {"identidade": identidade, "classe": _VOCABULARIOS_DO_LEDGER["classes_de_fonte"][0]},
+        "localizador": {"tipo": _VOCABULARIOS_DO_LEDGER["tipos_de_localizador"][0],
+                        "valor": f"fonte-de-teste/{ident}"},
+        "data_acesso": DATA_DE_ACESSO_PADRAO, "periodo": "2025", "moeda": None, "unidade": "unidade do caso",
+        "estatuto": ESTATUTO_OBSERVADO, "valor": valor,
+        "justificativa_da_fonte": "A fonte primária do número, a mais próxima do fato.",
+    }
+    registro.update(campos)
+    return registro
+
+
+def completar_ledger(entrega_dict: dict) -> dict:
+    """Acrescenta ao ledger da entrega só o que falta para ela não disparar regra de
+    ledger nenhuma — nunca altera um registro que já está lá:
+
+    - um registro por insumo do caso que nenhum `usado_em` nomeia, com o `valor` do
+      caso e identidade própria;
+    - para cada premissa decisiva da Tese (`cenarios.<manchete.cenario>.premissas.
+      <chave>`) sustentada por um registro e sem contraprova que a confirme — de outra
+      identidade, com o mesmo valor ou com a divergência reconciliada —, a contraprova,
+      com o mesmo claim, período e valor e identidade própria;
+    - sem `analise.consenso`, um registro de consenso e o consenso que o cita;
+    - para cada dataset de `dados` com `ledger` vazio, o registro que o sustenta,
+      citado ali.
+
+    Muta e devolve `entrega_dict`. Uma entrega montada à mão num teste (o exemplo do
+    `SKILL.md`, um dataset acrescentado depois de `montar_entrega`) passa por aqui para
+    ganhar o ledger do caso real sem perder o que já declarou."""
+    ledger = entrega_dict.setdefault("ledger", ledger_vazio())
+    registros = ledger["registros"]
+    ids = {registro["id"] for registro in registros}
+
+    def _acrescentar(base: str, claim: str, valor, **campos) -> dict:
+        ident, sufixo = base, 2
+        while ident in ids:
+            ident, sufixo = f"{base}#{sufixo}", sufixo + 1
+        ids.add(ident)
+        registro = registro_do_ledger(ident, claim, f"fonte-{ident}", valor, **campos)
+        registros.append(registro)
+        return registro
+
+    caso = entrega_dict["caso"]
+    nomeados = {caminho for registro in registros for caminho in registro.get("usado_em", [])}
+    for caminho, valor in insumos_do_caso(caso):
+        if caminho not in nomeados:
+            _acrescentar(f"insumo:{caminho}", f"{caminho} do caso", valor, usado_em=[caminho])
+
+    analise = entrega_dict["analise"]
+    cenario = entrega_dict["resultados"]["manchete"]["cenario"]
+    for premissa in analise.get("premissas_decisivas", []):
+        caminho = f"cenarios.{cenario}.premissas.{premissa['chave']}"
+        sustentam = [registro for registro in registros if caminho in registro.get("usado_em", [])]
+        confirmada = any(registro.get("contraprova_de") == alvo["id"]
+                         and registro["fonte"]["identidade"] != alvo["fonte"]["identidade"]
+                         and (_mesmo_valor(registro.get("valor"), alvo.get("valor")) or "reconciliacao" in registro)
+                         for alvo in sustentam for registro in registros)
+        if sustentam and not confirmada:
+            alvo = sustentam[0]
+            _acrescentar(f"contraprova:{caminho}", alvo["claim"], alvo["valor"], periodo=alvo["periodo"],
+                         moeda=alvo["moeda"], unidade=alvo["unidade"], contraprova_de=alvo["id"])
+
+    if "consenso" not in analise:
+        consenso = _acrescentar("consenso", "consenso de mercado da métrica-base",
+                                (caso.get("metrica_base") or {}).get("valor"))
+        analise["consenso"] = {"registros": [consenso["id"]]}
+
+    for dataset_id, dataset in (entrega_dict.get("dados") or {}).items():
+        if dataset.get("ledger") == []:
+            registro = _acrescentar(f"dados:{dataset_id}", f"série do dataset {dataset_id}", None)
+            dataset["ledger"] = [registro["id"]]
+    return entrega_dict
+
+
 def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     ticker: str | None = None, idioma: str = IDIOMA_PADRAO,
                     texto_conclusao: str | None = None,
@@ -201,7 +344,10 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     dados: dict | None = None,
                     exhibits: list | None = None,
                     tese: dict | None = None,
-                    compor_reversa: bool = True) -> dict:
+                    compor_reversa: bool = True,
+                    ledger: dict | None = None,
+                    consenso: dict | None = None,
+                    compor_ledger: bool = True) -> dict:
     """Monta um `entrega.json` válido (dict) a partir de uma fixture de caso.
 
     Roda `avaliar()` pelo caminho de produção — o `resultados` embutido
@@ -239,6 +385,14 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     não o declara e o gate o admite. `False` monta a Análise sem a reversa que o
     gate admite — a entrega que o HARD FAIL `analise_sem_reversa` recusa; não há
     como usá-lo para fazer uma entrega passar.
+
+    `ledger`, `consenso` e `compor_ledger` (5E, Task 2): `ledger` é o ledger de
+    partida (por padrão, `ledger_vazio()`) e `consenso`, dado, entra como está em
+    `analise.consenso`. Com `compor_ledger=True`, `completar_ledger` acrescenta o que
+    falta — por padrão, o ledger inteiro e o consenso. Com `compor_ledger=False`, nada
+    é acrescentado: a entrega leva exatamente `ledger` (ou o ledger vazio), `consenso`
+    (ou nenhum) e os datasets como vieram — é assim que um teste declara, por exemplo,
+    um dataset sem proveniência.
     """
     caso = carregar_caso(FIXTURES / nome_fixture)
     if mutar_caso is not None:
@@ -254,6 +408,8 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         "exhibits": exhibits if exhibits is not None else [],
     }
     analise.update(tese if tese is not None else _tese_padrao(resultados))
+    if consenso is not None:
+        analise["consenso"] = copy.deepcopy(consenso)
 
     entrega_dict = {
         "versao_contrato": "entrega/1",
@@ -265,11 +421,12 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         "caso": caso,
         "resultados": resultados,
         "analise": analise,
-        "ledger": [],
-        "ficha_tecnica": {},
+        "ledger": copy.deepcopy(ledger) if ledger is not None else ledger_vazio(),
     }
     if dados is not None:
-        entrega_dict["dados"] = dados
+        entrega_dict["dados"] = copy.deepcopy(dados)
+    if compor_ledger:
+        completar_ledger(entrega_dict)
     return entrega_dict
 
 

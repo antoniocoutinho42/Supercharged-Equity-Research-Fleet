@@ -25,6 +25,9 @@ SCRIPTS = RAIZ / "skills" / "er-relatorio" / "scripts"
 ASSETS_RELATORIO = RAIZ / "skills" / "er-relatorio" / "assets"
 INTEGRACAO_SCRIPTS = RAIZ / "skills" / "er-valuation" / "scripts"
 INTEGRACAO_ASSETS = RAIZ / "skills" / "er-valuation" / "assets"
+# Fatia 5E, Task 2: o contrato `ledger/1` é do `er-evidencia` (§3.2), e o relatório o lê pela
+# mesma constante dos assets externos — nunca por um literal fora dela, nunca por uma cópia.
+EVIDENCIA_ASSETS = RAIZ / "skills" / "er-evidencia" / "assets"
 VENDOR = RAIZ / "vendor" / "multiplos-justos"
 
 # B5 (achado F4, fuga 5 -- "import de um módulo da integração que não está
@@ -121,7 +124,7 @@ def test_caminho_da_integracao_so_na_constante_de_assets():
     '+') é DOBRADA antes da checagem -- ver `_dobrar_constante`. Um literal
     (ou uma cadeia dobrada) só escapa da checagem quando está dentro da
     própria expressão de `ASSETS_DA_INTEGRACAO` ou é uma docstring."""
-    alvos = ("er-valuation", "multiplos-justos", "vendor")
+    alvos = ("er-valuation", "er-evidencia", "multiplos-justos", "vendor")
     for arquivo in SCRIPTS.rglob("*.py"):
         arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
         permitidos = set()
@@ -153,8 +156,14 @@ def test_nenhum_asset_do_relatorio_espelha_um_asset_da_integracao_ou_do_vendor()
     """B5 (achado F4, fuga 6 -- cópia de `motor_espelho.js` em
     `skills/er-relatorio/assets/`): um asset copiado não é um `import` nem
     um literal de código -- nenhuma das checagens acima o alcança. Comparar
-    por SHA-256 (não por nome de arquivo) pega a cópia mesmo renomeada."""
-    fontes = list(INTEGRACAO_ASSETS.rglob("*")) + list(VENDOR.rglob("*"))
+    por SHA-256 (não por nome de arquivo) pega a cópia mesmo renomeada.
+
+    Fatia 5E, Task 2: os assets do `er-evidencia` entram na mesma varredura — uma cópia do
+    contrato do ledger dentro do relatório seria o vocabulário de evidência mantido em dois
+    lugares, e a leitura pela constante deixaria de ser a única."""
+    evidencia = [p for p in EVIDENCIA_ASSETS.rglob("*") if p.is_file()]
+    assert evidencia, f"nenhum asset em {EVIDENCIA_ASSETS} — a varredura do er-evidencia ficaria vacuamente verde"
+    fontes = list(INTEGRACAO_ASSETS.rglob("*")) + evidencia + list(VENDOR.rglob("*"))
     hashes_da_integracao = {_sha256_de(p): p for p in fontes if p.is_file()}
 
     for arquivo in ASSETS_RELATORIO.rglob("*"):

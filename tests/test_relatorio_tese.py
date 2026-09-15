@@ -117,7 +117,7 @@ def _entrega(fixture: str = FIXTURE, variante: str = "padrao", compor_reversa: b
 
 
 def _achados(entrega_dict: dict, catalogo: dict = CATALOGO) -> list:
-    return qc.avaliar(entrega_dict, catalogo, html=None)
+    return qc.avaliar(entrega_dict, catalogo, apoio.CONTRATO_LEDGER, html=None)
 
 
 def _do_codigo(achados: list, codigo: str) -> list:
@@ -127,7 +127,7 @@ def _do_codigo(achados: list, codigo: str) -> list:
 def _carregar(entrega_dict: dict, tmp_path: Path) -> dict:
     raiz = tmp_path / "raiz"
     apoio.escrever_raiz(raiz, entrega_dict)
-    return entrega.carregar(raiz)
+    return entrega.carregar(raiz, apoio.CONTRATO_LEDGER)
 
 
 # --------------------------------------------------------------------------
@@ -586,7 +586,9 @@ def _com_exhibit_sob_a_pergunta(entrega_dict: dict, exhibit: dict) -> dict:
     pergunta = entrega_dict["analise"]["perguntas"][0]
     del pergunta["sem_exhibit"]
     pergunta["exhibits"] = [exhibit["id"]]
-    return entrega_dict
+    # 5E, Task 2: o dataset entra depois de `montar_entrega` — o apoio completa o registro
+    # que o sustenta, sem o qual ele seria `dataset_sem_proveniencia`.
+    return apoio.completar_ledger(entrega_dict)
 
 
 @pytest.mark.parametrize("exhibit,onde,chave_de_mercado", [
@@ -826,6 +828,9 @@ def _entrega_com_todos_os_campos_de_prosa() -> dict:
     analise["visao_nao_consensual"] = {"texto": "O mercado subestima a duração da vantagem de custo."}
     analise["mudou_desde_analise_fornecida"] = {
         "linhas": ["A margem normalizada subiu.", "O custo de capital caiu."]}
+    # 5E, D5: o que mudou sai do confronto com a análise fornecida — e o texto do confronto é
+    # dado da Evidência, fora da lista de prosa.
+    entrega_dict["confronto"] = copy.deepcopy(_CONFRONTO)
     analise["exhibits"] = [dict(
         copy.deepcopy(_EXHIBIT), caption="Fonte: o cenário da manchete.",
         series=[*copy.deepcopy(_EXHIBIT["series"]),
@@ -833,7 +838,16 @@ def _entrega_com_todos_os_campos_de_prosa() -> dict:
                  "formula_nota": "margem EBITDA"}],
         overlays=[{"chave": "caso:preco.valor", "rotulo": "preço de tela"}])]
     entrega_dict["dados"] = copy.deepcopy(_DADOS_DOS_EXHIBITS)
-    return entrega_dict
+    # 5E, Task 2: o dataset entra depois de `montar_entrega` — o apoio completa o registro que o sustenta.
+    return apoio.completar_ledger(entrega_dict)
+
+
+_CONFRONTO = {
+    "analise_fornecida": {"identificacao": "Relatório de cobertura anterior", "data": "2026-03-02"},
+    "divergencias": [{"item": "Custo de capital", "classificacao": "premissa_revista",
+                      "anterior": "11,0%", "atual": "10,0%",
+                      "explicacao": "A estrutura de capital ficou menos alavancada."}],
+}
 
 
 def _ondes_do_molde(analise: dict, molde: tuple) -> set:

@@ -88,7 +88,7 @@ def _pagina(nome_fixture: str = FIXTURE, *, com_laboratorio: bool = True, **kwar
     fontes = {"resultados": entrega["resultados"], "caso": entrega["caso"]}
     _resolvido, log, _erros = placeholders.resolver(
         entrega["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
-    achados = qc.avaliar(entrega, CATALOGO, html=None)
+    achados = qc.avaliar(entrega, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
     pagina = render.compor(entrega, CATALOGO, achados, log, "pt-BR", None, None,
                             _js_da_integracao() if com_laboratorio else None)
@@ -201,7 +201,7 @@ def test_uma_premissa_que_o_catalogo_nao_conhece_sai_desabilitada_e_rotulada():
     fontes = {"resultados": entrega["resultados"], "caso": entrega["caso"]}
     _r, log, _e = placeholders.resolver(
         entrega["analise"]["conclusao"]["texto"], fontes, "pt-BR", "analise.conclusao.texto")
-    achados = qc.avaliar(entrega, CATALOGO, html=None)
+    achados = qc.avaliar(entrega, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     entrega["caso"]["cenarios"]["base"]["premissas"]["premissa_da_v10"] = 3.5
 
     painel = _painel(render.compor(entrega, CATALOGO, achados, log, "pt-BR", None, None,
@@ -415,7 +415,7 @@ def test_a_pagina_com_laboratorio_continua_autocontida():
     laboratório. Nenhuma referência externa, nenhuma chamada de rede: o
     relatório é artefato offline que o analista reenvia por e-mail."""
     pagina, entrega = _pagina()
-    achados = qc.avaliar(entrega, CATALOGO, html=pagina)
+    achados = qc.avaliar(entrega, CATALOGO, apoio.CONTRATO_LEDGER, html=pagina)
     assert not [a for a in achados if a.codigo == "relatorio_nao_autocontido"], achados
     laboratorio = (ASSETS / "laboratorio.js").read_text(encoding="utf-8")
     assert qc._PADRAO_CHAMADA_DE_REDE.findall(laboratorio) == []
@@ -430,9 +430,9 @@ def test_o_laboratorio_nao_muda_o_qc_nem_o_determinismo():
     nenhuma id gerada em tempo de execução)."""
     pagina, entrega = _pagina()
     sem_laboratorio, _ = _pagina(com_laboratorio=False)
-    como = [(a.nivel, a.codigo, a.onde, a.params) for a in qc.avaliar(entrega, CATALOGO, html=pagina)]
+    como = [(a.nivel, a.codigo, a.onde, a.params) for a in qc.avaliar(entrega, CATALOGO, apoio.CONTRATO_LEDGER, html=pagina)]
     sem = [(a.nivel, a.codigo, a.onde, a.params)
-           for a in qc.avaliar(entrega, CATALOGO, html=sem_laboratorio)]
+           for a in qc.avaliar(entrega, CATALOGO, apoio.CONTRATO_LEDGER, html=sem_laboratorio)]
     assert como == sem
 
     de_novo, _ = _pagina()

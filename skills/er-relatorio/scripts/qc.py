@@ -63,6 +63,17 @@ overlay. Sob fronteira, a limitação de escopo sai como REQUIRED DISCLOSURE
 (`fronteira_de_escopo_declarada`), e um catálogo que não rotula a classe ou não
 publica o mapa é HARD FAIL (`fronteira_de_escopo_desconhecida`). Ver
 `_achados_fronteira_de_escopo`.
+
+Fatia 5E, item 5, Task 2 (D3): as regras da §11 que dependem do ledger —
+`insumo_sem_proveniencia`, `usado_em_fora_dos_insumos`, `insumo_nao_reconciliado`,
+`conflito_de_fontes_silenciado`, `referencia_fora_do_ledger`,
+`dataset_sem_proveniencia` e `insumos_do_caso_desconhecidos` (HARD FAIL);
+`insumo_estimado`, `sem_contraprova_independente`, `lacuna_material` e
+`consenso_indisponivel` (REQUIRED DISCLOSURE); `concentracao_de_fontes` (QUALITY
+WARNING). Nenhum vocabulário de evidência mora aqui: o que é insumo sai do mapa
+`catalogo.insumos_do_caso` (`placeholders.insumos_do_caso`), e "é estimativa" e
+"lacuna que vira disclosure" saem das flags do contrato `ledger/1` que `avaliar`
+recebe (`entrega.ler_contrato_do_ledger`). Ver `_achados_do_ledger`.
 """
 
 import json
@@ -1019,16 +1030,337 @@ def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]
             + _achados_tese_dependente_de_uma_premissa(analise))
 
 
-def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Achado]:
+# --------------------------------------------------------------------------
+# Fatia 5E, item 5, Task 2 (D3): as regras da §11 que dependem do ledger.
+# --------------------------------------------------------------------------
+
+# §6.2, "reconciliação dos números materiais": dois números declarados — o do
+# registro e o do caso — são o mesmo número quando `math.isclose` os aceita com
+# estas duas tolerâncias. A relativa absorve só ruído de ponto flutuante e de
+# arredondamento na sexta casa significativa; o piso absoluto decide o zero. É
+# comparação de igualdade entre números declarados, nunca conta de valuation. A
+# mesma tolerância decide se duas fontes do mesmo claim conflitam.
+TOLERANCIA_RELATIVA_DE_RECONCILIACAO: float = 1e-6
+TOLERANCIA_ABSOLUTA_DE_RECONCILIACAO: float = 1e-9
+
+# §11, QUALITY WARNING "concentração excessiva de fontes": uma identidade que
+# sustenta mais da metade dos insumos do caso, quando há ao menos quatro. É regra
+# de QC do Fleet, não metodologia — por isso mora aqui, nomeada.
+LIMIAR_DE_CONCENTRACAO_DE_FONTES: float = 0.5
+MINIMO_DE_INSUMOS_PARA_CONCENTRACAO: int = 4
+
+
+def _numero_declarado(valor) -> bool:
+    """Número de JSON — `int` ou `float`, nunca booleano."""
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool)
+
+
+def _mesmo_numero(a: float, b: float) -> bool:
+    return math.isclose(a, b, rel_tol=TOLERANCIA_RELATIVA_DE_RECONCILIACAO,
+                        abs_tol=TOLERANCIA_ABSOLUTA_DE_RECONCILIACAO)
+
+
+def _numero_no_idioma(valor, idioma: str) -> str:
+    return placeholders.formatar(valor, "num4", idioma) if _numero_finito(valor) else _SEM_VALOR
+
+
+def _folhas_numericas(no, caminho: tuple = ()):
+    """`(caminho pontuado, número)` de toda folha numérica de `no`, na ordem em que aparece. O
+    índice de lista é segmento — como no caminho de um placeholder —, e booleano não é número."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            yield from _folhas_numericas(valor, caminho + (str(chave),))
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            yield from _folhas_numericas(valor, caminho + (str(indice),))
+    elif _numero_declarado(no):
+        yield ".".join(caminho), no
+
+
+def _caminhos_usados(registro: dict) -> list:
+    return _lista(registro.get("usado_em"))
+
+
+def _identidade(registro: dict) -> str | None:
+    identidade = _objeto(registro.get("fonte")).get("identidade")
+    return identidade if isinstance(identidade, str) and identidade.strip() else None
+
+
+def _caminho_da_premissa_no_caso(cenario: str, chave: str) -> str:
+    """Onde o caso declara o número de uma premissa de cenário: o mesmo lugar em que
+    `resultados` a publica, `cenarios.<cenario>.premissas.<chave>` — o que
+    `_achados_premissas_decisivas` confere no cenário da manchete. Conferido nas fixtures,
+    rota a rota, na 5E: em `firm`, `equity`, `rampa` e no SOTP, toda premissa da rota que o
+    cenário publicado declara está nesse caminho do caso."""
+    return ".".join(("cenarios", cenario, "premissas", chave))
+
+
+def _achados_insumo_sem_proveniencia(registros: list, insumos: dict) -> list[Achado]:
+    nomeados = {caminho for _indice, registro in registros for caminho in _caminhos_usados(registro)
+                if isinstance(caminho, str)}
+    return [Achado("HARD_FAIL", "insumo_sem_proveniencia", f"caso.{caminho}", {"caminho": caminho})
+            for caminho in insumos if caminho not in nomeados]
+
+
+def _achados_usado_em_fora_dos_insumos(registros: list, insumos: dict) -> list[Achado]:
+    achados: list[Achado] = []
+    for indice, registro in registros:
+        for posicao, caminho in enumerate(_caminhos_usados(registro)):
+            if isinstance(caminho, str) and caminho in insumos:
+                continue
+            achados.append(Achado("HARD_FAIL", "usado_em_fora_dos_insumos",
+                                  f"ledger.registros.{indice}.usado_em.{posicao}",
+                                  {"id": str(registro.get("id")), "caminho": str(caminho)}))
+    return achados
+
+
+def _achados_insumo_nao_reconciliado(registros: list, insumos: dict, idioma: str) -> list[Achado]:
+    achados: list[Achado] = []
+    for indice, registro in registros:
+        if "reconciliacao" in registro:
+            continue
+        valor = registro.get("valor")
+        for caminho in _caminhos_usados(registro):
+            if not (isinstance(caminho, str) and caminho in insumos):
+                continue
+            numero_do_caso = insumos[caminho]
+            if _numero_declarado(valor) and _mesmo_numero(valor, numero_do_caso):
+                continue
+            achados.append(Achado("HARD_FAIL", "insumo_nao_reconciliado", f"ledger.registros.{indice}.valor", {
+                "id": str(registro.get("id")), "caminho": caminho,
+                "valor_registro": valor, "valor_caso": numero_do_caso,
+                "valor_registro_fmt": _numero_no_idioma(valor, idioma),
+                "valor_caso_fmt": _numero_no_idioma(numero_do_caso, idioma),
+            }))
+    return achados
+
+
+def _achados_conflito_de_fontes_silenciado(registros: list) -> list[Achado]:
+    grupos: dict = {}
+    for indice, registro in registros:
+        claim, periodo, valor = registro.get("claim"), registro.get("periodo"), registro.get("valor")
+        if isinstance(claim, str) and isinstance(periodo, str) and _numero_declarado(valor):
+            grupos.setdefault((claim, periodo), []).append((indice, registro))
+
+    achados: list[Achado] = []
+    for (claim, periodo), membros in grupos.items():
+        valores = [registro["valor"] for _indice, registro in membros]
+        divergem = any(not _mesmo_numero(a, b) for posicao, a in enumerate(valores) for b in valores[posicao + 1:])
+        ids = [registro.get("id") for _indice, registro in membros]
+        vencedores = [_objeto(registro.get("conflito")).get("vencedor") for _indice, registro in membros]
+        declarado = any(isinstance(vencedor, str) and vencedor in ids for vencedor in vencedores)
+        if divergem and not declarado:
+            achados.append(Achado("HARD_FAIL", "conflito_de_fontes_silenciado", f"ledger.registros.{membros[0][0]}", {
+                "claim": claim, "periodo": periodo, "ids": ", ".join(f"'{ident}'" for ident in ids),
+            }))
+    return achados
+
+
+def _achados_referencia_fora_do_ledger(entrega: dict, registros: list) -> list[Achado]:
+    existentes = {registro.get("id") for _indice, registro in registros if isinstance(registro.get("id"), str)}
+    citacoes: list[tuple[str, object]] = []
+    for indice, registro in registros:
+        onde = f"ledger.registros.{indice}"
+        citacoes += [(f"{onde}.insumos.{posicao}", ident) for posicao, ident in enumerate(_lista(registro.get("insumos")))]
+        conflito = registro.get("conflito")
+        if isinstance(conflito, dict) and "vencedor" in conflito:
+            citacoes.append((f"{onde}.conflito.vencedor", conflito["vencedor"]))
+        if "contraprova_de" in registro:
+            citacoes.append((f"{onde}.contraprova_de", registro["contraprova_de"]))
+    consenso = _objeto(_objeto(entrega.get("analise")).get("consenso"))
+    citacoes += [(f"analise.consenso.registros.{posicao}", ident)
+                 for posicao, ident in enumerate(_lista(consenso.get("registros")))]
+    for dataset_id, dataset in _objeto(entrega.get("dados")).items():
+        citacoes += [(f"dados.{dataset_id}.ledger.{posicao}", ident)
+                     for posicao, ident in enumerate(_lista(_objeto(dataset).get("ledger")))]
+    return [Achado("HARD_FAIL", "referencia_fora_do_ledger", onde, {"id": str(ident)})
+            for onde, ident in citacoes if not (isinstance(ident, str) and ident in existentes)]
+
+
+def _achados_dataset_sem_proveniencia(entrega: dict) -> list[Achado]:
+    dados = _objeto(entrega.get("dados"))
+    usados: list[str] = []
+    for exhibit in _lista(_objeto(entrega.get("analise")).get("exhibits")):
+        if isinstance(exhibit, dict):
+            usados += [dataset_id for dataset_id in exhibits.datasets_do_exhibit(exhibit, dados)
+                       if dataset_id not in usados]
+    return [Achado("HARD_FAIL", "dataset_sem_proveniencia", f"dados.{dataset_id}.ledger", {"dataset": dataset_id})
+            for dataset_id in usados if not _lista(_objeto(dados.get(dataset_id)).get("ledger"))]
+
+
+def _achados_insumo_estimado(registros: list, insumos: dict, contrato) -> list[Achado]:
+    achados: list[Achado] = []
+    for indice, registro in registros:
+        estatuto = registro.get("estatuto")
+        flags = contrato.estatutos.get(estatuto) if isinstance(estatuto, str) else None
+        if not (flags and flags["e_estimativa"]):
+            continue
+        if any(isinstance(caminho, str) and caminho in insumos for caminho in _caminhos_usados(registro)):
+            achados.append(Achado("REQUIRED_DISCLOSURE", "insumo_estimado", f"ledger.registros.{indice}",
+                                  {"id": str(registro.get("id")), "claim": str(registro.get("claim"))}))
+    return achados
+
+
+def _confirma(contraprova: dict, alvo: dict | None) -> bool:
+    """§6.3: contraprova é CONFIRMAÇÃO independente do registro que sustenta a premissa
+    (`alvo`). Conta só quando vem de outra `fonte.identidade` — a cópia da mesma fonte não
+    conta — e declara o mesmo número do alvo, pela tolerância da reconciliação. Uma fonte que
+    diverge só confirma quando declara a `reconciliacao`, que a Evidência mostra. Sem isso, uma
+    "contraprova" que desmente o número suprimiria o disclosure em silêncio — e, com outro
+    claim, nem o conflito entre fontes a veria."""
+    if alvo is None:
+        return False
+    identidade, identidade_do_alvo = _identidade(contraprova), _identidade(alvo)
+    if identidade is None or identidade_do_alvo is None or identidade == identidade_do_alvo:
+        return False
+    valor, valor_do_alvo = contraprova.get("valor"), alvo.get("valor")
+    mesmo_numero = (_numero_declarado(valor) and _numero_declarado(valor_do_alvo)
+                    and _mesmo_numero(valor, valor_do_alvo))
+    return mesmo_numero or "reconciliacao" in contraprova
+
+
+def _achados_sem_contraprova_independente(entrega: dict, registros: list, catalogo: dict,
+                                          idioma: str) -> list[Achado]:
+    resultados = _objeto(entrega.get("resultados"))
+    cenario = str(_objeto(resultados.get("manchete")).get("cenario"))
+    premissas_da_rota = _premissas_da_rota(resultados, catalogo)
+
+    achados: list[Achado] = []
+    for posicao, premissa in enumerate(_lista(_objeto(entrega.get("analise")).get("premissas_decisivas"))):
+        chave = _objeto(premissa).get("chave")
+        caminho = _caminho_da_premissa_no_caso(cenario, str(chave))
+        sustentam = {registro["id"]: registro for _indice, registro in registros
+                     if caminho in _caminhos_usados(registro) and isinstance(registro.get("id"), str)}
+        if any(_confirma(registro, sustentam.get(registro["contraprova_de"])) for _indice, registro in registros
+               if isinstance(registro.get("contraprova_de"), str)):
+            continue
+        info = _objeto(premissas_da_rota.get(chave)) if isinstance(chave, str) else {}
+        rotulo = _objeto(info.get("rotulo")).get(idioma)
+        achados.append(Achado("REQUIRED_DISCLOSURE", "sem_contraprova_independente",
+                              f"analise.premissas_decisivas.{posicao}.chave", {
+                                  "chave": str(chave),
+                                  "rotulo": rotulo if isinstance(rotulo, str) and rotulo.strip() else _SEM_VALOR,
+                                  "caminho": caminho,
+                              }))
+    return achados
+
+
+def _achados_lacuna_material(ledger: dict, contrato) -> list[Achado]:
+    achados: list[Achado] = []
+    for indice, lacuna in enumerate(_lista(ledger.get("lacunas"))):
+        lacuna = _objeto(lacuna)
+        materialidade = lacuna.get("materialidade")
+        flags = contrato.materialidades.get(materialidade) if isinstance(materialidade, str) else None
+        if not (flags and flags["exige_disclosure"]):
+            continue
+        onde = f"ledger.lacunas.{indice}"
+        achados.append(Achado("REQUIRED_DISCLOSURE", "lacuna_material", onde, {
+            "id": str(lacuna.get("id")), "descricao": str(lacuna.get("descricao")),
+            "tratamento": str(lacuna.get("tratamento")),
+            "campos_de_prosa": {"descricao": f"{onde}.descricao", "tratamento": f"{onde}.tratamento"},
+        }))
+    return achados
+
+
+def _achados_consenso_indisponivel(analise: dict) -> list[Achado]:
+    ausente = _objeto(analise.get("consenso")).get("ausente")
+    if not isinstance(ausente, dict):
+        return []
+    onde = "analise.consenso.ausente"
+    return [Achado("REQUIRED_DISCLOSURE", "consenso_indisponivel", onde, {
+        "ancora": str(ausente.get("ancora")), "razao": str(ausente.get("razao")),
+        "campos_de_prosa": {"razao": f"{onde}.razao"},
+    })]
+
+
+def _achados_concentracao_de_fontes(registros: list, insumos: dict, idioma: str) -> list[Achado]:
+    total = len(insumos)
+    if total < MINIMO_DE_INSUMOS_PARA_CONCENTRACAO:
+        return []
+    sustentados: dict[str, set] = {}
+    for _indice, registro in registros:
+        identidade = _identidade(registro)
+        if identidade is not None:
+            sustentados.setdefault(identidade, set()).update(
+                caminho for caminho in _caminhos_usados(registro) if isinstance(caminho, str) and caminho in insumos)
+
+    achados: list[Achado] = []
+    for identidade, caminhos in sustentados.items():
+        parcela = len(caminhos) / total
+        if parcela > LIMIAR_DE_CONCENTRACAO_DE_FONTES:
+            achados.append(Achado("QUALITY_WARNING", "concentracao_de_fontes", "ledger.registros", {
+                "identidade": identidade, "insumos": len(caminhos), "total": total,
+                "parcela_fmt": placeholders.formatar(parcela, "pct0", idioma),
+                "limiar_fmt": placeholders.formatar(LIMIAR_DE_CONCENTRACAO_DE_FONTES, "pct0", idioma),
+            }))
+    return achados
+
+
+def _achados_do_ledger(entrega: dict, catalogo: dict, contrato, idioma: str) -> list[Achado]:
+    """As regras de D3, na ordem do plano: os HARD FAIL, os REQUIRED DISCLOSURE e o QUALITY
+    WARNING.
+
+    - Os insumos são as folhas numéricas do CASO que o mapa da integração cobre
+      (`catalogo.insumos_do_caso`, por `placeholders.insumo_do_caso`). Um caminho de `usado_em`
+      é ligação válida só quando é um desses — nunca resolvido de novo no caso, para que um
+      índice escrito de outro jeito (`-1`, `01`) não passe por insumo.
+    - Sem o mapa, as regras que dependem dele falham fechadas: HARD FAIL
+      `insumos_do_caso_desconhecidos`, nunca "nenhum insumo" — sem ele nenhum número seria
+      exigido, e a correção é do catálogo.
+    - Estimativa e disclosure de lacuna saem das flags do contrato lido (`e_estimativa`,
+      `exige_disclosure`), nunca do nome do estatuto ou da materialidade.
+    - Contraprova é confirmação (§6.3, `_confirma`): outra identidade e o mesmo número do
+      registro que sustenta a premissa decisiva, ou a reconciliação declarada da divergência.
+    - Os disclosures que citam prosa (`lacuna_material`, `consenso_indisponivel`) levam o texto
+      cru, para o `qc.json`, e `campos_de_prosa: {<param>: <onde>}` — o `onde` de cada texto
+      em `placeholders.campos_de_prosa`, pelo qual a Tese exibe o texto resolvido.
+    - Tolerante a forma, como o resto do QC: roda também sobre entregas montadas em teste sem
+      `entrega.carregar`."""
+    analise = _objeto(entrega.get("analise"))
+    ledger = _objeto(entrega.get("ledger"))
+    registros = [(indice, registro) for indice, registro in enumerate(_lista(ledger.get("registros")))
+                 if isinstance(registro, dict)]
+    mapa = placeholders.insumos_do_caso(catalogo)
+    insumos = None if mapa is None else {
+        caminho: numero for caminho, numero in _folhas_numericas(_objeto(entrega.get("caso")))
+        if placeholders.insumo_do_caso(caminho, mapa) is not None}
+
+    achados: list[Achado] = []
+    if insumos is None:
+        achados.append(Achado("HARD_FAIL", "insumos_do_caso_desconhecidos", "catalogo.insumos_do_caso", {}))
+    else:
+        achados += (_achados_insumo_sem_proveniencia(registros, insumos)
+                    + _achados_usado_em_fora_dos_insumos(registros, insumos)
+                    + _achados_insumo_nao_reconciliado(registros, insumos, idioma))
+    achados += (_achados_conflito_de_fontes_silenciado(registros)
+                + _achados_referencia_fora_do_ledger(entrega, registros)
+                + _achados_dataset_sem_proveniencia(entrega))
+    if insumos is not None:
+        achados += _achados_insumo_estimado(registros, insumos, contrato)
+    achados += (_achados_sem_contraprova_independente(entrega, registros, catalogo, idioma)
+                + _achados_lacuna_material(ledger, contrato)
+                + _achados_consenso_indisponivel(analise))
+    if insumos is not None:
+        achados += _achados_concentracao_de_fontes(registros, insumos, idioma)
+    return achados
+
+
+def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | None = None) -> list[Achado]:
     """Roda as regras de QC; devolve os achados em ordem determinística
     (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
     de ordem de `set`).
+
+    `contrato_ledger` (fatia 5E, Task 2): o dict do contrato `ledger/1` do
+    `er-evidencia`, que `builder.py` lê pela constante dos assets externos. Lido
+    por `entrega.ler_contrato_do_ledger` antes de qualquer regra: fora da forma,
+    `ContratoDoLedgerInvalido` — o QC falha fechado, nunca lê as flags pela metade.
 
     `html`: `None` na primeira passada de `builder.py` (antes do render —
     nenhuma regra desta fatia depende dele além de `relatorio_nao_
     autocontido`, que simplesmente não dispara); o HTML já composto na
     segunda passada, só para essa regra.
     """
+    contrato = contrato_entrega.ler_contrato_do_ledger(contrato_ledger)
     achados: list[Achado] = []
     idioma = entrega["execucao"]["idioma"]
 
@@ -1049,6 +1381,7 @@ def avaliar(entrega: dict, catalogo: dict, html: str | None = None) -> list[Acha
         achados.append(achado_bases)
 
     achados.extend(_achados_da_tese(entrega, catalogo, idioma))
+    achados.extend(_achados_do_ledger(entrega, catalogo, contrato, idioma))
 
     achado_autocontido = _achado_autocontido(html)
     if achado_autocontido is not None:

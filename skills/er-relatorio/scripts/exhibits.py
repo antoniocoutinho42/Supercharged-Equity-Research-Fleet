@@ -195,8 +195,11 @@ def _recusar_chave_desconhecida(objeto: dict, permitidas: frozenset, onde: str) 
 
 def validar_dados(valor: Any) -> None:
     """`entrega.dados` (G3): `{<id>: {"ledger": [...], "x": [...], "campos":
-    {<campo>: [...]}}}`. `ledger` só tem o tipo confirmado aqui — o schema
-    de cada registro é do item 7."""
+    {<campo>: [...]}}}`. `ledger` (fatia 5E, Task 2) é a lista dos ids dos
+    registros do ledger que sustentam o dataset: a forma de cada registro é
+    do contrato `ledger/1`, e se os ids existem e se um dataset usado por
+    série tem proveniência é QC (`referencia_fora_do_ledger`,
+    `dataset_sem_proveniencia`)."""
     dados = _exigir_objeto(valor, "dados")
     for dataset_id in sorted(dados):
         _validar_dataset(dados[dataset_id], f"dados.{dataset_id}")
@@ -208,8 +211,11 @@ def _validar_dataset(valor: Any, onde: str) -> None:
     for campo in sorted(CHAVES_DE_DATASET):
         if campo not in dataset:
             raise ContratoDeExhibitInvalido(f"campo obrigatório ausente em '{onde}': '{campo}'.")
-    if not isinstance(dataset["ledger"], list):
-        raise ContratoDeExhibitInvalido(f"'{onde}.ledger' não é uma lista: {dataset['ledger']!r}.")
+    ledger = dataset["ledger"]
+    if not isinstance(ledger, list) or not all(isinstance(ident, str) and ident.strip() for ident in ledger):
+        raise ContratoDeExhibitInvalido(
+            f"'{onde}.ledger' tem de ser uma lista de ids de registros do ledger (textos não vazios): {ledger!r}."
+        )
     if not isinstance(dataset["x"], list):
         raise ContratoDeExhibitInvalido(f"'{onde}.x' não é uma lista: {dataset['x']!r}.")
     campos = _exigir_objeto(dataset["campos"], f"{onde}.campos")

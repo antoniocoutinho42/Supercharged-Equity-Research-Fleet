@@ -12,6 +12,7 @@ de verdade sobre uma fixture de caso — nenhum `resultados.json` é forjado
 à mão neste arquivo.
 """
 
+import copy
 import json
 import os
 import subprocess
@@ -658,7 +659,7 @@ def test_degrau_com_divergencia_emite_com_disclosure(tmp_path):
 # --------------------------------------------------------------------------
 
 def _disclosures_de_divergencia(entrega_dict: dict) -> list:
-    return [a for a in qc.avaliar(entrega_dict, CATALOGO) if a.codigo == "divergencia_de_base_degrau"]
+    return [a for a in qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER) if a.codigo == "divergencia_de_base_degrau"]
 
 
 def test_o_disclosure_de_divergencia_segue_a_chave_da_integracao_nunca_um_limiar():
@@ -711,7 +712,7 @@ def test_degrau_sem_lista_de_chaves_e_hard_fail():
     entrega_dict = apoio.montar_entrega("caso_degrau.json")
     del entrega_dict["resultados"]["cenarios"]["base"]["degrau"]["diagnosticos_chaves"]
 
-    achados = qc.avaliar(entrega_dict, CATALOGO)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER)
     achado = next(a for a in achados if a.onde == "resultados.cenarios.base.degrau.diagnosticos_chaves")
     assert (achado.nivel, achado.codigo) == ("HARD_FAIL", "diagnostico_sem_chave")
     assert not [a for a in achados if a.codigo == "divergencia_de_base_degrau"]
@@ -927,11 +928,25 @@ def _bloco_json_do_skill(indice: int) -> dict:
 
 def test_exemplo_de_entrega_do_skill_md_emite(tmp_path):
     """O exemplo do contrato, verbatim, com `caso`/`resultados` de uma
-    fixture real no lugar dos `{}` (o SKILL.md os documenta como opacos)."""
+    fixture real no lugar dos `{}` (o SKILL.md os documenta como opacos).
+
+    Fatia 5E, Task 2: os registros, a lacuna e o consenso do exemplo entram como
+    estão — a forma, a reconciliação com os números reais do caso e a contraprova
+    da premissa decisiva são conferidas de verdade. O apoio só completa o ledger
+    com os insumos do caso real que o exemplo não nomeia: quais são depende do
+    caso, que o SKILL.md não mostra."""
     exemplo = _bloco_json_do_skill(0)
     real = apoio.montar_entrega("caso_reversa_firm.json")
     exemplo["caso"], exemplo["resultados"] = real["caso"], real["resultados"]
     exemplo["execucao"]["ticker"] = real["execucao"]["ticker"]
+    do_exemplo = copy.deepcopy(exemplo["ledger"]["registros"])
+    consenso_do_exemplo = copy.deepcopy(exemplo["analise"]["consenso"])
+    apoio.completar_ledger(exemplo)
+    completados = exemplo["ledger"]["registros"][len(do_exemplo):]
+    assert exemplo["ledger"]["registros"][:len(do_exemplo)] == do_exemplo
+    assert exemplo["analise"]["consenso"] == consenso_do_exemplo
+    assert completados and all(registro.get("usado_em") and "contraprova_de" not in registro
+                               for registro in completados), "o apoio completou mais do que os insumos"
     raiz = tmp_path / "exemplo_do_skill"
     apoio.escrever_raiz(raiz, exemplo)
 
@@ -944,11 +959,13 @@ def test_exemplo_de_entrega_do_skill_md_emite(tmp_path):
 
 def test_exemplo_da_gramatica_de_exhibits_do_skill_md_emite(tmp_path):
     """O segundo exemplo (dataset + exhibit com as três proveniências e um
-    overlay), montado sobre a mesma entrega válida."""
+    overlay, e o registro do ledger que sustenta o dataset — fatia 5E),
+    montado sobre a mesma entrega válida."""
     fragmento = _bloco_json_do_skill(1)
     entrega_dict = apoio.montar_entrega(
         "caso_reversa_firm.json",
-        dados=fragmento["dados"], exhibits=fragmento["analise"]["exhibits"])
+        dados=fragmento["dados"], exhibits=fragmento["analise"]["exhibits"], ledger=fragmento["ledger"])
+    assert entrega_dict["dados"] == fragmento["dados"], "o dataset do exemplo já cita o registro que o sustenta"
     raiz = tmp_path / "exemplo_de_exhibits"
     apoio.escrever_raiz(raiz, entrega_dict)
 

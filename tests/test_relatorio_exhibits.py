@@ -191,7 +191,7 @@ def test_fonte_para_campo_inexistente_e_hard_fail_nomeando_exhibit_e_serie():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "serie_nao_rastreavel")
     assert achado.nivel == "HARD_FAIL"
@@ -209,7 +209,7 @@ def test_formula_hostil_e_hard_fail():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "formula_invalida")
     assert achado.nivel == "HARD_FAIL"
@@ -233,7 +233,7 @@ def test_serie_derivada_sem_fonte_e_hard_fail():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "serie_nao_rastreavel")
     assert achado.nivel == "HARD_FAIL"
@@ -251,7 +251,7 @@ def test_overlay_com_chave_inexistente_e_hard_fail():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "overlay_nao_resolvido")
     assert achado.nivel == "HARD_FAIL"
@@ -267,7 +267,7 @@ def test_serie_curta_sem_nota_janela_e_quality_warning_que_nao_impede_emitir():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "serie_curta_sem_nota_janela")
     assert achado.nivel == "QUALITY_WARNING"
@@ -286,7 +286,7 @@ def test_serie_com_nota_janela_nao_dispara_warning():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     assert not any(a.codigo == "serie_curta_sem_nota_janela" for a in achados)
 
@@ -307,7 +307,7 @@ def test_tipo_inventado_recusa_contrato(tmp_path):
     apoio.escrever_raiz(raiz, entrega_dict)
 
     with pytest.raises(entrega.EntregaInvalida, match="pizza"):
-        entrega.carregar(raiz)
+        entrega.carregar(raiz, apoio.CONTRATO_LEDGER)
 
 
 @pytest.mark.parametrize("tipo", sorted(exhibits.TIPOS_PROPRIOS))
@@ -324,7 +324,7 @@ def test_tipo_de_painel_proprio_recusa_contrato(tipo, tmp_path):
     apoio.escrever_raiz(raiz, entrega_dict)
 
     with pytest.raises(entrega.EntregaInvalida, match=tipo):
-        entrega.carregar(raiz)
+        entrega.carregar(raiz, apoio.CONTRATO_LEDGER)
 
 
 # --------------------------------------------------------------------------
@@ -350,7 +350,7 @@ def test_series_de_datasets_com_eixos_diferentes_e_hard_fail():
     entrega_dict = apoio.montar_entrega(
         FIXTURE, dados=_dois_datasets_com_x_diferente(), exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "series_de_datasets_incompativeis")
     assert achado.nivel == "HARD_FAIL"
@@ -372,7 +372,7 @@ def test_series_de_datasets_com_o_mesmo_eixo_nao_disparam():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     assert not any(a.codigo == "series_de_datasets_incompativeis" for a in achados)
 
@@ -391,7 +391,7 @@ def test_serie_engine_nao_numerica_e_hard_fail(chave):
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     achado = next(a for a in achados if a.codigo == "serie_nao_rastreavel")
     assert achado.nivel == "HARD_FAIL"
@@ -411,7 +411,7 @@ def test_serie_engine_com_lista_de_numeros_continua_valida():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
     resolvidos, _log = exhibits.resolver(entrega_dict)
 
     assert not any(a.codigo == "serie_nao_rastreavel" for a in achados)
@@ -457,6 +457,6 @@ def test_serie_direta_com_null_continua_emitindo():
     }
     entrega_dict = apoio.montar_entrega(FIXTURE, dados=dados, exhibits=[exhibit])
 
-    achados = qc.avaliar(entrega_dict, CATALOGO, html=None)
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
 
     assert not any(a.nivel == "HARD_FAIL" for a in achados), achados
