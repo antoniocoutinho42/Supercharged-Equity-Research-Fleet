@@ -46,6 +46,14 @@ número que a integração declara conclusão de valor (`catalogo.conclusoes_de_
 é leitura condicional — fora da Conclusão da Tese, que fica só com o múltiplo de
 tela, e com o rótulo condicional do dicionário na Valuation. Uma decisão só, em
 `_leitura_condicional` (ver a seção "Leitura condicional").
+
+Fatia 5F, Task 5 (D15): a aba Valuation na ordem da §9 — cabeçalho (com a faixa
+piso–teto e o par de múltiplos forward), como o valor é formado, cenários,
+laboratório, ponte, sensibilidades (tabelas 1D e matrizes 2D) e o que está no
+preço, lido pela `leitura` que a integração publica. A escala dos montantes entra
+só onde a unidade do catálogo a declara; a premissa decisiva de uma parte de SOTP
+e o vínculo multi-rota saem rotulados na Tese; e o bootstrap pareia cada matriz ao
+seu host pelo índice (ver "Aba Valuation na ordem da §9").
 """
 
 import html
@@ -275,19 +283,35 @@ def _rotulo_fronteira(catalogo: dict, classe: str, idioma: str) -> str:
     return rotulo
 
 
-def _rotulo_do_vinculo(catalogo: dict, rota: str, item: str, idioma: str) -> str:
-    """Rótulo de um item de vínculo ou de mecanismo da Tese (D2): premissa da rota
-    (`_rotulo_premissa`) ou bloco econômico (`_rotulo_bloco`). O QC já recusa item
-    fora dos dois antes de renderizar (`vinculo_fora_do_vocabulario`, HARD FAIL);
-    aqui, defesa em profundidade, nomeada."""
-    if item in ((catalogo.get("premissas") or {}).get(rota) or {}):
-        return _rotulo_premissa(catalogo, rota, item, idioma)
+def _rotulo_do_vinculo(catalogo: dict, rotas: list, item: str, idioma: str) -> str:
+    """Rótulo de um item de vínculo ou de mecanismo da Tese (D2): premissa de uma das
+    `rotas` (`_rotulo_premissa`, pela primeira rota que a contém) ou bloco econômico
+    (`_rotulo_bloco`). `rotas` é a do caso e, num SOTP, a de cada parte (fatia 5F, Task
+    5, D13: o vínculo rotulado pela rota que o contém). O QC já recusa item fora delas e
+    dos blocos antes de renderizar (`vinculo_fora_do_vocabulario`, HARD FAIL); aqui,
+    defesa em profundidade, nomeada."""
+    for rota in rotas:
+        if item in ((catalogo.get("premissas") or {}).get(rota) or {}):
+            return _rotulo_premissa(catalogo, rota, item, idioma)
     if item in (catalogo.get("blocos") or {}):
         return _rotulo_bloco(catalogo, item, idioma)
     raise RotuloDoCatalogoAusente(
-        f"catálogo de apresentação sem '{item}' entre as premissas da rota '{rota}' e os "
+        f"catálogo de apresentação sem '{item}' entre as premissas das rotas {', '.join(rotas)} e os "
         "blocos econômicos — um vínculo nunca aparece pela chave crua."
     )
+
+
+def _rotas_do_valuation(resultados: dict) -> list:
+    """A rota do caso e, num SOTP, a de cada parte de `resultados.sotp.partes` — sem
+    repetição, na ordem publicada (fatia 5F, Task 5, D13). Leitura de contrato."""
+    sotp = resultados.get("sotp")
+    partes = sotp.get("partes") if isinstance(sotp, dict) else None
+    candidatas = [resultados.get("rota")] + [parte.get("rota") for parte in (partes or []) if isinstance(parte, dict)]
+    rotas: list = []
+    for rota in candidatas:
+        if isinstance(rota, str) and rota not in rotas:
+            rotas.append(rota)
+    return rotas
 
 
 def _mensagem_qc(achado, dicionario: dict) -> str:
@@ -674,10 +698,10 @@ def _lista_html(itens: list, dicionario: dict) -> str:
     return f'<ul class="tese-lista">{"".join(itens)}</ul>'
 
 
-def _rotulos_do_valuation_html(itens: list, catalogo: dict, rota: str, idioma: str) -> str:
+def _rotulos_do_valuation_html(itens: list, catalogo: dict, rotas: list, idioma: str) -> str:
     """O vínculo de uma pergunta, ou o mecanismo de um Positive/Negative (D2):
-    cada item pelo rótulo do catálogo."""
-    return " ".join(_valor_html("tese-rotulo", _rotulo_do_vinculo(catalogo, rota, item, idioma))
+    cada item pelo rótulo do catálogo, da rota que o contém (5F, D13)."""
+    return " ".join(_valor_html("tese-rotulo", _rotulo_do_vinculo(catalogo, rotas, item, idioma))
                     for item in itens)
 
 
@@ -877,6 +901,21 @@ def _disclosures_html(achados: list, dicionario: dict, prosa: dict) -> str:
     return f'<section class="disclosures disclosures-vazio"><h2>{titulo}</h2><p>{vazio}</p></section>'
 
 
+def _parte_do_sotp(resultados: dict, nome: str) -> tuple[int, dict]:
+    """O índice e a parte de `resultados.sotp.partes` cujo `nome` é `nome` (fatia 5F,
+    Task 5, D13). O QC já recusa a parte que não existe (`premissa_decisiva_fora_do_
+    cenario`, HARD FAIL); aqui, recusa nomeada — nunca uma premissa mostrada com o
+    número de outro lugar."""
+    sotp = resultados.get("sotp")
+    partes = sotp.get("partes") if isinstance(sotp, dict) else None
+    for indice, parte in enumerate(partes or []):
+        if isinstance(parte, dict) and parte.get("nome") == nome:
+            return indice, parte
+    raise CampoDeContratoAusente(
+        f"'resultados.sotp.partes' não tem a parte '{nome}' que uma premissa decisiva nomeia — o QC a "
+        "recusa antes (premissa_decisiva_fora_do_cenario), e a Tese nunca mostra o número de outro lugar.")
+
+
 def _premissas_decisivas_html(analise: dict, resultados: dict, catalogo: dict, idioma: str,
                                moeda: str | None, dicionario: dict, prosa: dict) -> str:
     """D1: cada premissa decisiva com o rótulo do catálogo, o número do cenário da
@@ -888,27 +927,43 @@ def _premissas_decisivas_html(analise: dict, resultados: dict, catalogo: dict, i
     o consolidado, e a manchete é o preço das partes — que usam premissas
     próprias. A seção sai com o rótulo do consolidado, do dicionário, nomeando o
     cenário e sem número nenhum (ela aparece também sob fronteira de escopo).
-    Premissa endereçável por parte é da 5F."""
+
+    Fatia 5F, Task 5 (D13): uma premissa com `parte` é a daquela parte de SOTP — o
+    rótulo da rota dela, o número que a parte publica em `resultados.sotp.partes` e,
+    sob ele, a parte pelo número e pelo nome. O montante sai com a escala declarada
+    quando a unidade a declara (D7)."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     nome = _campo_de_contrato(_campo_de_contrato(resultados, "manchete", "resultados"),
                               "cenario", "resultados.manchete")
     cenario = _campo_de_contrato(_campo_de_contrato(resultados, "cenarios", "resultados"),
                                  nome, "resultados.cenarios")
     premissas = _campo_de_contrato(cenario, "premissas", f"resultados.cenarios.{nome}")
+    escala = resultados.get("escala_monetaria")
     itens = []
     for indice, declarada in enumerate(analise["premissas_decisivas"]):
         chave = declarada["chave"]
-        rotulo = _rotulo_premissa(catalogo, rota, chave, idioma)
+        rota_da_premissa, premissas_da_premissa = rota, premissas
+        onde, nota_da_parte = f"resultados.cenarios.{nome}.premissas", ""
+        if "parte" in declarada:
+            indice_da_parte, parte = _parte_do_sotp(resultados, declarada["parte"])
+            onde_da_parte = f"resultados.sotp.partes.{indice_da_parte}"
+            rota_da_premissa = _campo_de_contrato(parte, "rota", onde_da_parte)
+            premissas_da_premissa = _campo_de_contrato(parte, "premissas", onde_da_parte)
+            onde = f"{onde_da_parte}.premissas"
+            nota_da_parte = '<p class="tese-premissa-parte">' + _texto_de_dado_html(t(
+                dicionario, "tese.premissa_da_parte", nome=declarada["parte"],
+                numero=placeholders.formatar(indice_da_parte + 1, "num0", idioma))) + '</p>'
+        rotulo = _rotulo_premissa(catalogo, rota_da_premissa, chave, idioma)
         valor = _valor_exibido_da_premissa(
-            catalogo["premissas"][rota][chave],
-            _campo_de_contrato(premissas, chave, f"resultados.cenarios.{nome}.premissas"),
-            catalogo, idioma, moeda, dicionario)
+            catalogo["premissas"][rota_da_premissa][chave],
+            _campo_de_contrato(premissas_da_premissa, chave, onde),
+            catalogo, idioma, moeda, dicionario, escala)
         derivacao = _prosa(prosa, f"analise.premissas_decisivas.{indice}.derivacao")
         itens.append(
             '<li class="tese-premissa"><div class="metrica">'
             + _valor_html("metrica-rotulo", rotulo)
             + _valor_html("metrica-valor", valor)
-            + f'</div><p class="tese-derivacao">{_texto_de_dado_html(derivacao)}</p></li>'
+            + f'</div>{nota_da_parte}<p class="tese-derivacao">{_texto_de_dado_html(derivacao)}</p></li>'
         )
     rotulo_do_consolidado = ""
     if _manchete_vem_do_sotp(resultados):
@@ -931,7 +986,7 @@ def _o_que_mudou_html(analise: dict, dicionario: dict, prosa: dict) -> str:
     return _secao_html("tese-o-que-mudou", t(dicionario, "tese.o_que_mudou_titulo"), f'<ul>{"".join(linhas)}</ul>')
 
 
-def _item_do_valuation_html(lado: str, indice: int, item: dict, catalogo: dict, rota: str, idioma: str,
+def _item_do_valuation_html(lado: str, indice: int, item: dict, catalogo: dict, rotas: list, idioma: str,
                              dicionario: dict, prosa: dict) -> str:
     """Um Positive ou Negative (§9): a afirmação, o vetor que atinge, o mecanismo
     do valuation que move, o observável que o confirma ou o mata, e se ele está
@@ -942,7 +997,7 @@ def _item_do_valuation_html(lado: str, indice: int, item: dict, catalogo: dict, 
         _atributo_html(t(dicionario, "tese.vetor"),
                        _valor_html("tese-vetor", _rotulo_de_vocabulario(dicionario, "tese.vetores", item["vetor"]))),
         _atributo_html(t(dicionario, "tese.mecanismo"),
-                       _rotulos_do_valuation_html(item["mecanismo"], catalogo, rota, idioma)),
+                       _rotulos_do_valuation_html(item["mecanismo"], catalogo, rotas, idioma)),
         _atributo_html(t(dicionario, "tese.observavel_item"),
                        _valor_html("tese-observavel", _prosa(prosa, onde + ".observavel"))),
         _atributo_html(t(dicionario, "tese.incorporacao"),
@@ -955,19 +1010,19 @@ def _item_do_valuation_html(lado: str, indice: int, item: dict, catalogo: dict, 
     return f'<li class="tese-item">{"".join(linhas)}</li>'
 
 
-def _positives_negatives_html(analise: dict, catalogo: dict, rota: str, idioma: str, dicionario: dict,
+def _positives_negatives_html(analise: dict, catalogo: dict, rotas: list, idioma: str, dicionario: dict,
                                prosa: dict) -> str:
     lados = []
     for lado, titulo in (("positives", t(dicionario, "tese.positives_titulo")),
                          ("negatives", t(dicionario, "tese.negatives_titulo"))):
-        itens = [_item_do_valuation_html(lado, indice, item, catalogo, rota, idioma, dicionario, prosa)
+        itens = [_item_do_valuation_html(lado, indice, item, catalogo, rotas, idioma, dicionario, prosa)
                  for indice, item in enumerate(analise[lado])]
         lados.append(f'<div class="tese-lado"><h3>{html.escape(titulo)}</h3>{_lista_html(itens, dicionario)}</div>')
     return _secao_html("tese-positives-negatives", t(dicionario, "tese.positives_negatives_titulo"),
                        f'<div class="tese-lados">{"".join(lados)}</div>')
 
 
-def _pergunta_html(indice: int, pergunta: dict, catalogo: dict, rota: str, idioma: str, dicionario: dict,
+def _pergunta_html(indice: int, pergunta: dict, catalogo: dict, rotas: list, idioma: str, dicionario: dict,
                     prosa: dict, exhibits_resolvidos: list, indice_por_id: dict) -> str:
     """Uma pergunta da tese (§7, §10): o tema, a pergunta, a evidência, o
     observável que a falsificaria, o vínculo com o valuation e — D5 — os exhibits
@@ -982,7 +1037,7 @@ def _pergunta_html(indice: int, pergunta: dict, catalogo: dict, rota: str, idiom
         _atributo_html(t(dicionario, "tese.observavel_pergunta"),
                        _valor_html("tese-observavel", _prosa(prosa, onde + ".observavel"))),
         _atributo_html(t(dicionario, "tese.vinculo"),
-                       _rotulos_do_valuation_html(pergunta["vinculo"], catalogo, rota, idioma)),
+                       _rotulos_do_valuation_html(pergunta["vinculo"], catalogo, rotas, idioma)),
     ]
     if "exhibits" in pergunta:
         artigos = []
@@ -1031,13 +1086,15 @@ def _tese_html(entrega: dict, catalogo: dict, achados: list, idioma: str, dicion
     citam, pelo índice do seu id nessa lista — o mesmo índice da sua spec no
     payload —, e o que nenhuma pergunta cita vai para a seção final."""
     analise, resultados = entrega["analise"], entrega["resultados"]
-    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    # A rota do caso é contrato (ausente, recusa nomeada); o vínculo lê também as rotas das partes (5F, D13).
+    _campo_de_contrato(resultados, "rota", "resultados")
+    rotas = _rotas_do_valuation(resultados)
     moeda = entrega["caso"].get("moeda")
     indice_por_id = {exhibit["id"]: indice for indice, exhibit in enumerate(exhibits_resolvidos)}
     citados = {indice_por_id[exhibit_id] for pergunta in analise["perguntas"]
                for exhibit_id in pergunta.get("exhibits", []) if exhibit_id in indice_por_id}
     perguntas = "".join(
-        _pergunta_html(indice, pergunta, catalogo, rota, idioma, dicionario, prosa, exhibits_resolvidos,
+        _pergunta_html(indice, pergunta, catalogo, rotas, idioma, dicionario, prosa, exhibits_resolvidos,
                        indice_por_id)
         for indice, pergunta in enumerate(analise["perguntas"]))
     return (
@@ -1046,7 +1103,7 @@ def _tese_html(entrega: dict, catalogo: dict, achados: list, idioma: str, dicion
         + _disclosures_html(achados, dicionario, prosa)
         + _premissas_decisivas_html(analise, resultados, catalogo, idioma, moeda, dicionario, prosa)
         + _o_que_mudou_html(analise, dicionario, prosa)
-        + _positives_negatives_html(analise, catalogo, rota, idioma, dicionario, prosa)
+        + _positives_negatives_html(analise, catalogo, rotas, idioma, dicionario, prosa)
         + _secao_html("tese-perguntas", t(dicionario, "tese.perguntas_titulo"), perguntas)
         + _riscos_html(analise, dicionario, prosa)
         + _visao_nao_consensual_html(analise, dicionario, prosa)
@@ -1131,7 +1188,10 @@ def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: 
             "rotulo": t(dicionario, "valuation.ponte_total"),
             "valor": _campo_de_contrato(ponte, "nd_efetivo", "resultados.ponte"),
         },
-        "formato": placeholders.especificacao_de_formato("moeda", idioma, moeda),
+        # Fatia 5F, Task 5 (D7): a receita da unidade dos montantes da ponte, com o sufixo da escala
+        # quando o caso a declara e o catálogo marca a unidade.
+        "formato": _espec_de_formato_com_escala(catalogo, UNIDADE_DOS_MONTANTES_DA_PONTE, idioma, moeda,
+                                                resultados.get("escala_monetaria")),
     }
 
 
@@ -1235,22 +1295,111 @@ def _cenario_da_grade(caso: dict) -> str:
     return nome
 
 
-def _paineis_valuation_html(caso: dict, resultados: dict, catalogo: dict,
-                             idioma: str, dicionario: dict) -> str:
-    """Hosts VAZIOS na aba Valuation, na mesma ordem do payload — só o
-    `svg.js` os preenche (bootstrap estático em `template.html`). Nenhum host
-    quando não há o que desenhar (S6)."""
+# Fatia 5F, Task 5 (D7): as linhas da ponte são o balanço na moeda do caso — montantes, a unidade
+# `moeda` do catálogo (`resultados.ponte` não declara unidade própria; é a que a 5B já aplicava pelo
+# formato). A escala entra pelo sufixo da receita que o `svg.js` recebe, só quando o catálogo marca
+# essa unidade com `escala_monetaria`.
+UNIDADE_DOS_MONTANTES_DA_PONTE: str = "moeda"
+
+
+def _espec_de_formato_com_escala(catalogo: dict, unidade: Any, idioma: str, moeda: str | None,
+                                 escala: Any) -> dict:
+    """A receita de `_espec_de_formato_da_unidade` com o sufixo da escala dos montantes
+    (`_sufixo_da_escala`) — vazio quando o caso não a declara ou a unidade não a marca."""
+    espec = dict(_espec_de_formato_da_unidade(catalogo, unidade, idioma, moeda))
+    espec["sufixo"] = espec["sufixo"] + _sufixo_da_escala(catalogo, unidade, escala, idioma)
+    return espec
+
+
+def _ponte_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict, moeda: str | None) -> str:
+    """O host VAZIO do waterfall — só o `svg.js` o preenche (bootstrap estático em
+    `template.html`) —, ou nada quando não há ponte (S6)."""
+    if _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda) is None:
+        return ""
+    titulo = html.escape(t(dicionario, "valuation.ponte_titulo"))
+    return (f'<section class="painel-svg"><h2>{titulo}</h2>'
+            f'<div class="painel-grafico" data-painel="ponte"></div></section>')
+
+
+def _grades_1d(resultados: dict) -> list:
+    sensibilidades = resultados.get("sensibilidades")
+    if not isinstance(sensibilidades, dict):
+        return []
+    grades = sensibilidades.get("grades_1d")
+    return grades if isinstance(grades, list) else []
+
+
+def _numero_exibivel(valor: Any) -> bool:
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool)
+
+
+def _unidade_publicada(catalogo: dict, caminho: str) -> str:
+    """A unidade que a integração declara para o número que a página exibe em `caminho`: a família
+    do mapa `catalogo.conclusoes_de_valor` que o cobre (fatia 5F, Task 5) — a mesma declaração que
+    decide a leitura condicional. Um número de valor fora do mapa é recusa nomeada: o relatório não
+    formata ao acaso um número cuja unidade ninguém declarou."""
+    mapa = placeholders.conclusoes_de_valor(catalogo)
+    familia = placeholders.conclusao_de_valor(caminho, mapa) if mapa is not None else None
+    if familia is None:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem a unidade de '{caminho}' no mapa 'conclusoes_de_valor' — o "
+            "relatório não formata um número de valor cuja unidade a integração não declara.")
+    return familia[0]
+
+
+def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, idioma: str, dicionario: dict,
+                   moeda: str | None) -> str:
+    """D10: uma grade 1D como tabela estática, sem JS (§10: "cinco números numa tabela podem
+    comunicar melhor que um gráfico") — o ponto pela unidade da premissa, o preço pela unidade que a
+    grade publica e o múltiplo pela do mapa —, com o ponto do cenário que a grade perturbou marcado
+    por igualdade exata, a regra da matriz (`_base_da_grade`). Sob fronteira de escopo, o título e as
+    colunas dos números de valor saem com o rótulo condicional."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    onde = "resultados.sensibilidades.grades_1d[*]"
+    premissa = _campo_de_contrato(grade, "premissa", onde)
+    cenario = _cenario_da_grade(caso)
+    central = (((caso.get("cenarios") or {}).get(cenario) or {}).get("premissas") or {}).get(premissa)
+    escala = resultados.get("escala_monetaria")
+    unidade_do_ponto = _unidade_da_premissa(catalogo, rota, premissa)
+    unidade_do_multiplo = _unidade_publicada(catalogo, CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D)
+    rotulo = _rotulo_premissa(catalogo, rota, premissa, idioma)
+    colunas = [
+        rotulo,
+        _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_coluna_preco", CAMINHO_DOS_PRECOS_DA_GRADE_1D),
+        _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_coluna_multiplo",
+                          CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D),
+    ]
+    linhas = []
+    for ponto in _campo_de_contrato(grade, "pontos", onde):
+        x = _campo_de_contrato(ponto, "x", f"{onde}.pontos[*]")
+        texto_do_ponto = _formatar_na_unidade(x, catalogo, unidade_do_ponto, idioma, moeda, escala)
+        if _numero_exibivel(central) and _numero_exibivel(x) and x == central:
+            texto_do_ponto = t(dicionario, "valuation.grade_1d_ponto_do_cenario", valor=texto_do_ponto,
+                               cenario=cenario)
+        celulas = [
+            texto_do_ponto,
+            _formatar_na_unidade(_campo_de_contrato(ponto, "valor", f"{onde}.pontos[*]"), catalogo,
+                                 grade.get("unidade"), idioma, moeda, escala),
+            _formatar_na_unidade(_campo_de_contrato(ponto, "multiplo", f"{onde}.pontos[*]"), catalogo,
+                                 unidade_do_multiplo, idioma, moeda, escala),
+        ]
+        linhas.append("<tr>" + "".join(f"<td>{_texto_de_dado_html(celula)}</td>" for celula in celulas) + "</tr>")
+    titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_titulo", CAMINHO_DOS_PRECOS_DA_GRADE_1D,
+                               cenario=cenario, premissa=rotulo)
+    cabecalho = "".join(f'<th class="grade-rotulo">{_texto_de_dado_html(coluna)}</th>' for coluna in colunas)
+    return (f'<section class="sensibilidade-1d"><h2>{_texto_de_dado_html(titulo)}</h2>'
+            f'<table class="grade-1d"><thead><tr>{cabecalho}</tr></thead>'
+            f'<tbody>{"".join(linhas)}</tbody></table></section>')
+
+
+def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+    """As sensibilidades, na ordem publicada: uma tabela por grade 1D (D10, `_grade_1d_html`) e,
+    depois, o host VAZIO de cada matriz 2D, com o `data-painel-indice` pelo qual o bootstrap a pareia
+    à sua spec (achado 14) — só o `svg.js` o preenche. Nenhuma seção sem grade (S6)."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     moeda = caso.get("moeda")
-    blocos = []
-    if _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda) is not None:
-        titulo = html.escape(t(dicionario, "valuation.ponte_titulo"))
-        blocos.append(
-            f'<section class="painel-svg">'
-            f'<h2>{titulo}</h2>'
-            f'<div class="painel-grafico" data-painel="ponte"></div>'
-            f'</section>'
-        )
+    blocos = [_grade_1d_html(caso, resultados, grade, catalogo, idioma, dicionario, moeda)
+              for grade in _grades_1d(resultados)]
     for indice, grade in enumerate(_grades_2d(resultados)):
         titulo = _texto_de_dado_html(_rotulo_do_numero(
             resultados, catalogo, dicionario, "matriz_titulo", CAMINHO_DAS_CELULAS_DA_GRADE_2D,
@@ -1317,12 +1466,37 @@ def _premissas_da_rota(catalogo: dict, rota: str) -> dict | None:
     return premissas if isinstance(premissas, dict) else None
 
 
+def _sufixo_da_escala(catalogo: dict, unidade: Any, escala: Any, idioma: str) -> str:
+    """O sufixo da escala dos montantes (fatia 5F, Task 5, D7): `" <rótulo>"` quando o caso
+    declara a escala (`resultados.escala_monetaria`) e o catálogo marca a unidade com
+    `escala_monetaria` — hoje só `moeda`, nunca preço por ação —; senão, vazio. Decide a
+    flag da unidade, nunca o nome dela; o rótulo é do catálogo (`escalas_monetarias`)."""
+    info = (catalogo.get("unidades") or {}).get(unidade)
+    if escala is None or not (isinstance(info, dict) and info.get("escala_monetaria") is True):
+        return ""
+    rotulo = (((catalogo.get("escalas_monetarias") or {}).get(escala) or {}).get("rotulo") or {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para a escala monetária '{escala}' em "
+            "'escalas_monetarias'.")
+    return f" {rotulo}"
+
+
+def _formatar_na_unidade(valor: Any, catalogo: dict, unidade: Any, idioma: str, moeda: str | None,
+                         escala: Any = None) -> str:
+    """Um número pela unidade que o contrato declara (`_formato_da_unidade`), com o sufixo da
+    escala quando a unidade a declara (`_sufixo_da_escala`)."""
+    return (placeholders.formatar(valor, _formato_da_unidade(catalogo, unidade), idioma, moeda)
+            + _sufixo_da_escala(catalogo, unidade, escala, idioma))
+
+
 def _valor_exibido_da_premissa(info: dict, valor: Any, catalogo: dict, idioma: str,
-                                moeda: str | None, dicionario: dict) -> str:
+                                moeda: str | None, dicionario: dict, escala: Any = None) -> str:
     """O valor ORIGINAL, legível, que fica ao lado do campo editável (L6).
     Número passa pela unidade que o catálogo declara (a mesma disciplina de
-    `_espec_de_formato_da_unidade`/A4 — nunca "2 casas e nada mais"); opção de
-    escolha vira o rótulo da opção; booleano vira sim/não do dicionário."""
+    `_espec_de_formato_da_unidade`/A4 — nunca "2 casas e nada mais"), com a escala dos
+    montantes quando a unidade a declara (5F, D7); opção de escolha vira o rótulo da
+    opção; booleano vira sim/não do dicionário."""
     entrada = info.get("entrada")
     if entrada == "escolha":
         # Fatia 5D, Task 3: a premissa decisiva da Tese também passa por aqui, e
@@ -1333,8 +1507,7 @@ def _valor_exibido_da_premissa(info: dict, valor: Any, catalogo: dict, idioma: s
         return rotulo if rotulo else t(dicionario, "valuation.laboratorio_valor_nao_rotulavel")
     if entrada == "booleano":
         return t(dicionario, "valuation.laboratorio_sim" if valor else "valuation.laboratorio_nao")
-    return placeholders.formatar(
-        valor, _formato_da_unidade(catalogo, info.get("unidade")), idioma, moeda)
+    return _formatar_na_unidade(valor, catalogo, info.get("unidade"), idioma, moeda, escala)
 
 
 def _widget_editavel(info: dict, valor: Any, identificador: str, idioma: str) -> str | None:
@@ -1380,7 +1553,7 @@ def _widget_editavel(info: dict, valor: Any, identificador: str, idioma: str) ->
 
 def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
                            identificador: str, catalogo: dict, idioma: str,
-                           moeda: str | None, dicionario: dict) -> tuple[str, str | None]:
+                           moeda: str | None, dicionario: dict, escala: Any = None) -> tuple[str, str | None]:
     """Um campo do painel, e o BLOCO econômico em que ele entra (`None` quando
     não é editável). Sem entrada no catálogo — ou com valor fora do tipo de
     entrada declarado — o campo é mostrado como o caso o declara,
@@ -1413,7 +1586,7 @@ def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
     rotulo = html.escape(_rotulo_premissa(catalogo, rota, chave, idioma))
     original = _texto_de_dado_html(t(
         dicionario, "valuation.laboratorio_original",
-        valor=_valor_exibido_da_premissa(info, valor, catalogo, idioma, moeda, dicionario)))
+        valor=_valor_exibido_da_premissa(info, valor, catalogo, idioma, moeda, dicionario, escala)))
     return (
         f'<div class="lab-campo" data-laboratorio-premissa="{html.escape(chave)}">'
         f'<label for="{identificador}">{rotulo}</label>'
@@ -1474,13 +1647,14 @@ def _diagnosticos_do_cenario_html(dicionario: dict) -> str:
 
 def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
                                   premissas_catalogo: dict, catalogo: dict, idioma: str,
-                                  moeda: str | None, dicionario: dict, rotulos_das_saidas: dict) -> str:
+                                  moeda: str | None, dicionario: dict, rotulos_das_saidas: dict,
+                                  escala: Any = None) -> str:
     campos_por_bloco: dict[str, list] = {}
     travados: list[str] = []
     for posicao, (chave, valor) in enumerate(premissas.items()):
         campo, bloco = _campo_do_laboratorio(
             rota, chave, valor, premissas_catalogo.get(chave), f"lab-{indice}-{posicao}",
-            catalogo, idioma, moeda, dicionario)
+            catalogo, idioma, moeda, dicionario, escala)
         if bloco is None:
             travados.append(campo)
         else:
@@ -1555,7 +1729,7 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
     paineis = "".join(
         _cenario_do_laboratorio_html(
             rota, nome, (bloco or {}).get("premissas") or {}, indice, premissas_catalogo,
-            catalogo, idioma, moeda, dicionario, rotulos_das_saidas)
+            catalogo, idioma, moeda, dicionario, rotulos_das_saidas, resultados.get("escala_monetaria"))
         for indice, (nome, bloco) in enumerate(cenarios.items())
     )
     return (
@@ -1680,6 +1854,14 @@ CAMINHO_DOS_PRECOS_POR_CENARIO: str = "cenarios.*.valor.preco_acao"
 CAMINHO_DOS_MULTIPLOS_POR_CENARIO: str = "cenarios.*.multiplos.*"
 CAMINHO_DOS_UPSIDES_POR_CENARIO: str = "cenarios.*.vs_preco.upside"
 CAMINHO_DAS_CELULAS_DA_GRADE_2D: str = "sensibilidades.grades_2d.*.celulas.*.*.valor"
+# Fatia 5F, Task 5: os números novos da aba Valuation — o par forward, as tabelas 1D, os
+# múltiplos e os montantes da formação do valor.
+CAMINHO_DO_MULTIPLO_FORWARD_DA_MANCHETE: str = "manchete.multiplo_forward.valor"
+CAMINHO_DO_MULTIPLO_DE_TELA_FORWARD: str = "mercado_tela_forward.valor"
+CAMINHO_DOS_PRECOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.valor"
+CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.multiplo"
+CAMINHO_DO_VALOR_DA_FASE_1: str = "cenarios.*.vp_fase1"
+CAMINHO_DO_VALOR_DA_FASE_2: str = "cenarios.*.valor_fase2_no_ano_T"
 
 
 def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str) -> bool:
@@ -1724,32 +1906,370 @@ def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: d
     mapa da integração declara conclusão de valor — hoje, o múltiplo justo — sai
     com o rótulo condicional na Valuation e NÃO sai quando `omitir_conclusao_de_
     valor` (a Conclusão da Tese): múltiplo justo contra o de tela é o upside dito
-    em outra unidade, e a Tese fica só com a leitura de mercado que a §14 mantém."""
+    em outra unidade, e a Tese fica só com a leitura de mercado que a §14 mantém.
+
+    Fatia 5F, Task 5 (D5): depois do par corrente, o par forward — o múltiplo justo
+    forward (`manchete.multiplo_forward`, que só existe fora do degrau e da rampa) ao
+    lado do de tela forward (`mercado_tela_forward`), cuja nota leva o período e a fonte
+    da métrica forward como dado; sem métrica declarada, a tela forward diz isso, sem
+    número. Sem `manchete.multiplo_forward`, não há par forward."""
     manchete = resultados["manchete"]
     if "multiplo" not in manchete:
         return f'<p class="sotp-nota">{html.escape(t(dicionario, "valuation.sotp_sem_multiplo"))}</p>'
-    lados = (
+    lados = [
         ("multiplo_justo_titulo", CAMINHO_DO_MULTIPLO_DA_MANCHETE, manchete["multiplo"]),
         ("multiplo_tela_titulo", CAMINHO_DO_MULTIPLO_DE_TELA, resultados["mercado_tela"]),
-    )
+    ]
+    if isinstance(manchete.get("multiplo_forward"), dict):
+        lados += [
+            ("multiplo_justo_forward_titulo", CAMINHO_DO_MULTIPLO_FORWARD_DA_MANCHETE, manchete["multiplo_forward"]),
+            ("multiplo_tela_forward_titulo", CAMINHO_DO_MULTIPLO_DE_TELA_FORWARD,
+             _campo_de_contrato(resultados, "mercado_tela_forward", "resultados")),
+        ]
     blocos = []
     for chave_do_rotulo, caminho, multiplo in lados:
         if omitir_conclusao_de_valor and _leitura_condicional(resultados, catalogo, caminho):
             continue
         rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho)
-        valor_fmt = placeholders.formatar(multiplo["valor"], "x2", idioma)
+        if multiplo is None:
+            valor_fmt = t(dicionario, "valuation.sem_valor")
+            nota_html = html.escape(t(dicionario, "valuation.metrica_forward_nao_declarada"))
+        else:
+            valor_fmt = placeholders.formatar(multiplo["valor"], "x2", idioma)
+            nota_html = html.escape(_rotulo_multiplo(catalogo, multiplo["chave"], idioma))
+            metrica = multiplo.get("metrica")
+            if isinstance(metrica, dict):
+                nota_html = _texto_de_dado_html(t(
+                    dicionario, "valuation.multiplo_tela_forward_nota",
+                    multiplo=_rotulo_multiplo(catalogo, multiplo["chave"], idioma),
+                    periodo=str(metrica.get("periodo")), fonte=str(metrica.get("fonte"))))
         blocos.append(
             f'<div class="metrica">'
             f'<span class="metrica-rotulo">{html.escape(rotulo)}</span>'
             f'<span class="metrica-valor">{_texto_de_dado_html(valor_fmt)}</span>'
-            f'<span class="metrica-nota">{html.escape(_rotulo_multiplo(catalogo, multiplo["chave"], idioma))}</span>'
+            f'<span class="metrica-nota">{nota_html}</span>'
             f'</div>'
         )
     return "".join(blocos)
 
 
-def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
+# --------------------------------------------------------------------------
+# Aba Valuation na ordem da §9 (fatia 5F, Task 5, D15): cabeçalho — preço e upside, a faixa
+# piso–teto, os múltiplos corrente e forward, a rota e a convenção — → como o valor é formado →
+# cenários → laboratório → ponte → sensibilidades → o que está no preço. Todo número sai de
+# `resultados` formatado pela unidade que o contrato declara; todo texto de metodologia sai do
+# catálogo; toda conclusão de valor nova sai por `_rotulo_do_numero`; nenhum código cru e nenhuma
+# prosa do motor chega à aba.
+# --------------------------------------------------------------------------
+
+# Os blocos que uma limitação publicada declara suprimir (`catalogo.limitacoes.<chave>.afeta`) e que
+# a seção "o que está no preço" mostra: a reversa ausente e a curva iso-valor não calculada (5F, D3).
+# Nomes que a declaração da integração usa, nunca o nome da limitação.
+AFETAS_DO_QUE_ESTA_NO_PRECO: tuple = (contrato_entrega.BLOCO_DA_REVERSA, "iso")
+
+
+def _rotulo_de_secao_do_catalogo(catalogo: dict, secao: str, codigo: Any, idioma: str) -> str:
+    """O rótulo de um código que o catálogo declara numa seção `{código: {rotulo: {idioma: ...}}}` —
+    os eixos, os motivos, as identificações e as posições da leitura da reversa (5F, D2). Ausente,
+    recusa nomeada: a aba nunca mostra o código cru."""
+    info = (catalogo.get(secao) or {}).get(codigo) if isinstance(codigo, str) else None
+    rotulo = ((info or {}).get("rotulo") or {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para '{codigo}' em '{secao}' — a aba "
+            "Valuation nunca mostra o código cru.")
+    return rotulo
+
+
+def _rotulo_do_triangulo(catalogo: dict, rota: str, variavel: Any, idioma: str) -> str:
+    """Uma variável do triângulo: premissa da rota (`_rotulo_premissa`) ou variável que não é premissa
+    (`catalogo.variaveis_do_triangulo`, hoje `rir`) — D9."""
+    if isinstance(variavel, str) and variavel in ((catalogo.get("premissas") or {}).get(rota) or {}):
+        return _rotulo_premissa(catalogo, rota, variavel, idioma)
+    return _rotulo_de_secao_do_catalogo(catalogo, "variaveis_do_triangulo", variavel, idioma)
+
+
+def _faixa_da_valuation_html(analise: dict, resultados: dict, idioma: str, moeda: str | None,
+                             dicionario: dict) -> str:
+    """D15, 1: a faixa piso–teto de `analise.faixa`, quando declarada — os preços que
+    `resultados.cenarios.<nome>.valor.preco_acao` publica para as duas pontas, com o nome do cenário.
+    O QC já conferiu a ordem (`faixa_fora_de_ordem`); sob fronteira de escopo a faixa é HARD FAIL."""
+    faixa = analise.get("faixa")
+    if not isinstance(faixa, dict):
+        return ""
+    cenarios = _campo_de_contrato(resultados, "cenarios", "resultados")
+    metricas = []
+    for papel in (contrato_entrega.PAPEIS_DA_FAIXA[0], contrato_entrega.PAPEIS_DA_FAIXA[-1]):
+        nome = faixa[papel]
+        valor = _campo_de_contrato(_campo_de_contrato(cenarios, nome, "resultados.cenarios"),
+                                   "valor", f"resultados.cenarios.{nome}")
+        preco = _campo_de_contrato(valor, "preco_acao", f"resultados.cenarios.{nome}.valor")
+        metricas.append(
+            '<div class="metrica">'
+            + _valor_html("metrica-rotulo", _rotulo_de_vocabulario(dicionario, "tese.papeis_da_faixa", papel))
+            + _valor_html("metrica-valor", placeholders.formatar(preco, "moeda", idioma, moeda))
+            + _valor_html("metrica-nota", t(dicionario, "tese.faixa_cenario", cenario=nome))
+            + '</div>'
+        )
+    return f'<section class="valuation-faixa">{"".join(metricas)}</section>'
+
+
+def _formacao_do_valor_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
+                            dicionario: dict) -> str:
+    """D15, 2 (D8): o quadro "como o valor é formado", colapsável — o texto de metodologia do
+    catálogo (`formacao_do_valor.<rota>`) com os números do cenário da manchete: cada passo cuja
+    premissa o cenário declara (na rampa, `util` e `g1` são alternativas, e só a declarada
+    aparece), pelo rótulo, pela unidade do catálogo e pela função; os múltiplos que o cenário
+    publica; na rampa, os montantes das duas fases; e a síntese. A taxa de reinvestimento aparece
+    pela função, nunca como número (D8). Num SOTP, com o rótulo do cenário consolidado; num cenário
+    com degrau, com o de antes do degrau — os múltiplos do cenário são os sem degrau."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    formacao = (catalogo.get("formacao_do_valor") or {}).get(rota)
+    sintese = ((formacao or {}).get("sintese") or {}).get(idioma) if isinstance(formacao, dict) else None
+    if not sintese:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem 'formacao_do_valor.{rota}' com a síntese em '{idioma}' — o quadro "
+            "de como o valor é formado é texto da metodologia, e o relatório não o escreve.")
+    nome = _campo_de_contrato(_campo_de_contrato(resultados, "manchete", "resultados"),
+                              "cenario", "resultados.manchete")
+    cenario = _campo_de_contrato(_campo_de_contrato(resultados, "cenarios", "resultados"),
+                                 nome, "resultados.cenarios")
+    onde = f"resultados.cenarios.{nome}"
+    premissas = _campo_de_contrato(cenario, "premissas", onde)
+    escala = resultados.get("escala_monetaria")
+
+    partes = []
+    if _manchete_vem_do_sotp(resultados):
+        partes.append('<p class="formacao-rotulo">'
+                      f'{_texto_de_dado_html(t(dicionario, "valuation.formacao_rotulo_consolidado", cenario=nome))}</p>')
+    elif "degrau" in cenario:
+        partes.append('<p class="formacao-rotulo">'
+                      f'{_texto_de_dado_html(t(dicionario, "valuation.formacao_rotulo_degrau", cenario=nome))}</p>')
+
+    passos = []
+    for passo in formacao.get("passos") or []:
+        chave = passo.get("premissa")
+        if chave not in premissas:
+            continue
+        rotulo = _rotulo_premissa(catalogo, rota, chave, idioma)
+        funcao = ((passo.get("funcao") or {}).get(idioma))
+        if not funcao:
+            raise RotuloDoCatalogoAusente(
+                f"catálogo de apresentação sem a função em '{idioma}' do passo '{chave}' de 'formacao_do_valor.{rota}'.")
+        valor = _valor_exibido_da_premissa(catalogo["premissas"][rota][chave], premissas[chave], catalogo, idioma,
+                                           moeda, dicionario, escala)
+        passos.append('<li class="formacao-passo">'
+                      f'{_valor_html("formacao-premissa", rotulo)} {_valor_html("formacao-valor", valor)}'
+                      f'<p class="formacao-funcao">{html.escape(funcao)}</p></li>')
+    partes.append(f'<ol class="formacao-passos">{"".join(passos)}</ol>')
+
+    unidade_dos_multiplos = _unidade_publicada(catalogo, CAMINHO_DOS_MULTIPLOS_POR_CENARIO)
+    itens = [
+        '<li class="formacao-multiplo">'
+        f'{_valor_html("formacao-multiplo-rotulo", _rotulo_multiplo(catalogo, chave, idioma))} '
+        f'{_valor_html("formacao-multiplo-valor", _formatar_na_unidade(valor, catalogo, unidade_dos_multiplos, idioma, moeda))}'
+        '</li>'
+        for chave, valor in _campo_de_contrato(cenario, "multiplos", onde).items()
+    ]
+    titulo_dos_multiplos = _rotulo_do_numero(resultados, catalogo, dicionario, "formacao_multiplos_titulo",
+                                             CAMINHO_DOS_MULTIPLOS_POR_CENARIO)
+    partes.append(f'<div class="formacao-multiplos"><h3>{html.escape(titulo_dos_multiplos)}</h3>'
+                  f'<ul>{"".join(itens)}</ul></div>')
+
+    montantes = []
+    for chave_do_rotulo, caminho in (("formacao_vp_fase1_titulo", CAMINHO_DO_VALOR_DA_FASE_1),
+                                     ("formacao_valor_fase2_titulo", CAMINHO_DO_VALOR_DA_FASE_2)):
+        campo = caminho.rsplit(".", 1)[-1]
+        if campo not in cenario:
+            continue
+        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho)
+        valor = _formatar_na_unidade(cenario[campo], catalogo, _unidade_publicada(catalogo, caminho), idioma, moeda,
+                                     escala)
+        montantes.append('<div class="metrica">' + _valor_html("metrica-rotulo", rotulo)
+                         + _valor_html("metrica-valor", valor) + '</div>')
+    if montantes:
+        partes.append(f'<div class="formacao-montantes">{"".join(montantes)}</div>')
+
+    partes.append(f'<p class="formacao-sintese">{html.escape(sintese)}</p>')
+    return (f'<section class="valuation-formacao"><h2>{html.escape(t(dicionario, "valuation.formacao_titulo"))}</h2>'
+            f'<details><summary>{html.escape(t(dicionario, "valuation.formacao_resumo"))}</summary>'
+            f'{"".join(partes)}</details></section>')
+
+
+def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
+                                dicionario: dict) -> str:
+    """D15, 3 (D9): cada cenário publicado — o nome; a âncora, texto do caso que a integração publica
+    em `resultados.cenarios.<nome>.ancora`, como dado (ajuste de D9 no regime de 15/09); o triângulo,
+    entradas e saída pelos rótulos do catálogo, ou — sem `triangulo` publicado, a rota rampa — a frase
+    de que não se aplica; e o preço e o upside, pela unidade que o mapa da integração declara e com o
+    rótulo condicional sob fronteira de escopo."""
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    escala = resultados.get("escala_monetaria")
+    rotulo_do_preco = _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
+                                        CAMINHO_DOS_PRECOS_POR_CENARIO)
+    rotulo_do_upside = _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
+                                         CAMINHO_DOS_UPSIDES_POR_CENARIO)
+    unidade_do_preco = _unidade_publicada(catalogo, CAMINHO_DOS_PRECOS_POR_CENARIO)
+    unidade_do_upside = _unidade_publicada(catalogo, CAMINHO_DOS_UPSIDES_POR_CENARIO)
+    artigos = []
+    for nome, cenario in _campo_de_contrato(resultados, "cenarios", "resultados").items():
+        onde = f"resultados.cenarios.{nome}"
+        triangulo = cenario.get("triangulo")
+        if isinstance(triangulo, dict):
+            texto_do_triangulo = t(
+                dicionario, "valuation.cenario_triangulo_valor",
+                entradas=", ".join(_rotulo_do_triangulo(catalogo, rota, entrada, idioma)
+                                   for entrada in triangulo.get("inputs") or []),
+                saida=_rotulo_do_triangulo(catalogo, rota, triangulo.get("output"), idioma))
+        else:
+            texto_do_triangulo = t(dicionario, "valuation.cenario_triangulo_nao_se_aplica")
+        preco = _campo_de_contrato(_campo_de_contrato(cenario, "valor", onde), "preco_acao", f"{onde}.valor")
+        upside = _campo_de_contrato(_campo_de_contrato(cenario, "vs_preco", onde), "upside", f"{onde}.vs_preco")
+        artigos.append(
+            '<article class="valuation-cenario">'
+            f'<h3>{_texto_de_dado_html(str(nome))}</h3>'
+            + _atributo_html(t(dicionario, "valuation.cenario_ancora"),
+                             _valor_html("cenario-ancora", str(_campo_de_contrato(cenario, "ancora", onde))))
+            + _atributo_html(t(dicionario, "valuation.cenario_triangulo"),
+                             _valor_html("cenario-triangulo", texto_do_triangulo))
+            + '<div class="valuation-cenario-numeros">'
+            + '<div class="metrica">' + _valor_html("metrica-rotulo", rotulo_do_preco)
+            + _valor_html("metrica-valor", _formatar_na_unidade(preco, catalogo, unidade_do_preco, idioma, moeda, escala))
+            + '</div><div class="metrica">' + _valor_html("metrica-rotulo", rotulo_do_upside)
+            + _valor_html("metrica-valor",
+                          _formatar_na_unidade(upside, catalogo, unidade_do_upside, idioma, moeda, escala))
+            + '</div></div></article>'
+        )
+    titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo", CAMINHO_DOS_PRECOS_POR_CENARIO)
+    return f'<section class="valuation-cenarios"><h2>{html.escape(titulo)}</h2>{"".join(artigos)}</section>'
+
+
+def _eixo_da_reversa_html(nome: str, eixo: dict, catalogo: dict, idioma: str, moeda: str | None,
+                          dicionario: dict) -> str:
+    """Um eixo do que está no preço, pela leitura normalizada que a integração publica ao lado do
+    payload do motor (`leitura`, D2): o rótulo do eixo e o do motivo; cada raiz pela `unidade` da
+    leitura, com a identificação rotulada, o intervalo e a curvatura (pela `unidade_da_curvatura`); os
+    toques tangenciais; o CAP; e, no eixo de custo de capital, o beta implícito com a posição, a banda
+    e a distância. A prosa do motor (`sem_solucao`, `sugestao`) e a álgebra nunca chegam aqui."""
+    onde = f"resultados.reversa.eixos.{nome}"
+    leitura = _campo_de_contrato(eixo, "leitura", onde)
+    unidade = _campo_de_contrato(leitura, "unidade", f"{onde}.leitura")
+    linhas = ['<p class="reversa-motivo">'
+              f'{html.escape(_rotulo_de_secao_do_catalogo(catalogo, "motivos_da_leitura", leitura.get("motivo"), idioma))}</p>']
+
+    raizes = []
+    for raiz in leitura.get("raizes") or []:
+        identificacao = raiz.get("identificacao")
+        rotulo_da_identificacao = (
+            _rotulo_de_secao_do_catalogo(catalogo, "identificacoes", identificacao, idioma) if identificacao is not None
+            else t(dicionario, "valuation.reversa_identificacao_indisponivel"))
+        pedacos = [_valor_html("reversa-raiz-valor", t(
+            dicionario, "valuation.reversa_raiz", identificacao=rotulo_da_identificacao,
+            valor=_formatar_na_unidade(raiz.get("valor"), catalogo, unidade, idioma, moeda)))]
+        intervalo = raiz.get("intervalo")
+        if isinstance(intervalo, list) and len(intervalo) == 2:
+            pedacos.append(_valor_html("reversa-intervalo", t(
+                dicionario, "valuation.reversa_intervalo",
+                de=_formatar_na_unidade(intervalo[0], catalogo, unidade, idioma, moeda),
+                ate=_formatar_na_unidade(intervalo[1], catalogo, unidade, idioma, moeda))))
+        if raiz.get("curvatura") is not None:
+            pedacos.append(_valor_html("reversa-curvatura", t(
+                dicionario, "valuation.reversa_curvatura",
+                valor=_formatar_na_unidade(raiz["curvatura"], catalogo, leitura.get("unidade_da_curvatura"), idioma,
+                                           moeda))))
+        raizes.append(f'<li class="reversa-raiz">{" ".join(pedacos)}</li>')
+    if raizes:
+        linhas.append(f'<ul class="reversa-raizes">{"".join(raizes)}</ul>')
+
+    tangenciais = leitura.get("tangenciais") or []
+    if tangenciais:
+        linhas.append('<p class="reversa-tangenciais">' + _texto_de_dado_html(t(
+            dicionario, "valuation.reversa_tangenciais",
+            valores=", ".join(_formatar_na_unidade(valor, catalogo, unidade, idioma, moeda) for valor in tangenciais)))
+            + '</p>')
+    if leitura.get("cap_anos") is not None:
+        linhas.append('<p class="reversa-cap">' + _texto_de_dado_html(t(
+            dicionario, "valuation.reversa_cap",
+            valor=_formatar_na_unidade(leitura["cap_anos"], catalogo, unidade, idioma, moeda))) + '</p>')
+
+    beta = leitura.get("beta")
+    if isinstance(beta, dict):
+        unidade_do_beta = beta.get("unidade")
+        if beta.get("valor") is not None:
+            linhas.append('<p class="reversa-beta">' + _texto_de_dado_html(t(
+                dicionario, "valuation.reversa_beta",
+                valor=_formatar_na_unidade(beta["valor"], catalogo, unidade_do_beta, idioma, moeda))) + '</p>')
+        linhas.append('<p class="reversa-beta-posicao">'
+                      f'{html.escape(_rotulo_de_secao_do_catalogo(catalogo, "posicoes_na_banda", beta.get("posicao"), idioma))}</p>')
+        banda = beta.get("banda")
+        if isinstance(banda, list) and len(banda) == 2 and beta.get("distancia") is not None:
+            linhas.append('<p class="reversa-banda">' + _texto_de_dado_html(t(
+                dicionario, "valuation.reversa_beta_banda",
+                minimo=_formatar_na_unidade(banda[0], catalogo, unidade_do_beta, idioma, moeda),
+                maximo=_formatar_na_unidade(banda[1], catalogo, unidade_do_beta, idioma, moeda),
+                distancia=_formatar_na_unidade(beta["distancia"], catalogo, unidade_do_beta, idioma, moeda))) + '</p>')
+
+    titulo = _rotulo_de_secao_do_catalogo(catalogo, "eixos_de_reversa", nome, idioma)
+    return f'<article class="reversa-eixo"><h3>{html.escape(titulo)}</h3>{"".join(linhas)}</article>'
+
+
+def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+    """O teto do crescimento gratuito (5F, D2): o rótulo e o texto do catálogo, e o múltiplo que a
+    integração publica com o rótulo da chave dele — nunca a `leitura`, prosa do wrapper."""
+    declaracao = catalogo.get("teto_do_crescimento_gratuito") or {}
+    rotulo, texto = ((declaracao.get("rotulo") or {}).get(idioma), (declaracao.get("texto") or {}).get(idioma))
+    if not rotulo or not texto:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem o rótulo e o texto em '{idioma}' de 'teto_do_crescimento_gratuito'.")
+    onde = "resultados.reversa.teto_do_crescimento_gratuito"
+    multiplo = t(dicionario, "valuation.reversa_teto_multiplo",
+                 valor=placeholders.formatar(_campo_de_contrato(teto, "multiplo", onde), "x2", idioma),
+                 multiplo=_rotulo_multiplo(catalogo, _campo_de_contrato(teto, "chave", onde), idioma))
+    return (f'<div class="reversa-teto"><h3>{html.escape(rotulo)}</h3>'
+            f'<p class="reversa-teto-multiplo">{_texto_de_dado_html(multiplo)}</p>'
+            f'<p class="reversa-teto-texto">{html.escape(texto)}</p></div>')
+
+
+def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
+    """D15, 7: o que está no preço, congelado nas premissas originais (§8.4) — cada eixo da reversa
+    (`_eixo_da_reversa_html`), o teto do crescimento gratuito quando publicado, as limitações publicadas
+    que declaram suprimir a reversa ou a curva iso-valor, e o julgamento do analista com o observável,
+    quando declarados (D12), pela lista de prosa. Sem reversa, só a limitação que a suprime. Sob
+    fronteira de escopo a leitura do preço continua (§14): nada aqui é conclusão de valor."""
+    caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
+    moeda = caso.get("moeda")
+    partes = [f'<p class="reversa-congelado-nota">{html.escape(t(dicionario, "valuation.o_que_esta_no_preco_congelado"))}</p>']
+    reversa = resultados.get(contrato_entrega.BLOCO_DA_REVERSA)
+    if isinstance(reversa, dict):
+        for nome, eixo in _campo_de_contrato(reversa, "eixos", "resultados.reversa").items():
+            partes.append(_eixo_da_reversa_html(nome, eixo, catalogo, idioma, moeda, dicionario))
+        teto = reversa.get("teto_do_crescimento_gratuito")
+        if isinstance(teto, dict):
+            partes.append(_teto_do_crescimento_gratuito_html(teto, catalogo, idioma, dicionario))
+    declaradas = catalogo.get("limitacoes") or {}
+    limitacoes = [_rotulo_limitacao(catalogo, chave, idioma) for chave in resultados.get("limitacoes") or []
+                  if isinstance(chave, str) and (declaradas.get(chave) or {}).get("afeta") in AFETAS_DO_QUE_ESTA_NO_PRECO]
+    if limitacoes:
+        partes.append('<ul class="reversa-limitacoes">'
+                      + "".join(f"<li>{html.escape(rotulo)}</li>" for rotulo in limitacoes) + '</ul>')
+    if isinstance(analise.get("o_que_esta_no_preco"), dict):
+        partes.append(
+            '<div class="reversa-julgamento">'
+            f'<h3>{html.escape(t(dicionario, "valuation.o_que_esta_no_preco_julgamento_titulo"))}</h3>'
+            '<p class="reversa-julgamento-texto">'
+            f'{_texto_de_dado_html(_prosa(prosa, "analise.o_que_esta_no_preco.julgamento"))}</p>'
+            + _atributo_html(t(dicionario, "valuation.o_que_esta_no_preco_observavel"),
+                             _valor_html("reversa-observavel", _prosa(prosa, "analise.o_que_esta_no_preco.observavel")))
+            + '</div>'
+        )
+    return (f'<section class="valuation-o-que-esta-no-preco">'
+            f'<h2>{html.escape(t(dicionario, "valuation.o_que_esta_no_preco_titulo"))}</h2>{"".join(partes)}</section>')
+
+
+def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict,
                      com_laboratorio: bool = False) -> str:
+    """A aba inteira, na ordem de D15 (ver a seção acima)."""
+    caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
     moeda = caso.get("moeda")
     manchete = resultados["manchete"]
 
@@ -1807,34 +2327,20 @@ def _valuation_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, d
             f'{html.escape(t(dicionario, "valuation.laboratorio_manchete_congelada"))}</p>'
         )
 
-    cenarios = resultados.get("cenarios") or {}
-    if len(cenarios) > 1:
-        linhas = "".join(
-            f'<li><strong>{_texto_de_dado_html(str(nome))}</strong>: '
-            f'{_texto_de_dado_html(placeholders.formatar(dados["valor"]["preco_acao"], "moeda", idioma, moeda))}</li>'
-            for nome, dados in cenarios.items()
-        )
-        titulo_dos_cenarios = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo",
-                                                CAMINHO_DOS_PRECOS_POR_CENARIO)
-        bloco_cenarios = (
-            f'<section class="cenarios">'
-            f'<h2>{html.escape(titulo_dos_cenarios)}</h2>'
-            f'<ul>{linhas}</ul>'
-            f'</section>'
-        )
-    else:
-        bloco_cenarios = ""
-
     laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario)
                    if com_laboratorio else "")
     return (
         f'<section class="valuation-cabecalho">{cabecalho}</section>'
         f'{nota_manchete}'
+        f'{_faixa_da_valuation_html(analise, resultados, idioma, moeda, dicionario)}'
         f'<section class="valuation-multiplos">{bloco_multiplos}</section>'
         f'<section class="valuation-rota">{bloco_rota}</section>'
-        f'{bloco_cenarios}'
-        f'{_paineis_valuation_html(caso, resultados, catalogo, idioma, dicionario)}'
+        f'{_formacao_do_valor_html(resultados, catalogo, idioma, moeda, dicionario)}'
+        f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario)}'
         f'{laboratorio}'
+        f'{_ponte_html(resultados, catalogo, idioma, dicionario, moeda)}'
+        f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario)}'
+        f'{_o_que_esta_no_preco_html(entrega, catalogo, idioma, dicionario, prosa)}'
     )
 
 
@@ -2227,7 +2733,7 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     # mesma lista de prosa que o QC varreu e que o `log` da Evidência registra.
     prosa, _log_da_prosa = placeholders.resolver_prosa(entrega, idioma)
     corpo_tese = _tese_html(entrega, catalogo, achados, idioma, dicionario, titulo, prosa, exhibits_resolvidos)
-    corpo_valuation = _valuation_html(caso, resultados, catalogo, idioma, dicionario,
+    corpo_valuation = _valuation_html(entrega, catalogo, idioma, dicionario, prosa,
                                        com_laboratorio=laboratorio is not None)
     corpo_evidencia = _evidencia_html(entrega, catalogo, log, log_exhibits, idioma, dicionario, prosa,
                                       ficha_tecnica)

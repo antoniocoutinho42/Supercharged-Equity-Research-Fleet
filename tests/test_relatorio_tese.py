@@ -1150,11 +1150,18 @@ def test_a_conclusao_mostra_a_faixa_dos_cenarios_o_veredicto_e_o_preco_de_tela_c
         data=preco["data"], fonte=preco["fonte"])
 
     justo, tela = resultados["manchete"]["multiplo"], resultados["mercado_tela"]
+    # Fatia 5F, Task 5 (D5): o par forward, depois do corrente; sem métrica forward declarada, a tela forward
+    # diz que ela não foi declarada.
+    justo_forward = resultados["manchete"]["multiplo_forward"]
+    assert resultados["mercado_tela_forward"] is None
     assert _metricas(_um(conclusao, classe="tese-multiplos")) == [
         (DICIONARIO["interface"]["valuation"]["multiplo_justo_titulo"], placeholders.formatar(justo["valor"], "x2", "pt-BR"),
          CATALOGO["multiplos"][justo["chave"]]["rotulo"]["pt-BR"]),
         (DICIONARIO["interface"]["valuation"]["multiplo_tela_titulo"], placeholders.formatar(tela["valor"], "x2", "pt-BR"),
-         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"])]
+         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"]),
+        (VALUATION["multiplo_justo_forward_titulo"], placeholders.formatar(justo_forward["valor"], "x2", "pt-BR"),
+         CATALOGO["multiplos"][justo_forward["chave"]]["rotulo"]["pt-BR"]),
+        (VALUATION["multiplo_tela_forward_titulo"], VALUATION["sem_valor"], VALUATION["metrica_forward_nao_declarada"])]
 
 
 # --------------------------------------------------------------------------
@@ -1377,7 +1384,8 @@ def test_sob_fronteira_a_conclusao_e_condicional_e_a_valuation_chama_o_preco_de_
     tela = sob["resultados"]["mercado_tela"]
     assert _metricas(_um(conclusao, classe="tese-multiplos")) == [
         (VALUATION["multiplo_tela_titulo"], placeholders.formatar(tela["valor"], "x2", "pt-BR"),
-         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"])]
+         CATALOGO["multiplos"][tela["chave"]]["rotulo"]["pt-BR"]),
+        (VALUATION["multiplo_tela_forward_titulo"], VALUATION["sem_valor"], VALUATION["metrica_forward_nao_declarada"])]
 
     avisos = _secao(_aba(pagina, "tese"), TESE["disclosures_titulo"])
     rotulo_da_classe = CATALOGO["fronteiras_de_escopo"][fronteira["classe"]]["rotulo"]["pt-BR"]
@@ -1395,7 +1403,8 @@ def test_sob_fronteira_a_conclusao_e_condicional_e_a_valuation_chama_o_preco_de_
     conclusao_fora = _secoes(_aba(fora, "tese"))[0]
     assert _titulo(conclusao_fora) == TESE["conclusao_titulo"]
     assert [rotulo for rotulo, _valor, _nota in _metricas(_um(conclusao_fora, classe="tese-multiplos"))] == [
-        VALUATION["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]]
+        VALUATION["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"],
+        VALUATION["multiplo_justo_forward_titulo"], VALUATION["multiplo_tela_forward_titulo"]]
     assert _visivel(_secao(_aba(fora, "tese"), TESE["disclosures_titulo"])) == (
         f'{TESE["disclosures_titulo"]} {TESE["disclosures_vazio"]}')
     cabecalho, laboratorio, todos = _rotulos_do_preco_na_valuation(fora)
@@ -1434,13 +1443,17 @@ def test_sob_fronteira_nenhum_numero_de_valor_sai_com_rotulo_incondicional_nas_a
     def _presentes(rotulos: list, modelos: dict) -> set:
         return {chave for chave, modelo in modelos.items() if any(_e_o_rotulo(rotulo, modelo) for rotulo in rotulos)}
 
+    # Fatia 5F, Task 5: os montantes da formação do valor só existem na rota rampa, e a página dela entra na
+    # varredura ao lado da de `caso_reversa_firm` — nas duas pontas, fora e sob a fronteira.
     fora = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios"),
                                          tmp_path / "fora"))
+    fora += _rotulos(_pagina_pelo_builder(_entrega("caso_rampa.json"), tmp_path / "fora_rampa"))
     assert _presentes(fora, incondicionais) == set(incondicionais), "a entrega não exercita todo lugar da varredura"
     assert _presentes(fora, condicionais) == set()
 
     sob = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios_sob_fronteira"),
                                         tmp_path / "sob"))
+    sob += _rotulos(_pagina_pelo_builder(_entrega("caso_rampa.json", variante="fronteira"), tmp_path / "sob_rampa"))
     assert [rotulo for rotulo in sob
             if any(_e_o_rotulo(rotulo, modelo) for modelo in [*incondicionais.values(), *da_faixa])] == []
     assert _presentes(sob, condicionais) == set(condicionais)
@@ -1463,15 +1476,17 @@ def test_a_tela_decide_pelo_mapa_da_integracao_qual_numero_e_leitura_condicional
         return ([_visivel(r) for r in _todos(_um(aba, classe="valuation-cabecalho"), classe="metrica-rotulo")],
                 [_visivel(r) for r in _todos(_um(aba, classe="valuation-multiplos"), classe="metrica-rotulo")])
 
+    # Fatia 5F, Task 5 (D5): o par forward sai depois do corrente — o justo forward, que o mapa cobre, condicional;
+    # o de tela forward, sem métrica declarada, com o rótulo de sempre.
+    multiplos = [condicional["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"],
+                 condicional["multiplo_justo_forward_titulo"], VALUATION["multiplo_tela_forward_titulo"]]
     assert _cabecalho_e_multiplos(CATALOGO) == (
-        [condicional["preco_justo_titulo"], condicional["upside_titulo"]],
-        [condicional["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]])
+        [condicional["preco_justo_titulo"], condicional["upside_titulo"]], multiplos)
 
     sem_o_upside = copy.deepcopy(CATALOGO)
     sem_o_upside["conclusoes_de_valor"]["fração"].remove("manchete.upside")
     assert _cabecalho_e_multiplos(sem_o_upside) == (
-        [condicional["preco_justo_titulo"], VALUATION["upside_titulo"]],
-        [condicional["multiplo_justo_titulo"], VALUATION["multiplo_tela_titulo"]])
+        [condicional["preco_justo_titulo"], VALUATION["upside_titulo"]], multiplos)
 
 
 # --------------------------------------------------------------------------

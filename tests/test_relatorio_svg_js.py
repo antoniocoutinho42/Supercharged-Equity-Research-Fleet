@@ -512,7 +512,9 @@ def test_titulo_da_matriz_nomeia_o_cenario_que_a_grade_perturbou():
     )
     # O título é texto de dado (render._texto_de_dado_html codifica `=`, `(` e `@`): compara-se o que o
     # leitor vê, o texto desescapado.
-    titulo = html.unescape(next(t for t in re.findall(r"<h2>([^<]*)</h2>", pagina) if "Sensibilidade" in t))
+    # Fatia 5F, Task 5: a aba também traz a tabela da grade 1D, cujo título começa igual; o da matriz é o que nomeia
+    # os dois eixos.
+    titulo = html.unescape(next(t for t in re.findall(r"<h2>([^<]*)</h2>", pagina) if "Sensibilidade" in t and "×" in t))
     assert titulo == esperado
     assert caso["sensibilidades"]["cenario"] in titulo
     assert caso["cenario_base"] not in titulo
@@ -658,6 +660,67 @@ def test_bootstrap_do_template_consome_toda_chave_do_payload_dos_paineis():
     chaves = set(payload["ponte"]) | set(payload["matrizes"][0])
     faltando = {chave for chave in chaves if chave not in bootstrap}
     assert not faltando, faltando
+
+
+_HARNESS_DOS_PAINEIS = r"""
+const fs = require('fs');
+const vm = require('vm');
+const entrada = JSON.parse(fs.readFileSync(__ENTRADA__, 'utf-8'));
+const proprio = (objeto, nome) => Object.prototype.hasOwnProperty.call(objeto, nome);
+
+// O subconjunto de seletor do harness dos exhibits (test_relatorio_tese.py): qualquer outro LANÇA.
+function casa(el, seletor) {
+  const m = /^\s*\[([\w-]+)(?:="([^"]*)")?\]\s*$/.exec(seletor);
+  if (!m) { throw new Error('seletor fora do subconjunto do harness: ' + seletor); }
+  if (!proprio(el.atributos, m[1])) { return false; }
+  return m[2] === undefined || el.atributos[m[1]] === m[2];
+}
+
+const elementos = entrada.elementos.map((atributos) => ({
+  atributos: atributos, innerHTML: '', textContent: '',
+  getAttribute(nome) { return proprio(this.atributos, nome) ? this.atributos[nome] : null; },
+}));
+const ctx = vm.createContext({
+  document: {
+    getElementById: (id) => (id === 'fleet-dados-exhibits' ? { textContent: entrada.dados } : null),
+    querySelectorAll: (seletor) => elementos.filter((el) => casa(el, seletor)),
+    querySelector: (seletor) => elementos.find((el) => casa(el, seletor)) || null,
+  },
+  // Um registrador no lugar do módulo SVG: a matriz "desenha" o rótulo do eixo x da spec que recebeu.
+  FleetSVG: { waterfall: () => 'waterfall', matriz: (grade, opcoes) => 'matriz ' + opcoes.rotuloX },
+});
+vm.runInContext(entrada.bootstrap, ctx, { filename: 'bootstrap-dos-paineis' });
+console.log(JSON.stringify(elementos.map((el) => [el.innerHTML, el.textContent])));
+"""
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_cada_host_de_matriz_recebe_a_grade_do_seu_indice_e_nunca_a_da_sua_posicao(tmp_path):
+    """Fatia 5F, Task 5 (achado 14): o bootstrap ligava `hostsMatriz[m]` a `matrizes[m]` pela ORDEM no DOM, e a
+    aba reposicionada expõe o defeito que a 5D corrigiu nos exhibits. O bootstrap EXTRAÍDO da página roda sobre
+    hosts fora de ordem e um índice sem spec: cada host desenha a grade do seu `data-painel-indice`, e o índice sem
+    spec recebe o texto de indisponível — nunca a grade de outro host, nunca um host vazio em silêncio."""
+    pagina = _compor(FIXTURE)
+    (bootstrap,) = [m.group(1) for m in re.finditer(r"<script>(.*?)</script>", pagina, re.S)
+                    if 'getElementById("fleet-dados-exhibits")' in m.group(1)]
+    indisponivel = render.t(DICIONARIO, "graficos.indisponivel")
+    dados = {"formatacao": {"graficoIndisponivel": indisponivel}, "exhibits": [],
+             "paineis_valuation": {"ponte": None, "matrizes": [
+                 {"grade": {}, "base": None, "rotuloX": "grade 0", "rotuloY": "", "formato": None,
+                  "formatoX": None, "formatoY": None},
+                 {"grade": {}, "base": None, "rotuloX": "grade 1", "rotuloY": "", "formato": None,
+                  "formatoX": None, "formatoY": None}]}}
+    elementos = [{"data-painel": "matriz", "data-painel-indice": indice} for indice in ("1", "0", "7")]
+    arquivo = tmp_path / "bootstrap_dos_paineis.json"
+    arquivo.write_text(json.dumps({"bootstrap": bootstrap, "dados": json.dumps(dados), "elementos": elementos},
+                                  ensure_ascii=False), encoding="utf-8")
+
+    resultado = subprocess.run(
+        ["node", "-e", _HARNESS_DOS_PAINEIS.replace("__ENTRADA__", json.dumps(str(arquivo)))],
+        capture_output=True, text=True, encoding="utf-8", timeout=120)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert json.loads(resultado.stdout) == [["matriz grade 1", ""], ["matriz grade 0", ""], ["", indisponivel]]
 
 
 def test_unidade_de_grade_fora_do_catalogo_e_hard_fail_nomeado():

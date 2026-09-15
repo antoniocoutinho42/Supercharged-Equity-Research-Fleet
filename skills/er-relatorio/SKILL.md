@@ -496,7 +496,9 @@ Os códigos de QC que servem a outras seções do desenho:
 1. **Conclusão**: o texto da conclusão; a faixa piso–base–teto, cada ponta com
    o preço que `resultados.cenarios.<nome>.valor.preco_acao` publica e o nome
    do cenário; o veredicto, com o preço de tela, a data e a fonte de
-   `caso.preco`; o múltiplo justo ao lado do de tela; e o consenso como
+   `caso.preco`; o múltiplo justo ao lado do de tela, corrente e forward (fatia 5F: a
+   tela forward com o período e a fonte da métrica, ou "métrica forward não
+   declarada"); e o consenso como
    referência externa (fatia 5E) — uma linha por registro que
    `analise.consenso.registros` cita, com claim, período, valor (só
    localizado), unidade, fonte e data de acesso; com `ausente`, nada. Num
@@ -506,8 +508,8 @@ Os códigos de QC que servem a outras seções do desenho:
    "conclusão condicional, sem preço-alvo", com a classe (rótulo do
    catálogo), a arquitetura dominante e a razão que
    `resultados.fronteira_de_escopo` publica — prosa auditável, que sai da
-   lista de prosa —, nenhuma faixa e, da dupla de
-   múltiplos, só o de tela: todo número que a integração declara conclusão de
+   lista de prosa —, nenhuma faixa e, dos múltiplos, só os de tela (corrente e
+   forward): todo número que a integração declara conclusão de
    valor (`catalogo.conclusoes_de_valor`) fica fora da Conclusão. O consenso
    continua: é leitura de mercado, como o múltiplo de tela;
 2. avisos obrigatórios (todo REQUIRED DISCLOSURE — sob fronteira de escopo,
@@ -517,9 +519,11 @@ Os códigos de QC que servem a outras seções do desenho:
    `ProsaNaoAuditada` (`RC=1`) —, e a âncora do consenso indisponível sai pelo
    rótulo do dicionário;
 3. premissas decisivas: o rótulo do catálogo, o número do cenário da manchete
-   formatado pela unidade do catálogo e a derivação. Num caso SOTP a seção sai
-   rotulada como a do cenário consolidado (dicionário, sem número): as partes
-   que formam a manchete usam premissas próprias, e a premissa por parte é da 5F;
+   formatado pela unidade do catálogo (com a escala, quando a unidade a declara) e
+   a derivação. Num caso SOTP a seção sai rotulada como a do cenário consolidado
+   (dicionário, sem número): as partes que formam a manchete usam premissas
+   próprias. Uma premissa com `parte` (fatia 5F) sai com o rótulo da rota da parte,
+   o número que a parte publica e a parte pelo número e pelo nome;
 4. o que mudou desde a análise fornecida, se declarado;
 5. Positives e Negatives: a afirmação, o vetor, o que move no valuation, o
    observável, e se está refletido ou não incorporado (com a razão);
@@ -539,18 +543,48 @@ spec no payload (`data-exhibit-indice`), e o bootstrap pareia host e spec por
 esse índice, nunca pela posição no DOM — o mesmo exhibit pode aparecer sob
 duas perguntas.
 
-**Valuation** — preço justo, upside, múltiplo justo pareado com o de tela pela
-mesma base, rota e convenção terminal — do catálogo, nunca de `caso` cru —,
-preço por cenário quando houver mais de um, os painéis SVG (o waterfall da
-ponte e uma matriz por grade 2D, cujo título nomeia o cenário que a grade
-perturbou) e o laboratório; SOTP mostra só preço/upside, sem rota/convenção
-única. **Sob fronteira de escopo**, todo número que o mapa da integração declara
-conclusão de valor sai com o rótulo condicional do dicionário
-(`valuation.condicional`): o preço e o upside do cabeçalho, o múltiplo justo, o
-título da lista por cenário, as três saídas de cada cenário do laboratório e o
-título da matriz. A decisão é uma só (`render._leitura_condicional`): quem exibe
-o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome
-de campo decide.
+**Valuation** (fatia 5F) — o laboratório econômico da §9, nesta ordem:
+
+1. **cabeçalho**: o preço justo e o upside; a faixa piso–teto de `analise.faixa`, quando
+   declarada (os preços dos cenários que ela nomeia); o múltiplo justo ao lado do de tela
+   pela mesma base e, fora do degrau e da rampa, o par forward — `manchete.multiplo_forward`
+   ao lado de `mercado_tela_forward`, com o período e a fonte da métrica forward, ou
+   "métrica forward não declarada"; a rota e a convenção terminal — do catálogo, nunca de
+   `caso` cru. SOTP mostra só preço e upside;
+2. **como o valor é formado** (`<details>` fechado): cada passo de
+   `catalogo.formacao_do_valor.<rota>` cuja premissa o cenário da manchete declara, com o
+   rótulo, o número e a função; os múltiplos que o cenário publica; na rampa, `vp_fase1` e
+   `valor_fase2_no_ano_T`; e a síntese. Num SOTP, rotulado como o do cenário consolidado; no
+   degrau, como o de antes do degrau;
+3. **cenários**: o nome, a âncora (texto do caso que a integração publica, como dado), o
+   triângulo (entradas e saída pelos rótulos do catálogo, `rir` por
+   `variaveis_do_triangulo`; na rampa, a frase de que não se aplica), o preço e o upside;
+4. o **laboratório**, sem mudança;
+5. a **ponte** como waterfall;
+6. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
+   ponto do cenário marcado por igualdade exata — e uma matriz por grade 2D, cujo título
+   nomeia o cenário que a grade perturbou;
+7. **o que está no preço**, congelado nas premissas originais: cada eixo de
+   `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
+   `unidade` da leitura, a identificação rotulada, o intervalo e a curvatura, os toques
+   tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
+   crescimento gratuito, com o múltiplo e o texto do catálogo; as limitações publicadas da
+   reversa e da curva iso; e o julgamento do analista com o observável, quando declarados.
+   Sem reversa, o rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`,
+   `sugestao`, `leitura`, `algebra`) nem código cru chega à aba.
+
+**A escala dos montantes** (`resultados.escala_monetaria`) entra só onde a unidade do
+catálogo a declara (`unidades.<unidade>.escala_monetaria`): no valor original de uma
+premissa monetária do laboratório, nas premissas decisivas, nos montantes da formação do
+valor e no waterfall, pelo sufixo da receita que o `svg.js` recebe — nunca em preço por
+ação. **Sob fronteira de escopo**, todo número que o mapa da integração declara conclusão
+de valor sai com o rótulo condicional do dicionário (`valuation.condicional`): o preço e o
+upside do cabeçalho, o múltiplo justo corrente e o forward, os múltiplos e os montantes da
+formação do valor, o título dos cenários e os rótulos de preço e upside de cada um, as três
+saídas de cada cenário do laboratório, o título e as colunas de cada tabela 1D e o título
+da matriz. A decisão é uma só (`render._leitura_condicional`): quem exibe o número diz o
+caminho que lê em `resultados`, e o mapa responde — nenhum nome de campo decide. A reversa
+e o teto do crescimento gratuito ficam fora do mapa e saem como leitura do preço.
 
 **Evidência** (fatia 5E) — a camada de auditabilidade da §9, nesta ordem:
 
@@ -615,7 +649,7 @@ caminho), nunca um `KeyError` cru.
 
 | Asset | Papel |
 |---|---|
-| `assets/template.html` | Casca estática das três abas + bootstrap que entrega o payload aos módulos JS, pareando cada gráfico ao seu host pelo índice (`data-exhibit-indice`) |
+| `assets/template.html` | Casca estática das três abas + bootstrap que entrega o payload aos módulos JS, pareando cada gráfico ao seu host pelo índice (`data-exhibit-indice`) e cada matriz de sensibilidade ao seu host pelo índice da grade (`data-painel-indice`) |
 | `assets/graficos.js` | Adaptador fino sobre o uPlot: desenha os cinco cartesianos e a `tabela` a partir da spec já resolvida |
 | `assets/svg.js` | Os dois painéis NÃO-cartesianos (waterfall da ponte, matriz de sensibilidade) como string SVG pura |
 | `assets/uPlot.iife.min.js` / `.min.css` / `.LICENSE` | uPlot v1.6.27 vendorizado byte a byte, embutido só quando há exhibit |

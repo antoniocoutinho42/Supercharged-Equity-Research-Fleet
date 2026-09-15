@@ -389,3 +389,318 @@ def test_a_premissa_de_uma_parte_que_nao_existe_ou_que_ela_nao_declara_e_hard_fa
     achados = _do_codigo(_achados(sotp), "premissa_decisiva_fora_do_cenario")
     assert [(a.nivel, a.onde, a.params["chave"], a.params["parte"]) for a in achados] == [
         ("HARD_FAIL", "analise.premissas_decisivas.0.chave", chave, parte)]
+
+
+# ==========================================================================
+# Task 5 (D15): a aba Valuation renderizada, na ordem da §9, e o par forward e a premissa de parte na
+# Tese. Toda asserção lê o TEXTO que o analista vê (a árvore de `test_relatorio_tese.py`, sobre
+# `apoio.prosa_da_pagina`); classe e atributo só localizam.
+# ==========================================================================
+
+import shutil  # noqa: E402
+
+import builder  # noqa: E402
+import exhibits as exhibits_mod  # noqa: E402
+import render  # noqa: E402
+from test_relatorio_svg_js import _chamar_node, _textos  # noqa: E402
+from test_relatorio_tese import (  # noqa: E402
+    _aba, _elementos, _metricas, _secoes, _titulo, _todos, _um, _visivel)
+
+DICIONARIO = placeholders.carregar_dicionario(IDIOMA)
+VALUATION = DICIONARIO["interface"]["valuation"]
+TESE = DICIONARIO["interface"]["tese"]
+SEM_NODE = shutil.which("node") is None
+
+
+def _pagina(entrega_dict: dict, com_laboratorio: bool = False) -> str:
+    """O HTML pelo caminho que o builder percorre depois de uma primeira passada de QC sem HARD FAIL — com
+    o laboratório quando pedido (os dois JS da integração, lidos de `builder.ASSETS_DA_INTEGRACAO`)."""
+    achados = _achados(entrega_dict)
+    assert not [a for a in achados if a.nivel == "HARD_FAIL"], achados
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, IDIOMA)
+    resolvidos, log_exhibits = exhibits_mod.resolver(entrega_dict)
+    js = ({nome: builder.ASSETS_DA_INTEGRACAO[nome].read_text(encoding="utf-8") for nome in ("espelho", "fachada")}
+          if com_laboratorio else None)
+    return render.compor(entrega_dict, CATALOGO, achados, log, IDIOMA, resolvidos, log_exhibits, js)
+
+
+def _titulo_da(secao: dict) -> str | None:
+    return next((_visivel(filho) for filho in secao["filhos"] if filho.get("tag") in ("h2", "h3", "h4")), None)
+
+
+def _secao(aba: dict, titulo: str) -> dict:
+    """A seção da aba cujo título é `titulo`. A aba Valuation abre com seções sem título (o cabeçalho), que o
+    `_secao` da Tese não pula."""
+    (secao,) = [secao for secao in _secoes(aba) if _titulo_da(secao) == titulo]
+    return secao
+
+
+def _moeda(entrega_dict: dict, valor: float) -> str:
+    return placeholders.formatar(valor, "moeda", IDIOMA, entrega_dict["caso"]["moeda"])
+
+
+def _na_unidade(valor, unidade: str, entrega_dict: dict) -> str:
+    return placeholders.formatar(valor, CATALOGO["unidades"][unidade]["formato"], IDIOMA, entrega_dict["caso"]["moeda"])
+
+
+def test_a_aba_valuation_segue_a_ordem_da_secao_9():
+    """Cabeçalho (preço e upside, faixa piso–teto, múltiplos, rota) → como o valor é formado → cenários →
+    laboratório → ponte → sensibilidades (a 1D e depois a 2D) → o que está no preço."""
+    entrega_dict = _entrega()
+    aba = _aba(_pagina(entrega_dict, com_laboratorio=True), "valuation")
+    secoes = _secoes(aba)
+    titulos = [_titulo_da(secao) for secao in secoes]
+    primeira_com_titulo = next(indice for indice, titulo in enumerate(titulos) if titulo is not None)
+
+    assert [titulo for titulo in titulos if titulo is not None] == [
+        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["laboratorio_titulo"],
+        VALUATION["ponte_titulo"],
+        VALUATION["grade_1d_titulo"].format(cenario="base", premissa=_rotulo("firm", "wacc")),
+        VALUATION["matriz_titulo"].format(cenario="base", y=_rotulo("firm", "g"), x=_rotulo("firm", "roic")),
+        VALUATION["o_que_esta_no_preco_titulo"]]
+    cabecalho = " ".join(_visivel(secao) for secao in secoes[:primeira_com_titulo])
+    posicoes = [cabecalho.find(rotulo) for rotulo in (
+        VALUATION["preco_justo_titulo"], TESE["papeis_da_faixa"]["piso"], VALUATION["multiplo_justo_titulo"],
+        VALUATION["rota_titulo"])]
+    assert -1 not in posicoes and posicoes == sorted(posicoes), (posicoes, cabecalho)
+
+
+def test_o_que_esta_no_preco_mostra_cada_eixo_pela_unidade_da_leitura_com_a_identificacao_e_o_beta():
+    entrega_dict = _entrega()
+    eixos = entrega_dict["resultados"]["reversa"]["eixos"]
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["o_que_esta_no_preco_titulo"])
+    artigos = _todos(secao, classe="reversa-eixo")
+    assert [_titulo(artigo) for artigo in artigos] == [
+        CATALOGO["eixos_de_reversa"][nome]["rotulo"][IDIOMA] for nome in eixos]
+
+    for artigo, eixo in zip(artigos, eixos.values()):
+        leitura = eixo["leitura"]
+        assert _visivel(_um(artigo, classe="reversa-motivo")) == (
+            CATALOGO["motivos_da_leitura"][leitura["motivo"]]["rotulo"][IDIOMA])
+        raizes = leitura["raizes"]
+        assert [_visivel(_um(item, classe="reversa-raiz-valor")) for item in _todos(artigo, classe="reversa-raiz")] == [
+            VALUATION["reversa_raiz"].format(valor=_na_unidade(raiz["valor"], leitura["unidade"], entrega_dict),
+                                             identificacao=CATALOGO["identificacoes"][raiz["identificacao"]]["rotulo"][IDIOMA])
+            for raiz in raizes]
+        assert [_visivel(el) for el in _todos(artigo, classe="reversa-intervalo")] == [
+            VALUATION["reversa_intervalo"].format(de=_na_unidade(raiz["intervalo"][0], leitura["unidade"], entrega_dict),
+                                                  ate=_na_unidade(raiz["intervalo"][1], leitura["unidade"], entrega_dict))
+            for raiz in raizes]
+        if leitura["cap_anos"] is not None:
+            assert _visivel(_um(artigo, classe="reversa-cap")) == VALUATION["reversa_cap"].format(
+                valor=_na_unidade(leitura["cap_anos"], leitura["unidade"], entrega_dict))
+    assert all(eixo["leitura"]["raizes"] for nome, eixo in eixos.items() if nome != "cap"), "sem raiz, o teste não discrimina"
+
+    beta = eixos["custo_capital"]["leitura"]["beta"]
+    (artigo_do_custo,) = [artigo for artigo, nome in zip(artigos, eixos) if nome == "custo_capital"]
+    assert [_visivel(_um(artigo_do_custo, classe=classe)) for classe in ("reversa-beta", "reversa-beta-posicao",
+                                                                          "reversa-banda")] == [
+        VALUATION["reversa_beta"].format(valor=_na_unidade(beta["valor"], beta["unidade"], entrega_dict)),
+        CATALOGO["posicoes_na_banda"][beta["posicao"]]["rotulo"][IDIOMA],
+        VALUATION["reversa_beta_banda"].format(minimo=_na_unidade(beta["banda"][0], beta["unidade"], entrega_dict),
+                                               maximo=_na_unidade(beta["banda"][1], beta["unidade"], entrega_dict),
+                                               distancia=_na_unidade(beta["distancia"], beta["unidade"], entrega_dict))]
+    julgamento = entrega_dict["analise"]["o_que_esta_no_preco"]
+    assert [_visivel(_um(secao, classe=classe)) for classe in ("reversa-julgamento-texto", "reversa-observavel")] == [
+        julgamento["julgamento"], julgamento["observavel"]]
+
+
+def test_sem_raiz_o_que_esta_no_preco_rotula_o_motivo_mostra_o_teto_e_a_limitacao_da_iso_sem_codigo_cru():
+    sem_raiz = _entrega("reversa_sem_raiz")
+    reversa = sem_raiz["resultados"]["reversa"]
+    teto = reversa["teto_do_crescimento_gratuito"]
+    secao = _secao(_aba(_pagina(sem_raiz), "valuation"), VALUATION["o_que_esta_no_preco_titulo"])
+    rotulo_sem_raiz = CATALOGO["motivos_da_leitura"]["sem_raiz_na_faixa"]["rotulo"][IDIOMA]
+
+    motivos = [_visivel(_um(artigo, classe="reversa-motivo")) for artigo in _todos(secao, classe="reversa-eixo")]
+    assert motivos.count(rotulo_sem_raiz) == 3
+    (bloco_do_teto,) = _todos(secao, classe="reversa-teto")
+    assert [_titulo(bloco_do_teto), _visivel(_um(bloco_do_teto, classe="reversa-teto-multiplo")),
+            _visivel(_um(bloco_do_teto, classe="reversa-teto-texto"))] == [
+        CATALOGO["teto_do_crescimento_gratuito"]["rotulo"][IDIOMA],
+        VALUATION["reversa_teto_multiplo"].format(valor=placeholders.formatar(teto["multiplo"], "x2", IDIOMA),
+                                                  multiplo=CATALOGO["multiplos"][teto["chave"]]["rotulo"][IDIOMA]),
+        CATALOGO["teto_do_crescimento_gratuito"]["texto"][IDIOMA]]
+    assert CATALOGO["limitacoes"]["iso_nao_calculada"]["rotulo"][IDIOMA] in [
+        _visivel(item) for item in _todos(_um(secao, classe="reversa-limitacoes"), tag="li")]
+
+    texto = _visivel(_aba(_pagina(sem_raiz), "valuation"))
+    crus = ["sem_raiz_na_faixa", "raiz_na_faixa", "custo_capital", "iso_nao_calculada", teto["leitura"]]
+    crus += [reversa["eixos"][nome][campo] for nome in reversa["eixos"] for campo in ("sem_solucao", "sugestao")
+             if isinstance(reversa["eixos"][nome].get(campo), str)]
+    assert [cru for cru in crus if cru in texto] == []
+
+
+def test_sem_reversa_o_que_esta_no_preco_diz_a_limitacao_que_a_suprime():
+    rampa = _entrega(SEM_REVERSA)
+    (limitacao,) = rampa["resultados"]["limitacoes"]
+    secao = _secao(_aba(_pagina(rampa), "valuation"), VALUATION["o_que_esta_no_preco_titulo"])
+    assert _todos(secao, classe="reversa-eixo") == []
+    assert [_visivel(item) for item in _todos(_um(secao, classe="reversa-limitacoes"), tag="li")] == [
+        CATALOGO["limitacoes"][limitacao]["rotulo"][IDIOMA]]
+
+
+def test_o_par_forward_sai_no_cabecalho_e_na_conclusao_da_tese_com_o_periodo_e_a_fonte_da_metrica():
+    forward = _entrega("forward_firm")
+    resultados = forward["resultados"]
+    justo, tela = resultados["manchete"]["multiplo_forward"], resultados["mercado_tela_forward"]
+    esperados = [
+        (VALUATION["multiplo_justo_forward_titulo"], placeholders.formatar(justo["valor"], "x2", IDIOMA),
+         CATALOGO["multiplos"][justo["chave"]]["rotulo"][IDIOMA]),
+        (VALUATION["multiplo_tela_forward_titulo"], placeholders.formatar(tela["valor"], "x2", IDIOMA),
+         VALUATION["multiplo_tela_forward_nota"].format(multiplo=CATALOGO["multiplos"][tela["chave"]]["rotulo"][IDIOMA],
+                                                        periodo=tela["metrica"]["periodo"],
+                                                        fonte=tela["metrica"]["fonte"]))]
+    pagina = _pagina(forward)
+    assert _metricas(_um(_aba(pagina, "valuation"), classe="valuation-multiplos"))[2:] == esperados
+    assert _metricas(_um(_aba(pagina, "tese"), classe="tese-multiplos"))[2:] == esperados
+
+
+def test_a_escala_entra_no_valor_original_e_nos_montantes_da_rampa_e_nunca_no_preco_por_acao():
+    escala = _entrega("escala")
+    resultados = escala["resultados"]
+    assert resultados["escala_monetaria"] == "milhoes"
+    rotulo = CATALOGO["escalas_monetarias"]["milhoes"]["rotulo"][IDIOMA]
+    premissas = escala["caso"]["cenarios"]["base"]["premissas"]
+    aba = _aba(_pagina(escala, com_laboratorio=True), "valuation")
+
+    def _original(chave: str) -> str:
+        (campo,) = [el for el in _elementos(aba) if el["attrs"].get("data-laboratorio-premissa") == chave]
+        return _visivel(_um(campo, classe="lab-original"))
+
+    assert _original("receita0") == VALUATION["laboratorio_original"].format(
+        valor=f"{_moeda(escala, premissas['receita0'])} {rotulo}")
+    assert _original("wk") == VALUATION["laboratorio_original"].format(valor=_na_unidade(premissas["wk"], "pp", escala))
+
+    formacao = _secao(aba, VALUATION["formacao_titulo"])
+    montantes = [(_visivel(_um(metrica, classe="metrica-rotulo")), _visivel(_um(metrica, classe="metrica-valor")))
+                 for metrica in _todos(_um(formacao, classe="formacao-montantes"), classe="metrica")]
+    cenario = resultados["cenarios"]["base"]
+    assert montantes == [
+        (VALUATION["formacao_vp_fase1_titulo"], f"{_moeda(escala, cenario['vp_fase1'])} {rotulo}"),
+        (VALUATION["formacao_valor_fase2_titulo"], f"{_moeda(escala, cenario['valor_fase2_no_ano_T'])} {rotulo}")]
+
+    precos = [_um(aba, classe="valuation-cabecalho"), _secao(aba, VALUATION["cenarios_titulo"])]
+    assert [rotulo in _visivel(bloco) for bloco in precos] == [False, False]
+    assert _moeda(escala, resultados["manchete"]["preco_acao"]) in _visivel(precos[0])
+
+
+@pytest.mark.skipif(SEM_NODE, reason="node ausente do PATH -- o harness do svg.js roda sempre no CI (setup-node)")
+def test_o_waterfall_desenha_a_ponte_com_a_escala_e_sem_ela_quando_o_caso_nao_a_declara():
+    rotulo = CATALOGO["escalas_monetarias"]["milhoes"]["rotulo"][IDIOMA]
+
+    def _valores(fonte: str) -> list:
+        entrega_dict = _entrega(fonte)
+        payload = render._paineis_valuation_para_json(entrega_dict["caso"], entrega_dict["resultados"], CATALOGO,
+                                                      IDIOMA, DICIONARIO)
+        svg = _chamar_node("FleetSVG.waterfall(ponte.parcelas, {total: ponte.total, formato: ponte.formato})",
+                           ponte=payload["ponte"])
+        return _textos(svg, "fleet-svg-valor")
+
+    com_escala, sem_escala = _valores("escala"), _valores(SEM_REVERSA)
+    assert com_escala and [texto.endswith(f" {rotulo}") for texto in com_escala] == [True] * len(com_escala)
+    assert [texto for texto in sem_escala if rotulo in texto] == []
+
+
+@pytest.mark.parametrize("fonte", [GRADES, "caso_minimo_equity.json", SEM_REVERSA])
+def test_a_formacao_do_valor_mostra_os_passos_que_o_cenario_declara_os_multiplos_e_a_sintese(fonte):
+    entrega_dict = _entrega(fonte)
+    resultados = entrega_dict["resultados"]
+    rota = resultados["rota"]
+    cenario = resultados["cenarios"][resultados["manchete"]["cenario"]]
+    formacao = CATALOGO["formacao_do_valor"][rota]
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["formacao_titulo"])
+
+    passos = [passo for passo in formacao["passos"] if passo["premissa"] in cenario["premissas"]]
+    assert [tuple(_visivel(_um(item, classe=classe)) for classe in ("formacao-premissa", "formacao-valor", "formacao-funcao"))
+            for item in _todos(secao, classe="formacao-passo")] == [
+        (_rotulo(rota, passo["premissa"]),
+         _na_unidade(cenario["premissas"][passo["premissa"]], CATALOGO["premissas"][rota][passo["premissa"]]["unidade"],
+                     entrega_dict),
+         passo["funcao"][IDIOMA])
+        for passo in passos]
+    assert [(_visivel(_um(item, classe="formacao-multiplo-rotulo")), _visivel(_um(item, classe="formacao-multiplo-valor")))
+            for item in _todos(secao, classe="formacao-multiplo")] == [
+        (CATALOGO["multiplos"][chave]["rotulo"][IDIOMA], placeholders.formatar(valor, "x2", IDIOMA))
+        for chave, valor in cenario["multiplos"].items()]
+    assert _visivel(_um(secao, classe="formacao-sintese")) == formacao["sintese"][IDIOMA]
+    if rota == "rampa":
+        assert "util" in cenario["premissas"] and "g1" not in cenario["premissas"]
+        assert _todos(secao, classe="formacao-montantes")
+
+
+@pytest.mark.parametrize("fonte,chave", [
+    pytest.param(SOTP_SAFRA, "formacao_rotulo_consolidado", id="sotp"),
+    pytest.param("caso_degrau.json", "formacao_rotulo_degrau", id="degrau"),
+])
+def test_a_formacao_do_valor_diz_de_que_cenario_e_no_sotp_e_no_degrau(fonte, chave):
+    entrega_dict = _entrega(fonte)
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["formacao_titulo"])
+    assert _visivel(_um(secao, classe="formacao-rotulo")) == VALUATION[chave].format(
+        cenario=entrega_dict["resultados"]["manchete"]["cenario"])
+
+    vizinha = _secao(_aba(_pagina(_entrega()), "valuation"), VALUATION["formacao_titulo"])
+    assert _todos(vizinha, classe="formacao-rotulo") == []
+
+
+def test_os_cenarios_mostram_a_ancora_como_dado_o_triangulo_rotulado_o_preco_e_o_upside():
+    entrega_dict = _entrega()
+    (nome, cenario), = entrega_dict["resultados"]["cenarios"].items()
+    (artigo,) = _todos(_secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["cenarios_titulo"]),
+                       classe="valuation-cenario")
+
+    def _rotulo_do_triangulo(chave: str) -> str:
+        info = CATALOGO["premissas"]["firm"].get(chave) or CATALOGO["variaveis_do_triangulo"][chave]
+        return info["rotulo"][IDIOMA]
+
+    triangulo = cenario["triangulo"]
+    assert [_titulo(artigo), _visivel(_um(artigo, classe="cenario-ancora")),
+            _visivel(_um(artigo, classe="cenario-triangulo"))] == [
+        nome, cenario["ancora"],
+        VALUATION["cenario_triangulo_valor"].format(entradas=", ".join(_rotulo_do_triangulo(c) for c in triangulo["inputs"]),
+                                                    saida=_rotulo_do_triangulo(triangulo["output"]))]
+    assert [(_visivel(_um(metrica, classe="metrica-rotulo")), _visivel(_um(metrica, classe="metrica-valor")))
+            for metrica in _todos(artigo, classe="metrica")] == [
+        (VALUATION["preco_justo_titulo"], _moeda(entrega_dict, cenario["valor"]["preco_acao"])),
+        (VALUATION["upside_titulo"], placeholders.formatar(cenario["vs_preco"]["upside"], "pct1", IDIOMA))]
+
+    rampa = _entrega(SEM_REVERSA)
+    (artigo_da_rampa,) = _todos(_secao(_aba(_pagina(rampa), "valuation"), VALUATION["cenarios_titulo"]),
+                                classe="valuation-cenario")
+    assert _visivel(_um(artigo_da_rampa, classe="cenario-triangulo")) == VALUATION["cenario_triangulo_nao_se_aplica"]
+
+
+def test_a_grade_1d_de_wacc_e_uma_tabela_com_o_ponto_do_cenario_marcado_por_igualdade_exata():
+    entrega_dict = _entrega()
+    caso = entrega_dict["caso"]
+    grade = entrega_dict["resultados"]["sensibilidades"]["grades_1d"][0]
+    premissa = caso["cenarios"][caso["sensibilidades"]["cenario"]]["premissas"][grade["premissa"]]
+    titulo = VALUATION["grade_1d_titulo"].format(cenario=caso["sensibilidades"]["cenario"],
+                                                 premissa=_rotulo("firm", grade["premissa"]))
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), titulo)
+
+    assert [_visivel(celula) for celula in _todos(_um(secao, tag="thead"), tag="th")] == [
+        _rotulo("firm", grade["premissa"]), VALUATION["grade_1d_coluna_preco"], VALUATION["grade_1d_coluna_multiplo"]]
+    ponto = lambda x: _na_unidade(x, CATALOGO["premissas"]["firm"][grade["premissa"]]["unidade"], entrega_dict)
+    assert [[_visivel(celula) for celula in _todos(linha, tag="td")] for linha in _todos(_um(secao, tag="tbody"), tag="tr")] == [
+        [VALUATION["grade_1d_ponto_do_cenario"].format(valor=ponto(p["x"]), cenario=caso["sensibilidades"]["cenario"])
+         if p["x"] == premissa else ponto(p["x"]),
+         _moeda(entrega_dict, p["valor"]), placeholders.formatar(p["multiplo"], "x2", IDIOMA)]
+        for p in grade["pontos"]]
+    assert sum(1 for p in grade["pontos"] if p["x"] == premissa) == 1
+
+
+def test_num_sotp_a_premissa_decisiva_de_parte_e_o_vinculo_multi_rota_saem_rotulados():
+    sotp = _entrega(SOTP_SAFRA)
+    indice, parte = _base_instalada(sotp)
+    _com_premissa_de_parte(sotp, parte["nome"], "util")
+    sotp["analise"]["perguntas"][1]["vinculo"] = ["util", "custo_capital"]
+    aba = _aba(_pagina(sotp), "tese")
+
+    (premissa,) = _todos(aba, classe="tese-premissa")
+    assert [_visivel(_um(premissa, classe=classe)) for classe in ("metrica-rotulo", "metrica-valor", "tese-premissa-parte")] == [
+        _rotulo("rampa", "util"), _na_unidade(parte["premissas"]["util"], "pp", sotp),
+        TESE["premissa_da_parte"].format(numero=placeholders.formatar(indice + 1, "num0", IDIOMA), nome=parte["nome"])]
+    pergunta = _todos(aba, classe="tese-pergunta")[1]
+    assert [_visivel(chip) for chip in _todos(pergunta, classe="tese-rotulo")] == [
+        _rotulo("rampa", "util"), CATALOGO["blocos"]["custo_capital"]["rotulo"][IDIOMA]]
