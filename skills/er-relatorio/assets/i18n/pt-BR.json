@@ -67,6 +67,8 @@
       },
       "veredicto_titulo": "Veredicto",
       "preco_de_tela": "Preço de tela: {preco} em {data} (fonte: {fonte}).",
+      "consenso_titulo": "Consenso de mercado, como referência externa",
+      "consenso_linha": "{claim}, {periodo}: {valor} {unidade} — {fonte}, acesso em {data}.",
       "disclosures_titulo": "Avisos obrigatórios",
       "disclosures_vazio": "Nenhum aviso obrigatório nesta entrega.",
       "premissas_decisivas_titulo": "Premissas decisivas",
@@ -155,10 +157,136 @@
       }
     },
     "evidencia": {
+      "fontes_titulo": "Fontes",
+      "fontes_vazio": "Nenhuma fonte registrada no ledger desta entrega.",
+      "fontes_colunas": {
+        "identidade": "Fonte",
+        "classe": "Classe",
+        "registros": "Registros"
+      },
+      "ledger_titulo": "Ledger",
+      "ledger_vazio": "Nenhum registro no ledger desta entrega.",
+      "registro_campos": {
+        "id": "Registro",
+        "fonte": "Fonte",
+        "classe": "Classe da fonte",
+        "estatuto": "Estatuto",
+        "periodo": "Período",
+        "valor": "Valor",
+        "unidade": "Unidade",
+        "moeda": "Moeda",
+        "data_acesso": "Data de acesso",
+        "localizador_tipo": "Tipo de localizador",
+        "localizador_valor": "Localizador",
+        "localizador_parametros": "Parâmetros do localizador",
+        "justificativa_da_fonte": "Por que esta fonte",
+        "formula": "Fórmula",
+        "insumos": "Insumos do cálculo",
+        "usado_em": "Usado em",
+        "reconciliacao": "Reconciliação",
+        "conflito_vencedor": "Conflito: registro vencedor",
+        "conflito_razao": "Conflito: razão da escolha",
+        "contraprova_de": "Contraprova do registro"
+      },
+      "sem_valor": "—",
+      "lacunas_titulo": "Lacunas e limitações declaradas",
+      "lacunas_vazio": "Nenhuma lacuna nem limitação declarada nesta entrega.",
+      "lacunas_do_ledger_titulo": "Lacunas de evidência",
+      "lacunas_colunas": {
+        "id": "Lacuna",
+        "materialidade": "Materialidade",
+        "descricao": "Descrição",
+        "tratamento": "Tratamento"
+      },
+      "limitacoes_titulo": "Limitações metodológicas",
+      "fronteira_titulo": "Fronteira de escopo",
+      "confronto_titulo": "Confronto com a análise fornecida",
+      "confronto_analise_fornecida": "Análise fornecida: {identificacao}, de {data}.",
+      "confronto_sem_divergencias": "Nenhuma divergência declarada no confronto.",
+      "confronto_colunas": {
+        "item": "Item",
+        "classificacao": "Classificação",
+        "anterior": "Anterior",
+        "atual": "Atual",
+        "explicacao": "Explicação"
+      },
+      "classificacoes_de_divergencia": {
+        "dado_novo": "Dado novo",
+        "premissa_revista": "Premissa revista",
+        "erro_anterior": "Erro anterior",
+        "pergunta_resolvida": "Pergunta anterior resolvida pelo observável"
+      },
+      "classes_de_fonte": {
+        "filing": "Documento protocolado pela companhia",
+        "ri": "Relações com investidores",
+        "release": "Divulgação de resultados",
+        "transcript": "Transcrição de teleconferência",
+        "apresentacao": "Apresentação institucional",
+        "regulador": "Órgão regulador",
+        "api": "API ou conector de dados",
+        "relatorio_setorial": "Relatório setorial",
+        "governo": "Fonte governamental",
+        "imprensa_especializada": "Imprensa especializada",
+        "web": "Página na internet",
+        "documento_do_usuario": "Documento fornecido pelo usuário",
+        "resposta_do_usuario": "Resposta do usuário, evidência a verificar"
+      },
+      "tipos_de_localizador": {
+        "url": "Endereço na internet",
+        "documento": "Documento",
+        "endpoint": "Consulta a um serviço de dados"
+      },
+      "estatutos": {
+        "reported": "Reportado pela fonte",
+        "calculated": "Calculado",
+        "estimated": "Estimado"
+      },
+      "materialidades": {
+        "material": "Material",
+        "nao_material": "Não material"
+      },
+      "ancoras_do_consenso": {
+        "guidance": "Guidance vigente da companhia",
+        "historico_normalizado": "Histórico normalizado",
+        "run_rate": "Run-rate do trimestre mais recente",
+        "pares": "Pares diretos"
+      },
       "metodologia_titulo": "Metodologia",
       "metodologia_valor": "{nome} — versão {versao}",
       "ficha_tecnica_titulo": "Ficha técnica",
       "ficha_tecnica_vazia": "Nenhum dado técnico registrado.",
+      "ficha_tecnica_blocos": {
+        "execucao": "Execução",
+        "metodologia": "Metodologia e caso",
+        "contratos": "Contratos consumidos",
+        "registros_por_estatuto": "Registros do ledger por estatuto",
+        "registros_por_classe_de_fonte": "Registros do ledger por classe de fonte",
+        "achados": "Achados do QC por nível"
+      },
+      "ficha_tecnica_campos": {
+        "execucao": {
+          "id": "Identificador da execução",
+          "ticker": "Ticker",
+          "idioma": "Idioma"
+        },
+        "metodologia": {
+          "nome": "Metodologia",
+          "versao": "Versão da metodologia",
+          "caso_sha256": "Hash canônico do caso"
+        },
+        "contratos": {
+          "entrega": "Entrega",
+          "resultados": "Resultados",
+          "catalogo": "Catálogo de apresentação",
+          "ledger": "Ledger"
+        }
+      },
+      "ficha_tecnica_niveis": {
+        "HARD_FAIL": "HARD FAIL",
+        "REQUIRED_DISCLOSURE": "REQUIRED DISCLOSURE"
+      },
+      "ficha_tecnica_contagem": "{codigo}: {quantidade}",
+      "ficha_tecnica_nenhum_achado": "nenhum",
       "log_titulo": "Log de resolução de placeholders",
       "log_vazio": "Nenhum placeholder resolvido nesta entrega.",
       "log_colunas": {

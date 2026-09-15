@@ -2,7 +2,9 @@
 
 `python skills/er-relatorio/scripts/builder.py <raiz>`:
 - código 0: `entrega.json` válido, QC sem HARD FAIL — escreve `relatorio.html`
-  (as três abas — Tese, Valuation, Evidência — via `render.compor`) e `qc.json`.
+  (as três abas — Tese, Valuation, Evidência — via `render.compor`), `qc.json`
+  e `ficha-tecnica.json` (a ficha técnica da execução, `compor_ficha_tecnica`,
+  fatia 5E), que só sai junto do relatório.
 - código 2: `entrega.json` válido mas o QC achou HARD FAIL — escreve só
   `qc.json` (regra inviolável 2: nenhum `relatorio.html` sai).
 - código 1: uso incorreto, `entrega.json` ausente/malformado/incompatível, o
@@ -112,9 +114,64 @@ def _montar_qc_json(achados: list, dicionario: dict) -> dict:
     return {"versao_contrato": "qc/1", "achados": lista}
 
 
+# Fatia 5E, Task 3 (D6; §9 do desenho, e §15, decisão 10: "também em arquivo"): a ficha
+# técnica da execução, gravada ao lado de `relatorio.html` só quando ele é gravado.
+NOME_DA_FICHA_TECNICA = "ficha-tecnica.json"
+
+
+def _contagem_em_ordem(chaves) -> dict:
+    """`{chave: quantas vezes}`, pela chave em ordem alfabética — nunca pela ordem em que
+    as chaves chegam."""
+    contagem: dict = {}
+    for chave in chaves:
+        contagem[chave] = contagem.get(chave, 0) + 1
+    return dict(sorted(contagem.items()))
+
+
+def compor_ficha_tecnica(entrega_dict: dict, catalogo: dict, achados: list) -> dict:
+    """A ficha técnica da execução (fatia 5E, Task 3, D6), composta pelo builder — a entrega
+    nunca a declara. Função pura: sem relógio, sem caminho, e a mesma ficha para a mesma
+    entrega em qualquer ordem dos registros do ledger ou dos achados. Compõe:
+    - a execução: `id`, `ticker` e `idioma`;
+    - de `resultados.origem`: o nome e a versão da metodologia e o `caso_sha256`;
+    - as versões dos contratos consumidos, lidas dos próprios artefatos: a entrega, os
+      resultados, o catálogo e o ledger;
+    - os registros do ledger por estatuto e por classe de fonte;
+    - os achados do QC por nível, na ordem de `qc.NIVEIS`, e por código. Todos os níveis,
+      também o QUALITY WARNING: a ficha em arquivo é interna, como o `qc.json`, e a
+      Evidência a mostra sem ele.
+
+    Gates declarados e comandos executados ficam para o item 8: nenhum produtor os tem, e
+    inventar o formato agora é o que a §12 proíbe. `resultados` e o catálogo são opacos para
+    o relatório: um campo que a ficha lê e não está lá é `render.CampoDeContratoAusente`,
+    nomeado — código 1 no `main`, nunca um `KeyError` cru."""
+    execucao, resultados, ledger = entrega_dict["execucao"], entrega_dict["resultados"], entrega_dict["ledger"]
+    origem = render._campo_de_contrato(resultados, "origem", "resultados")
+    metodologia = render._campo_de_contrato(origem, "metodologia", "resultados.origem")
+    registros = ledger["registros"]
+    return {
+        "execucao": {campo: execucao[campo] for campo in ("id", "ticker", "idioma")},
+        "metodologia": {
+            "nome": render._campo_de_contrato(metodologia, "nome", "resultados.origem.metodologia"),
+            "versao": render._campo_de_contrato(metodologia, "versao", "resultados.origem.metodologia"),
+            "caso_sha256": render._campo_de_contrato(origem, "caso_sha256", "resultados.origem"),
+        },
+        "contratos": {
+            "entrega": entrega_dict["versao_contrato"],
+            "resultados": resultados["versao_contrato"],
+            "catalogo": render._campo_de_contrato(catalogo, "versao_contrato", "catalogo"),
+            "ledger": ledger["versao_contrato"],
+        },
+        "registros_por_estatuto": _contagem_em_ordem(registro["estatuto"] for registro in registros),
+        "registros_por_classe_de_fonte": _contagem_em_ordem(registro["fonte"]["classe"] for registro in registros),
+        "achados": {nivel: _contagem_em_ordem(achado.codigo for achado in achados if achado.nivel == nivel)
+                    for nivel in qc.NIVEIS},
+    }
+
+
 def _remover_saida_anterior(raiz: Path) -> None:
     """B3 (regra inviolável 2) — no início de todo build, desfaz qualquer
-    'relatorio.html'/'qc.json' que já exista na raiz de uma rodada anterior
+    'relatorio.html'/'qc.json'/'ficha-tecnica.json' (fatia 5E) que já exista na raiz de uma rodada anterior
     -- inclusive quando é um symlink: `Path.unlink()` desfaz o LINK, nunca
     segue até o alvo (o alvo, se houver, não é tocado). Sem isto, uma
     recusa (código 1 ou 2) nesta mesma raiz podia deixar o relatorio.html de
@@ -128,7 +185,7 @@ def _remover_saida_anterior(raiz: Path) -> None:
     (chamado logo em seguida) já dá o erro nomeado e código 1 corretos;
     esta limpeza preliminar só não pode ser o que derruba o processo com um
     traceback cru antes de chegar lá."""
-    for nome in ("relatorio.html", "qc.json"):
+    for nome in ("relatorio.html", "qc.json", NOME_DA_FICHA_TECNICA):
         try:
             (raiz / nome).unlink()
         except OSError:
@@ -243,9 +300,15 @@ def main(argv: list[str] | None = None) -> int:
     # resolver` de novo por conta própria.
     exhibits_resolvidos, log_exhibits = exhibits.resolver(entrega_dict)
 
+    # Fatia 5E, Task 3 (D6): a ficha técnica da execução, composta aqui sobre os achados
+    # desta primeira passada — os mesmos da segunda sempre que o relatório é gravado: a
+    # segunda só pode acrescentar o HARD FAIL `relatorio_nao_autocontido`, que impede a
+    # gravação. A Evidência mostra esta ficha, e `ficha-tecnica.json` grava a mesma.
     try:
+        ficha_tecnica = compor_ficha_tecnica(entrega_dict, catalogo, achados)
         pagina = render.compor(entrega_dict, catalogo, achados, log, idioma,
-                                exhibits_resolvidos, log_exhibits, js_da_integracao)
+                                exhibits_resolvidos, log_exhibits, js_da_integracao,
+                                ficha_tecnica=ficha_tecnica)
     except (render.ChaveDeInterfaceAusente, render.RotuloDoCatalogoAusente,
             render.CampoDeContratoAusente, render.JsonNaoSerializavel,
             render.ProsaNaoAuditada) as erro:
@@ -271,10 +334,18 @@ def main(argv: list[str] | None = None) -> int:
         # disco quando a segunda passada do QC o reprova.
         return 2
 
+    # Fatia 5E, Task 3 (D6): o relatório e a ficha técnica saem juntos. Se a gravação falha
+    # no meio, nenhum dos dois fica — código diferente de 0 é "nada publicável aqui" (B3).
     try:
         _escrever_arquivo_da_raiz(raiz, "relatorio.html", pagina)
+        _escrever_json(raiz, NOME_DA_FICHA_TECNICA, ficha_tecnica)
     except OSError as erro:
-        print(f"não foi possível gravar 'relatorio.html': {erro}.", file=sys.stderr)
+        for nome in ("relatorio.html", NOME_DA_FICHA_TECNICA):
+            try:
+                (raiz / nome).unlink()
+            except OSError:
+                pass
+        print(f"não foi possível gravar 'relatorio.html' e '{NOME_DA_FICHA_TECNICA}': {erro}.", file=sys.stderr)
         return 1
 
     return 0

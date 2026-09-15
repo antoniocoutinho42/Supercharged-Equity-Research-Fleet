@@ -510,9 +510,11 @@ def test_titulo_da_matriz_nomeia_o_cenario_que_a_grade_perturbou():
         x=CATALOGO["premissas"][rota][grade["premissa_x"]]["rotulo"]["pt-BR"],
         y=CATALOGO["premissas"][rota][grade["premissa_y"]]["rotulo"]["pt-BR"],
     )
-    titulo = next(t for t in re.findall(r"<h2>([^<]*)</h2>", pagina) if "Sensibilidade" in t)
-    assert titulo == html.escape(esperado)
-    assert html.escape(caso["sensibilidades"]["cenario"]) in titulo
+    # O título é texto de dado (render._texto_de_dado_html codifica `=`, `(` e `@`): compara-se o que o
+    # leitor vê, o texto desescapado.
+    titulo = html.unescape(next(t for t in re.findall(r"<h2>([^<]*)</h2>", pagina) if "Sensibilidade" in t))
+    assert titulo == esperado
+    assert caso["sensibilidades"]["cenario"] in titulo
     assert caso["cenario_base"] not in titulo
 
 

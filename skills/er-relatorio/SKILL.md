@@ -66,10 +66,12 @@ reimplementa valuation. Concretamente:
   busca o rótulo em `catalogo_apresentacao.json` — nunca interpreta
   `caso...premissas.tv` nem nenhum alias.
 - **HARD FAIL nunca emite.** Regra inviolável 2: se o QC acha nível
-  `HARD_FAIL`, `relatorio.html` não é escrito — só `qc.json`. Todo build
-  também remove `relatorio.html`/`qc.json` de uma rodada anterior na MESMA
-  raiz antes de começar (desfazendo symlink, nunca seguindo) — uma recusa
-  nunca deixa a saída de uma rodada anterior no lugar.
+  `HARD_FAIL`, `relatorio.html` não é escrito — só `qc.json` —, e a ficha
+  técnica da execução (`ficha-tecnica.json`, fatia 5E) só sai junto do
+  relatório. Todo build também remove `relatorio.html`/`qc.json`/
+  `ficha-tecnica.json` de uma rodada anterior na MESMA raiz antes de começar
+  (desfazendo symlink, nunca seguindo) — uma recusa nunca deixa a saída de uma
+  rodada anterior no lugar.
 
 ## Como rodar
 
@@ -82,7 +84,7 @@ Códigos de saída:
 
 | Código | Significado | O que é escrito |
 |---|---|---|
-| `0` | QC sem `HARD_FAIL` | `relatorio.html` + `qc.json` |
+| `0` | QC sem `HARD_FAIL` | `relatorio.html` + `qc.json` + `ficha-tecnica.json` |
 | `2` | QC achou `HARD_FAIL` | só `qc.json` |
 | `1` | uso incorreto, ou `entrega.json` ausente/malformado/fora da raiz/versão incompatível/idioma sem dicionário/`execucao.ticker` divergente de `caso.ticker`, ou o contrato do ledger ilegível ou fora da forma que o relatório lê | nada |
 
@@ -276,8 +278,14 @@ e lacuna que vira disclosure saem das flags `e_estimativa`, `exige_formula` e
 e dado:** a `descricao` e o `tratamento` de uma lacuna e a `razao` do consenso
 ausente são prosa auditável da Tese (lista de prosa); os demais textos do ledger e
 os do confronto são dado da Evidência (§9) e podem citar números. A **ficha
-técnica** não é declarada: é da execução, e a Evidência a mostra vazia até o
-builder compô-la.
+técnica** não é declarada: é da execução, e o builder a compõe
+(`builder.compor_ficha_tecnica`) — a Evidência a mostra, e `ficha-tecnica.json` a
+grava ao lado do relatório. **Na Tese**, os avisos `lacuna_material` e
+`consenso_indisponivel` saem com o texto que a lista de prosa resolveu (pelo
+`params.campos_de_prosa`) e a âncora pelo rótulo do dicionário; o `qc.json`, que é
+interno, guarda o texto cru e a chave. A Conclusão mostra o consenso como
+referência externa: uma linha por registro citado, com claim, período, valor,
+unidade, fonte e data de acesso — também sob fronteira de escopo.
 
 ## Placeholders auditáveis (A7)
 
@@ -371,7 +379,8 @@ catálogo é HARD FAIL (`unidade_desconhecida`).
 ## QC de três níveis (A8)
 
 `HARD_FAIL` (não emite), `REQUIRED_DISCLOSURE` (visível no HTML),
-`QUALITY_WARNING` (só em `qc.json`). Regras:
+`QUALITY_WARNING` (interno: em `qc.json` e na ficha técnica em arquivo, nunca na
+página — nem na ficha que a Evidência mostra). Regras:
 
 | Código | Nível | Gatilho |
 |---|---|---|
@@ -424,6 +433,48 @@ Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 nunca do dicionário do relatório. `qc.json` sai sempre, em ordem determinística,
 mesmo quando o builder recusa emitir o HTML.
 
+## Cobertura da §11
+
+A §11 do desenho lista o que o QC impõe, em três níveis. A tabela abaixo dá dono a cada item,
+pelo texto do desenho: os códigos de QC que o garantem, o mecanismo fora do QC (o gate do caso, a
+CI, o badge do laboratório) ou a pendência, com o dono (`5F`, `item 6` ou `item 8`) e a razão. A
+trava `tests/test_relatorio_cobertura_11.py` lê a §11, as duas tabelas e o `qc.py`: os itens de
+cada nível são os do desenho, todo código citado existe no `qc.py` com o nível da linha e tem
+mensagem no dicionário, todo código que o `qc.py` constrói aparece numa das duas tabelas, e toda
+pendência tem dono permitido e razão.
+
+| Nível | Item da §11 | Códigos de QC | Fora do QC | Pendência |
+|---|---|---|---|---|
+| HARD FAIL | paridade Python↔JS divergente | — | a CI (`tests/test_paridade_js.py`, `tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`) e o badge do laboratório, que bloqueia a edição quando o motor do navegador não reproduz o que o relatório publicou (5C) | **item 6**: a paridade por caso no build — o builder não roda node, e um caso cuja paridade diverge ainda emite |
+| HARD FAIL | `selftest` ou suíte da metodologia falhando | — | a CI (`tests/test_vendor_multiplos_justos.py` roda o `selftest` e as duas fases de `testes.py`) | **item 8**: a suíte por execução — o M4 exige "suíte PASS", e o builder não a roda |
+| HARD FAIL | número material do valuation sem proveniência | `insumo_sem_proveniencia`, `usado_em_fora_dos_insumos`, `insumos_do_caso_desconhecidos`, `referencia_fora_do_ledger`, `numero_sem_proveniencia`, `placeholder_nao_resolvido`, `placeholder_malformado` | — | — |
+| HARD FAIL | gráfico com dados não rastreáveis | `serie_nao_rastreavel`, `formula_invalida`, `serie_de_tamanho_incompativel`, `series_de_datasets_incompativeis`, `overlay_nao_resolvido`, `dataset_sem_proveniencia`, `referencia_fora_do_ledger` | — | — |
+| HARD FAIL | inconsistência estrutural que torne o valuation matematicamente inválido | `resultados_nao_correspondem_ao_caso`, `multiplos_com_bases_diferentes`, `unidade_desconhecida`, `formato_incompativel_com_unidade`, `diagnostico_sem_chave`, `degrau_sem_divergencia_de_base`, `faixa_fora_de_ordem`, `premissa_decisiva_fora_do_cenario` | as recusas do gate do caso (`caso.CasoInvalido`, na integração): um caso incoerente nem chega ao motor | — |
+| HARD FAIL | perguntas da tese ausentes ou sem vínculo econômico | `perguntas_da_tese_incompletas`, `vinculo_fora_do_vocabulario` | — | — |
+| HARD FAIL | fair value sem reversa / custo de capital implícito quando a metodologia exigir | `analise_sem_reversa`, `limitacao_desconhecida` | o gate do caso recusa uma reversa sem o eixo do custo de capital implícito (`caso.EIXO_OBRIGATORIO`) | — |
+| HARD FAIL | números materialmente conflitantes sem reconciliação ou disclosure | `insumo_nao_reconciliado`, `conflito_de_fontes_silenciado`, `referencia_fora_do_ledger` | — | — |
+| HARD FAIL | fronteira de escopo declarada com fair value por ação como conclusão principal | `fronteira_com_preco_alvo`, `fronteira_de_escopo_desconhecida` | — | — |
+| REQUIRED DISCLOSURE | conservação de capital que não fecha | — | — | **5F**: a conservação de capital entra com o restante da aba Valuation |
+| REQUIRED DISCLOSURE | ausência de contraprova independente | `sem_contraprova_independente` | — | — |
+| REQUIRED DISCLOSURE | premissa central fora do ponto central da grade | — | — | **5F**: é item da Valuation, junto das sensibilidades |
+| REQUIRED DISCLOSURE | gap material que não inviabiliza o valuation | `lacuna_material`, `consenso_indisponivel` | — | — |
+| REQUIRED DISCLOSURE | metodologia especial ou limitação de escopo | `limitacao_metodologica`, `fronteira_de_escopo_declarada`, `divergencia_de_base_degrau` | — | — |
+| REQUIRED DISCLOSURE | input relevante baseado em estimativa em vez de dado observado | `insumo_estimado` | — | — |
+| QUALITY WARNING | exhibit fraco | `serie_curta_sem_nota_janela` | — | **item 8**: o resto é julgamento editorial sobre o exhibit — um gráfico que não responde à pergunta, ou um tipo mal escolhido |
+| QUALITY WARNING | concentração excessiva de fontes | `concentracao_de_fontes` | — | — |
+| QUALITY WARNING | sensibilidade pouco informativa | — | — | **5F**: é item da Valuation, junto das sensibilidades |
+| QUALITY WARNING | tese muito dependente de uma única premissa | `tese_dependente_de_uma_premissa` | — | — |
+| QUALITY WARNING | pergunta de tese pouco discriminante | — | — | **item 8**: julgamento editorial sobre a pergunta, sem critério mecânico declarado |
+| QUALITY WARNING | Positives/Negatives pouco ligados ao valuation | — | — | **item 8**: julgamento editorial; o mecanismo fora do vocabulário do valuation já é HARD FAIL (o vínculo) |
+| QUALITY WARNING | termos de linguagem interna vazando no corpo | — | — | **item 8**: a lista de banimento é da metodologia e entra pelo catálogo |
+| QUALITY WARNING | contagem de premissas na Conclusão fora do usual | — | — | **item 8**: o "usual" é critério editorial que ninguém declarou ainda |
+
+Os códigos de QC que servem a outras seções do desenho:
+
+| Código | Nível | Onde o desenho o pede |
+|---|---|---|
+| `relatorio_nao_autocontido` | HARD FAIL | §9 e §2: arquivo único autocontido, zero rede |
+
 ## As três abas (`render.py`)
 
 **Tese** (fatia 5D) — a decisão de investimento, nesta ordem:
@@ -431,18 +482,26 @@ mesmo quando o builder recusa emitir o HTML.
 1. **Conclusão**: o texto da conclusão; a faixa piso–base–teto, cada ponta com
    o preço que `resultados.cenarios.<nome>.valor.preco_acao` publica e o nome
    do cenário; o veredicto, com o preço de tela, a data e a fonte de
-   `caso.preco`; e o múltiplo justo ao lado do de tela. Num caso SOTP
-   (`resultados.manchete.fonte` igual a `sotp`) a faixa sai rotulada como a
-   dos cenários consolidados, nomeando o preço da soma das partes — que
+   `caso.preco`; o múltiplo justo ao lado do de tela; e o consenso como
+   referência externa (fatia 5E) — uma linha por registro que
+   `analise.consenso.registros` cita, com claim, período, valor (só
+   localizado), unidade, fonte e data de acesso; com `ausente`, nada. Num
+   caso SOTP (`resultados.manchete.fonte` igual a `sotp`) a faixa sai rotulada
+   como a dos cenários consolidados, nomeando o preço da soma das partes — que
    continua sendo a manchete. **Sob fronteira de escopo** o título é
    "conclusão condicional, sem preço-alvo", com a classe (rótulo do
    catálogo), a arquitetura dominante e a razão que
    `resultados.fronteira_de_escopo` publica — prosa auditável, que sai da
    lista de prosa —, nenhuma faixa e, da dupla de
    múltiplos, só o de tela: todo número que a integração declara conclusão de
-   valor (`catalogo.conclusoes_de_valor`) fica fora da Conclusão;
+   valor (`catalogo.conclusoes_de_valor`) fica fora da Conclusão. O consenso
+   continua: é leitura de mercado, como o múltiplo de tela;
 2. avisos obrigatórios (todo REQUIRED DISCLOSURE — sob fronteira de escopo,
-   a limitação de escopo com o rótulo da classe, nunca "nenhum aviso");
+   a limitação de escopo com o rótulo da classe, nunca "nenhum aviso"). A
+   prosa que um aviso cita (`params.campos_de_prosa`) sai resolvida pela
+   lista de prosa — nunca o placeholder cru, e um campo fora da lista é
+   `ProsaNaoAuditada` (`RC=1`) —, e a âncora do consenso indisponível sai pelo
+   rótulo do dicionário;
 3. premissas decisivas: o rótulo do catálogo, o número do cenário da manchete
    formatado pela unidade do catálogo e a derivação. Num caso SOTP a seção sai
    rotulada como a do cenário consolidado (dicionário, sem número): as partes
@@ -479,10 +538,45 @@ título da matriz. A decisão é uma só (`render._leitura_condicional`): quem e
 o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome
 de campo decide.
 
-**Evidência** — metodologia, ficha técnica (vazia até o builder compô-la: a
-ficha é da execução e saiu do contrato na fatia 5E), o log de resolução de
-**todo** placeholder da prosa (conclusão, textos da Tese, do consenso ausente,
-das lacunas e dos exhibits) e a rastreabilidade série a série dos exhibits.
+**Evidência** (fatia 5E) — a camada de auditabilidade da §9, nesta ordem:
+
+1. **fontes**: as identidades distintas, na ordem da primeira aparição no ledger,
+   com o rótulo de cada classe e o número de registros;
+2. **ledger**, agrupado por `claim` na ordem da primeira aparição: cada registro
+   com a fonte e a classe, o estatuto, o período, o valor (só localizado, pelo
+   formato `render.FORMATO_DO_VALOR_DO_LEDGER`), a unidade, a moeda, a data de
+   acesso, o localizador (tipo, valor e parâmetros), a justificativa, a fórmula e
+   os insumos, o `usado_em`, a reconciliação, o conflito com o vencedor e a razão,
+   e a contraprova;
+3. **lacunas e limitações declaradas**: cada lacuna com a materialidade rotulada
+   e a descrição e o tratamento resolvidos pela lista de prosa; cada
+   `resultados.limitacoes` com o rótulo do catálogo; a fronteira de escopo com o
+   rótulo da classe;
+4. **confronto com a análise fornecida**, se houver: a identificação e a data, e
+   cada divergência com o item, a classificação rotulada, o anterior, o atual e a
+   explicação;
+5. **ficha técnica** (`builder.compor_ficha_tecnica`, a mesma que o builder grava
+   em `ficha-tecnica.json`): a execução, a metodologia e o hash do caso, as
+   versões dos contratos consumidos, os registros por estatuto e por classe de
+   fonte e os achados por nível e código — sem o QUALITY WARNING, que é interno e
+   fica no `qc.json` e no arquivo;
+6. metodologia, o log de resolução de **todo** placeholder da prosa (conclusão,
+   textos da Tese, do consenso ausente, das lacunas e dos exhibits) e a
+   rastreabilidade série a série dos exhibits.
+
+Todo vocabulário do ledger (classe de fonte, tipo de localizador, estatuto,
+materialidade, âncora do consenso) e a classificação de uma divergência saem pelo
+rótulo do dicionário (`interface.evidencia.<vocabulário>`), com trava de cobertura
+contra o contrato lido e o `entrega.py` — rótulo ausente é
+`ChaveDeInterfaceAusente`, nunca a chave crua. Os textos do ledger e do confronto
+são dado da Evidência (§9: linguagem interna permitida) e saem como declarados.
+Todo texto de dado que a página escreve, nas três abas — a prosa resolvida, os
+avisos, os textos de exhibit, o log de placeholders, o ledger, o consenso, o
+confronto e a ficha —, sai por um helper só (`render._texto_de_dado_html`): no
+HTML cru, `=`, `(` e `@` saem como entidade, e o leitor vê o mesmo caractere. Um
+endereço com `?data=` na query é dado, e a regra de autocontenção
+(`relatorio_nao_autocontido`), que não muda, nunca o lê como atributo; a marcação
+continua sob a regra inteira.
 
 `assets/template.html` é a casca estática — CSS e JS
 100% inline, nenhum `src`/`href`/`url()`/`@import` que não seja
@@ -502,8 +596,8 @@ caminho), nunca um `KeyError` cru.
 | `scripts/exhibits.py` | Contrato de `analise.exhibits`/`entrega.dados`; avaliador fechado da fórmula (`ast`, nunca `eval`); resolve série/overlay em número e produz o log de rastreabilidade |
 | `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem; e o leitor do mapa das conclusões de valor (`conclusoes_de_valor`/`conclusao_de_valor`), que o QC e a tela consultam sob fronteira de escopo; e o do mapa dos insumos do caso (`insumos_do_caso`/`insumo_do_caso`), com o mesmo casador de padrão, que o QC consulta para exigir proveniência |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
-| `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados; embute o payload dos exhibits e dos painéis |
-| `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, decide o exit code |
+| `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados e da ficha técnica que o builder compôs; embute o payload dos exhibits e dos painéis |
+| `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, compõe a ficha técnica da execução (`compor_ficha_tecnica`) e a grava em `ficha-tecnica.json` junto do relatório, decide o exit code |
 
 | Asset | Papel |
 |---|---|

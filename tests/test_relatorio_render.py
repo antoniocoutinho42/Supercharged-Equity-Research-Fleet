@@ -9,7 +9,6 @@ sintético do teste de QUALITY_WARNING, que o próprio plano autoriza
 """
 
 import copy
-import html
 import json
 import re
 import sys
@@ -27,6 +26,10 @@ import render  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "tests"))
 import relatorio_apoio as apoio  # noqa: E402
+# Fatia 5E, Task 3: texto de dado sai pelo helper que tira da página a assinatura de uma referência, e o
+# HTML cru deixa de ser o texto que o analista lê — as asserções sobre texto de dado leem a mesma árvore
+# da aba Tese.
+from test_relatorio_tese import _aba, _secao, _todos, _um, _visivel  # noqa: E402
 
 CATALOGO = json.loads(
     (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
@@ -100,8 +103,8 @@ def test_degrau_com_disclosure_visivel_na_tese():
 
     assert "16,4%" in pagina
     assert "16.4%" not in pagina
-    assert render.t(DICIONARIO, "tese.disclosures_titulo") in pagina
-    assert html.escape(CATALOGO["disclosures"]["divergencia_de_base_degrau"]["texto"]["pt-BR"]) in pagina
+    avisos = _visivel(_secao(_aba(pagina, "tese"), render.t(DICIONARIO, "tese.disclosures_titulo")))
+    assert CATALOGO["disclosures"]["divergencia_de_base_degrau"]["texto"]["pt-BR"] in avisos
 
 
 # --------------------------------------------------------------------------
@@ -240,7 +243,8 @@ def test_prosa_com_tag_html_sai_escapada():
     pagina = render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
 
     assert "<script>alert('oi')</script>" not in pagina
-    assert "&lt;script&gt;alert(&#x27;oi&#x27;)&lt;/script&gt;" in pagina
+    assert _visivel(_um(_aba(pagina, "tese"), classe="conclusao-texto")) == texto.replace(
+        "{{resultados:manchete.preco_acao|moeda}}", "R$ 61,91")
 
 
 # --------------------------------------------------------------------------
@@ -258,7 +262,8 @@ def test_disclosure_aparece_e_quality_warning_nao():
 
     mensagem_disclosure = DICIONARIO["qc"][disclosure_real.codigo].format(
         onde=disclosure_real.onde, **disclosure_real.params)
-    assert html.escape(mensagem_disclosure) in pagina
+    avisos = _todos(_secao(_aba(pagina, "tese"), render.t(DICIONARIO, "tese.disclosures_titulo")), tag="li")
+    assert mensagem_disclosure in [_visivel(item) for item in avisos]
     assert "codigo_inventado_sem_dicionario" not in pagina
 
 
@@ -348,3 +353,50 @@ def test_rotulo_de_fronteira_de_escopo_ausente_levanta_erro_nomeado():
         CATALOGO["fronteiras_de_escopo"]["pre_lucro"]["rotulo"]["pt-BR"])
     with pytest.raises(render.RotuloDoCatalogoAusente, match="classe_que_nao_existe"):
         render._rotulo_fronteira(CATALOGO, "classe_que_nao_existe", "pt-BR")
+
+
+# --------------------------------------------------------------------------
+# Fatia 5E, Task 3: os avisos da Tese com a prosa resolvida, o rótulo do vocabulário do
+# ledger e o valor de um registro formatado sem conta.
+# --------------------------------------------------------------------------
+
+ANCORA = apoio.CONTRATO_LEDGER["vocabularios"]["ancoras_do_consenso"][0]
+
+
+def test_um_aviso_que_cita_um_campo_fora_da_lista_de_prosa_e_prosa_nao_auditada():
+    """A Tese troca cada parâmetro de `campos_de_prosa` pelo texto que a lista de prosa resolveu.
+    Um `onde` fora da lista é recusa nomeada — no builder, código 1 —, nunca o texto cru."""
+    entrega_dict = apoio.montar_entrega("caso_minimo_firm.json", consenso={
+        "ausente": {"ancora": ANCORA, "razao": "Nenhum provedor cobre a companhia."}})
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
+    achados = qc.avaliar(entrega_dict, CATALOGO, apoio.CONTRATO_LEDGER, html=None)
+    (aviso,) = [a for a in achados if a.codigo == "consenso_indisponivel"]
+    render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
+
+    fora_da_lista = aviso._replace(params={
+        **aviso.params, "campos_de_prosa": {"razao": "analise.consenso.ausente.razao_fora_da_lista"}})
+    with pytest.raises(render.ProsaNaoAuditada, match="razao_fora_da_lista"):
+        render.compor(entrega_dict, CATALOGO, [fora_da_lista if a is aviso else a for a in achados], log, "pt-BR")
+
+
+def test_um_rotulo_de_vocabulario_do_ledger_ausente_do_dicionario_e_erro_nomeado(monkeypatch):
+    """A classe de fonte, como todo vocabulário do contrato do ledger, sai pelo rótulo do
+    dicionário. Sem o rótulo, a recusa nomeia a chave — nunca a classe crua na Evidência."""
+    entrega_dict, achados, log = _preparar("caso_minimo_firm.json")
+    classe = entrega_dict["ledger"]["registros"][0]["fonte"]["classe"]
+    render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
+
+    sem_o_rotulo = copy.deepcopy(DICIONARIO)
+    del sem_o_rotulo["interface"]["evidencia"]["classes_de_fonte"][classe]
+    monkeypatch.setattr(placeholders, "carregar_dicionario", lambda _idioma: copy.deepcopy(sem_o_rotulo))
+    with pytest.raises(render.ChaveDeInterfaceAusente,
+                       match=re.escape(f"interface.evidencia.classes_de_fonte.{classe}")):
+        render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR")
+
+
+def test_o_valor_de_um_registro_do_ledger_sai_formatado_pelo_idioma_e_sem_conta():
+    """O valor de um registro — a linha do consenso na Tese, o ledger na Evidência — é o número
+    que a fonte declara, só localizado: a receita do formato não escala, não prefixa e não
+    sufixa. A unidade do registro é texto livre da fonte, e o relatório não a interpreta."""
+    receita = placeholders.especificacao_de_formato(render.FORMATO_DO_VALOR_DO_LEDGER, "pt-BR")
+    assert (receita["escala"], receita["prefixo"], receita["sufixo"]) == (1, "", "")

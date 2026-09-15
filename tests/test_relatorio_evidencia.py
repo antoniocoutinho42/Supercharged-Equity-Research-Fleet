@@ -1,5 +1,6 @@
 """O ledger no contrato `entrega/1`, o consenso e o confronto, e as regras da §11 que dependem do
-ledger (fatia 5E, item 5, Task 2) — sem render.
+ledger (fatia 5E, item 5, Task 2); e a aba Evidência, o consenso na Conclusão, os avisos da Tese
+com a prosa resolvida e a ficha técnica em arquivo (Task 3).
 
 Ver docs/superpowers/plans/2026-09-14-v4-item5e-evidencia.md: D1 (a forma de `ledger/1`, lida do
 contrato do `er-evidencia`), D3 (as regras), D4 (o consenso), D5 (o confronto) e D6
@@ -27,6 +28,7 @@ import math
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -38,11 +40,17 @@ BUILDER = SCRIPTS / "builder.py"
 sys.path.insert(0, str(SCRIPTS))
 import builder  # noqa: E402
 import entrega  # noqa: E402
+import exhibits  # noqa: E402
 import placeholders  # noqa: E402
 import qc  # noqa: E402
+import render  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "tests"))
 import relatorio_apoio as apoio  # noqa: E402
+# A Task 3 lê a página como a aba Tese a lê: a mesma árvore do texto que o analista vê, sobre
+# `apoio.prosa_da_pagina`, e a mesma variante de fronteira de escopo — uma leitura só.
+from test_relatorio_tese import (  # noqa: E402
+    _aba, _com_fronteira_de_escopo, _secao, _secoes, _titulo, _todos, _um, _visivel)
 
 CATALOGO = apoio.CATALOGO
 CONTRATO = apoio.CONTRATO_LEDGER
@@ -897,3 +905,464 @@ def test_disclosures_e_aviso_do_ledger_emitem_com_a_mensagem_do_dicionario(tmp_p
     for achado in achados:
         assert achado["mensagem"] == DICIONARIO["qc"][achado["codigo"]].format(onde=achado["onde"], **achado["params"])
     assert estimado["claim"] in achados[0]["mensagem"]
+
+
+# ==========================================================================
+# Task 3 (D4, D6, D7): a aba Evidência, o consenso na Conclusão, os avisos da Tese com a prosa
+# resolvida e a ficha técnica em arquivo. Toda asserção lê o TEXTO que o analista vê; classe só
+# LOCALIZA a seção.
+# ==========================================================================
+
+EVIDENCIA = DICIONARIO["interface"]["evidencia"]
+TESE = DICIONARIO["interface"]["tese"]
+NOME_DA_FICHA = "ficha-tecnica.json"
+
+
+def _pagina(entrega_dict: dict) -> str:
+    """O HTML pelo caminho que `builder.py` percorre depois de uma primeira passada de QC sem HARD FAIL:
+    o log de toda a prosa, os exhibits resolvidos uma vez e a ficha técnica que o builder compõe."""
+    achados = _achados(entrega_dict)
+    assert not [a for a in achados if a.nivel == "HARD_FAIL"], achados
+    _prosa, log = placeholders.resolver_prosa(entrega_dict, "pt-BR")
+    resolvidos, log_exhibits = exhibits.resolver(entrega_dict)
+    return render.compor(entrega_dict, CATALOGO, achados, log, "pt-BR", resolvidos, log_exhibits,
+                         ficha_tecnica=builder.compor_ficha_tecnica(entrega_dict, CATALOGO, achados))
+
+
+def _rotulo(vocabulario: str, codigo: str) -> str:
+    """O rótulo do dicionário para um código de vocabulário — nunca a própria chave, senão a asserção
+    não distinguiria o rótulo da chave crua."""
+    rotulo = EVIDENCIA[vocabulario][codigo]
+    assert rotulo != codigo, (vocabulario, codigo)
+    return rotulo
+
+
+def _pares(tabela: dict) -> list:
+    """`(rótulo, valor)` de cada linha de uma tabela de chave e valor."""
+    return [(_visivel(_um(linha, tag="th")), _visivel(_um(linha, tag="td"))) for linha in _todos(tabela, tag="tr")]
+
+
+def _linhas(tabela: dict) -> list:
+    """As células de cada linha do corpo de uma tabela com cabeçalho."""
+    return [[_visivel(celula) for celula in _todos(linha, tag="td")]
+            for linha in _todos(_um(tabela, tag="tbody"), tag="tr")]
+
+
+def _tabela_do_registro(ledger: dict, ident: str) -> dict:
+    (tabela,) = [tabela for tabela in _todos(ledger, tag="table")
+                 if (EVIDENCIA["registro_campos"]["id"], ident) in _pares(tabela)]
+    return tabela
+
+
+def _valor_do_ledger(valor) -> str:
+    return placeholders.formatar(valor, render.FORMATO_DO_VALOR_DO_LEDGER, "pt-BR")
+
+
+def _contagem(quantidade: int) -> str:
+    return placeholders.formatar(quantidade, "num0", "pt-BR")
+
+
+def _moeda_do_caso(entrega_dict: dict, valor: float) -> str:
+    return placeholders.formatar(valor, "moeda", "pt-BR", entrega_dict["caso"]["moeda"])
+
+
+# --- D7: a ordem e as seções da aba ----------------------------------------
+
+def test_a_aba_evidencia_segue_a_ordem_do_desenho():
+    """D7: fontes → ledger → lacunas e limitações declaradas → confronto, se houver → ficha técnica →
+    metodologia, log de placeholders e rastreabilidade dos exhibits. Sem confronto, nenhuma seção vazia
+    no lugar dele."""
+    com_confronto = _entrega()
+    com_confronto["confronto"] = _confronto()
+    esperados = [EVIDENCIA[chave] for chave in (
+        "fontes_titulo", "ledger_titulo", "lacunas_titulo", "confronto_titulo", "ficha_tecnica_titulo",
+        "metodologia_titulo", "log_titulo", "exhibits_titulo")]
+    assert [_titulo(secao) for secao in _secoes(_aba(_pagina(com_confronto), "evidencia"))] == esperados
+
+    sem_confronto = [titulo for titulo in esperados if titulo != EVIDENCIA["confronto_titulo"]]
+    assert [_titulo(secao) for secao in _secoes(_aba(_pagina(_entrega()), "evidencia"))] == sem_confronto
+
+
+def test_as_fontes_sao_as_identidades_distintas_na_ordem_da_primeira_aparicao_com_a_classe_e_os_registros():
+    """Uma linha por identidade, na ordem em que o ledger a cita pela primeira vez, com o rótulo de cada
+    classe com que ela aparece e o número de registros dela."""
+    entrega_dict = _entrega()
+    repetida, outra = _que_sustenta(entrega_dict, "preco.valor"), _que_sustenta(entrega_dict, "acoes_diluidas")
+    outra_classe = next(classe for classe in _VOCABULARIOS["classes_de_fonte"] if classe != repetida["fonte"]["classe"])
+    outra["fonte"] = {"identidade": repetida["fonte"]["identidade"], "classe": outra_classe}
+    registros = _registros(entrega_dict)
+
+    identidades = list(dict.fromkeys(registro["fonte"]["identidade"] for registro in registros))
+    assert len(identidades) == len(registros) - 1
+    esperadas = []
+    for identidade in identidades:
+        da_fonte = [registro for registro in registros if registro["fonte"]["identidade"] == identidade]
+        classes = dict.fromkeys(registro["fonte"]["classe"] for registro in da_fonte)
+        esperadas.append([identidade, ", ".join(_rotulo("classes_de_fonte", classe) for classe in classes),
+                          _contagem(len(da_fonte))])
+    (da_repetida,) = [linha for linha in esperadas if linha[0] == repetida["fonte"]["identidade"]]
+    assert da_repetida[2] == _contagem(2) and ", " in da_repetida[1], "a identidade repetida não discriminaria"
+
+    fontes = _secao(_aba(_pagina(entrega_dict), "evidencia"), EVIDENCIA["fontes_titulo"])
+    assert _linhas(_um(fontes, tag="table")) == esperadas
+
+
+def test_um_registro_do_ledger_mostra_todos_os_campos_rotulados_e_nenhuma_chave_crua_de_vocabulario():
+    """D7: fonte e classe, estatuto, período, valor e unidade, moeda, data de acesso, localizador (tipo,
+    valor e parâmetros), justificativa, fórmula e insumos, usado_em, reconciliação, conflito e
+    contraprova — cada um sob o rótulo do dicionário, e todo vocabulário do contrato pelo rótulo."""
+    entrega_dict = _entrega()
+    alvo = _que_sustenta(entrega_dict, "preco.valor")
+    classe = next(classe for classe in _VOCABULARIOS["classes_de_fonte"] if classe != CLASSE)
+    tipo = next(tipo for tipo in _VOCABULARIOS["tipos_de_localizador"] if tipo != TIPO_DE_LOCALIZADOR)
+    completo = apoio.registro_do_ledger(
+        "preco-medio", alvo["claim"], "Consolidadora de cotações", alvo["valor"] * 1.001,
+        fonte={"identidade": "Consolidadora de cotações", "classe": classe},
+        localizador={"tipo": tipo, "valor": "cotacoes/diarias", "parametros": {"ativo": "SINT3", "janela": "fechamento"}},
+        periodo=alvo["periodo"], moeda="BRL", unidade="R$ por ação", estatuto=ESTATUTO_COM_FORMULA,
+        formula="média ponderada pelo volume dos negócios do dia", insumos=[alvo["id"]], usado_em=["preco.valor"],
+        reconciliacao={"texto": "A média ponderada difere do fechamento por menos de um centavo."},
+        conflito={"vencedor": alvo["id"], "razao": "A bolsa é a fonte primária do preço negociado."},
+        contraprova_de=alvo["id"])
+    _registros(entrega_dict).append(completo)
+
+    ledger = _secao(_aba(_pagina(entrega_dict), "evidencia"), EVIDENCIA["ledger_titulo"])
+    campos = EVIDENCIA["registro_campos"]
+    assert _pares(_tabela_do_registro(ledger, completo["id"])) == [
+        (campos["id"], completo["id"]),
+        (campos["fonte"], "Consolidadora de cotações"),
+        (campos["classe"], _rotulo("classes_de_fonte", classe)),
+        (campos["estatuto"], _rotulo("estatutos", ESTATUTO_COM_FORMULA)),
+        (campos["periodo"], alvo["periodo"]),
+        (campos["valor"], _valor_do_ledger(completo["valor"])),
+        (campos["unidade"], "R$ por ação"),
+        (campos["moeda"], "BRL"),
+        (campos["data_acesso"], completo["data_acesso"]),
+        (campos["localizador_tipo"], _rotulo("tipos_de_localizador", tipo)),
+        (campos["localizador_valor"], "cotacoes/diarias"),
+        (campos["localizador_parametros"], "ativo: SINT3; janela: fechamento"),
+        (campos["justificativa_da_fonte"], completo["justificativa_da_fonte"]),
+        (campos["formula"], completo["formula"]),
+        (campos["insumos"], alvo["id"]),
+        (campos["usado_em"], "preco.valor"),
+        (campos["reconciliacao"], completo["reconciliacao"]["texto"]),
+        (campos["conflito_vencedor"], alvo["id"]),
+        (campos["conflito_razao"], completo["conflito"]["razao"]),
+        (campos["contraprova_de"], alvo["id"]),
+    ]
+    chaves_cruas = {classe, CLASSE, tipo, TIPO_DE_LOCALIZADOR, ESTATUTO_COM_FORMULA, ESTATUTO_OBSERVADO}
+    assert sorted(chaves_cruas & {_visivel(celula) for celula in _todos(ledger, tag="td")}) == []
+
+
+def test_o_ledger_agrupa_por_claim_na_ordem_da_primeira_aparicao_e_mostra_conflito_e_reconciliacao():
+    """Um registro concorrente, declarado no fim do ledger, fica sob o claim que ele disputa, com o
+    vencedor e a razão; o registro que diverge do número do caso mostra a reconciliação."""
+    entrega_dict = _entrega()
+    alvo = _que_sustenta(entrega_dict, "preco.valor")
+    razao = "A bolsa é a fonte primária do preço negociado."
+    concorrente = _concorrente(alvo, alvo["valor"] + 1.0, conflito={"vencedor": alvo["id"], "razao": razao})
+    _registros(entrega_dict).append(concorrente)
+    reconciliado = _que_sustenta(entrega_dict, "acoes_diluidas")
+    reconciliado["valor"] = reconciliado["valor"] * 1.01
+    reconciliado["reconciliacao"] = {"texto": "A fonte publica as ações em circulação, e o caso usa as diluídas."}
+    registros = _registros(entrega_dict)
+
+    ledger = _secao(_aba(_pagina(entrega_dict), "evidencia"), EVIDENCIA["ledger_titulo"])
+    campos = EVIDENCIA["registro_campos"]
+    claims = list(dict.fromkeys(registro["claim"] for registro in registros))
+    grupos = _todos(ledger, classe="ledger-claim")
+    assert [(_titulo(grupo), [dict(_pares(tabela))[campos["id"]] for tabela in _todos(grupo, tag="table")])
+            for grupo in grupos] == [
+        (claim, [registro["id"] for registro in registros if registro["claim"] == claim]) for claim in claims]
+    (do_preco,) = [grupo for grupo in grupos if _titulo(grupo) == alvo["claim"]]
+    assert len(_todos(do_preco, tag="table")) == 2, "o concorrente não ficou sob o claim que disputa"
+
+    disputa = dict(_pares(_tabela_do_registro(ledger, concorrente["id"])))
+    assert (disputa[campos["conflito_vencedor"]], disputa[campos["conflito_razao"]]) == (alvo["id"], razao)
+    divergente = dict(_pares(_tabela_do_registro(ledger, reconciliado["id"])))
+    assert (divergente[campos["valor"]], divergente[campos["reconciliacao"]]) == (
+        _valor_do_ledger(reconciliado["valor"]), reconciliado["reconciliacao"]["texto"])
+
+
+def test_lacunas_limitacoes_e_fronteira_de_escopo_saem_rotuladas_e_com_a_prosa_resolvida():
+    """Cada lacuna com a materialidade rotulada e a descrição e o tratamento resolvidos pela lista de
+    prosa; cada limitação publicada com o rótulo do catálogo; a fronteira de escopo com o rótulo da
+    classe. Sem nada declarado, a seção diz isso."""
+    degrau = _entrega("caso_degrau.json")
+    limitacoes = degrau["resultados"]["limitacoes"]
+    assert limitacoes, "caso_degrau publica a limitação da reversa — sem ela, a asserção seria vácua"
+    placeholder = "{{caso:preco.valor|moeda}}"
+    degrau["ledger"]["lacunas"] = [
+        _lacuna(id="historico", descricao=f"O preço de tela, {placeholder}, não tem série histórica ajustada.",
+                materialidade=MATERIALIDADE_COM_DISCLOSURE),
+        _lacuna()]
+    preco = _moeda_do_caso(degrau, degrau["caso"]["preco"]["valor"])
+
+    secao = _secao(_aba(_pagina(degrau), "evidencia"), EVIDENCIA["lacunas_titulo"])
+    assert _linhas(_um(secao, tag="table")) == [
+        [lacuna["id"], _rotulo("materialidades", lacuna["materialidade"]),
+         lacuna["descricao"].replace(placeholder, preco), lacuna["tratamento"]]
+        for lacuna in degrau["ledger"]["lacunas"]]
+    assert [_visivel(item) for item in _todos(_um(secao, classe="limitacoes"), tag="li")] == [
+        CATALOGO["limitacoes"][chave]["rotulo"]["pt-BR"] for chave in limitacoes]
+    assert "{{" not in _visivel(secao)
+
+    sob_fronteira = apoio.montar_entrega(FIXTURE, mutar_caso=_com_fronteira_de_escopo)
+    classe = sob_fronteira["resultados"]["fronteira_de_escopo"]["classe"]
+    secao = _secao(_aba(_pagina(sob_fronteira), "evidencia"), EVIDENCIA["lacunas_titulo"])
+    assert _visivel(_um(secao, classe="fronteira-de-escopo")) == (
+        CATALOGO["fronteiras_de_escopo"][classe]["rotulo"]["pt-BR"])
+
+    nada = _secao(_aba(_pagina(_entrega()), "evidencia"), EVIDENCIA["lacunas_titulo"])
+    assert _visivel(nada) == f'{EVIDENCIA["lacunas_titulo"]} {EVIDENCIA["lacunas_vazio"]}'
+
+
+def test_o_confronto_mostra_a_analise_fornecida_e_cada_divergencia_com_a_classificacao_rotulada():
+    entrega_dict = _entrega()
+    confronto = _confronto()
+    outra = sorted(entrega.CLASSIFICACOES_DE_DIVERGENCIA - {confronto["divergencias"][0]["classificacao"]})[0]
+    confronto["divergencias"].append({
+        "item": "Margem normalizada", "classificacao": outra, "anterior": "Sem o segmento novo",
+        "atual": "Com o segmento novo consolidado", "explicacao": "A companhia passou a publicar o segmento."})
+    entrega_dict["confronto"] = confronto
+
+    secao = _secao(_aba(_pagina(entrega_dict), "evidencia"), EVIDENCIA["confronto_titulo"])
+    fornecida = confronto["analise_fornecida"]
+    cabecalho = _visivel(_um(secao, classe="confronto-analise-fornecida"))
+    assert cabecalho == render.t(DICIONARIO, "evidencia.confronto_analise_fornecida",
+                                 identificacao=fornecida["identificacao"], data=fornecida["data"])
+    assert fornecida["identificacao"] in cabecalho and fornecida["data"] in cabecalho
+    assert _linhas(_um(secao, tag="table")) == [
+        [divergencia["item"], _rotulo("classificacoes_de_divergencia", divergencia["classificacao"]),
+         divergencia["anterior"], divergencia["atual"], divergencia["explicacao"]]
+        for divergencia in confronto["divergencias"]]
+
+
+def test_todo_valor_de_vocabulario_do_contrato_do_ledger_e_do_entrega_tem_rotulo_em_todo_dicionario():
+    """Trava de cobertura: classes de fonte, tipos de localizador, estatutos, materialidades e âncoras
+    do consenso, lidos do contrato, e as classificações de divergência do `entrega.py` — cada grupo
+    rotulado exatamente, sem rótulo faltando nem sobrando, em todo dicionário publicado."""
+    esperados = {nome: set(vocabulario) for nome, vocabulario in _VOCABULARIOS.items()}
+    esperados["classificacoes_de_divergencia"] = set(entrega.CLASSIFICACOES_DE_DIVERGENCIA)
+    dicionarios = sorted((SCRIPTS.parent / "assets" / "i18n").glob("*.json"))
+    assert dicionarios and len(esperados) == 6
+
+    for caminho in dicionarios:
+        evidencia = json.loads(caminho.read_text(encoding="utf-8"))["interface"]["evidencia"]
+        for nome, valores in esperados.items():
+            rotulos = evidencia.get(nome) or {}
+            assert set(rotulos) == valores, (caminho.name, nome, sorted(set(rotulos) ^ valores))
+            assert all(isinstance(rotulo, str) and rotulo.strip() and rotulo != chave
+                       for chave, rotulo in rotulos.items()), (caminho.name, nome)
+
+
+# --- D3/D4: os avisos e o consenso na Tese ---------------------------------
+
+def test_a_lacuna_material_sai_nos_avisos_com_o_numero_resolvido_e_o_qc_json_guarda_o_texto_cru(tmp_path):
+    """A Tese mostra a descrição que a lista de prosa resolveu — o preço formatado, nunca `{{...}}` —, e o
+    `qc.json`, o artefato interno, continua com o texto cru."""
+    entrega_dict = _entrega()
+    descricao = "O preço de tela, {{caso:preco.valor|moeda}}, não tem série histórica ajustada."
+    tratamento = "O histórico entra só como referência qualitativa."
+    entrega_dict["ledger"]["lacunas"] = [_lacuna(id="historico", descricao=descricao, tratamento=tratamento,
+                                                 materialidade=MATERIALIDADE_COM_DISCLOSURE)]
+    raiz = tmp_path / "lacuna_material"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = _rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    preco = _moeda_do_caso(entrega_dict, entrega_dict["caso"]["preco"]["valor"])
+    pagina = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    (aviso,) = [_visivel(item) for item in _todos(_secao(_aba(pagina, "tese"), TESE["disclosures_titulo"]), tag="li")]
+    assert aviso == DICIONARIO["qc"]["lacuna_material"].format(
+        descricao=descricao.replace("{{caso:preco.valor|moeda}}", preco), tratamento=tratamento)
+    assert preco in aviso and "{{" not in aviso
+
+    (achado,) = _ler_qc(raiz)["achados"]
+    assert (achado["params"]["descricao"], achado["mensagem"]) == (
+        descricao, DICIONARIO["qc"]["lacuna_material"].format(descricao=descricao, tratamento=tratamento))
+
+
+def test_o_consenso_sai_na_conclusao_com_uma_linha_por_registro_tambem_sob_fronteira_de_escopo():
+    """D4: sob o título de referência externa, uma linha por registro citado — claim e período, valor
+    formatado pelo idioma e unidade, fonte e data de acesso. Sob fronteira de escopo, igual: é leitura
+    de mercado, como o múltiplo de tela."""
+    for entrega_dict in (_entrega(), apoio.montar_entrega(FIXTURE, mutar_caso=_com_fronteira_de_escopo)):
+        segundo = apoio.registro_do_ledger(
+            "consenso-receita", "Consenso de receita líquida", "Provedor de consenso", 2750.5,
+            periodo="2026E", moeda="BRL", unidade="R$ milhões", data_acesso="2026-09-10")
+        _registros(entrega_dict).append(segundo)
+        entrega_dict["analise"]["consenso"]["registros"].append(segundo["id"])
+        por_id = {registro["id"]: registro for registro in _registros(entrega_dict)}
+        citados = [por_id[ident] for ident in entrega_dict["analise"]["consenso"]["registros"]]
+        assert len(citados) == 2
+
+        consenso = _um(_secoes(_aba(_pagina(entrega_dict), "tese"))[0], classe="tese-consenso")
+        linhas = [_visivel(item) for item in _todos(consenso, tag="li")]
+        assert (_titulo(consenso), linhas) == (TESE["consenso_titulo"], [
+            render.t(DICIONARIO, "tese.consenso_linha", claim=registro["claim"], periodo=registro["periodo"],
+                     valor=_valor_do_ledger(registro["valor"]), unidade=registro["unidade"],
+                     fonte=registro["fonte"]["identidade"], data=registro["data_acesso"])
+            for registro in citados])
+        for linha, registro in zip(linhas, citados):
+            for trecho in (registro["claim"], registro["periodo"], _valor_do_ledger(registro["valor"]),
+                           registro["fonte"]["identidade"], registro["data_acesso"]):
+                assert trecho in linha, (trecho, linha)
+
+
+def test_consenso_ausente_sai_so_nos_avisos_com_o_rotulo_da_ancora_e_a_razao_resolvida():
+    """Sem consenso, nada na Conclusão: o aviso `consenso_indisponivel` diz a âncora que entra no lugar
+    pelo rótulo do dicionário — nunca a chave crua (a lição do B2) — e a razão resolvida."""
+    entrega_dict = _entrega()
+    entrega_dict["analise"]["consenso"] = {
+        "ausente": {"ancora": ANCORA, "razao": "Nenhum provedor cobre a companhia desde {{livre:2024}}."}}
+
+    tese = _aba(_pagina(entrega_dict), "tese")
+
+    (aviso,) = [_visivel(item) for item in _todos(_secao(tese, TESE["disclosures_titulo"]), tag="li")]
+    assert aviso == DICIONARIO["qc"]["consenso_indisponivel"].format(
+        razao="Nenhum provedor cobre a companhia desde 2024.", ancora=_rotulo("ancoras_do_consenso", ANCORA))
+    assert f"'{ANCORA}'" not in aviso and "{{" not in aviso
+    assert _todos(_secoes(tese)[0], classe="tese-consenso") == []
+
+
+# --- D6: a ficha técnica ------------------------------------------------------
+
+def test_a_ficha_tecnica_compoe_a_execucao_os_contratos_as_contagens_e_os_achados_e_a_evidencia_a_mostra():
+    """D6: a execução; a metodologia e o hash do caso, de `resultados.origem`; as versões lidas dos
+    próprios artefatos; os registros por estatuto e por classe de fonte e os achados por nível e código,
+    em ordem que não depende da ordem do ledger nem da dos achados. A Evidência a mostra com os rótulos
+    do dicionário — sem o QUALITY WARNING, que é interno (§11)."""
+    entrega_dict = _entrega()
+    _que_sustenta(entrega_dict, "preco.valor")["estatuto"] = ESTATUTO_ESTIMADO
+    outra_classe = next(classe for classe in _VOCABULARIOS["classes_de_fonte"] if classe != CLASSE)
+    _que_sustenta(entrega_dict, "acoes_diluidas")["fonte"]["classe"] = outra_classe
+    for registro in _registros(entrega_dict):
+        if registro.get("usado_em"):
+            registro["fonte"]["identidade"] = "fonte dominante"
+    achados = _achados(entrega_dict)
+    assert [(a.nivel, a.codigo) for a in achados] == [
+        ("REQUIRED_DISCLOSURE", "insumo_estimado"), ("QUALITY_WARNING", "concentracao_de_fontes")]
+
+    registros, resultados = _registros(entrega_dict), entrega_dict["resultados"]
+    esperada = {
+        "execucao": {campo: entrega_dict["execucao"][campo] for campo in ("id", "ticker", "idioma")},
+        "metodologia": {"nome": resultados["origem"]["metodologia"]["nome"],
+                        "versao": resultados["origem"]["metodologia"]["versao"],
+                        "caso_sha256": resultados["origem"]["caso_sha256"]},
+        "contratos": {"entrega": entrega_dict["versao_contrato"], "resultados": resultados["versao_contrato"],
+                      "catalogo": CATALOGO["versao_contrato"], "ledger": entrega_dict["ledger"]["versao_contrato"]},
+        "registros_por_estatuto": dict(sorted(Counter(r["estatuto"] for r in registros).items())),
+        "registros_por_classe_de_fonte": dict(sorted(Counter(r["fonte"]["classe"] for r in registros).items())),
+        "achados": {nivel: dict(sorted(Counter(a.codigo for a in achados if a.nivel == nivel).items()))
+                    for nivel in qc.NIVEIS},
+    }
+    assert len(esperada["registros_por_estatuto"]) == len(esperada["registros_por_classe_de_fonte"]) == 2
+    como_arquivo = json.dumps(esperada, ensure_ascii=False)
+    assert json.dumps(builder.compor_ficha_tecnica(entrega_dict, CATALOGO, achados), ensure_ascii=False) == como_arquivo
+    invertida = copy.deepcopy(entrega_dict)
+    invertida["ledger"]["registros"].reverse()
+    assert json.dumps(builder.compor_ficha_tecnica(invertida, CATALOGO, achados[::-1]), ensure_ascii=False) == como_arquivo
+
+    pagina = _pagina(entrega_dict)
+    blocos, campos = EVIDENCIA["ficha_tecnica_blocos"], EVIDENCIA["ficha_tecnica_campos"]
+    niveis = EVIDENCIA["ficha_tecnica_niveis"]
+    secao = _secao(_aba(pagina, "evidencia"), EVIDENCIA["ficha_tecnica_titulo"])
+    assert [(_titulo(grupo), _pares(_um(grupo, tag="table")))
+            for grupo in _todos(secao, classe="ficha-tecnica-grupo")] == [
+        *[(blocos[bloco], [(campos[bloco][campo], valor) for campo, valor in esperada[bloco].items()])
+          for bloco in ("execucao", "metodologia", "contratos")],
+        (blocos["registros_por_estatuto"], [(_rotulo("estatutos", estatuto), _contagem(quantidade))
+                                            for estatuto, quantidade in esperada["registros_por_estatuto"].items()]),
+        (blocos["registros_por_classe_de_fonte"], [(_rotulo("classes_de_fonte", classe), _contagem(quantidade))
+                                                   for classe, quantidade in esperada["registros_por_classe_de_fonte"].items()]),
+        (blocos["achados"], [(niveis["HARD_FAIL"], EVIDENCIA["ficha_tecnica_nenhum_achado"]),
+                             (niveis["REQUIRED_DISCLOSURE"], render.t(DICIONARIO, "evidencia.ficha_tecnica_contagem",
+                                                                      codigo="insumo_estimado", quantidade=_contagem(1)))]),
+    ]
+    assert "concentracao_de_fontes" not in apoio.prosa_da_pagina(pagina)
+
+
+def test_a_ficha_tecnica_sai_em_arquivo_identica_byte_a_byte_em_duas_emissoes_e_sem_caminho(tmp_path):
+    """D6 (§15, decisão 10: "também em arquivo"): o builder grava `ficha-tecnica.json` ao lado do
+    relatório. Duas emissões da mesma entrega, em raízes de nomes diferentes, gravam os mesmos bytes —
+    nenhum relógio e nenhum caminho —, e o arquivo é a ficha que a Evidência mostra."""
+    entrega_dict = _entrega()
+    conteudos = []
+    for nome in ("primeira-raiz", "outra-raiz-de-execucao"):
+        raiz = tmp_path / nome
+        apoio.escrever_raiz(raiz, entrega_dict)
+        resultado = _rodar_builder(raiz)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        conteudo = (raiz / NOME_DA_FICHA).read_bytes()
+        assert nome.encode("utf-8") not in conteudo
+        conteudos.append(conteudo)
+    assert conteudos[0] == conteudos[1]
+
+    ficha = json.loads(conteudos[0])
+    assert ficha == builder.compor_ficha_tecnica(entrega_dict, CATALOGO, _achados(entrega_dict))
+    pagina = (tmp_path / "primeira-raiz" / "relatorio.html").read_text(encoding="utf-8")
+    exibida = _visivel(_secao(_aba(pagina, "evidencia"), EVIDENCIA["ficha_tecnica_titulo"]))
+    assert ficha["metodologia"]["caso_sha256"] in exibida and ficha["execucao"]["id"] in exibida
+
+
+def test_a_ficha_tecnica_nao_sobra_depois_de_um_hard_fail_nem_de_uma_recusa_codigo_1_na_mesma_raiz(tmp_path):
+    """A ficha é gravada só quando o relatório é gravado, e a limpeza da saída anterior a inclui: um HARD
+    FAIL deixa só `qc.json`, e uma recusa código 1 não deixa nada — nunca a ficha de uma rodada anterior."""
+    raiz = tmp_path / "raiz_reusada"
+    saidas = ("relatorio.html", "qc.json", NOME_DA_FICHA)
+    sem_proveniencia = _entrega()
+    _registros(sem_proveniencia).remove(_que_sustenta(sem_proveniencia, "preco.valor"))
+
+    def _rodada(entrega_dict: dict | None, codigo: int) -> list:
+        if entrega_dict is None:
+            (raiz / "entrega.json").write_text("{ isto não é json", encoding="utf-8")
+        else:
+            apoio.escrever_raiz(raiz, entrega_dict)
+        resultado = _rodar_builder(raiz)
+        assert resultado.returncode == codigo, resultado.stdout + resultado.stderr
+        return [nome for nome in saidas if (raiz / nome).exists()]
+
+    assert _rodada(_entrega(), 0) == list(saidas)
+    assert _rodada(sem_proveniencia, 2) == ["qc.json"]
+    assert _rodada(_entrega(), 0) == list(saidas)
+    assert _rodada(None, 1) == []
+
+
+def test_texto_de_dado_com_a_assinatura_de_uma_referencia_emite_e_sai_como_declarado(tmp_path):
+    """Medido na Task 3: a regra de autocontenção lê `data=`, `href=`, `src=`, `url(` e `@import` em todo o
+    HTML fora dos `<script>`, e um localizador com `?data=` na query — dado da Evidência, nunca recurso que
+    a página carrega — fazia o builder recusar um relatório válido (código 2); a prosa da Tese tem o mesmo
+    falso positivo desde a 5A. A página escreve todo texto de dado por um helper só, e a regra do QC não
+    muda: o endereço, o parâmetro, a justificativa e o texto da Tese emitem e saem idênticos ao declarado
+    no texto que o analista lê, e a MESMA página, com uma referência externa de verdade na marcação,
+    continua recusada."""
+    entrega_dict = _entrega()
+    registro = _que_sustenta(entrega_dict, "preco.valor")
+    endereco = "https://ri.exemplo.com/doc?data=2025-12-31&href=x"
+    justificativa = "A bolsa publica o fechamento; o feed antigo usava @import e src=legado."
+    registro.update(localizador={"tipo": TIPO_DE_LOCALIZADOR, "valor": endereco, "parametros": {"url(": "fechamento"}},
+                    justificativa_da_fonte=justificativa)
+    veredicto = "A tela embute o fechamento de data=hoje, e o endereço url(ri) o confirma."
+    entrega_dict["analise"]["veredicto"]["texto"] = veredicto
+    raiz = tmp_path / "texto_de_dado"
+    apoio.escrever_raiz(raiz, entrega_dict)
+
+    resultado = _rodar_builder(raiz)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    assert _ler_qc(raiz)["achados"] == []
+    pagina = (raiz / "relatorio.html").read_text(encoding="utf-8")
+    campos = EVIDENCIA["registro_campos"]
+    ledger = _secao(_aba(pagina, "evidencia"), EVIDENCIA["ledger_titulo"])
+    exibidos = dict(_pares(_tabela_do_registro(ledger, registro["id"])))
+    assert [exibidos[campos[nome]] for nome in ("localizador_valor", "localizador_parametros",
+                                                "justificativa_da_fonte")] == [endereco, "url(: fechamento", justificativa]
+    assert _visivel(_um(_aba(pagina, "tese"), classe="tese-veredicto-texto")) == veredicto
+
+    assert _do_codigo(qc.avaliar(entrega_dict, CATALOGO, CONTRATO, html=pagina), "relatorio_nao_autocontido") == []
+    externa = "https://externo.exemplo.com/marca.png"
+    injetada = pagina.replace("</body>", f'<img src="{externa}"></body>', 1)
+    assert [achado.params["valor"] for achado in _do_codigo(
+        qc.avaliar(entrega_dict, CATALOGO, CONTRATO, html=injetada), "relatorio_nao_autocontido")] == [externa]
