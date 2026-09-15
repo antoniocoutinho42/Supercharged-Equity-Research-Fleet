@@ -364,6 +364,9 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
     "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
     "sensibilidades", "sotp", "degrau", "cenario_base", "fronteira_de_escopo",
+    # Fatia 5F, Task 2: validadas por `_validar_metrica_forward` e
+    # `_validar_escala_monetaria` (mais abaixo).
+    "metrica_forward", "escala_monetaria",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -461,7 +464,8 @@ def validar(caso: Caso) -> None:
     triângulo quando a rota tiver um, premissas obrigatórias, premissas
     desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
     -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
-    'sotp' e 'fronteira_de_escopo', só quando presentes. As duas recusas de
+    'sotp', 'fronteira_de_escopo', 'metrica_forward' e 'escala_monetaria', só
+    quando presentes. As duas recusas de
     'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
     registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
     modifica `caso`; não preenche nada — só confirma ou recusa.
@@ -538,6 +542,8 @@ def validar(caso: Caso) -> None:
     _validar_sensibilidades(caso, cenarios, rota)
     _validar_sotp(caso, cenarios)
     _validar_fronteira_de_escopo(caso)
+    _validar_metrica_forward(caso, rota)
+    _validar_escala_monetaria(caso)
 
 
 def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
@@ -2661,6 +2667,101 @@ def _validar_fronteira_de_escopo(caso: Caso) -> None:
                 f"'fronteira_de_escopo.{campo}' ausente ou vazio: {valor!r}. "
                 f"Tem de ser texto não vazio: {razao}"
             )
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 2 (D5/D7 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): dois campos opcionais de topo que o relatório exibe e que nenhuma
+# conta do motor consome.
+#
+# 'metrica_forward' é a métrica forward (consenso, guidance) com proveniência,
+# denominador do múltiplo de tela forward: fato de mercado declarado, nunca uma
+# escolha do wrapper. Mesmo `tipo` da métrica-base — o múltiplo justo forward que o
+# motor já publica é o da mesma métrica —, valor finito e positivo, período e fonte.
+# Recusada na rota rampa e junto de degrau: EV/EBITDA do ano 0 e P/VP com degrau não
+# têm forward para parear com a tela.
+#
+# 'escala_monetaria' é a escala dos montantes do caso, convenção do caso como a moeda
+# (§16.2 do desenho): o relatório a aplica às unidades que o catálogo marca. Opcional:
+# sem ela, nada muda.
+# --------------------------------------------------------------------------
+
+ESCALAS_MONETARIAS: frozenset = frozenset({"milhares", "milhoes", "bilhoes"})
+
+_CHAVES_METRICA_FORWARD_PERMITIDAS: frozenset = frozenset({"tipo", "valor", "periodo", "fonte"})
+
+
+def _validar_metrica_forward(caso: Caso, rota: str) -> None:
+    """Valida o bloco opcional 'metrica_forward': rota, degrau, chaves, tipo, valor,
+    período e fonte. Ausente ou `None` é um caso sem tela forward. A presença é
+    recusada antes da forma na rota rampa e junto de 'degrau': nenhum bloco, por mais
+    bem formado, tem par justo forward ali."""
+    metrica_forward = caso.get("metrica_forward")
+    if metrica_forward is None:
+        return
+
+    if not isinstance(metrica_forward, dict):
+        raise CasoInvalido(
+            f"campo 'metrica_forward' não é um objeto: {metrica_forward!r}. Declare 'tipo', "
+            "'valor', 'periodo' e 'fonte'."
+        )
+    if rota == "rampa":
+        raise CasoInvalido(
+            "campo 'metrica_forward' presente na rota 'rampa': o múltiplo da rota é EV/EBITDA do "
+            "ano 0, que não tem forward — não existe múltiplo justo forward para parear com a tela. "
+            "Remova o campo."
+        )
+    if caso.get("degrau") is not None:
+        raise CasoInvalido(
+            "campo 'metrica_forward' presente junto de 'degrau': o múltiplo da manchete é o P/VP "
+            "justo com degrau, que não tem forward — não existe múltiplo justo forward para parear "
+            "com a tela. Remova 'metrica_forward', ou remova 'degrau'."
+        )
+    _recusar_chave_desconhecida(metrica_forward, _CHAVES_METRICA_FORWARD_PERMITIDAS, "'metrica_forward'")
+
+    tipo = metrica_forward.get("tipo")
+    tipo_da_base = caso["metrica_base"]["tipo"]
+    if tipo != tipo_da_base:
+        raise CasoInvalido(
+            f"'metrica_forward.tipo' diferente de 'metrica_base.tipo': {tipo!r} contra "
+            f"{tipo_da_base!r}. O múltiplo de tela forward pareia com o múltiplo justo forward da "
+            "mesma métrica — em outra, os dois múltiplos comparariam bases diferentes."
+        )
+
+    valor = metrica_forward.get("valor")
+    if not _numero_valido(valor) or not _finito(valor) or valor <= 0:
+        raise CasoInvalido(
+            f"'metrica_forward.valor' inválido: {valor!r}. A métrica forward é o denominador do "
+            "múltiplo de tela forward — precisa ser um número finito e positivo."
+        )
+
+    for campo in ("periodo", "fonte"):
+        item = metrica_forward.get(campo)
+        if not isinstance(item, str) or not item.strip():
+            raise CasoInvalido(
+                f"campo 'metrica_forward.{campo}' ausente ou vazio: {item!r}. A métrica forward é "
+                "fato de mercado (consenso, guidance): sem período e fonte, o múltiplo de tela "
+                "forward não é auditável."
+            )
+
+
+def _validar_escala_monetaria(caso: Caso) -> None:
+    """Valida o campo opcional 'escala_monetaria': ausente ou `None` é um caso sem
+    escala declarada; presente, um código de `ESCALAS_MONETARIAS`, recusado pelo nome
+    com sugestão quando fora dele."""
+    escala = caso.get("escala_monetaria")
+    if escala is None:
+        return
+    _exigir_texto(escala, "escala_monetaria")
+    if escala not in ESCALAS_MONETARIAS:
+        sugestao = difflib.get_close_matches(escala, ESCALAS_MONETARIAS, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'escala_monetaria' fora do vocabulário: '{escala}'.{dica}"
+            "É a escala em que os montantes do caso estão declarados — uma escala desconhecida "
+            "sairia na tela sem rótulo. Escalas aceitas: "
+            f"{', '.join(sorted(ESCALAS_MONETARIAS))}."
+        )
 
 
 def carregar(caminho: Path) -> Caso:

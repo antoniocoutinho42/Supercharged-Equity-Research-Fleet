@@ -177,7 +177,8 @@ _UNIDADE_DO_BETA = "beta"
 _PREFIXO_DO_INTERVALO = "intervalo_para_alvo_±"
 
 
-def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
+def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
+                    valor_da_metrica: float | None = None) -> dict:
     """Calcula o alvo de múltiplo de mercado: a definição de múltiplo
     aplicada aos dados já declarados no caso (preço, ações, métrica-base e,
     na rota firm, a ponte via `nd_efetivo`) — não é reinterpretação nem
@@ -222,12 +223,17 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     de um cenário específico. O parâmetro existe para que a chamada tenha
     a mesma forma de `reverter(caso, nome_cenario, nd_efetivo)`, que usa o
     nome para buscar o cenário-alvo e o vetor central de premissas dele.
+
+    `valor_da_metrica` (fatia 5F, Task 2, D5): quando dado, substitui o valor da
+    métrica-base no denominador — a mesma conta com a métrica forward que o caso
+    declara (`metrica_forward.valor`, do mesmo tipo da métrica-base), para o
+    múltiplo de tela forward. Sem ele, a conta de sempre.
     """
     rota = caso["rota"]
     preco = caso["preco"]["valor"]
     acoes = caso["acoes_diluidas"]
     metrica = caso["metrica_base"]
-    metrica_valor = metrica["valor"]
+    metrica_valor = metrica["valor"] if valor_da_metrica is None else valor_da_metrica
     market_cap = preco * acoes
 
     if rota == "firm":

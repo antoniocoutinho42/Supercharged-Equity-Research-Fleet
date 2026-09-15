@@ -156,6 +156,20 @@ outra chave, e nulo é ausência. Sob fronteira declarada a análise continua,
 sem preço-alvo de manchete — regra do relatório, que lê
 `resultados.fronteira_de_escopo` e o mapa `conclusoes_de_valor` do catálogo.
 
+Bloco opcional `metrica_forward` (`{tipo, valor, periodo, fonte}`): a métrica
+forward (consenso, guidance) que o múltiplo de tela forward usa no
+denominador — fato de mercado com proveniência, nunca uma escolha do wrapper.
+`tipo` igual ao de `metrica_base`, `valor` finito e positivo, `periodo` e
+`fonte` textos não vazios, nenhuma outra chave (recusa com sugestão); nulo é
+ausência. Recusado na rota `rampa` e junto de `degrau`: EV/EBITDA do ano 0 e
+P/VP com degrau não têm forward.
+
+Campo opcional `escala_monetaria`: a escala em que os montantes do caso estão
+declarados — `milhares`, `milhoes` ou `bilhoes` (`caso.ESCALAS_MONETARIAS`;
+fora disso, recusa nomeando, com sugestão); nulo é ausência. Não entra em
+conta nenhuma: o relatório a aplica às unidades que o catálogo marca com
+`escala_monetaria` (hoje só `moeda`, nunca preço por ação).
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -180,10 +194,20 @@ convenção que já mora aqui):
   wrapper já devolve para aquele preço e `convencao_terminal` — o código
   CANÔNICO da convenção 'tv' do cenário-base (`caso._tv_canon`, nunca o
   literal/alias declarado), rotulado pelo catálogo (`convencoes_terminais`);
-  ausente quando a manchete vem do SOTP.
+  ausente quando a manchete vem do SOTP. Fora do degrau e da rampa, também
+  `multiplo_forward` (`{chave, base, valor}`): o múltiplo justo forward do
+  cenário-base, lido de `multiplos` pela chave forward da rota, com a mesma
+  `base` do corrente.
 - `mercado_tela` — o múltiplo de mercado (tela), sempre publicado — antes só
   existia dentro do bloco opcional `reversa`. Pareado com o múltiplo da
   manchete pela mesma `base`.
+- `mercado_tela_forward` — o múltiplo de tela forward, sempre publicado:
+  `{chave, base, valor, algebra, metrica}` quando o caso declara
+  `metrica_forward` — a mesma conta de `mercado_tela`
+  (`reversa.alvo_de_mercado`) com a métrica forward no denominador, e
+  `metrica` com tipo, valor, período e fonte —, ou `null`.
+- `escala_monetaria` — a escala dos montantes que o caso declara, ou `null`;
+  sempre publicada.
 - `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
   grade de sensibilidade) — a chave pública de cada mensagem do motor
   (`diagnosticos.classificar`), paralela a `diagnosticos`/
@@ -240,7 +264,12 @@ a `reversa.LIMITACOES_DA_LEITURA`; e os vocabulários da leitura da reversa —
 `eixos_de_reversa`, com o rótulo e `obrigatorio` amarrado a
 `caso.EIXO_OBRIGATORIO`; `motivos_da_leitura`, `identificacoes` e
 `posicoes_na_banda`, as tuplas de `reversa.py`; e `teto_do_crescimento_gratuito`,
-com rótulo e texto)
+com rótulo e texto; o rótulo de cada escala monetária (`escalas_monetarias`,
+as do gate) e a marca `escala_monetaria` das unidades de montante; o quadro
+"como o valor é formado" de cada rota (`formacao_do_valor`: a função de
+cada premissa, em uma linha, e a síntese — texto de metodologia, nunca um
+número); e o rótulo das variáveis do triângulo que não são premissa
+(`variaveis_do_triangulo`))
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

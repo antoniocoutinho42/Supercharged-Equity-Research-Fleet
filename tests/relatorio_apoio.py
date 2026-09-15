@@ -145,8 +145,35 @@ def _reversa_sem_raiz(caso: dict) -> dict:
     return c
 
 
+def _forward_firm(caso: dict) -> dict:
+    """`caso_minimo_firm` com a métrica forward declarada (D5 da 5F): EBITDA de 1.100 no ano
+    seguinte, contra 1.000 da métrica-base — a tela forward é o mesmo valor de mercado sobre ela."""
+    c = copy.deepcopy(caso)
+    c["metrica_forward"] = {"tipo": "EBITDA", "valor": 1100.0, "periodo": "2026E", "fonte": "consenso sintético"}
+    return c
+
+
+def _forward_equity(caso: dict) -> dict:
+    """`caso_minimo_equity` com a métrica forward declarada (D5 da 5F): lucro de 560 no ano
+    seguinte, contra 500 da métrica-base."""
+    c = copy.deepcopy(caso)
+    c["metrica_forward"] = {"tipo": "LL", "valor": 560.0, "periodo": "2026E", "fonte": "consenso sintético"}
+    return c
+
+
+def _escala(caso: dict) -> dict:
+    """`caso_rampa` com os montantes declarados em milhões (D7 da 5F): a única rota com premissa
+    monetária (receita e EBITDA do ano 0, D&A do parque), e com ponte."""
+    c = copy.deepcopy(caso)
+    c["escala_monetaria"] = "milhoes"
+    return c
+
+
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
+    "forward_firm": ("caso_minimo_firm.json", _forward_firm),
+    "forward_equity": ("caso_minimo_equity.json", _forward_equity),
+    "escala": ("caso_rampa.json", _escala),
 }
 
 

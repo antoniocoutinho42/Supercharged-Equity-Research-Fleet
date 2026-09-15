@@ -270,3 +270,48 @@ def test_limitacao_de_reversa_e_publicada_se_e_so_se_o_gate_recusa_reversa_valid
     assert exercitadas == set(LIMITACOES_DE_REVERSA), (
         f"limitação registrada sem fixture que a exercite: "
         f"{sorted(set(LIMITACOES_DE_REVERSA) - exercitadas)}")
+
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 2 (D5/D7 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): o par forward com a base declarada e a escala dos montantes.
+# --------------------------------------------------------------------------
+
+def test_o_multiplo_de_tela_forward_e_o_valor_de_mercado_sobre_a_metrica_forward_declarada(resultados):
+    """O oráculo é montado aqui, a partir do caso: o valor de mercado (na rota firm, com a dívida
+    líquida da ponte) sobre a métrica forward declarada, nunca sobre a métrica-base. A base é a da
+    manchete, e o múltiplo justo forward da manchete é o `_fwd` do cenário-base."""
+    esperados = {
+        "forward_firm": ("EV/EBITDA_fwd", lambda caso, r: (
+            caso["preco"]["valor"] * caso["acoes_diluidas"] + r["ponte"]["nd_efetivo"]) / caso["metrica_forward"]["valor"]),
+        "forward_equity": ("PL_fwd", lambda caso, r: (
+            caso["preco"]["valor"] * caso["acoes_diluidas"]) / caso["metrica_forward"]["valor"]),
+    }
+    for nome, (chave, oraculo) in esperados.items():
+        caso, r = resultados[nome]
+        tela, manchete = r["mercado_tela_forward"], r["manchete"]
+        assert tela["chave"] == chave and tela["valor"] == pytest.approx(oraculo(caso, r)), nome
+        assert tela["metrica"] == caso["metrica_forward"], nome
+        assert tela["base"] == manchete["multiplo"]["base"] == manchete["multiplo_forward"]["base"], nome
+        assert manchete["multiplo_forward"]["chave"] == chave, nome
+        assert manchete["multiplo_forward"]["valor"] == r["cenarios"][manchete["cenario"]]["multiplos"][chave], nome
+
+
+def test_o_multiplo_justo_forward_da_manchete_so_existe_fora_do_sotp_do_degrau_e_da_rampa(resultados):
+    com_forward = 0
+    for nome, (caso, r) in resultados.items():
+        sem_forward = "sotp" in caso or "degrau" in caso or caso["rota"] == "rampa"
+        assert ("multiplo_forward" in r["manchete"]) is not sem_forward, nome
+        com_forward += not sem_forward
+    assert com_forward, "nenhuma fixture com o múltiplo forward — trava vacuamente verde"
+
+
+def test_sem_declaracao_a_tela_forward_e_a_escala_saem_nulas(resultados):
+    """Campo de contrato ausente não some em silêncio: toda fixture publica os dois, nulos; a
+    variante `escala` publica o código que declarou."""
+    for nome in CASOS:
+        _caso, r = resultados[nome]
+        assert "mercado_tela_forward" in r and r["mercado_tela_forward"] is None, nome
+        assert "escala_monetaria" in r and r["escala_monetaria"] is None, nome
+    assert resultados["escala"][1]["escala_monetaria"] == "milhoes"

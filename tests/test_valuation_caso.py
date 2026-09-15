@@ -1433,3 +1433,51 @@ def test_fronteira_de_escopo_malformada_recusa_nomeando_o_campo(fronteira, nomea
     with pytest.raises(CasoInvalido) as erro:
         validar(_firm_com_fronteira(fronteira))
     assert nomeado in str(erro.value)
+
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 2 (D5/D7 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): 'metrica_forward' e 'escala_monetaria', opcionais de topo com
+# vocabulário fechado.
+# --------------------------------------------------------------------------
+
+_METRICA_FORWARD = {"tipo": "EBITDA", "valor": 1100.0, "periodo": "2026E", "fonte": "consenso sintético"}
+
+
+def _com(base: dict, **campos) -> dict:
+    return {**base, **campos}
+
+
+def _fixture(nome: str) -> dict:
+    return json.loads((FIXTURES / nome).read_text(encoding="utf-8"))
+
+
+def test_metrica_forward_e_escala_monetaria_declaradas_sao_aceitas_e_nulas_sao_ausencia():
+    validar(_com(_firm(), metrica_forward=dict(_METRICA_FORWARD), escala_monetaria="milhoes"))
+    validar(_com(_equity(), metrica_forward={**_METRICA_FORWARD, "tipo": "LL"}, escala_monetaria="bilhoes"))
+    validar(_com(_firm(), metrica_forward=None, escala_monetaria=None))
+
+
+@pytest.mark.parametrize("caso,nomeado", [
+    pytest.param(lambda: _com(_fixture("caso_rampa.json"), metrica_forward={**_METRICA_FORWARD, "tipo": "EBITDA0"}),
+                 "'metrica_forward' presente na rota 'rampa'", id="na_rota_rampa"),
+    pytest.param(lambda: _com(_fixture("caso_degrau.json"), metrica_forward={**_METRICA_FORWARD, "tipo": "LL"}),
+                 "'metrica_forward' presente junto de 'degrau'", id="junto_de_degrau"),
+    pytest.param(lambda: _com(_firm(), metrica_forward={**_METRICA_FORWARD, "tipo": "NOPAT"}),
+                 "'metrica_forward.tipo' diferente de 'metrica_base.tipo'", id="tipo_diferente_do_da_base"),
+    pytest.param(lambda: _com(_firm(), metrica_forward={**_METRICA_FORWARD, "valor": 0.0}),
+                 "'metrica_forward.valor' inválido", id="valor_zero"),
+    pytest.param(lambda: _com(_firm(), metrica_forward={**_METRICA_FORWARD, "valor": float("inf")}),
+                 "'metrica_forward.valor' inválido", id="valor_nao_finito"),
+    pytest.param(lambda: _com(_firm(), metrica_forward={**_METRICA_FORWARD, "periodos": "2026E"}),
+                 "Você quis dizer 'periodo'?", id="chave_desconhecida_com_sugestao"),
+    pytest.param(lambda: _com(_firm(), metrica_forward={k: v for k, v in _METRICA_FORWARD.items() if k != "fonte"}),
+                 "'metrica_forward.fonte'", id="fonte_ausente"),
+    pytest.param(lambda: _com(_firm(), escala_monetaria="milhões"),
+                 "Você quis dizer 'milhoes'?", id="escala_fora_do_vocabulario"),
+])
+def test_recusas_da_metrica_forward_e_da_escala_monetaria_nomeiam_a_regra(caso, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(caso())
+    assert nomeado in str(erro.value)

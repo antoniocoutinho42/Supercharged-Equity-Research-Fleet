@@ -66,7 +66,8 @@
       "formato": "pp2"
     },
     "moeda": {
-      "formato": "moeda"
+      "formato": "moeda",
+      "escala_monetaria": true
     },
     "anos": {
       "formato": "num0"
@@ -1077,6 +1078,173 @@
       "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. Nenhuma hipótese de crescimento pago chega a este múltiplo; a distância entre ele e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
     }
   },
+  "escalas_monetarias": {
+    "milhares": {
+      "rotulo": {
+        "pt-BR": "milhares"
+      }
+    },
+    "milhoes": {
+      "rotulo": {
+        "pt-BR": "milhões"
+      }
+    },
+    "bilhoes": {
+      "rotulo": {
+        "pt-BR": "bilhões"
+      }
+    }
+  },
+  "formacao_do_valor": {
+    "firm": {
+      "passos": [
+        {
+          "premissa": "da",
+          "funcao": {
+            "pt-BR": "Encargo de reposição: a fração do EBITDA que a operação consome para repor os ativos existentes — sem repor, o lucro de hoje não se repete amanhã."
+          }
+        },
+        {
+          "premissa": "tax",
+          "funcao": {
+            "pt-BR": "Imposto sobre o lucro operacional que sobra depois da reposição."
+          }
+        },
+        {
+          "premissa": "g",
+          "funcao": {
+            "pt-BR": "Crescimento: quanto o lucro operacional cresce ao ano no horizonte explícito."
+          }
+        },
+        {
+          "premissa": "roic",
+          "funcao": {
+            "pt-BR": "Retorno do capital novo: com o crescimento, fixa a fração do lucro reinvestida para crescer (crescimento ÷ retorno) — quanto maior o retorno, menos o crescimento consome."
+          }
+        },
+        {
+          "premissa": "wacc",
+          "funcao": {
+            "pt-BR": "Custo de capital: desconta o caixa que sobra, e a margem entre ele e o crescimento é o que o valor capitaliza."
+          }
+        }
+      ],
+      "sintese": {
+        "pt-BR": "O múltiplo justo é essa cadeia comprimida: muda a variável, muda o múltiplo — o quadro é o mapa para ler o resto da valuation."
+      }
+    },
+    "equity": {
+      "passos": [
+        {
+          "premissa": "g",
+          "funcao": {
+            "pt-BR": "Crescimento: quanto o lucro cresce ao ano no horizonte explícito."
+          }
+        },
+        {
+          "premissa": "roe",
+          "funcao": {
+            "pt-BR": "Retorno do patrimônio novo: com o crescimento, fixa a fração do lucro retida para crescer (crescimento ÷ retorno); o resto pode voltar ao acionista."
+          }
+        },
+        {
+          "premissa": "gde",
+          "funcao": {
+            "pt-BR": "Dívida bruta sobre o patrimônio: com a dívida líquida, mede o caixa que o balanço carrega por real de patrimônio."
+          }
+        },
+        {
+          "premissa": "nde",
+          "funcao": {
+            "pt-BR": "Dívida líquida sobre o patrimônio: a diferença para a bruta é o caixa sobre o patrimônio, que a política de caixa mantém enquanto o balanço cresce e que muda o fluxo ao acionista."
+          }
+        },
+        {
+          "premissa": "ke",
+          "funcao": {
+            "pt-BR": "Custo do capital próprio: desconta o fluxo ao acionista, e a margem entre ele e o crescimento é o que o valor capitaliza."
+          }
+        }
+      ],
+      "sintese": {
+        "pt-BR": "O múltiplo justo sobre o lucro é essa cadeia comprimida: muda a variável, muda o múltiplo — o quadro é o mapa para ler o resto da valuation."
+      }
+    },
+    "rampa": {
+      "passos": [
+        {
+          "premissa": "ebitda0",
+          "funcao": {
+            "pt-BR": "EBITDA econômico do ano 0: a base, sobre o parque já construído e ainda ocioso."
+          }
+        },
+        {
+          "premissa": "da_parque",
+          "funcao": {
+            "pt-BR": "Encargo de reposição do parque instalado, fixo em moeda: dilui à medida que a receita preenche a capacidade."
+          }
+        },
+        {
+          "premissa": "tax",
+          "funcao": {
+            "pt-BR": "Imposto sobre o lucro operacional."
+          }
+        },
+        {
+          "premissa": "util",
+          "funcao": {
+            "pt-BR": "Utilização atual do parque: define quanto a receita cresce até a capacidade plena, ao fim da rampa."
+          }
+        },
+        {
+          "premissa": "g1",
+          "funcao": {
+            "pt-BR": "Crescimento da rampa, quando declarado direto no lugar da utilização."
+          }
+        },
+        {
+          "premissa": "t_rampa",
+          "funcao": {
+            "pt-BR": "Prazo da rampa: os anos até a capacidade plena, delimitados por um evento observável."
+          }
+        },
+        {
+          "premissa": "wk",
+          "funcao": {
+            "pt-BR": "Capital de giro por real de receita nova: na rampa, o único reinvestimento — o capital fixo já foi pago, e crescer até a capacidade é quase gratuito."
+          }
+        },
+        {
+          "premissa": "g2",
+          "funcao": {
+            "pt-BR": "Crescimento depois da capacidade plena, com capital novo."
+          }
+        },
+        {
+          "premissa": "kappa",
+          "funcao": {
+            "pt-BR": "Capex fixo por real de receita nova depois da capacidade plena: o custo de crescer quando o parque está cheio."
+          }
+        },
+        {
+          "premissa": "wacc",
+          "funcao": {
+            "pt-BR": "Custo de capital: desconta as duas fases; o valor da fase de expansão, medido ao fim da rampa, é trazido a valor presente."
+          }
+        }
+      ],
+      "sintese": {
+        "pt-BR": "O valor é a soma das duas fases: o valor presente da rampa, em que crescer consome só capital de giro, e o valor da expansão ao fim da rampa, trazido a valor presente — muda a variável de uma fase, muda o valor daquela fase."
+      }
+    }
+  },
+  "variaveis_do_triangulo": {
+    "rir": {
+      "rotulo": {
+        "pt-BR": "Taxa de reinvestimento (crescimento ÷ retorno do capital novo)"
+      }
+    }
+  },
   "conclusoes_de_valor": {
     "preço por ação": [
       "manchete.preco_acao",
@@ -1092,6 +1260,7 @@
     ],
     "múltiplo": [
       "manchete.multiplo.valor",
+      "manchete.multiplo_forward.valor",
       "cenarios.*.multiplos.*",
       "cenarios.*.sem_degrau.multiplos.*",
       "cenarios.*.degrau.multiplo",
@@ -1127,6 +1296,7 @@
   "insumos_do_caso": [
     "preco.valor",
     "metrica_base.valor",
+    "metrica_forward.valor",
     "acoes_diluidas",
     "ponte.*",
     "cenarios.*.premissas.*",

@@ -204,6 +204,25 @@ def _caso_equity_com_degrau_e_sotp() -> dict:
     return _com_sotp_do_segmento(_com_degrau(_equity()), com_materialidade=False)
 
 
+# Fatia 5F, Task 2 (D5): a menor métrica forward válida, do mesmo tipo da métrica-base do caso —
+# a única recusa possível é a da combinação.
+_METRICA_FORWARD_MINIMA = {"valor": 30.0, "periodo": "2026E", "fonte": "fixture da matriz"}
+
+
+def _com_metrica_forward(caso: dict) -> dict:
+    c = copy.deepcopy(caso)
+    c["metrica_forward"] = {"tipo": c["metrica_base"]["tipo"], **_METRICA_FORWARD_MINIMA}
+    return c
+
+
+def _caso_rampa_com_metrica_forward() -> dict:
+    return _com_metrica_forward(_rampa())
+
+
+def _caso_equity_com_degrau_e_metrica_forward() -> dict:
+    return _com_metrica_forward(_com_degrau(_equity()))
+
+
 # --------------------------------------------------------------------------
 # A matriz: 3 rotas x 3 blocos opcionais = 9 células. `constroi` monta o
 # caso minimamente válido da célula; `deve_passar` é o veredito de
@@ -244,9 +263,14 @@ MATRIZ = {
     ("equity", "degrau+mercado+reversa"): (_caso_equity_com_degrau_e_reversa, False),
     ("equity", "degrau+sensibilidades"): (_caso_equity_com_degrau_e_sensibilidades, False),
     ("equity", "degrau+sotp"): (_caso_equity_com_degrau_e_sotp, False),
+    # Fatia 5F, Task 2 (D5): 'metrica_forward' não tem múltiplo justo forward para parear na
+    # rota rampa (EV/EBITDA do ano 0) nem junto de degrau (P/VP com degrau) -- recusada no
+    # gate, por nome.
+    ("rampa", "metrica_forward"): (_caso_rampa_com_metrica_forward, False),
+    ("equity", "degrau+metrica_forward"): (_caso_equity_com_degrau_e_metrica_forward, False),
 }
 
-assert len(MATRIZ) == 12, "a matriz tem de cobrir as 3 rotas x 3 blocos, mais as 3 células degrau x bloco (D7, só na rota equity), exatamente uma vez cada"
+assert len(MATRIZ) == 14, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity) e as 2 recusas de metrica_forward (5F, D5), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

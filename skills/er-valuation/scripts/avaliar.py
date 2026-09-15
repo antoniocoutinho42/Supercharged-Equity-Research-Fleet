@@ -214,6 +214,23 @@ def _chave_e_base_do_multiplo(rota: str, tipo_metrica: str) -> tuple[str, str]:
     raise ValueError(f"rota desconhecida para múltiplo de referência: {rota!r}")
 
 
+def _chave_e_base_do_multiplo_forward(rota: str, tipo_metrica: str) -> tuple[str, str] | None:
+    """Fatia 5F, Task 2 (D5): chave (campo de `multiplos`) e `base` do múltiplo
+    FORWARD de referência da rota — o par forward de `_chave_e_base_do_multiplo`,
+    que o motor já publica em `cenarios.*.multiplos`, com a mesma `base` do
+    corrente. A rota rampa não tem forward: o headline dela é EV/EBITDA do ano 0
+    (`None`). Rota desconhecida levanta `ValueError`, a mesma disciplina."""
+    if rota == "firm":
+        if tipo_metrica == "EBITDA":
+            return "EV/EBITDA_fwd", "ebitda"
+        return "EV/NOPAT_fwd", "nopat"
+    if rota == "equity":
+        return "PL_fwd", "pl"
+    if rota == "rampa":
+        return None
+    raise ValueError(f"rota desconhecida para múltiplo forward de referência: {rota!r}")
+
+
 def _montar_manchete(caso: dict, resultado: dict) -> dict:
     """Monta o campo `manchete` (A4, regra 3): qual preço é "a resposta".
 
@@ -265,6 +282,10 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
     cenario_base = resultado["cenarios"][nome_base]
     preco_acao = cenario_base["valor"]["preco_acao"]
 
+    # Fatia 5F, Task 2 (D5): o múltiplo justo FORWARD da manchete, lido de
+    # `multiplos` pela chave forward da rota — só fora do degrau e da rampa, que não
+    # têm forward (o SOTP já saiu acima, sem múltiplo nenhum).
+    multiplo_forward = None
     if "degrau" in cenario_base:
         multiplo = {
             "chave": "PVP_com_degrau",
@@ -274,17 +295,25 @@ def _montar_manchete(caso: dict, resultado: dict) -> dict:
     else:
         chave, base = _chave_e_base_do_multiplo(caso["rota"], caso["metrica_base"]["tipo"])
         multiplo = {"chave": chave, "base": base, "valor": cenario_base["multiplos"][chave]}
+        par_forward = _chave_e_base_do_multiplo_forward(caso["rota"], caso["metrica_base"]["tipo"])
+        if par_forward is not None:
+            chave_forward, base_forward = par_forward
+            multiplo_forward = {"chave": chave_forward, "base": base_forward,
+                                "valor": _exigir_valor(cenario_base["multiplos"], chave_forward)}
 
     tv_declarado = caso["cenarios"][nome_base]["premissas"]["tv"]
 
-    return {
+    manchete = {
         "fonte": "cenarios",
         "cenario": nome_base,
         "preco_acao": preco_acao,
         "upside": preco_acao / preco_valor - 1,
         "multiplo": multiplo,
-        "convencao_terminal": _tv_canon(tv_declarado),
     }
+    if multiplo_forward is not None:
+        manchete["multiplo_forward"] = multiplo_forward
+    manchete["convencao_terminal"] = _tv_canon(tv_declarado)
+    return manchete
 
 
 # Chaves de aviso da rampa, na ordem canônica (regra 5) — mesma tupla e
@@ -389,6 +418,28 @@ def _montar_mercado_tela(caso: dict, resultado: dict, nd_efetivo: float) -> dict
     chave, base = _chave_e_base_do_multiplo(caso["rota"], caso["metrica_base"]["tipo"])
     alvo = alvo_de_mercado(caso, nome_base, nd_efetivo)
     return {"chave": chave, "base": base, "valor": alvo["valor"], "algebra": alvo["algebra"]}
+
+
+def _montar_mercado_tela_forward(caso: dict, nd_efetivo: float) -> dict | None:
+    """Fatia 5F, Task 2 (D5): o múltiplo de tela FORWARD — `null` quando o caso não
+    declara `metrica_forward`. É a conta de `mercado_tela` (`reversa.alvo_de_mercado`,
+    a mesma função) com a métrica forward declarada no denominador: nunca uma
+    segunda conta, nunca uma métrica escolhida pelo wrapper. O gate já recusou a
+    métrica forward na rota rampa e junto de degrau, então a chave forward da rota
+    sempre existe aqui. `metrica` repete a declaração com a proveniência (tipo,
+    valor, período, fonte), para a tela citá-la."""
+    metrica_forward = caso.get("metrica_forward")
+    if metrica_forward is None:
+        return None
+    chave, base = _chave_e_base_do_multiplo_forward(caso["rota"], caso["metrica_base"]["tipo"])
+    alvo = alvo_de_mercado(caso, _nome_cenario_base(caso), nd_efetivo, metrica_forward["valor"])
+    return {
+        "chave": chave,
+        "base": base,
+        "valor": alvo["valor"],
+        "algebra": alvo["algebra"],
+        "metrica": {campo: metrica_forward[campo] for campo in ("tipo", "valor", "periodo", "fonte")},
+    }
 
 
 # Subconjunto do que o motor devolve que vira o campo "multiplos" de cada
@@ -938,6 +989,10 @@ def avaliar(caso: dict) -> dict:
         "companhia": caso["companhia"],
         "ticker": caso.get("ticker"),
         "moeda": moeda,
+        # Fatia 5F, Task 2 (D7): a escala dos montantes que o caso declara, sempre
+        # publicada — `null` sem declaração; o relatório a aplica às unidades que o
+        # catálogo marca (`unidades.<unidade>.escala_monetaria`).
+        "escala_monetaria": caso.get("escala_monetaria"),
         "data_analise": caso["data_analise"],
         "rota": rota,
         "metrica_base": metrica_saida,
@@ -1053,6 +1108,9 @@ def avaliar(caso: dict) -> dict:
     # início desta função).
     resultado["manchete"] = _montar_manchete(caso, resultado)
     resultado["mercado_tela"] = _montar_mercado_tela(caso, resultado, nd_efetivo)
+    # Fatia 5F, Task 2 (D5): a tela forward, SEMPRE publicada — `null` sem
+    # `metrica_forward` declarada no caso.
+    resultado["mercado_tela_forward"] = _montar_mercado_tela_forward(caso, nd_efetivo)
 
     # Fatia 5D, Task 1 (D3/D4): o que só a integração sabe sobre o escopo do
     # caso, SEMPRE publicado — um campo de contrato ausente não pode sumir em

@@ -23,7 +23,7 @@ from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM, avaliar
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 from caso import CLASSES_DE_FRONTEIRA_DE_ESCOPO, LIMITACOES_DE_REVERSA, reversa_indisponivel  # noqa: E402
-from caso import EIXO_OBRIGATORIO, EIXOS_DE_REVERSA  # noqa: E402
+from caso import EIXO_OBRIGATORIO, EIXOS_DE_REVERSA, ESCALAS_MONETARIAS, _TRIANGULO_POR_ROTA  # noqa: E402
 import diagnosticos  # noqa: E402
 import reversa  # noqa: E402
 
@@ -123,6 +123,11 @@ def test_toda_chave_de_multiplo_emitida_pelas_fixtures_esta_no_catalogo():
         if "multiplo" in r["manchete"]:
             vistas.add(r["manchete"]["multiplo"]["chave"])
         vistas.add(r["mercado_tela"]["chave"])
+        # Fatia 5F, Task 2 (D5): o par forward, da manchete e da tela.
+        if "multiplo_forward" in r["manchete"]:
+            vistas.add(r["manchete"]["multiplo_forward"]["chave"])
+        if r["mercado_tela_forward"] is not None:
+            vistas.add(r["mercado_tela_forward"]["chave"])
         # Fatia 5F, Task 1 (D2): a chave do múltiplo que o teto do crescimento gratuito publica.
         teto = (r.get("reversa") or {}).get("teto_do_crescimento_gratuito")
         if teto is not None:
@@ -139,7 +144,7 @@ def test_chaves_de_topo_do_catalogo():
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
         "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
-        "teto_do_crescimento_gratuito",
+        "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor", "variaveis_do_triangulo",
     }
 
 
@@ -218,7 +223,7 @@ def test_toda_limitacao_declara_o_bloco_que_suprime_e_as_da_reversa_sao_as_do_ga
 # caso declara. `**` casa zero ou mais segmentos — só aqui, nunca no mapa.
 _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
     "leitura de mercado — o preço e o múltiplo de tela, que a §14 mantém sob fronteira": (
-        "preco.**", "mercado_tela.**"),
+        "preco.**", "mercado_tela.**", "mercado_tela_forward.**"),
     "o que o preço embute — a reversa, que a §14 mantém sob fronteira": (
         "reversa.**",),
     "a ponte da dívida líquida — as linhas de balanço do caso e a soma delas": (
@@ -322,12 +327,12 @@ def test_o_mapa_nao_cobre_o_multiplo_de_tela_nem_o_que_o_caso_declara():
     """§14: sob fronteira de escopo a entrega mantém a leitura de mercado — o múltiplo
     de tela — e nada do que o caso declara (premissa, preço, métrica, bloco) é
     conclusão de valor."""
-    vistas = {"mercado_tela": 0, "caso": 0}
+    vistas = {"mercado_tela": 0, "mercado_tela_forward": 0, "caso": 0}
     for nome in CASOS_E_VARIANTES:
         caso, resultados = _caso_e_resultados(nome)
         for caminho, valor in _folhas_numericas(resultados):
-            if caminho[0] == "mercado_tela":
-                vistas["mercado_tela"] += 1
+            if caminho[0] in ("mercado_tela", "mercado_tela_forward"):
+                vistas[caminho[0]] += 1
                 assert not _familias_que_cobrem(caminho), (nome, ".".join(caminho))
             if _ecoa_o_caso(caso, caminho, valor):
                 vistas["caso"] += 1
@@ -771,3 +776,43 @@ def test_toda_unidade_que_a_leitura_da_reversa_publica_esta_no_catalogo():
                     nome, leitura["premissa"])
             vistas |= unidades
     assert {"pp", "anos_fracionarios", "curvatura", "beta"} <= vistas, f"trava vacuamente verde: {vistas}"
+
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 2 (D5/D7/D8/D9): a escala dos montantes, o quadro "como o valor é
+# formado" e a variável do triângulo que não é premissa. Texto de metodologia e
+# vocabulário, do catálogo — o relatório nunca aprende qual unidade é montante nem
+# qual premissa entra no quadro.
+# --------------------------------------------------------------------------
+
+def test_escalas_monetarias_do_catalogo_sao_as_do_gate_e_so_o_montante_as_usa():
+    """A escala é declaração do caso, e quem diz a que número ela se aplica é a unidade: só
+    `moeda` (montante) — preço por ação nunca, mesmo com o formato monetário."""
+    assert set(CAT["escalas_monetarias"]) == ESCALAS_MONETARIAS
+    _rotulos_em_todo_idioma("escalas_monetarias")
+    for unidade, info in CAT["unidades"].items():
+        assert isinstance(info.get("escala_monetaria", False), bool), unidade
+    assert {unidade for unidade, info in CAT["unidades"].items() if info.get("escala_monetaria")} == {"moeda"}
+
+
+def test_formacao_do_valor_cobre_as_rotas_com_passos_que_sao_premissas_da_rota():
+    assert set(CAT["formacao_do_valor"]) == set(_PREMISSAS_POR_ROTA)
+    for rota, quadro in CAT["formacao_do_valor"].items():
+        assert set(quadro) == {"passos", "sintese"}, rota
+        premissas = [passo["premissa"] for passo in quadro["passos"]]
+        assert premissas and len(set(premissas)) == len(premissas), (rota, premissas)
+        assert set(premissas) <= set(_PREMISSAS_POR_ROTA[rota]), (rota, set(premissas) - set(_PREMISSAS_POR_ROTA[rota]))
+        for passo in quadro["passos"]:
+            assert set(passo) == {"premissa", "funcao"}, (rota, passo)
+        for idioma in CAT["idiomas"]:
+            assert quadro["sintese"].get(idioma, "").strip(), (rota, idioma)
+            for passo in quadro["passos"]:
+                assert passo["funcao"].get(idioma, "").strip(), (rota, passo["premissa"], idioma)
+
+
+def test_variaveis_do_triangulo_sao_as_do_triangulo_que_nao_sao_premissa():
+    assert _TRIANGULO_POR_ROTA, "nenhuma rota com triângulo — trava vacuamente verde"
+    for rota, triangulo in _TRIANGULO_POR_ROTA.items():
+        assert set(CAT["variaveis_do_triangulo"]) == set(triangulo) - set(CAT["premissas"][rota]), rota
+    _rotulos_em_todo_idioma("variaveis_do_triangulo")
