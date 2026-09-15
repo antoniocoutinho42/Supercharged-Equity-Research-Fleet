@@ -364,9 +364,9 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Opcionais, cada uma com validador dedicado, condicional ou não à rota.
     "metrica_base", "ponte", "delimitador", "preco", "mercado", "reversa",
     "sensibilidades", "sotp", "degrau", "cenario_base", "fronteira_de_escopo",
-    # Fatia 5F, Task 2: validadas por `_validar_metrica_forward` e
-    # `_validar_escala_monetaria` (mais abaixo).
-    "metrica_forward", "escala_monetaria",
+    # Fatia 5F, Tasks 2 e 3: validadas por `_validar_metrica_forward`,
+    # `_validar_escala_monetaria` e `_validar_conservacao_de_capital` (mais abaixo).
+    "metrica_forward", "escala_monetaria", "conservacao_de_capital",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -464,8 +464,8 @@ def validar(caso: Caso) -> None:
     triângulo quando a rota tiver um, premissas obrigatórias, premissas
     desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
     -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
-    'sotp', 'fronteira_de_escopo', 'metrica_forward' e 'escala_monetaria', só
-    quando presentes. As duas recusas de
+    'sotp', 'fronteira_de_escopo', 'metrica_forward', 'escala_monetaria' e
+    'conservacao_de_capital', só quando presentes. As duas recusas de
     'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
     registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
     modifica `caso`; não preenche nada — só confirma ou recusa.
@@ -544,6 +544,7 @@ def validar(caso: Caso) -> None:
     _validar_fronteira_de_escopo(caso)
     _validar_metrica_forward(caso, rota)
     _validar_escala_monetaria(caso)
+    _validar_conservacao_de_capital(caso, rota)
 
 
 def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
@@ -2761,6 +2762,88 @@ def _validar_escala_monetaria(caso: Caso) -> None:
             "É a escala em que os montantes do caso estão declarados — uma escala desconhecida "
             "sairia na tela sem rótulo. Escalas aceitas: "
             f"{', '.join(sorted(ESCALAS_MONETARIAS))}."
+        )
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 3 (D6 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): bloco opcional 'conservacao_de_capital', a verificação da §11.1b
+# da metodologia — o capital que a companhia consome (capex total mais ΔWC) contra
+# os encargos de reposição e de crescimento do vetor. O motor só a confronta no
+# subcomando `ev`, sobre o EBITDA declarado: fora da rota firm com métrica EBITDA o
+# bloco é recusado — a rampa garante a identidade por construção (reinvestimento
+# por componente) e o degrau só existe na rota equity. O limiar (10%) é do motor;
+# este módulo só valida a forma.
+# --------------------------------------------------------------------------
+
+ANOS_BASE_DO_CAPEX: frozenset = frozenset({"corrente", "guidance_longo_prazo"})
+
+_CHAVES_CONSERVACAO_PERMITIDAS: frozenset = frozenset({"capex_total", "dwc"})
+_CHAVES_CAPEX_TOTAL_PERMITIDAS: frozenset = frozenset({"valor", "fonte", "ano_base"})
+_CHAVES_DWC_PERMITIDAS: frozenset = frozenset({"valor", "fonte"})
+
+
+def _validar_conservacao_de_capital(caso: Caso, rota: str) -> None:
+    """Valida o bloco opcional 'conservacao_de_capital': rota e métrica, chaves em
+    todo nível, fontes, valores e o ano-base do capex. Ausente ou `None` é um caso
+    sem a verificação."""
+    conservacao = caso.get("conservacao_de_capital")
+    if conservacao is None:
+        return
+
+    if not isinstance(conservacao, dict):
+        raise CasoInvalido(
+            f"campo 'conservacao_de_capital' não é um objeto: {conservacao!r}. Declare 'capex_total' "
+            "({valor, fonte, ano_base}) e 'dwc' ({valor, fonte})."
+        )
+    tipo_da_metrica = caso["metrica_base"]["tipo"]
+    if rota != "firm" or tipo_da_metrica != "EBITDA":
+        raise CasoInvalido(
+            f"bloco 'conservacao_de_capital' na rota '{rota}' com métrica '{tipo_da_metrica}': a "
+            "conservação de capital só é confrontada na rota firm com métrica EBITDA — o motor a "
+            "executa sobre o EBITDA declarado, e na rota rampa a identidade vale por construção "
+            "(reinvestimento por componente). Remova o bloco, ou avalie pela rota firm com EBITDA."
+        )
+    _recusar_chave_desconhecida(conservacao, _CHAVES_CONSERVACAO_PERMITIDAS, "'conservacao_de_capital'")
+
+    for grupo, permitidas in (("capex_total", _CHAVES_CAPEX_TOTAL_PERMITIDAS),
+                              ("dwc", _CHAVES_DWC_PERMITIDAS)):
+        item = conservacao.get(grupo)
+        if not isinstance(item, dict):
+            raise CasoInvalido(
+                f"'conservacao_de_capital.{grupo}' ausente ou não é um objeto: {item!r}. Declare "
+                f"{', '.join(sorted(permitidas))}."
+            )
+        _recusar_chave_desconhecida(item, permitidas, f"'conservacao_de_capital.{grupo}'")
+        fonte = item.get("fonte")
+        if not isinstance(fonte, str) or not fonte.strip():
+            raise CasoInvalido(
+                f"campo 'conservacao_de_capital.{grupo}.fonte' ausente ou vazio: {fonte!r}. Um número "
+                "que confronta o vetor sem fonte não é auditável."
+            )
+
+    capex = conservacao["capex_total"].get("valor")
+    if not _numero_valido(capex) or not _finito(capex) or capex <= 0:
+        raise CasoInvalido(
+            f"'conservacao_de_capital.capex_total.valor' inválido: {capex!r}. O capex total do "
+            "ano-base precisa ser um número finito e positivo — é o capital que a operação consome."
+        )
+    dwc = conservacao["dwc"].get("valor")
+    if not _numero_valido(dwc) or not _finito(dwc):
+        raise CasoInvalido(
+            f"'conservacao_de_capital.dwc.valor' inválido: {dwc!r}. A variação do capital de giro "
+            "precisa ser um número finito (negativa quando o giro libera caixa)."
+        )
+
+    ano_base = conservacao["capex_total"].get("ano_base")
+    _exigir_texto(ano_base, "conservacao_de_capital.capex_total.ano_base")
+    if ano_base not in ANOS_BASE_DO_CAPEX:
+        sugestao = difflib.get_close_matches(ano_base, ANOS_BASE_DO_CAPEX, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'conservacao_de_capital.capex_total.ano_base' fora do vocabulário: '{ano_base}'.{dica}"
+            "O capex do ano-base é o corrente ou o do guidance de longo prazo — declare qual. "
+            f"Anos-base aceitos: {', '.join(sorted(ANOS_BASE_DO_CAPEX))}."
         )
 
 

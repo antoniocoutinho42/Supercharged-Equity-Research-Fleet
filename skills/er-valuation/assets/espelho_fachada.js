@@ -45,7 +45,11 @@
 //   `degrau.diagnosticos_chaves`, como `precificarDegrau` as devolve
 //   (`_ALERTAS_DEGRAU_ORDEM`, do lado Python) — mais, desde a onda de correcao
 //   da revisao final (F1), a da divergencia de base acima do limiar, que o
-//   espelho decide com a copia travada do limiar do wrapper.
+//   espelho decide com a copia travada do limiar do wrapper;
+// - conservacao de capital (fatia 5F, Task 3): num caso firm que declara
+//   `conservacao_de_capital`, tambem `conservacao_capital.diagnosticos_chaves`,
+//   como `conservacaoCapital` do espelho as devolve — o limiar e' o do motor, e a
+//   chave, a de `avaliar.py:_ALERTAS_DA_CONSERVACAO`.
 // Nenhuma chave e' decidida AQUI — nenhum predicado, nenhum limiar: esta
 // fachada so' poe no lugar do contrato o que o espelho respondeu.
 //
@@ -302,6 +306,16 @@
     return cenario;
   }
 
+  // `cenarios.<n>.conservacao_capital.diagnosticos_chaves` (fatia 5F, Task 3; secao
+  // 8.4): so' nos cenarios firm de um caso que declara `conservacao_de_capital`, do
+  // mesmo jeito que o bloco so' existe la' no `resultados`. Recalculada a cada chamada
+  // com o `da`, a `tax`, o `g` e o `roic` do cenario editado — o alerta anda com o
+  // numero. Cenario recusado publica `null` (F2).
+  function comConservacao(cenario, chavesDaConservacao) {
+    cenario.conservacao_capital = { diagnosticos_chaves: chavesDaConservacao };
+    return cenario;
+  }
+
   // F4 (cabecalho, "LISTA EXIBIVEL"): toda forma de diagnostico que o cenario
   // publica, na ordem de cada uma — as do proprio cenario e, depois, as do
   // degrau. E' o UNICO ponto que junta as formas: uma forma nova entra aqui ou
@@ -309,6 +323,7 @@
   function listaExibida(cenario) {
     const formas = [cenario.diagnosticos_chaves];
     if (cenario.degrau) formas.push(cenario.degrau.diagnosticos_chaves);
+    if (cenario.conservacao_capital) formas.push(cenario.conservacao_capital.diagnosticos_chaves);
     // F2: cenario recusado publica `null` em toda forma, e a lista exibivel
     // tambem sai `null` — nunca uma lista vazia que se leria como "nenhum
     // diagnostico".
@@ -349,7 +364,8 @@
    *
    * Devolve `{cenarios: {<nome>: {premissas, valor: {preco_acao},
    * multiplo: {chave, valor}, vs_preco: {upside}, diagnosticos_chaves,
-   * [degrau: {diagnosticos_chaves}], diagnosticos_exibidos, recusa}}}`, mais
+   * [degrau: {diagnosticos_chaves}], [conservacao_capital: {diagnosticos_chaves}],
+   * diagnosticos_exibidos, recusa}}}`, mais
    * `ponte: {nd_efetivo}` nas rotas que cruzam ponte (firm/rampa) — a rota
    * equity nao publica o bloco, do mesmo jeito que `resultados.json` nao
    * publica (L2: mesmas chaves). As chaves de diagnostico seguem as tres
@@ -385,6 +401,8 @@
     const ndEfetivo = temPonte ? ndEfetivoDe(caso.ponte) : 0.0;
     const chave = chaveDoMultiplo(rota, metrica.tipo);
     const blocoDegrau = rota === 'equity' ? (caso.degrau || null) : null;
+    // Fatia 5F, Task 3: o gate so' admite o bloco na rota firm com EBITDA.
+    const blocoConservacao = rota === 'firm' ? (caso.conservacao_de_capital || null) : null;
     const precoDeTela = precoDeTelaDe(caso);
 
     const cenarios = {};
@@ -437,6 +455,12 @@
         ? cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
           diagnosticosDaCelula(M, rota, premissas, moeda, rf))
         : cenarioRecusado(premissas, chave, motivoDaRecusa(M, premissas));
+      if (blocoConservacao !== null) {
+        comConservacao(cenarios[nome], Number.isFinite(r.valor)
+          ? M.conservacaoCapital(blocoConservacao.capex_total.valor, blocoConservacao.dwc.valor,
+            metrica.valor, premissas.da, premissas.tax, premissas.g, premissas.roic).diagnosticos_chaves
+          : null);
+      }
     }
 
     // F4: a lista exibivel, montada sobre o registro inteiro de cada cenario —
@@ -573,6 +597,12 @@
       if (js.degrau) {
         registrarLista(divergencias, nome, 'degrau.diagnosticos_chaves',
           py.degrau ? py.degrau.diagnosticos_chaves : undefined, js.degrau.diagnosticos_chaves);
+      }
+      // Fatia 5F, Task 3: a conservacao de capital, onde o caso a declara.
+      if (js.conservacao_capital) {
+        registrarLista(divergencias, nome, 'conservacao_capital.diagnosticos_chaves',
+          py.conservacao_capital ? py.conservacao_capital.diagnosticos_chaves : undefined,
+          js.conservacao_capital.diagnosticos_chaves);
       }
     }
 

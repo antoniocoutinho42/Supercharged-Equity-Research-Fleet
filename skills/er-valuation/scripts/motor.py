@@ -69,6 +69,10 @@ _FLAGS_COM_HIFEN: dict[str, str] = {
     "indice_atual": "--indice-atual",
     "indice_alvo": "--indice-alvo",
     "perfil_transicao": "--perfil-transicao",
+    # Fatia 5F, Task 3 (D6): chave de ESCALA, não de premissa — o capex total do
+    # ano-base que ativa a conservação de capital no `ev`; o par `dwc` não tem
+    # underscore e passa pela regra genérica.
+    "capex_total": "--capex-total",
 }
 
 # 'mid_year' é a única premissa booleana do motor (store_true): a flag entra

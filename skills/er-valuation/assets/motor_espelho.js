@@ -1727,6 +1727,65 @@ function resolverDegrau(item) {
   return { id: item.id, ...resultado, ...CAMPOS_SOLVER_VAZIOS };
 }
 
+// ============================================================================
+// CONSERVACAO DE CAPITAL (fatia 5F, Task 3) — espelha `conservacao_capital` (justos.py:173-193),
+// a verificacao executavel da §11.1b que o handler `ev` roda com --capex-total/--dwc/--ebitda
+// (justos.py:1925-1931), e a chave que `avaliar.py:_conservacao_publicada` da ao alerta.
+// Paridade contra o WRAPPER (mesmo harness/fixture da secao WRAPPER acima): o lado Python roda
+// `avaliar.precificar_firm` com as flags, e o numero publicado e' o do motor atravessando a CLI.
+//
+// `d`, `t`, `g` e `roic` chegam em PONTOS PERCENTUAIS, como o caso e a CLI os recebem — a conversao
+// e' a da CLI (`pc`, justos.py:1886), feita aqui; `capexTotal`, `dwc` e `ebitda` em moeda, sem
+// conversao. Os cinco numeros saem com o arredondamento do motor (4 casas; 2 no `gap_%`), e o limiar
+// e' o do motor (10% do capital consumido) — nenhum limiar do Fleet aqui. `ALERTA` vira `true`
+// (so' a presenca importa, a convencao de ALERTAS_DEGRAU), e `diagnosticos_chaves` e' a lista que o
+// wrapper publica.
+//
+// Truthiness do Python: `g / roic if roic else nan` e `gap / consumido if consumido else nan`
+// testam "!= 0.0" — `!== 0` reproduz, inclusive para NaN (ver `identificacao`, acima).
+// ============================================================================
+
+const LIMIAR_CONSERVACAO_CAPITAL = 0.10;
+const ALERTAS_CONSERVACAO = [['ALERTA', 'conservacao_capital_nao_fecha']];
+
+function conservacaoCapital(capexTotal, dwc, ebitda, d, t, g, roic) {
+  const dF = pct(d);
+  const tF = pct(t);
+  const gF = pct(g);
+  const roicF = pct(roic);
+  const consumido = capexTotal + dwc;
+  const nopat = ebitda * (1 - dF) * (1 - tF);
+  const rir = roicF !== 0 ? gF / roicF : NaN;
+  const encargos = dF * ebitda + rir * nopat;
+  const gap = consumido - encargos;
+  const gapPct = consumido !== 0 ? gap / consumido : NaN;
+  const saida = {
+    capital_consumido: arredondarPy(consumido, 4),
+    encargo_reposicao_d_x_EBITDA: arredondarPy(dF * ebitda, 4),
+    encargo_crescimento_RiR_x_NOPAT: arredondarPy(rir * nopat, 4),
+    gap: arredondarPy(gap, 4),
+    'gap_%': arredondarPy(gapPct * 100, 2),
+  };
+  if (Math.abs(gapPct) > LIMIAR_CONSERVACAO_CAPITAL) saida.ALERTA = true;
+  saida.diagnosticos_chaves = ALERTAS_CONSERVACAO
+    .filter(([campo]) => campo in saida)
+    .map(([, chave]) => chave);
+  return saida;
+}
+
+// `args` de um problema `tipo: "conservacao"`: {"premissas": {...vetor firm, em ponto percentual...},
+// "ebitda": float, "capex_total": float, "dwc": float}. Carrega CAMPOS_SOLVER_VAZIOS pela MESMA razao
+// de resolverDiag/resolverDegrau acima.
+function resolverConservacao(item) {
+  const a = item.args;
+  const p = a.premissas;
+  return {
+    id: item.id,
+    conservacao: conservacaoCapital(a.capex_total, a.dwc, a.ebitda, p.da, p.tax, p.g, p.roic),
+    ...CAMPOS_SOLVER_VAZIOS,
+  };
+}
+
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
 // Sem `tipo`: item da fixture de VALOR da 4A (fn/args -> valor) — despachado
 // por `avaliarVetores`, o MESMO caminho de sempre, sem nenhuma linha
@@ -1736,7 +1795,8 @@ function resolverDegrau(item) {
 // despachado por `resolverAlvo`/`resolverGrade1D`/`resolverGrade2D`. `tipo:
 // 'rampa'` (fatia C, task 1): despachado por `resolverRampa`. `tipo: 'diag'`
 // (fatia C, task 2): despachado por `resolverDiag`. `tipo: 'degrau'`
-// (fatia D, task 2): despachado por `resolverDegrau`.
+// (fatia D, task 2): despachado por `resolverDegrau`. `tipo: 'conservacao'` (fatia 5F,
+// task 3): despachado por `resolverConservacao`.
 // Qualquer outro `tipo` LANCA — falha fechada, a mesma disciplina do resto
 // deste arquivo.
 function avaliarItem(item) {
@@ -1764,6 +1824,9 @@ function avaliarItem(item) {
   if (item.tipo === 'degrau') {
     return resolverDegrau(item);
   }
+  if (item.tipo === 'conservacao') {
+    return resolverConservacao(item);
+  }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
 
@@ -1789,6 +1852,7 @@ const superficiePublica = {
   diagnosticosFirm, diagnosticosEquity, resolverDiag,
   fatorH, rentabPosDegrau, descontoTransicao, valorTransicionado, precificarDegrau, resolverDegrau,
   LIMIAR_DIVERGENCIA_DE_BASE_PCT, CHAVE_DIVERGENCIA_DE_BASE,
+  LIMIAR_CONSERVACAO_CAPITAL, conservacaoCapital, resolverConservacao,
   tvCanon, cliRecusa,
   avaliarItem, avaliarItens,
 };

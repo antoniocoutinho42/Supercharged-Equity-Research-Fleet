@@ -2779,5 +2779,145 @@
       },
       "m_valor": 100.0
     }
+  },
+  {
+    "id": 130,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 430.0,
+      "dwc": 20.0
+    }
+  },
+  {
+    "id": 131,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 500.0,
+      "dwc": -60.0
+    }
+  },
+  {
+    "id": 132,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 495.0,
+      "dwc": 0.0
+    }
+  },
+  {
+    "id": 133,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 405.0,
+      "dwc": 0.0
+    }
+  },
+  {
+    "id": 134,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 520.0,
+      "dwc": 0.0
+    }
+  },
+  {
+    "id": 135,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 1000.0,
+      "capex_total": 300.0,
+      "dwc": 0.0
+    }
+  },
+  {
+    "id": 136,
+    "tipo": "conservacao",
+    "args": {
+      "premissas": {
+        "g": 7.0,
+        "roic": 18.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 35.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "ebitda": 2500.0,
+      "capex_total": 1400.0,
+      "dwc": 90.0
+    }
   }
 ]

@@ -742,3 +742,57 @@ def test_rampa_engine_key_colidindo_com_campo_autorado_nao_sobrescreve(monkeypat
     r = avaliar(c)
     assert r["cenarios"]["base"]["ancora"] == c["cenarios"]["base"]["ancora"]
     assert r["cenarios"]["base"]["ancora"] != "CLOBBERED-PELO-MOTOR"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 3 (D6 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): a conservação de capital (§11.1b), publicada por cenário na rota
+# firm com EBITDA — a saída do motor íntegra, o ano-base declarado e a chave do
+# alerta, por presença.
+# --------------------------------------------------------------------------
+
+sys.path.insert(0, str(RAIZ / "tests"))
+from relatorio_apoio import caso_da_variante  # noqa: E402
+from avaliar import _CHAVES_DA_CONSERVACAO, _conservacao_publicada  # noqa: E402
+
+
+@pytest.mark.parametrize("variante,gap_pct,alerta", [
+    ("conservacao_fecha", 0.0, False),
+    ("conservacao_nao_fecha", -50.0, True),
+])
+def test_a_conservacao_de_capital_sai_publicada_com_a_chave_so_onde_o_motor_alerta(variante, gap_pct, alerta):
+    """`caso_minimo_firm` tem encargos de 450: reposição 200 (20% de 1.000) e crescimento 250 (RiR 5/12
+    sobre NOPAT 600). Capex 430 + ΔWC 20 fecha em zero; capex 300 dá gap de −50% — números conferidos
+    rodando o motor. O bloco publicado é a saída dele, íntegra, mais `ano_base` e as chaves."""
+    caso = caso_da_variante(variante)
+    declarado = caso["conservacao_de_capital"]
+    bloco = avaliar(caso)["cenarios"]["base"]["conservacao_capital"]
+    do_motor = _motor_rodar(
+        "firm", caso["cenarios"]["base"]["premissas"],
+        {"ebitda": caso["metrica_base"]["valor"], "capex_total": declarado["capex_total"]["valor"],
+         "dwc": declarado["dwc"]["valor"]},
+        caso["moeda"])["conservacao_capital"]
+    assert {campo: valor for campo, valor in bloco.items()
+            if campo not in ("ano_base", "diagnosticos_chaves")} == do_motor
+    assert bloco["gap_%"] == gap_pct
+    assert ("ALERTA" in bloco) is alerta
+    assert bloco["diagnosticos_chaves"] == (list(_CHAVES_DA_CONSERVACAO) if alerta else [])
+    assert bloco["ano_base"] == declarado["capex_total"]["ano_base"]
+
+
+def test_sem_o_bloco_nenhum_cenario_publica_a_conservacao_de_capital():
+    assert all("conservacao_capital" not in cenario for cenario in _res_firm()["cenarios"].values())
+
+
+@pytest.mark.parametrize("bloco_do_motor,nomeado", [
+    ("NAO CHECAVEL — a identidade exige --capex-total, --dwc e --ebitda juntos", "conservação de capital"),
+    ({"capital_consumido": 0.0, "encargo_reposicao_d_x_EBITDA": 200.0,
+      "encargo_crescimento_RiR_x_NOPAT": 250.0, "gap": -450.0, "gap_%": None,
+      "leitura": "identidade fecha dentro do limiar"}, "gap_%"),
+], ids=["texto_no_lugar_do_bloco", "gap_nulo"])
+def test_a_conservacao_que_o_motor_nao_fecha_em_numero_e_recusa_nomeada(bloco_do_motor, nomeado):
+    """Armadilha 3 do plano: sem `--ebitda` o motor devolve TEXTO no lugar do bloco, e capital
+    consumido nulo vira `gap_%` nulo — o wrapper recusa nomeando, nunca publica texto nem `null`."""
+    with pytest.raises(MotorFalhou, match=nomeado):
+        _conservacao_publicada({"conservacao_capital": bloco_do_motor},
+                               caso_da_variante("conservacao_fecha")["conservacao_de_capital"])

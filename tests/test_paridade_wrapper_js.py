@@ -18,9 +18,9 @@ ESPELHO = RAIZ / "skills" / "er-valuation" / "assets" / "motor_espelho.js"
 FIXTURE = RAIZ / "tests" / "fixtures" / "vetores_solver.json"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 import diagnosticos  # noqa: E402
-from avaliar import (_CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM,  # noqa: E402
-                     _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
-from vetores_solver import avaliar_python  # noqa: E402
+from avaliar import (_CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DA_CONSERVACAO,  # noqa: E402
+                     _CHAVES_DO_DEGRAU_ORDEM, _LIMIAR_DIVERGENCIA_DE_BASE_PCT)
+from vetores_solver import CAMPOS_CONSERVACAO, avaliar_python  # noqa: E402
 
 TAU = 1e-12
 SEM_NODE = shutil.which("node") is None
@@ -362,3 +362,30 @@ def test_o_limiar_e_a_chave_da_divergencia_de_base_do_espelho_sao_os_do_wrapper(
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout) == {"limiar": _LIMIAR_DIVERGENCIA_DE_BASE_PCT,
                                     "chave": _CHAVE_DIVERGENCIA_DE_BASE}
+
+
+# ---------------------------------------------------------------------------
+# CONSERVACAO DE CAPITAL (fatia 5F, Task 3). Mesmo harness, mesma fixture — a paridade e' contra o
+# WRAPPER (`avaliar.precificar_firm` com as flags, e o bloco que `avaliar()` publica), nao contra
+# `conservacao_capital` importada direto: o numero que a fachada compara no browser e' o que
+# atravessou a CLI do motor. Os cinco numeros sao arredondados pelo motor e comparam EXATAMENTE;
+# ALERTA por presenca; `diagnosticos_chaves` pela lista.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_conservacao_de_capital_bate_campo_a_campo_nos_dois_lados_do_limiar():
+    probs = _problemas({"conservacao"})
+    assert probs, "fixture sem problemas de conservacao de capital"
+    py, js = avaliar_python(probs), _lado_js()
+    campos = CAMPOS_CONSERVACAO + ("ALERTA", "diagnosticos_chaves")
+    fora = [(p["id"], campo, a["conservacao"].get(campo), js[p["id"]]["conservacao"].get(campo))
+            for p, a in zip(probs, py) for campo in campos
+            if a["conservacao"].get(campo) != js[p["id"]]["conservacao"].get(campo)]
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+    # O limiar do motor (10%) so' fica preso se a fixture tiver o gap perto dele dos dois lados e nos
+    # dois sinais: um limiar diferente no espelho, ou um sem o modulo, reprova acima.
+    gaps = [(a["conservacao"]["gap_%"], bool(a["conservacao"]["diagnosticos_chaves"])) for a in py]
+    assert any(5 < abs(gap) <= 10 and not acesa for gap, acesa in gaps), gaps
+    assert any(10 < gap < 20 and acesa for gap, acesa in gaps), gaps
+    assert any(-20 < gap < -10 and acesa for gap, acesa in gaps), gaps
+    assert {chave for a in py for chave in a["conservacao"]["diagnosticos_chaves"]} == set(_CHAVES_DA_CONSERVACAO)

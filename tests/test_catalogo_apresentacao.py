@@ -19,11 +19,11 @@ import pytest
 RAIZ = Path(__file__).resolve().parent.parent
 FIXTURES = RAIZ / "tests" / "fixtures"
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
-from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DO_DEGRAU_ORDEM, avaliar  # noqa: E402
+from avaliar import _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DA_CONSERVACAO, _CHAVES_DO_DEGRAU_ORDEM, avaliar  # noqa: E402
 from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 from caso import CLASSES_DE_FRONTEIRA_DE_ESCOPO, LIMITACOES_DE_REVERSA, reversa_indisponivel  # noqa: E402
-from caso import EIXO_OBRIGATORIO, EIXOS_DE_REVERSA, ESCALAS_MONETARIAS, _TRIANGULO_POR_ROTA  # noqa: E402
+from caso import ANOS_BASE_DO_CAPEX, EIXO_OBRIGATORIO, EIXOS_DE_REVERSA, ESCALAS_MONETARIAS, _TRIANGULO_POR_ROTA  # noqa: E402
 import diagnosticos  # noqa: E402
 import reversa  # noqa: E402
 
@@ -82,7 +82,10 @@ def test_diagnosticos_do_catalogo_sao_exatamente_os_do_classificador():
     publica em `degrau.diagnosticos_chaves` — os dois alertas do degrau e a
     divergência de base acima do limiar."""
     assert CHAVES_DO_DEGRAU, "constante do wrapper vazia — a união ficaria vacuamente igual"
-    assert set(CAT["diagnosticos"]) == set(diagnosticos.CHAVES) | AVISOS_RAMPA | CHAVES_DO_DEGRAU
+    # Fatia 5F, Task 3 (D6): mais a chave que o wrapper dá ao alerta da conservação de capital.
+    assert _CHAVES_DA_CONSERVACAO, "constante do wrapper vazia — a união ficaria vacuamente igual"
+    assert set(CAT["diagnosticos"]) == (set(diagnosticos.CHAVES) | AVISOS_RAMPA | CHAVES_DO_DEGRAU
+                                        | set(_CHAVES_DA_CONSERVACAO))
 
 
 def test_todo_rotulo_existe_em_todo_idioma_declarado():
@@ -145,6 +148,7 @@ def test_chaves_de_topo_do_catalogo():
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
         "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
         "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor", "variaveis_do_triangulo",
+        "anos_base_do_capex",
     }
 
 
@@ -244,6 +248,8 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
                       "roic2_%")),
     "o efeito, sobre o múltiplo de uma parte, da convenção terminal alternativa (C7)": (
         "sotp.partes.*.efeito_c7_alternativa_gp_%",),
+    "o diagnóstico da conservação de capital: capital consumido × encargos de reposição e de crescimento": (
+        "cenarios.*.conservacao_capital.**",),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 
@@ -816,3 +822,23 @@ def test_variaveis_do_triangulo_sao_as_do_triangulo_que_nao_sao_premissa():
     for rota, triangulo in _TRIANGULO_POR_ROTA.items():
         assert set(CAT["variaveis_do_triangulo"]) == set(triangulo) - set(CAT["premissas"][rota]), rota
     _rotulos_em_todo_idioma("variaveis_do_triangulo")
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 3 (D6): a conservação de capital. O limiar (10%) é do motor, e o
+# disclosure só nomeia a chave que a integração publica — a mesma trava da
+# divergência de base do degrau.
+# --------------------------------------------------------------------------
+
+def test_anos_base_do_capex_do_catalogo_sao_os_do_gate():
+    assert set(CAT["anos_base_do_capex"]) == ANOS_BASE_DO_CAPEX
+    _rotulos_em_todo_idioma("anos_base_do_capex")
+
+
+def test_disclosure_da_conservacao_de_capital_nomeia_a_chave_da_integracao_sem_limiar():
+    disclosure = CAT["disclosures"]["conservacao_de_capital"]
+    assert set(disclosure) == {"chave", "texto"}, sorted(disclosure)
+    assert disclosure["chave"] in _CHAVES_DA_CONSERVACAO
+    assert disclosure["chave"] in CAT["diagnosticos"]
+    for idioma in CAT["idiomas"]:
+        assert disclosure["texto"].get(idioma, "").strip()

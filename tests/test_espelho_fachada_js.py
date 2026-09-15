@@ -29,11 +29,11 @@ from collections import Counter
 
 import pytest
 
-from relatorio_apoio import FIXTURES, listas_de_chaves_de_diagnostico, montar_entrega
+from relatorio_apoio import FIXTURES, VARIANTES_DO_CASO, listas_de_chaves_de_diagnostico, montar_entrega
 from test_espelho_js import ESPELHO, RAIZ, RAZAO, SEM_NODE
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
-from avaliar import (_ALERTAS_DEGRAU_ORDEM, _CHAVE_DIVERGENCIA_DE_BASE,  # noqa: E402
+from avaliar import (_ALERTAS_DEGRAU_ORDEM, _CHAVE_DIVERGENCIA_DE_BASE, _CHAVES_DA_CONSERVACAO,  # noqa: E402
                      _LIMIAR_DIVERGENCIA_DE_BASE_PCT, avaliar)
 from caso import _PREMISSAS_POR_ROTA, TV_CANON, CasoInvalido, carregar, validar  # noqa: E402
 from motor import MotorFalhou  # noqa: E402
@@ -55,6 +55,10 @@ TAU = 1e-12
 # bloco `degrau`, então nenhuma fixture de caso fica de fora hoje.
 FIXTURES_DE_CASO: list = sorted(p.name for p in FIXTURES.glob("caso_*.json"))
 
+# Fatia 5F, Task 3 (D6): as variantes compostas do apoio com a conservação de capital — a forma de
+# diagnóstico que nenhuma fixture publica. As travas da lista exibida e das chaves as incluem.
+VARIANTES_COM_CONSERVACAO: list = ["conservacao_fecha", "conservacao_nao_fecha"]
+
 # Harness em node: carrega a fachada, avalia o caso e compara com o
 # `resultados`, devolvendo TUDO num JSON só — inclusive a recusa, quando a
 # fachada lança (é assim que o laboratório vai vê-la: uma exceção nomeada,
@@ -73,6 +77,13 @@ _HARNESS = (
     "}"
     "console.log(JSON.stringify(saida));"
 )
+
+
+def _compor(variante: str):
+    """`mutar_caso` que aplica, no lugar, a composição de uma variante do apoio ao caso carregado."""
+    def _mutar(caso: dict) -> None:
+        caso.update(VARIANTES_DO_CASO[variante][1](caso))
+    return _mutar
 
 
 @functools.lru_cache(maxsize=None)
@@ -96,6 +107,11 @@ def _entrega(fixture: str, nopat: bool = False) -> str:
         caso["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0,
                                 "fonte": "harness da fachada"}
 
+    if fixture in VARIANTES_DO_CASO:
+        # Fatia 5F, Task 3: `fixture` pode ser o nome de uma variante composta do apoio (D14) — a
+        # fixture-base com a composição aplicada antes de `avaliar()`.
+        return json.dumps(montar_entrega(VARIANTES_DO_CASO[fixture][0], mutar_caso=_compor(fixture)),
+                          ensure_ascii=False)
     entrega = montar_entrega(fixture, mutar_caso=_para_nopat if nopat else None)
     return json.dumps(entrega, ensure_ascii=False)
 
@@ -522,7 +538,7 @@ def _lista(cenario: dict, caminho: tuple, lado: str) -> list:
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
-@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO + VARIANTES_COM_CONSERVACAO)
 def test_as_chaves_de_diagnostico_da_fachada_sao_as_do_resultados_em_ordem(fixture, tmp_path):
     """Carga (T3): para toda fixture, as chaves que a fachada devolve são
     exatamente as que o wrapper publicou, na mesma ordem e no mesmo lugar —
@@ -544,6 +560,12 @@ def test_as_chaves_de_diagnostico_da_fachada_sao_as_do_resultados_em_ordem(fixtu
                 f"{fixture}/{nome}"
         else:
             assert "degrau" not in cenario_js, f"{fixture}/{nome}: {cenario_js.get('degrau')}"
+        if "conservacao_capital" in cenario_py:
+            caminho = ("conservacao_capital", "diagnosticos_chaves")
+            assert _lista(cenario_js, caminho, "fachada") == _lista(cenario_py, caminho, "wrapper"), \
+                f"{fixture}/{nome}"
+        else:
+            assert "conservacao_capital" not in cenario_js, f"{fixture}/{nome}"
         # F2: um cenário precificado declara que NÃO foi recusado — o campo existe e é `null`.
         assert cenario_js["recusa"] is None, f"{fixture}/{nome}: {cenario_js['recusa']}"
 
@@ -666,6 +688,9 @@ def test_os_dois_alertas_do_degrau_saem_na_ordem_do_wrapper(tmp_path):
     # Uma chave a mais no bloco do degrau (na fixture, a lista só traz a divergência de base).
     pytest.param("caso_degrau.json", ("degrau", "diagnosticos_chaves"),
                  lambda chaves: chaves + ["degrau_alerta"], id="degrau-presenca"),
+    # A chave da conservação de capital apagada da lista publicada (fatia 5F, Task 3).
+    pytest.param("conservacao_nao_fecha", ("conservacao_capital", "diagnosticos_chaves"),
+                 lambda chaves: [], id="conservacao-presenca"),
 ])
 def test_o_comparador_prende_as_chaves_de_diagnostico_por_igualdade_ordenada(
         fixture, caminho, adulterar, tmp_path):
@@ -705,7 +730,7 @@ def _subsequencia(curta: list, longa: list) -> bool:
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
-@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO + VARIANTES_COM_CONSERVACAO)
 def test_a_lista_exibida_contem_toda_lista_de_chaves_do_cenario_em_ordem(fixture, tmp_path):
     """F4 (MÉDIO, E3). O laboratório pinta UMA lista, `diagnosticos_exibidos`,
     que a fachada monta por cenário — e deixa de conhecer caminho de contrato.
@@ -912,3 +937,44 @@ def test_a_fachada_recusa_pela_d6_se_e_so_se_o_gate_recusa_o_caso_editado(tmp_pa
             assert cenario["diagnosticos_exibidos"] is None, rotulo
             recusadas += 1
     assert 0 < recusadas < len(variantes), f"a varredura não exercita os dois lados da D6: {recusadas}"
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5F, Task 3 (D6; §8.4): a conservação de capital anda com o número
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_conservacao_de_capital_acende_e_apaga_com_o_preco_na_mesma_chamada(tmp_path):
+    """A regra inegociável do §8.4 aplicada à conservação de capital, que depende de premissas
+    editáveis (`da`, `tax`, `g`, `roic`). `conservacao_fecha`: encargos de 450 contra capex 430 + ΔWC
+    20, gap zero, sem a chave. `da` 30 leva os encargos a ≈ 518,75 — gap de ≈ −15,3%, acima do limiar
+    do motor — e a chave acende na chamada em que o preço anda; desfazer a apaga. Três chamadas no
+    mesmo processo, cada uma conferida contra o que `avaliar()` publica para o caso."""
+    variante = "conservacao_fecha"
+    caso, resultados = _caso_e_resultados(variante)
+    caminho = ("conservacao_capital", "diagnosticos_chaves")
+    (chave,) = _CHAVES_DA_CONSERVACAO
+
+    def _editar(c: dict) -> None:
+        _compor(variante)(c)
+        c["cenarios"]["base"]["premissas"]["da"] = 30.0
+
+    editada = montar_entrega(VARIANTES_DO_CASO[variante][0], mutar_caso=_editar)
+    carga, na_edicao, desfeito = [
+        vivo["cenarios"]["base"]
+        for vivo in _avaliar_em_sequencia([caso, editada["caso"], caso], tmp_path)]
+    publicado = resultados["cenarios"]["base"]
+    publicado_editado = editada["resultados"]["cenarios"]["base"]
+
+    assert _lista(publicado, caminho, "wrapper") == [] == _lista(carga, caminho, "fachada")
+    assert chave not in carga["diagnosticos_exibidos"]
+
+    assert _lista(publicado_editado, caminho, "wrapper") == [chave]
+    assert _lista(na_edicao, caminho, "fachada") == [chave]
+    assert chave in na_edicao["diagnosticos_exibidos"]
+    assert _erro_relativo(publicado_editado["valor"]["preco_acao"], na_edicao["valor"]["preco_acao"]) <= TAU
+    assert _erro_relativo(carga["valor"]["preco_acao"], na_edicao["valor"]["preco_acao"]) > TAU, \
+        "a edição não moveu o preço — o teste deixou de provar que número e diagnóstico andam juntos"
+
+    assert _lista(desfeito, caminho, "fachada") == []
+    assert desfeito["valor"]["preco_acao"] == carga["valor"]["preco_acao"]

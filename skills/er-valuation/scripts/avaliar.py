@@ -369,6 +369,39 @@ _CHAVE_DIVERGENCIA_DE_BASE: str = "degrau_divergencia_de_base"
 _CHAVES_DO_DEGRAU_ORDEM: tuple[str, ...] = (
     tuple(chave for _campo, chave in _ALERTAS_DEGRAU_ORDEM) + (_CHAVE_DIVERGENCIA_DE_BASE,))
 
+# Fatia 5F, Task 3 (D6): a CHAVE do alerta da conservação de capital (§11.1b). O motor
+# publica `conservacao_capital.ALERTA` como prosa sem chave quando o gap passa do
+# limiar DELE (10%, justos.py); dar a chave é trabalho desta camada, por presença — o
+# padrão de `_ALERTAS_DEGRAU_ORDEM`. `motor_espelho.js:conservacaoCapital` toma a mesma
+# decisão ao vivo, com a paridade presa em tests/test_paridade_wrapper_js.py.
+_ALERTAS_DA_CONSERVACAO: tuple[tuple[str, str], ...] = (("ALERTA", "conservacao_capital_nao_fecha"),)
+_CHAVES_DA_CONSERVACAO: tuple[str, ...] = tuple(chave for _campo, chave in _ALERTAS_DA_CONSERVACAO)
+
+
+def _conservacao_publicada(saida_motor: dict, conservacao: dict) -> dict:
+    """`cenarios.<n>.conservacao_capital` (fatia 5F, Task 3, D6): a saída do motor
+    para a verificação da §11.1b, íntegra, mais `ano_base` (a declaração do caso) e
+    `diagnosticos_chaves` (as chaves dos alertas presentes, na ordem de
+    `_ALERTAS_DA_CONSERVACAO`).
+
+    O motor devolve TEXTO no lugar do bloco ("NAO CHECAVEL...") quando falta
+    `--capex-total`, `--dwc` ou `--ebitda` — inalcançável com o gate, e recusado aqui
+    pelo nome, nunca publicado no lugar do bloco. `gap_%` passa por `_exigir_valor`:
+    capital consumido nulo, ou retorno do capital novo nulo, vira `null` no motor."""
+    bloco = saida_motor.get("conservacao_capital")
+    if not isinstance(bloco, dict):
+        raise MotorFalhou(
+            f"motor não devolveu a conservação de capital como bloco: {bloco!r}. A identidade "
+            "exige --capex-total, --dwc e --ebitda juntos; o wrapper não publica texto no lugar do "
+            "bloco."
+        )
+    _exigir_valor(bloco, "gap_%")
+    return {
+        **bloco,
+        "ano_base": conservacao["capex_total"]["ano_base"],
+        "diagnosticos_chaves": [chave for campo, chave in _ALERTAS_DA_CONSERVACAO if campo in bloco],
+    }
+
 
 def _chaves_do_degrau(nivel_alvo: dict, divergencia_de_base_pct: float) -> list[str]:
     """`degrau.diagnosticos_chaves` de um cenário: as chaves dos alertas que o
@@ -468,7 +501,8 @@ _MULTIPLOS_POR_ROTA: dict[str, tuple[str, ...]] = {
 def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
                      nd_efetivo: float | None = None, acoes: float | None = None,
                      moeda: str | None = None,
-                     rf: float | None = None) -> tuple[dict, dict, str, float]:
+                     rf: float | None = None,
+                     conservacao: dict | None = None) -> tuple[dict, dict, str, float]:
     """Roda o motor para um vetor de premissas da rota firm; devolve
     (saída, valor, álgebra, múltiplo de referência).
 
@@ -526,15 +560,25 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
     Todo call site existente (`avaliar.py`, `sensibilidades.py`) sempre
     passa `nd_efetivo`/`acoes` explícitos — o default novo não muda
     nenhum comportamento pré-existente, só abre um caminho a mais.
+
+    Fatia 5F, Task 3 (D6): `conservacao` é o bloco `conservacao_de_capital` do
+    caso, ou `None`. Dado, o capex total e o ΔWC vão ao motor (`--capex-total`,
+    `--dwc`), que publica `conservacao_capital` na saída — lido por
+    `_conservacao_publicada`. Só o laço de cenários de `avaliar()` o passa: as
+    células de grade, as partes de SOTP e o teto também precificam por esta
+    função, e a verificação não é delas.
     """
     campo_multiplo = _campo_do_multiplo("firm", tipo_metrica)
     sem_ponte = nd_efetivo is None
+    flags_da_conservacao = ({} if conservacao is None else
+                            {"capex_total": conservacao["capex_total"]["valor"],
+                             "dwc": conservacao["dwc"]["valor"]})
     if tipo_metrica == "EBITDA":
         escala = {"ebitda": valor_metrica}
         if not sem_ponte:
             escala["nd"] = nd_efetivo
             escala["acoes"] = acoes
-        saida = rodar("firm", premissas, escala, moeda, rf=rf)
+        saida = rodar("firm", premissas, {**escala, **flags_da_conservacao}, moeda, rf=rf)
         multiplo = _exigir_valor(saida, campo_multiplo)
         if sem_ponte:
             valor = {"EV": _exigir_valor(saida, "EV")}
@@ -549,7 +593,7 @@ def precificar_firm(premissas: dict, tipo_metrica: str, valor_metrica: float,
             }
             algebra = "EV = EV/EBITDA_curr x EBITDA (ponte feita pelo motor)"
     else:  # NOPAT
-        saida = rodar("firm", premissas, None, moeda, rf=rf)
+        saida = rodar("firm", premissas, flags_da_conservacao or None, moeda, rf=rf)
         multiplo = _exigir_valor(saida, campo_multiplo)
         ev = multiplo * valor_metrica
         if sem_ponte:
@@ -1005,12 +1049,16 @@ def avaliar(caso: dict) -> dict:
         ponte = compor(caso["ponte"])
         resultado["ponte"] = ponte
         nd_efetivo = ponte["nd_efetivo"]
+        # Fatia 5F, Task 3 (D6): a conservação de capital, só no cenário.
+        conservacao = caso.get("conservacao_de_capital")
         for nome, cenario in caso["cenarios"].items():
             saida, valor, algebra, _multiplo = precificar_firm(
                 cenario["premissas"], metrica["tipo"], metrica["valor"],
-                nd_efetivo, acoes, moeda, rf=rf)
+                nd_efetivo, acoes, moeda, rf=rf, conservacao=conservacao)
             cenarios[nome] = _monta_cenario(
                 cenario, saida, rota, valor, algebra, preco_valor, metrica["tipo"])
+            if conservacao is not None:
+                cenarios[nome]["conservacao_capital"] = _conservacao_publicada(saida, conservacao)
     elif rota == "rampa":
         # Única rota sem `triangulo`, de propósito: a regra existe para a
         # RiR nunca ficar silenciosa, e aqui o motor já devolve

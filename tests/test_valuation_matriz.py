@@ -223,6 +223,34 @@ def _caso_equity_com_degrau_e_metrica_forward() -> dict:
     return _com_metrica_forward(_com_degrau(_equity()))
 
 
+# Fatia 5F, Task 3 (D6): o menor bloco de conservação de capital válido. O motor só confronta a
+# identidade na rota firm com EBITDA, então as três células abaixo são recusas por nome.
+_CONSERVACAO_MINIMA = {
+    "capex_total": {"valor": 430.0, "fonte": "fixture da matriz", "ano_base": "corrente"},
+    "dwc": {"valor": 20.0, "fonte": "fixture da matriz"},
+}
+
+
+def _com_conservacao(caso: dict) -> dict:
+    c = copy.deepcopy(caso)
+    c["conservacao_de_capital"] = copy.deepcopy(_CONSERVACAO_MINIMA)
+    return c
+
+
+def _caso_equity_com_conservacao() -> dict:
+    return _com_conservacao(_equity())
+
+
+def _caso_rampa_com_conservacao() -> dict:
+    return _com_conservacao(_rampa())
+
+
+def _caso_firm_nopat_com_conservacao() -> dict:
+    c = _com_conservacao(_firm())
+    c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "fonte": "fixture da matriz"}
+    return c
+
+
 # --------------------------------------------------------------------------
 # A matriz: 3 rotas x 3 blocos opcionais = 9 células. `constroi` monta o
 # caso minimamente válido da célula; `deve_passar` é o veredito de
@@ -268,9 +296,14 @@ MATRIZ = {
     # gate, por nome.
     ("rampa", "metrica_forward"): (_caso_rampa_com_metrica_forward, False),
     ("equity", "degrau+metrica_forward"): (_caso_equity_com_degrau_e_metrica_forward, False),
+    # Fatia 5F, Task 3 (D6): 'conservacao_de_capital' fora da rota firm com EBITDA -- recusada no
+    # gate, por nome (a rampa garante a identidade por construção; o degrau só existe na equity).
+    ("equity", "conservacao_de_capital"): (_caso_equity_com_conservacao, False),
+    ("rampa", "conservacao_de_capital"): (_caso_rampa_com_conservacao, False),
+    ("firm", "conservacao_de_capital+nopat"): (_caso_firm_nopat_com_conservacao, False),
 }
 
-assert len(MATRIZ) == 14, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity) e as 2 recusas de metrica_forward (5F, D5), exatamente uma vez cada"
+assert len(MATRIZ) == 17, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5) e as 3 de conservacao_de_capital (5F, D6), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

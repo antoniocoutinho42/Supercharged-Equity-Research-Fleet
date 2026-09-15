@@ -1481,3 +1481,60 @@ def test_recusas_da_metrica_forward_e_da_escala_monetaria_nomeiam_a_regra(caso, 
     with pytest.raises(CasoInvalido) as erro:
         validar(caso())
     assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5F, Task 3 (D6 do plano docs/superpowers/plans/2026-09-15-v4-item5f-
+# valuation.md): 'conservacao_de_capital', só na rota firm com EBITDA, com
+# vocabulário fechado em todo nível.
+# --------------------------------------------------------------------------
+
+def _conservacao_valida() -> dict:
+    return {"capex_total": {"valor": 430.0, "fonte": "demonstração sintética", "ano_base": "corrente"},
+            "dwc": {"valor": 20.0, "fonte": "demonstração sintética"}}
+
+
+def _conservacao_com(grupo, campo: str, valor) -> dict:
+    bloco = _conservacao_valida()
+    (bloco if grupo is None else bloco[grupo])[campo] = valor
+    return bloco
+
+
+def _firm_nopat() -> dict:
+    return _com(_firm(), metrica_base={"tipo": "NOPAT", "valor": 600.0, "fonte": "fixture sintética"})
+
+
+def test_conservacao_de_capital_na_rota_firm_com_ebitda_e_aceita_e_nula_e_ausencia():
+    validar(_com(_firm(), conservacao_de_capital=_conservacao_valida()))
+    guidance = _conservacao_com("capex_total", "ano_base", "guidance_longo_prazo")
+    guidance["dwc"]["valor"] = -35.0  # giro que libera caixa: ΔWC negativo é válido
+    validar(_com(_firm(), conservacao_de_capital=guidance))
+    validar(_com(_firm(), conservacao_de_capital=None))
+
+
+@pytest.mark.parametrize("caso,nomeado", [
+    pytest.param(lambda: _com(_equity(), conservacao_de_capital=_conservacao_valida()),
+                 "bloco 'conservacao_de_capital' na rota 'equity'", id="rota_equity"),
+    pytest.param(lambda: _com(_fixture("caso_rampa.json"), conservacao_de_capital=_conservacao_valida()),
+                 "bloco 'conservacao_de_capital' na rota 'rampa'", id="rota_rampa"),
+    pytest.param(lambda: _com(_firm_nopat(), conservacao_de_capital=_conservacao_valida()),
+                 "com métrica 'NOPAT'", id="firm_com_nopat"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("capex_total", "valor", 0.0)),
+                 "'conservacao_de_capital.capex_total.valor' inválido", id="capex_zero"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("capex_total", "valor", float("inf"))),
+                 "'conservacao_de_capital.capex_total.valor' inválido", id="capex_nao_finito"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("dwc", "valor", float("nan"))),
+                 "'conservacao_de_capital.dwc.valor' inválido", id="dwc_nao_finito"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("capex_total", "ano_base", "guidance")),
+                 "'conservacao_de_capital.capex_total.ano_base' fora do vocabulário", id="ano_base_fora_do_vocabulario"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com(None, "capex", 1.0)),
+                 "Você quis dizer 'capex_total'?", id="chave_desconhecida_no_bloco"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("capex_total", "anobase", "corrente")),
+                 "Você quis dizer 'ano_base'?", id="chave_desconhecida_no_capex"),
+    pytest.param(lambda: _com(_firm(), conservacao_de_capital=_conservacao_com("dwc", "fontes", "balanço")),
+                 "Você quis dizer 'fonte'?", id="chave_desconhecida_no_dwc"),
+])
+def test_recusas_da_conservacao_de_capital_nomeiam_a_regra(caso, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(caso())
+    assert nomeado in str(erro.value)

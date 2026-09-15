@@ -169,11 +169,34 @@ def _escala(caso: dict) -> dict:
     return c
 
 
+def _com_conservacao_de_capital(caso: dict, capex_total: float, dwc: float) -> dict:
+    c = copy.deepcopy(caso)
+    c["conservacao_de_capital"] = {
+        "capex_total": {"valor": capex_total, "fonte": "demonstração sintética", "ano_base": "corrente"},
+        "dwc": {"valor": dwc, "fonte": "demonstração sintética"},
+    }
+    return c
+
+
+def _conservacao_fecha(caso: dict) -> dict:
+    """`caso_minimo_firm` (EBITDA 1.000, d 20%, t 25%, g 5%, ROIC 12%) com a conservação de capital
+    declarada (D6 da 5F): encargos de 450 — reposição 200, crescimento 250 — contra capex 430 e
+    ΔWC 20. Gap zero, sem alerta."""
+    return _com_conservacao_de_capital(caso, 430.0, 20.0)
+
+
+def _conservacao_nao_fecha(caso: dict) -> dict:
+    """A mesma companhia com capex 300 e ΔWC zero: gap de −50%, acima do limiar do motor."""
+    return _com_conservacao_de_capital(caso, 300.0, 0.0)
+
+
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
     "forward_firm": ("caso_minimo_firm.json", _forward_firm),
     "forward_equity": ("caso_minimo_equity.json", _forward_equity),
     "escala": ("caso_rampa.json", _escala),
+    "conservacao_fecha": ("caso_minimo_firm.json", _conservacao_fecha),
+    "conservacao_nao_fecha": ("caso_minimo_firm.json", _conservacao_nao_fecha),
 }
 
 

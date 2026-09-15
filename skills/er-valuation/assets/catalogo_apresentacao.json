@@ -904,9 +904,22 @@
       "rotulo": {
         "pt-BR": "Divergência de base acima do limiar: parte do incremento do degrau vem do descasamento entre LL e ROE·VPA, não do degrau"
       }
+    },
+    "conservacao_capital_nao_fecha": {
+      "severidade": "alerta",
+      "bloco": "crescimento_reinvestimento",
+      "rotulo": {
+        "pt-BR": "Conservação de capital não fecha: o capital consumido difere dos encargos de reposição e de crescimento acima do limiar — encargo de reposição e taxa de reinvestimento em bases diferentes"
+      }
     }
   },
   "disclosures": {
+    "conservacao_de_capital": {
+      "chave": "conservacao_capital_nao_fecha",
+      "texto": {
+        "pt-BR": "O capital que a companhia consome (capex total mais capital de giro) não fecha com os encargos de reposição e de crescimento do vetor: o encargo de reposição e a taxa de reinvestimento estão em bases diferentes, e o valor pode cobrar a reposição duas vezes ou deixar de cobrá-la."
+      }
+    },
     "divergencia_de_base_degrau": {
       "chave": "degrau_divergencia_de_base",
       "texto": {
@@ -1245,6 +1258,18 @@
       }
     }
   },
+  "anos_base_do_capex": {
+    "corrente": {
+      "rotulo": {
+        "pt-BR": "Capex do ano corrente"
+      }
+    },
+    "guidance_longo_prazo": {
+      "rotulo": {
+        "pt-BR": "Capex do guidance de longo prazo"
+      }
+    }
+  },
   "conclusoes_de_valor": {
     "preço por ação": [
       "manchete.preco_acao",
@@ -1297,6 +1322,8 @@
     "preco.valor",
     "metrica_base.valor",
     "metrica_forward.valor",
+    "conservacao_de_capital.capex_total.valor",
+    "conservacao_de_capital.dwc.valor",
     "acoes_diluidas",
     "ponte.*",
     "cenarios.*.premissas.*",

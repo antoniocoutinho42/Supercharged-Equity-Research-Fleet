@@ -131,6 +131,10 @@ from motor import MotorFalhou, rodar  # noqa: E402
 # reimplementar a composicao que `avaliar()` ja faz. Ver `_avaliar_degrau` abaixo.
 from avaliar import avaliar as avaliar_caso  # noqa: E402
 
+# [5F, Task 3] `precificar_firm` com as flags da conservação de capital e o bloco que `avaliar()` publica
+# (`_conservacao_publicada`) — o WRAPPER, pela mesma razão dos imports acima. Ver `_avaliar_conservacao`.
+from avaliar import _conservacao_publicada, precificar_firm  # noqa: E402
+
 SEMENTE_SOLVER = 20260826
 
 _DESPACHO = {"ev_nopat": ev_nopat, "ev_ebitda": ev_ebitda, "pe": pe}
@@ -1138,15 +1142,15 @@ def gerar() -> list[dict]:
     reproduza a fixture commitada byte a byte.
 
     Os problemas de wrapper (`_bloco_wrapper`, task 3), de rampa (`_bloco_rampa`, fatia C task 1),
-    de diagnóstico (`_bloco_diag`, fatia C task 2) e de degrau (`_bloco_degrau`, fatia D task 2)
-    vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
+    de diagnóstico (`_bloco_diag`, fatia C task 2), de degrau (`_bloco_degrau`, fatia D task 2) e
+    de conservação de capital (`_bloco_conservacao`, fatia 5F task 3) vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
     regra da metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2, imutável por
     regra da fatia B) alinhado por posição com os IDs que ele já conhece; a fixture inteira
     permanece uma lista única, um gerador único, como o brief da task 3 pediu e esta task
     preserva."""
     rng = random.Random(SEMENTE_SOLVER)
     problemas = (_bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
-                + _bloco_diag() + _bloco_degrau())
+                + _bloco_diag() + _bloco_degrau() + _bloco_conservacao())
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -1466,6 +1470,52 @@ def _avaliar_degrau(problema: dict) -> dict:
     }
 
 
+# [5F, Task 3] Conservação de capital (§11.1b). O vetor de `caso_minimo_firm` (EBITDA 1.000, d 20%,
+# t 25%, g 5%, ROIC 12% — encargos de 450) contra capitais consumidos dos dois lados do limiar do motor
+# (10%): fecha em zero; −2,27% com ΔWC negativo; +9,09% logo abaixo; −11,11% e +13,46% logo acima — um
+# limiar de 20% no espelho, ou um sem o módulo, reprova nesses —; −50% bem acima. E um vetor com d, g
+# e ROIC diferentes (+9,47%), para o gap não depender só do capex.
+_PREMISSAS_CONSERVACAO: dict = dict(g=5.0, roic=12.0, wacc=10.0, n=10, da=20.0, tax=25.0, tv="gordon",
+                                    roic_tv=10.0, gp=3.0)
+
+# Os cinco números do bloco que o motor arredonda — comparados por igualdade exata no harness.
+CAMPOS_CONSERVACAO: tuple = ("capital_consumido", "encargo_reposicao_d_x_EBITDA",
+                             "encargo_crescimento_RiR_x_NOPAT", "gap", "gap_%")
+
+
+def _problema_conservacao(premissas: dict, ebitda: float, capex_total: float, dwc: float) -> dict:
+    return {"id": 0, "tipo": "conservacao",
+            "args": {"premissas": premissas, "ebitda": ebitda, "capex_total": capex_total, "dwc": dwc}}
+
+
+def _bloco_conservacao() -> list[dict]:
+    v = [_problema_conservacao(dict(_PREMISSAS_CONSERVACAO), 1000.0, capex, dwc)
+         for capex, dwc in ((430.0, 20.0), (500.0, -60.0), (495.0, 0.0), (405.0, 0.0), (520.0, 0.0),
+                            (300.0, 0.0))]
+    v.append(_problema_conservacao({**_PREMISSAS_CONSERVACAO, "da": 35.0, "g": 7.0, "roic": 18.0},
+                                   2500.0, 1400.0, 90.0))
+    return v
+
+
+def _avaliar_conservacao(problema: dict) -> dict:
+    """Um problema `tipo: "conservacao"` (fatia 5F, Task 3) — roda o WRAPPER de verdade:
+    `avaliar.precificar_firm` com as flags da conservação de capital (a CLI converte d, t, g e ROIC de
+    ponto percentual para fração, e o handler `ev` chama `conservacao_capital`) e
+    `avaliar._conservacao_publicada`, o mesmo bloco que `avaliar()` publica. ALERTA vira
+    `True`/ausência, a convenção de `_avaliar_degrau`: só a presença importa."""
+    args = problema["args"]
+    conservacao = {"capex_total": {"valor": args["capex_total"], "fonte": "fixture", "ano_base": "corrente"},
+                   "dwc": {"valor": args["dwc"], "fonte": "fixture"}}
+    saida, _valor, _algebra, _multiplo = precificar_firm(
+        args["premissas"], "EBITDA", args["ebitda"], moeda="BRL-nominal", conservacao=conservacao)
+    bloco = _conservacao_publicada(saida, conservacao)
+    publicado = {campo: bloco[campo] for campo in CAMPOS_CONSERVACAO}
+    if "ALERTA" in bloco:
+        publicado["ALERTA"] = True
+    publicado["diagnosticos_chaves"] = bloco["diagnosticos_chaves"]
+    return {"id": problema["id"], "conservacao": publicado, **_CAMPOS_SOLVER_VAZIOS}
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
@@ -1474,6 +1524,7 @@ _DESPACHO_POR_TIPO = {
     "rampa": _avaliar_rampa,
     "diag": _avaliar_diag,
     "degrau": _avaliar_degrau,
+    "conservacao": _avaliar_conservacao,
 }
 
 

@@ -170,6 +170,17 @@ fora disso, recusa nomeando, com sugestão); nulo é ausência. Não entra em
 conta nenhuma: o relatório a aplica às unidades que o catálogo marca com
 `escala_monetaria` (hoje só `moeda`, nunca preço por ação).
 
+Bloco opcional `conservacao_de_capital`
+(`{capex_total: {valor, fonte, ano_base}, dwc: {valor, fonte}}`): a verificação
+da conservação de capital da metodologia — o capital consumido (capex total
+mais ΔWC) contra os encargos de reposição e de crescimento do vetor de cada
+cenário. Só na rota `firm` com métrica `EBITDA` (fora dela, recusa nomeada: o
+motor só confronta a identidade sobre o EBITDA declarado, e a rota rampa a
+garante por construção); `capex_total.valor` finito e positivo, `dwc.valor`
+finito, as duas fontes textos não vazios, `ano_base` `corrente` ou
+`guidance_longo_prazo` (`caso.ANOS_BASE_DO_CAPEX`), nenhuma outra chave em
+nível nenhum; nulo é ausência.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -208,6 +219,14 @@ convenção que já mora aqui):
   `metrica` com tipo, valor, período e fonte —, ou `null`.
 - `escala_monetaria` — a escala dos montantes que o caso declara, ou `null`;
   sempre publicada.
+- `cenarios.<n>.conservacao_capital` — só quando o caso declara
+  `conservacao_de_capital`: a saída do motor para a verificação, íntegra
+  (capital consumido, encargos de reposição e de crescimento, gap e `gap_%`,
+  e o `ALERTA` ou a `leitura` do motor), mais `ano_base` e
+  `diagnosticos_chaves` — `conservacao_capital_nao_fecha` quando o motor emite
+  `ALERTA`, por presença (`avaliar._ALERTAS_DA_CONSERVACAO`). O limiar (10%) é
+  do motor; o espelho o reproduz ao vivo (`motor_espelho.js:conservacaoCapital`),
+  e a fachada publica a lista, a exibe e a compara.
 - `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
   grade de sensibilidade) — a chave pública de cada mensagem do motor
   (`diagnosticos.classificar`), paralela a `diagnosticos`/
@@ -269,7 +288,9 @@ as do gate) e a marca `escala_monetaria` das unidades de montante; o quadro
 "como o valor é formado" de cada rota (`formacao_do_valor`: a função de
 cada premissa, em uma linha, e a síntese — texto de metodologia, nunca um
 número); e o rótulo das variáveis do triângulo que não são premissa
-(`variaveis_do_triangulo`))
+(`variaveis_do_triangulo`); o rótulo de cada ano-base do capex
+(`anos_base_do_capex`); e, em `disclosures.conservacao_de_capital`, o texto e a
+chave da conservação de capital que não fecha)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
@@ -352,4 +373,6 @@ de sensibilidade (alvo de mercado, `grade1D`, `grade2D`); a paridade
 correspondente vive em dois harnesses separados —
 `tests/test_paridade_solver_js.py` (contra o motor congelado) e
 `tests/test_paridade_wrapper_js.py` (contra `reversa.py`/`sensibilidades.py`)
-— porque são garantias contra fontes Python diferentes (motor × wrapper).
+— porque são garantias contra fontes Python diferentes (motor × wrapper). A
+conservação de capital (`conservacaoCapital`) é garantia contra o wrapper: o
+harness roda `avaliar.precificar_firm` com as flags do motor.
