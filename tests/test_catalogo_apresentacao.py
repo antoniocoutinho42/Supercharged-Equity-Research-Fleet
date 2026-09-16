@@ -436,9 +436,11 @@ _NAO_SAO_INSUMOS: dict[str, tuple[str, ...]] = {
         "sensibilidades.grades_2d.*.pontos_x.*",
         "sensibilidades.grades_2d.*.pontos_y.*"),
     "julgamento declarado — a sobreposição que leva o cenário da manchete ao outro ramo de uma escolha "
-    "metodológica, e o peso de probabilidade de cada cenário (§8.2: fora da fórmula), são escolha do "
-    "analista, não fato sobre a companhia nem sobre o mercado": (
-        "escolhas_metodologicas.*.sobreposicoes.*", "pesos_de_probabilidade.*"),
+    "metodológica (na premissa, e — 5G Task 1b — na métrica-base ou numa linha da ponte), e o peso de "
+    "probabilidade de cada cenário (§8.2: fora da fórmula), são escolha do analista, não fato sobre a "
+    "companhia nem sobre o mercado": (
+        "escolhas_metodologicas.*.sobreposicoes.*", "escolhas_metodologicas.*.sobreposicoes.*.*",
+        "pesos_de_probabilidade.*"),
 }
 
 

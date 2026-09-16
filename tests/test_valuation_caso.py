@@ -1578,9 +1578,7 @@ def test_alavanca_de_lucro_e_aceita_com_degrau_declarado():
     pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={})]),
                  "'escolhas_metodologicas.0.sobreposicoes' vazia", id="sobreposicoes_vazia"),
     pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"roe": 20.0})]),
-                 "não é premissa da rota 'firm'", id="sobreposicao_fora_da_rota"),
-    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"tv": "book"})]),
-                 "que não é premissa numérica", id="sobreposicao_nao_numerica"),
+                 "não é alvo da rota 'firm'", id="sobreposicao_fora_da_rota"),
     pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"roic": "20"})]),
                  "não é um número finito", id="sobreposicao_textual"),
     pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(no_caso_base="centra")]),
@@ -1699,6 +1697,76 @@ def test_cross_check_pela_rota_firm_exige_a_ponte_que_so_as_rotas_com_ponte_decl
                  "chave desconhecida em 'cross_check'", id="cross_check_com_chave_desconhecida"),
 ])
 def test_recusas_das_tres_leituras_nomeiam_a_regra(caso, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(caso())
+    assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1b: os alvos que uma sobreposição alcança além da premissa numérica —
+# a convenção terminal, `metrica_base.valor` e as linhas da ponte. Todo alvo fora desse
+# conjunto continua recusado, com a mesma mensagem nomeada.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("sobreposicoes", [
+    pytest.param({"metrica_base": {"valor": 1100.0}}, id="metrica_base_valor"),
+    pytest.param({"ponte": {"caixa_e_equivalentes": 0.0}}, id="uma_linha_da_ponte"),
+    pytest.param({"ponte": {"divida_bruta": 900.0, "minoritarios": 50.0}}, id="duas_linhas_da_ponte"),
+    pytest.param({"tv": "book"}, id="convencao_terminal"),
+    pytest.param({"tv": "convergencia", "roic": 14.0, "metrica_base": {"valor": 900.0},
+                  "ponte": {"outros_passivos": 10.0}}, id="alvos_misturados"),
+])
+def test_sobreposicoes_alcancam_os_alvos_declarados_do_caso(sobreposicoes):
+    validar(_com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes=sobreposicoes)]))
+
+
+@pytest.mark.parametrize("caso,nomeado", [
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"acoes_diluidas": 120.0})]),
+        "que não é alvo da rota 'firm'", id="alvo_fora_do_conjunto"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"preco": {"valor": 60.0}})]),
+        "que não é alvo da rota 'firm'", id="preco_nao_e_alvo"),
+    pytest.param(lambda: _com(_equity(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"ponte": {"divida_bruta": 900.0}})]),
+        "cita 'ponte' na rota 'equity'", id="ponte_na_rota_sem_ponte"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"ponte": {"caixa_e_equivalente": 0.0}})]),
+        "Você quis dizer 'caixa_e_equivalentes'?", id="linha_de_ponte_desconhecida"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"ponte": {}})]),
+        "'escolhas_metodologicas.0.sobreposicoes.ponte' não é um objeto com ao menos uma linha",
+        id="ponte_sem_linha"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"ponte": {"divida_bruta": "900"}})]),
+        "'escolhas_metodologicas.0.sobreposicoes.ponte.divida_bruta' não é um número finito",
+        id="linha_de_ponte_textual"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"metrica_base": {"tipo": "NOPAT"}})]),
+        "chave desconhecida em 'escolhas_metodologicas.0.sobreposicoes.metrica_base'",
+        id="metrica_base_com_tipo"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"metrica_base": 1100.0})]),
+        "'escolhas_metodologicas.0.sobreposicoes.metrica_base' não é um objeto",
+        id="metrica_base_escalar"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"metrica_base": {"valor": float("inf")}})]),
+        "'escolhas_metodologicas.0.sobreposicoes.metrica_base.valor' não é um número finito",
+        id="metrica_base_nao_finita"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"tv": "perpetuidade"})]),
+        "'escolhas_metodologicas.0.sobreposicoes.tv' fora do vocabulário", id="tv_fora_do_vocabulario"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"tv": 3.0})]),
+        "'escolhas_metodologicas.0.sobreposicoes.tv' não é texto", id="tv_numerica"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"mid_year": True})]),
+        "premissa não numérica que a sobreposição não alcança", id="mid_year_nao_e_alcancado"),
+    pytest.param(lambda: _com(_equity(), escolhas_metodologicas=[
+        _escolha(sobreposicoes={"politica_tv": "encerra"})]),
+        "premissa não numérica que a sobreposição não alcança", id="politica_tv_nao_e_alcancada"),
+])
+def test_recusas_dos_alvos_de_sobreposicao_nomeiam_a_regra(caso, nomeado):
     with pytest.raises(CasoInvalido) as erro:
         validar(caso())
     assert nomeado in str(erro.value)

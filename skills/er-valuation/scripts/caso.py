@@ -2913,6 +2913,140 @@ _CHAVES_DA_ESCOLHA_PERMITIDAS: frozenset = frozenset({
 })
 _CHAVES_DO_GATILHO_PERMITIDAS: frozenset = frozenset({"observavel"})
 
+# Fatia 5G, Task 1b: os alvos que uma sobreposição alcança, além da premissa numérica
+# da rota. As dez escolhas não movem só premissa — a base do lucro move a MÉTRICA, o
+# caixa em híbrida financeira e a fronteira de consolidação movem LINHAS DA PONTE, e a
+# hipótese terminal troca a CONVENÇÃO. A sobreposição é uma sobreposição parcial do
+# próprio caso, e por isso usa a estrutura dele: os dois alvos fora do vetor de
+# premissas entram como objetos, com os mesmos nomes que o caso lhes dá.
+#
+# Por que não um caminho textual ('metrica_base.valor', 'ponte.divida_bruta'), que
+# seria a forma óbvia: `_validar_chaves_enderecaveis` (revisão da 5E, F1) recusa
+# QUALQUER chave do caso que contenha '.', porque o caminho de um número do caso
+# separa segmentos por '.' no mapa de insumos, no `usado_em` do ledger e nos
+# placeholders. Uma chave com ponto tornaria o número sob ela inendereçável — e as
+# sobreposições são folhas do caso como qualquer outra.
+ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO: frozenset = frozenset({"metrica_base", "ponte"})
+
+# A única premissa NÃO numérica que uma sobreposição alcança: a convenção terminal, a
+# única cujo vocabulário este gate de fato conhece (`TV_CANON`). 'politica_tv' e
+# 'mid_year' ficam de fora — o gate as trata como string opaca e bool (ver
+# `_PREMISSAS_NAO_NUMERICAS` e o comentário de `POLITICA_TV_OPCOES`), e uma
+# sobreposição sobre elas passaria sem nenhuma checagem de valor.
+PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO: frozenset = frozenset({"tv"})
+
+_CHAVES_DA_METRICA_NA_SOBREPOSICAO: frozenset = frozenset({"valor"})
+
+
+def _valor_numerico_da_sobreposicao(prefixo: str, alvo: str, valor: Any) -> None:
+    """Todo alvo numérico de uma sobreposição — premissa, métrica-base ou linha da
+    ponte — é número finito. O motor (ou a ponte) recebe o valor direto, sem
+    conversão: texto, bool, NaN ou Infinity envenenam o preço da alternativa em
+    silêncio."""
+    if not _numero_valido(valor) or not _finito(valor):
+        raise CasoInvalido(
+            f"'{prefixo}.sobreposicoes.{alvo}' não é um número finito: {valor!r}. O motor "
+            "recebe esse valor direto, sem conversão — texto, bool, NaN ou Infinity envenenam "
+            "o preço da alternativa em silêncio."
+        )
+
+
+def _validar_sobreposicoes(prefixo: str, sobreposicoes: Any, rota: str) -> None:
+    """Valida o mapa de sobreposições de UMA escolha: forma, alvos e valores.
+
+    Os alvos são os que as dez escolhas de fato movem, e nada além deles: cada
+    premissa da rota (numérica, ou a convenção terminal, em
+    `PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO`), `metrica_base` (só `valor`) e `ponte`
+    (as linhas de `CAMPOS_DA_PONTE`, e só nas rotas que declaram o bloco). É uma
+    sobreposição PARCIAL do caso, com a estrutura do caso — ver o comentário de
+    `ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO` sobre por que não é um caminho textual.
+    """
+    if not isinstance(sobreposicoes, dict):
+        raise CasoInvalido(
+            f"'{prefixo}.sobreposicoes' não é um objeto: {sobreposicoes!r}. É o mapa de alvos "
+            "do caso -> valor que leva o cenário da manchete ao outro ramo da escolha."
+        )
+    if not sobreposicoes:
+        raise CasoInvalido(
+            f"'{prefixo}.sobreposicoes' vazia: a alternativa sairia idêntica ao cenário da "
+            "manchete, com impacto zero. Uma escolha sem nada que a mova não é uma escolha "
+            "— declare o alvo que muda de ramo, ou remova a entrada."
+        )
+
+    premissas_da_rota = _PREMISSAS_POR_ROTA[rota]
+    aceitos = set(premissas_da_rota) | ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO
+    for alvo in sorted(sobreposicoes):
+        _exigir_texto(alvo, f"{prefixo}.sobreposicoes")
+        valor = sobreposicoes[alvo]
+
+        if alvo not in aceitos:
+            sugestao = difflib.get_close_matches(alvo, aceitos, n=1)
+            dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+            raise CasoInvalido(
+                f"'{prefixo}.sobreposicoes' cita '{alvo}', que não é alvo da rota "
+                f"'{rota}'.{dica}A alternativa é precificada pelo mesmo motor, sobre uma cópia "
+                "do caso com as sobreposições aplicadas: um alvo que o caso não tem seria "
+                f"ignorado em silêncio. Alvos aceitos: {', '.join(sorted(aceitos))}."
+            )
+
+        if alvo == "metrica_base":
+            if not isinstance(valor, dict):
+                raise CasoInvalido(
+                    f"'{prefixo}.sobreposicoes.metrica_base' não é um objeto: {valor!r}. "
+                    "Declare 'valor' — a base do lucro sobre a qual a alternativa é construída."
+                )
+            _recusar_chave_desconhecida(
+                valor, _CHAVES_DA_METRICA_NA_SOBREPOSICAO, f"'{prefixo}.sobreposicoes.metrica_base'")
+            if "valor" not in valor:
+                raise CasoInvalido(
+                    f"'{prefixo}.sobreposicoes.metrica_base' sem 'valor': o tipo da métrica é a "
+                    "rota do caso e não muda por escolha metodológica — o que muda de ramo é a "
+                    "base, o número."
+                )
+            _valor_numerico_da_sobreposicao(prefixo, "metrica_base.valor", valor["valor"])
+            continue
+
+        if alvo == "ponte":
+            if rota not in _ROTAS_COM_PONTE:
+                raise CasoInvalido(
+                    f"'{prefixo}.sobreposicoes' cita 'ponte' na rota '{rota}', que não declara "
+                    "ponte de dívida: a rota chega em Equity direto, e não há linha de balanço "
+                    "a sobrepor."
+                )
+            if not isinstance(valor, dict) or not valor:
+                raise CasoInvalido(
+                    f"'{prefixo}.sobreposicoes.ponte' não é um objeto com ao menos uma linha: "
+                    f"{valor!r}. Declare a linha de balanço que muda de ramo "
+                    f"({', '.join(CAMPOS_DA_PONTE)})."
+                )
+            _recusar_chave_desconhecida(
+                valor, frozenset(CAMPOS_DA_PONTE), f"'{prefixo}.sobreposicoes.ponte'")
+            for linha in sorted(valor):
+                _valor_numerico_da_sobreposicao(prefixo, f"ponte.{linha}", valor[linha])
+            continue
+
+        if alvo in PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO:
+            _exigir_texto(valor, f"{prefixo}.sobreposicoes.{alvo}")
+            if valor not in TV_CANON:
+                sugestao = difflib.get_close_matches(valor, TV_CANON, n=1)
+                dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+                raise CasoInvalido(
+                    f"'{prefixo}.sobreposicoes.{alvo}' fora do vocabulário: '{valor}'.{dica}"
+                    "A hipótese terminal alternativa é uma convenção que o motor reconhece — "
+                    f"uma fora do vocabulário seria repassada crua e recusada lá. Convenções "
+                    f"aceitas: {', '.join(sorted(TV_CANON))}."
+                )
+            continue
+
+        if alvo in _PREMISSAS_NAO_NUMERICAS:
+            raise CasoInvalido(
+                f"'{prefixo}.sobreposicoes' cita '{alvo}', premissa não numérica que a "
+                "sobreposição não alcança: o gate a trata como valor opaco, e uma sobreposição "
+                "sobre ela passaria sem checagem nenhuma. A única convenção que uma escolha "
+                f"troca é {', '.join(sorted(PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO))}."
+            )
+        _valor_numerico_da_sobreposicao(prefixo, alvo, valor)
+
 
 def _validar_escolha(prefixo: str, escolha: Any, rota: str, vistas: set) -> None:
     """Valida UMA entrada de 'escolhas_metodologicas': forma, chave, posição,
@@ -2967,44 +3101,7 @@ def _validar_escolha(prefixo: str, escolha: Any, rota: str, vistas: set) -> None
             f"{', '.join(sorted(POSICOES_DA_ESCOLHA))}."
         )
 
-    sobreposicoes = escolha.get("sobreposicoes")
-    if not isinstance(sobreposicoes, dict):
-        raise CasoInvalido(
-            f"'{prefixo}.sobreposicoes' não é um objeto: {sobreposicoes!r}. É o mapa "
-            "premissa -> número que leva o cenário da manchete ao outro ramo da escolha."
-        )
-    if not sobreposicoes:
-        raise CasoInvalido(
-            f"'{prefixo}.sobreposicoes' vazia: a alternativa sairia idêntica ao cenário da "
-            "manchete, com impacto zero. Uma escolha sem nada que a mova não é uma escolha "
-            "— declare a premissa que muda de ramo, ou remova a entrada."
-        )
-    permitidas = _PREMISSAS_POR_ROTA[rota]
-    for premissa in sorted(sobreposicoes):
-        _exigir_texto(premissa, f"{prefixo}.sobreposicoes")
-        if premissa not in permitidas:
-            sugestao = difflib.get_close_matches(premissa, permitidas, n=1)
-            dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
-            raise CasoInvalido(
-                f"'{prefixo}.sobreposicoes' cita '{premissa}', que não é premissa da rota "
-                f"'{rota}'.{dica}A alternativa é precificada pelo mesmo motor, sobre o mesmo "
-                "vetor do cenário da manchete: uma chave que o motor não conhece seria "
-                f"ignorada em silêncio. Premissas aceitas: {', '.join(sorted(permitidas))}."
-            )
-        if premissa in _PREMISSAS_NAO_NUMERICAS:
-            raise CasoInvalido(
-                f"'{prefixo}.sobreposicoes' cita '{premissa}', que não é premissa numérica: "
-                "a sobreposição move a alternativa por um número sobre o vetor da manchete. "
-                "Uma escolha que troca a convenção terminal ou a política de caixa se declara "
-                "pelas premissas numéricas do terminal, não pela convenção em si."
-            )
-        valor = sobreposicoes[premissa]
-        if not _numero_valido(valor) or not _finito(valor):
-            raise CasoInvalido(
-                f"'{prefixo}.sobreposicoes.{premissa}' não é um número finito: {valor!r}. O "
-                "motor recebe esse valor direto, sem conversão — texto, bool, NaN ou Infinity "
-                "envenenam o preço da alternativa em silêncio."
-            )
+    _validar_sobreposicoes(prefixo, escolha.get("sobreposicoes"), rota)
 
     gatilho = escolha.get("gatilho_disparou")
     if gatilho is None:

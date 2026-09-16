@@ -112,8 +112,8 @@ from pathlib import Path
 
 import diagnosticos
 from caso import (
-    PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SOMA_DOS_PESOS, CasoInvalido, _tv_canon, carregar,
-    reversa_indisponivel,
+    ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO, PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SOMA_DOS_PESOS,
+    CasoInvalido, _tv_canon, carregar, reversa_indisponivel,
 )
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
@@ -1056,27 +1056,62 @@ def _preco_do_vetor(caso: dict, nome_cenario: str, premissas: dict,
     return _exigir_valor(niveis[0], "preco_acao")
 
 
+def _alternativa_do_caso(caso: dict, nome_cenario: str, sobreposicoes: dict,
+                          nd_efetivo: float) -> tuple[dict, dict, float]:
+    """A cópia do caso com as sobreposições de UMA escolha aplicadas; devolve
+    `(caso, premissas do cenário da manchete nele, nd_efetivo dele)`.
+
+    Fatia 5G, Task 1b: a sobreposição é uma sobreposição PARCIAL do caso, com a
+    estrutura do caso (`caso._validar_sobreposicoes`) — cada premissa da rota no vetor
+    do cenário da manchete, `metrica_base` na escala e `ponte` nas linhas de balanço.
+    Uma linha de ponte sobreposta muda a dívida líquida, e o `nd_efetivo` da
+    alternativa vem de `ponte.compor` sobre a ponte já sobreposta — a MESMA função que
+    o caso inteiro usa, nunca uma soma refeita aqui. Sem sobreposição de ponte, o
+    `nd_efetivo` do caso é repassado como está, sem uma segunda composição idêntica.
+
+    Cópia rasa: cada sub-bloco tocado é substituído por um dicionário novo, então o
+    `caso` original nunca é mutado — `avaliar()` é função pura do caso que recebe, e
+    uma escolha não pode contaminar a próxima.
+    """
+    premissas = dict(caso["cenarios"][nome_cenario]["premissas"])
+    caso_alternativo = dict(caso)
+    for alvo, valor in sobreposicoes.items():
+        if alvo in ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO:
+            caso_alternativo[alvo] = {**caso[alvo], **valor}
+        else:
+            premissas[alvo] = valor
+    caso_alternativo["cenarios"] = {
+        **caso["cenarios"],
+        nome_cenario: {**caso["cenarios"][nome_cenario], "premissas": premissas},
+    }
+    nd_da_alternativa = (compor(caso_alternativo["ponte"])["nd_efetivo"]
+                         if "ponte" in sobreposicoes else nd_efetivo)
+    return caso_alternativo, premissas, nd_da_alternativa
+
+
 def _escolhas_precificadas(caso: dict, manchete: dict, nd_efetivo: float,
                             moeda: str | None, rf: float | None) -> list[dict]:
     """`resultados.escolhas_metodologicas`: cada escolha declarada, com o preço do
     ramo alternativo, o impacto dele sobre o preço da manchete e a materialidade.
 
-    A alternativa é o cenário da manchete com as sobreposições por cima — o oráculo
-    que o teste monta é exatamente esse. `impacto` é fração de comparação (quanto o
-    outro ramo moveria o preço da manchete), nunca uma conclusão de valor; `material`
-    aplica `LIMIAR_DE_ESCOLHA_MATERIAL` ao módulo do impacto, e é a decisão que o
-    relatório consome sem conhecer limiar nenhum. `gatilho_disparou` sai como o caso
-    o declarou, ou `null` — o wrapper nunca avalia gatilho.
+    A alternativa é o CASO com as sobreposições por cima, precificado no cenário da
+    manchete (`_alternativa_do_caso`) — o oráculo que o teste monta é exatamente esse.
+    `impacto` é fração de comparação (quanto o outro ramo moveria o preço da
+    manchete), nunca uma conclusão de valor; `material` aplica
+    `LIMIAR_DE_ESCOLHA_MATERIAL` ao módulo do impacto, e é a decisão que o relatório
+    consome sem conhecer limiar nenhum. `gatilho_disparou` sai como o caso o declarou,
+    ou `null` — o wrapper nunca avalia gatilho.
     """
     nome_cenario = manchete["cenario"]
     preco_da_manchete = manchete["preco_acao"]
-    premissas_centrais = caso["cenarios"][nome_cenario]["premissas"]
 
     publicadas = []
     for escolha in caso.get("escolhas_metodologicas") or []:
         sobreposicoes = escolha["sobreposicoes"]
+        caso_alternativo, premissas, nd_da_alternativa = _alternativa_do_caso(
+            caso, nome_cenario, sobreposicoes, nd_efetivo)
         preco_alternativa = _preco_do_vetor(
-            caso, nome_cenario, {**premissas_centrais, **sobreposicoes}, nd_efetivo, moeda, rf)
+            caso_alternativo, nome_cenario, premissas, nd_da_alternativa, moeda, rf)
         impacto = preco_alternativa / preco_da_manchete - 1
         publicadas.append({
             "chave": escolha["chave"],

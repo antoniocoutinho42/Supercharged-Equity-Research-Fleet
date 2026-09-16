@@ -806,7 +806,7 @@ def test_a_conservacao_que_o_motor_nao_fecha_em_numero_e_recusa_nomeada(bloco_do
 # --------------------------------------------------------------------------
 
 from avaliar import (  # noqa: E402
-    DIRECOES_DO_EMPILHAMENTO, LIMIAR_DE_ESCOLHA_MATERIAL, precificar_firm,
+    DIRECOES_DO_EMPILHAMENTO, LIMIAR_DE_ESCOLHA_MATERIAL, _alternativa_do_caso, precificar_firm,
 )
 
 
@@ -816,24 +816,36 @@ def _com_escolhas(fixture: str, escolhas: list) -> dict:
     return caso
 
 
-def test_o_preco_da_alternativa_e_o_cenario_da_manchete_com_as_sobreposicoes():
-    """O oráculo é montado aqui, não copiado do wrapper: o vetor do cenário da manchete
-    com as sobreposições por cima, pela mesma função que precifica o cenário. E o
-    impacto é esse preço contra o da manchete."""
+def _preco_da_sobreposicao(caso: dict, nome_cenario: str, sobreposicoes: dict) -> float:
+    """Oráculo do teste, montado aqui e não copiado do wrapper: a cópia do caso com as
+    sobreposições aplicadas nos alvos que o gate admite — premissas do cenário,
+    `metrica_base` e linhas da `ponte` —, precificada pela rota firm."""
+    premissas = {**caso["cenarios"][nome_cenario]["premissas"],
+                 **{alvo: valor for alvo, valor in sobreposicoes.items()
+                    if alvo not in ("metrica_base", "ponte")}}
+    metrica = {**caso["metrica_base"], **sobreposicoes.get("metrica_base", {})}
+    nd_efetivo = _compor_ponte({**caso["ponte"], **sobreposicoes.get("ponte", {})})["nd_efetivo"]
+    _saida, valor, _algebra, _multiplo = precificar_firm(
+        premissas, metrica["tipo"], metrica["valor"], nd_efetivo,
+        caso["acoes_diluidas"], caso["moeda"])
+    return valor["preco_acao"]
+
+
+def test_o_preco_da_alternativa_e_o_caso_da_manchete_com_as_sobreposicoes():
+    """O oráculo é a cópia do caso com as sobreposições, precificada pela mesma função
+    que precifica o cenário. E o impacto é esse preço contra o da manchete."""
     caso = caso_da_variante("escolhas")
     r = avaliar(caso)
-    nd_efetivo = r["ponte"]["nd_efetivo"]
-    premissas_centrais = caso["cenarios"][r["manchete"]["cenario"]]["premissas"]
 
     assert [escolha["chave"] for escolha in r["escolhas_metodologicas"]] == [
-        "rentabilidade", "crescimento", "ano_de_capex_no_par_d_rir"]
+        "rentabilidade", "crescimento", "ano_de_capex_no_par_d_rir",
+        "caixa_excedente_em_hibrida_financeira"]
     for publicada, declarada in zip(r["escolhas_metodologicas"], caso["escolhas_metodologicas"]):
-        _saida, valor, _algebra, _multiplo = precificar_firm(
-            {**premissas_centrais, **declarada["sobreposicoes"]}, caso["metrica_base"]["tipo"],
-            caso["metrica_base"]["valor"], nd_efetivo, caso["acoes_diluidas"], caso["moeda"])
-        assert publicada["preco_alternativa"] == pytest.approx(valor["preco_acao"]), declarada["chave"]
+        esperado = _preco_da_sobreposicao(
+            caso, r["manchete"]["cenario"], declarada["sobreposicoes"])
+        assert publicada["preco_alternativa"] == pytest.approx(esperado), declarada["chave"]
         assert publicada["impacto"] == pytest.approx(
-            valor["preco_acao"] / r["manchete"]["preco_acao"] - 1), declarada["chave"]
+            esperado / r["manchete"]["preco_acao"] - 1), declarada["chave"]
         assert publicada["sobreposicoes"] == declarada["sobreposicoes"]
         assert publicada["no_caso_base"] == declarada["no_caso_base"]
         assert publicada["gatilho_disparou"] == declarada.get("gatilho_disparou")
@@ -967,3 +979,59 @@ def test_sem_os_blocos_as_tres_leituras_saem_nulas():
     assert r["retorno_exigido"] is None
     assert r["valor_ponderado"] is None
     assert r["cross_check"] is None
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1b: as sobreposições alcançam os alvos que as dez escolhas de fato
+# movem — a base do lucro move a métrica, o caixa em híbrida financeira move uma linha
+# da ponte, e a hipótese terminal troca a convenção. Um alvo por teste, com o oráculo
+# montado a partir da cópia do caso.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("chave,sobreposicoes,confere", [
+    pytest.param(
+        "base_do_lucro", {"metrica_base": {"valor": 1100.0}},
+        lambda caso, alt: alt["metrica_base"] == {**caso["metrica_base"], "valor": 1100.0},
+        id="metrica_base_valor"),
+    pytest.param(
+        "caixa_excedente_em_hibrida_financeira", {"ponte": {"caixa_e_equivalentes": 0.0}},
+        lambda caso, alt: alt["ponte"] == {**caso["ponte"], "caixa_e_equivalentes": 0.0},
+        id="linha_da_ponte"),
+    pytest.param(
+        "hipotese_terminal", {"tv": "book"},
+        lambda caso, alt: alt["cenarios"]["base"]["premissas"]["tv"] == "book",
+        id="convencao_terminal"),
+])
+def test_a_sobreposicao_alcanca_cada_alvo_do_caso_e_o_preco_bate_com_a_copia(chave, sobreposicoes, confere):
+    """O preço alternativo é o da CÓPIA do caso com a sobreposição aplicada naquele
+    alvo, e o caso original nunca é mutado. `metrica_base.valor` 1.100 contra 1.000 sobe
+    o preço; caixa a zero engrossa a dívida líquida em 300 e o derruba; a convenção
+    'book' (contra 'gordon' do caso) o derruba de R$ 61,91 para R$ 55,31 — números
+    conferidos no motor."""
+    caso = carregar(FIXTURES / "caso_minimo_firm.json")
+    caso["escolhas_metodologicas"] = [
+        {"chave": chave, "no_caso_base": "central", "sobreposicoes": sobreposicoes}]
+    original = json.loads(json.dumps(caso))
+    r = avaliar(caso)
+    (publicada,) = r["escolhas_metodologicas"]
+
+    assert publicada["preco_alternativa"] == pytest.approx(
+        _preco_da_sobreposicao(caso, "base", sobreposicoes))
+    assert publicada["preco_alternativa"] != pytest.approx(r["manchete"]["preco_acao"])
+    assert caso == original, "avaliar() mutou o caso ao compor a alternativa"
+
+    # A cópia composta pelo wrapper aplica a sobreposição no alvo certo, e só nele.
+    alternativo, _premissas, _nd = _alternativa_do_caso(
+        caso, "base", sobreposicoes, r["ponte"]["nd_efetivo"])
+    assert confere(caso, alternativo)
+
+
+def test_a_convencao_terminal_alternativa_bate_com_o_preco_do_motor_para_ela():
+    """Oráculo direto: 'book' em `caso_minimo_firm` vale R$ 55,31 (o mesmo número que
+    `tests/test_valuation_contrato.py` já prende para o alias 'ic')."""
+    caso = carregar(FIXTURES / "caso_minimo_firm.json")
+    caso["escolhas_metodologicas"] = [
+        {"chave": "hipotese_terminal", "no_caso_base": "central", "sobreposicoes": {"tv": "book"}}]
+    (publicada,) = avaliar(caso)["escolhas_metodologicas"]
+    assert publicada["preco_alternativa"] == pytest.approx(55.31, abs=0.01)
+    assert publicada["material"] is True  # -10,66%, acima do limiar

@@ -186,11 +186,26 @@ metodologia (as dez de `references/aplicacao.md` §5b, item 4), **declaradas pel
 analista** — o wrapper nunca avalia gatilho, só precifica. Cada entrada traz
 `chave` (uma de `caso.ESCOLHAS_METODOLOGICAS`; fora do vocabulário, recusa com
 sugestão — e repetida, recusa), `no_caso_base` (`central` ou `alternativa`,
-`caso.POSICOES_DA_ESCOLHA`), `sobreposicoes` (mapa não vazio premissa da rota →
-número finito, que leva o cenário da manchete ao outro ramo — premissa de outra
-rota, premissa não numérica ou valor não finito são recusa nomeada) e, opcional,
+`caso.POSICOES_DA_ESCOLHA`), `sobreposicoes` (mapa não vazio de alvos do caso →
+valor, que leva o cenário da manchete ao outro ramo) e, opcional,
 `gatilho_disparou: {observavel}` (texto não vazio). Nenhuma outra chave, em
 nível nenhum; lista vazia e nulo são recusa e ausência, respectivamente.
+
+Os **alvos** de uma sobreposição são os que as dez escolhas de fato movem, e nada
+além deles — um alvo fora do conjunto é recusa nomeada, com sugestão:
+
+- cada **premissa numérica da rota**, com número finito;
+- a **convenção terminal** `tv` (`PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO`), com um
+  código de `caso.TV_CANON` — a única premissa não numérica alcançada, porque é a
+  única cujo vocabulário este gate conhece; `politica_tv` e `mid_year` ficam de fora;
+- `metrica_base` (só `valor`, finito — o tipo é da rota e não muda por escolha);
+- `ponte` (as linhas de `caso.CAMPOS_DA_PONTE`, valores finitos), só nas rotas que
+  declaram o bloco.
+
+A sobreposição é uma sobreposição **parcial do caso**, com a estrutura do caso — e
+não um caminho textual (`"ponte.divida_bruta"`), porque `_validar_chaves_enderecaveis`
+recusa qualquer chave do caso com `.`: o caminho de um número do caso separa
+segmentos por `.` no mapa de insumos, no ledger e nos placeholders.
 Recusado inteiro junto de `sotp` (com soma de partes o preço da manchete vem da
 composição das partes, e o impacto compararia bases que não se correspondem);
 `leitura_de_capacidade` é recusada pelo nome (trocaria a arquitetura do vetor, não
@@ -285,8 +300,10 @@ convenção que já mora aqui):
 - `escolhas_metodologicas` — o painel de escolhas, sempre publicado (lista vazia
   sem declaração): por escolha declarada, `chave`, `no_caso_base`,
   `sobreposicoes` e `gatilho_disparou` como o caso os declarou, mais
-  `preco_alternativa` (o cenário da manchete precificado com as sobreposições por
-  cima, pelo mesmo caminho que o cenário percorreu — inclusive o degrau),
+  `preco_alternativa` (a CÓPIA do caso com as sobreposições aplicadas, precificada no
+  cenário da manchete pelo mesmo caminho que o cenário percorreu — inclusive o
+  degrau, e com o `nd_efetivo` recomposto por `ponte.compor` quando a sobreposição
+  move uma linha de balanço),
   `impacto` (esse preço contra o da manchete, fração de comparação) e `material`
   (o módulo do impacto acima de `avaliar.LIMIAR_DE_ESCOLHA_MATERIAL`, o limiar de
   ~10% da metodologia). O relatório lê o booleano e nunca compara limiar nenhum.

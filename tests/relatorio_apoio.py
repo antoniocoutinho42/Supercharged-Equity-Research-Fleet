@@ -204,7 +204,12 @@ def _escolhas(caso: dict) -> dict:
       ramos centrais);
     - `ano_de_capex_no_par_d_rir` no ramo CENTRAL, com o gatilho declarado como
       disparado: d de 24% leva a ≈ R$ 58,56, impacto ≈ −5,4%. Central, não entra no
-      empilhamento.
+      empilhamento;
+    - `caixa_excedente_em_hibrida_financeira` no ramo CENTRAL, sobrepondo uma LINHA DA
+      PONTE (Task 1b): o caixa deixa de ser excedente devolvível e vai a zero, a dívida
+      líquida sobe 300 e o preço cai para ≈ R$ 58,91. É o alvo de sobreposição que não
+      é premissa — sem ele, o caminho `sobreposicoes.<bloco>.<campo>` ficaria ocioso nas
+      travas do catálogo.
     """
     c = copy.deepcopy(caso)
     c["escolhas_metodologicas"] = [
@@ -215,6 +220,9 @@ def _escolhas(caso: dict) -> dict:
         {"chave": "ano_de_capex_no_par_d_rir", "no_caso_base": "central",
          "sobreposicoes": {"da": 24.0},
          "gatilho_disparou": {"observavel": "Capex do guidance de longo prazo acima do capex do ano corrente."}},
+        {"chave": "caixa_excedente_em_hibrida_financeira", "no_caso_base": "central",
+         "sobreposicoes": {"ponte": {"caixa_e_equivalentes": 0.0}},
+         "gatilho_disparou": {"observavel": "Carteira de crédito própria dentro do balanço consolidado."}},
     ]
     return c
 
