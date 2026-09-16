@@ -219,6 +219,36 @@ def _escolhas(caso: dict) -> dict:
     return c
 
 
+def _alternativas(caso: dict) -> dict:
+    """`caso_minimo_firm` com as três leituras da 5G Task 2 declaradas de uma vez —
+    nenhuma delas se recusa junto das outras, e uma variante só as exerce todas:
+
+    - um segundo cenário (`bull`, ROIC 16% e g 6%) e `cenario_base`, porque ponderar
+      exige dois cenários ou mais;
+    - `retorno_exigido` de 14 pontos percentuais, que substitui o WACC de 10% do
+      cenário da manchete;
+    - `pesos_de_probabilidade` 70/30 sobre base e bull;
+    - `cross_check` pela rota equity — a oposta da do caso —, com métrica, âncora e
+      vetor próprios (a rota equity não atravessa ponte, então o segundo método
+      chega a preço sem nada além do que declara aqui).
+    """
+    c = copy.deepcopy(caso)
+    bull = copy.deepcopy(c["cenarios"]["base"])
+    bull["ancora"] = "guidance de longo prazo da companhia"
+    bull["premissas"] = {**bull["premissas"], "roic": 16.0, "g": 6.0}
+    c["cenarios"]["bull"] = bull
+    c["cenario_base"] = "base"
+    c["retorno_exigido"] = {"taxa": 14.0}
+    c["pesos_de_probabilidade"] = {"base": 70.0, "bull": 30.0}
+    c["cross_check"] = {
+        "rota": "equity",
+        "metrica_base": {"tipo": "LL", "valor": 450.0},
+        "ancora": "lucro líquido normalizado 2023-2025",
+        "premissas": {"g": 5.0, "roe": 15.0, "ke": 12.0, "n": 10, "tv": "convergencia"},
+    }
+    return c
+
+
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
     "forward_firm": ("caso_minimo_firm.json", _forward_firm),
@@ -227,6 +257,7 @@ VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "conservacao_fecha": ("caso_minimo_firm.json", _conservacao_fecha),
     "conservacao_nao_fecha": ("caso_minimo_firm.json", _conservacao_nao_fecha),
     "escolhas": ("caso_minimo_firm.json", _escolhas),
+    "alternativas": ("caso_minimo_firm.json", _alternativas),
 }
 
 

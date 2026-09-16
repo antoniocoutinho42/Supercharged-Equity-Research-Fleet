@@ -893,3 +893,77 @@ def test_com_degrau_a_alternativa_e_precificada_com_degrau():
 def test_sem_o_bloco_o_painel_sai_vazio_e_sem_alerta():
     r = _res_firm()
     assert r["escolhas_metodologicas"] == [] and r["empilhamento"] is None
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 2 (D2/D3/D4 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): o retorno exigido, o valor ponderado e o cross-check pela rota
+# oposta. Os três oráculos são montados aqui, pelo motor ou pela aritmética da soma
+# ponderada — nunca copiados do wrapper.
+# --------------------------------------------------------------------------
+
+from avaliar import precificar_equity  # noqa: E402
+from caso import PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SOMA_DOS_PESOS  # noqa: E402
+
+
+@pytest.mark.parametrize("fixture,taxa", [
+    ("caso_minimo_firm.json", 14.0),
+    ("caso_minimo_equity.json", 18.0),
+])
+def test_o_retorno_exigido_substitui_o_custo_de_capital_da_rota_uma_rota_por_vez(fixture, taxa):
+    """O preço é o do cenário da manchete com a premissa de custo de capital da rota
+    trocada pela taxa — WACC na rota firm, Ke na equity —, e nada mais do vetor muda."""
+    caso = carregar(FIXTURES / fixture)
+    caso["retorno_exigido"] = {"taxa": taxa}
+    r = avaliar(caso)
+    premissa = PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA[caso["rota"]]
+    premissas = {**caso["cenarios"]["base"]["premissas"], premissa: taxa}
+    metrica = caso["metrica_base"]
+    if caso["rota"] == "firm":
+        _saida, valor, _algebra, _multiplo = precificar_firm(
+            premissas, metrica["tipo"], metrica["valor"], r["ponte"]["nd_efetivo"],
+            caso["acoes_diluidas"], caso["moeda"])
+    else:
+        _saida, valor, _algebra, _multiplo = precificar_equity(
+            premissas, metrica["valor"], caso["acoes_diluidas"], caso["moeda"])
+    assert r["retorno_exigido"] == {
+        "taxa": taxa, "premissa_substituida": premissa,
+        "preco_acao": pytest.approx(valor["preco_acao"])}
+    # Exigir mais retorno do que o caso descontava vale menos: o sinal da leitura.
+    assert (valor["preco_acao"] < r["manchete"]["preco_acao"]) is (
+        taxa > caso["cenarios"]["base"]["premissas"][premissa])
+
+
+def test_o_valor_ponderado_e_a_soma_de_peso_x_preco_dos_cenarios():
+    caso = caso_da_variante("alternativas")
+    r = avaliar(caso)
+    pesos = caso["pesos_de_probabilidade"]
+    esperado = sum(peso / SOMA_DOS_PESOS * r["cenarios"][nome]["valor"]["preco_acao"]
+                   for nome, peso in pesos.items())
+    assert r["valor_ponderado"]["valor"] == pytest.approx(esperado)
+    assert r["valor_ponderado"]["pesos"] == pesos
+    # Entre o menor e o maior preço, nunca fora deles — e nunca igual à manchete aqui.
+    precos = [cenario["valor"]["preco_acao"] for cenario in r["cenarios"].values()]
+    assert min(precos) < r["valor_ponderado"]["valor"] < max(precos)
+
+
+def test_o_cross_check_precifica_o_vetor_da_rota_oposta_e_a_diferenca_sai_com_o_sinal_certo():
+    caso = caso_da_variante("alternativas")
+    r = avaliar(caso)
+    bloco = caso["cross_check"]
+    _saida, valor, _algebra, _multiplo = precificar_equity(
+        bloco["premissas"], bloco["metrica_base"]["valor"], caso["acoes_diluidas"], caso["moeda"])
+    assert r["cross_check"]["rota"] == "equity" != caso["rota"]
+    assert r["cross_check"]["preco_acao"] == pytest.approx(valor["preco_acao"])
+    assert r["cross_check"]["diferenca_vs_manchete"] == pytest.approx(
+        valor["preco_acao"] / r["manchete"]["preco_acao"] - 1)
+    # O segundo método vale menos que a manchete nesta variante: diferença negativa.
+    assert valor["preco_acao"] < r["manchete"]["preco_acao"]
+    assert r["cross_check"]["diferenca_vs_manchete"] < 0
+
+
+def test_sem_os_blocos_as_tres_leituras_saem_nulas():
+    r = _res_firm()
+    assert r["retorno_exigido"] is None
+    assert r["valor_ponderado"] is None
+    assert r["cross_check"] is None

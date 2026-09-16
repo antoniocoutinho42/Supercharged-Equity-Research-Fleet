@@ -111,7 +111,10 @@ import sys
 from pathlib import Path
 
 import diagnosticos
-from caso import CasoInvalido, _tv_canon, carregar, reversa_indisponivel
+from caso import (
+    PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SOMA_DOS_PESOS, CasoInvalido, _tv_canon, carregar,
+    reversa_indisponivel,
+)
 from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
 from ponte import compor
 from reversa import alvo_de_mercado, limitacoes_da_leitura, reverter
@@ -1111,6 +1114,93 @@ def _empilhamento(escolhas: list[dict]) -> dict | None:
     return {"direcao": direcao, "chaves": chaves} if len(chaves) > 1 else None
 
 
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 2 (D2/D3/D4): o retorno exigido, o valor ponderado e o cross-check
+# pela rota oposta — as três leituras opcionais que a §9 pede depois das
+# sensibilidades. Nenhuma conta nova de valuation: o retorno exigido e o cross-check
+# passam pelo motor, e o valor ponderado é a soma de peso x preço que os cenários já
+# publicaram.
+# --------------------------------------------------------------------------
+
+def _retorno_exigido(caso: dict, manchete: dict, nd_efetivo: float,
+                      moeda: str | None, rf: float | None) -> dict | None:
+    """`resultados.retorno_exigido` (D2): que preço resulta ao exigir retorno de X%.
+
+    A taxa declarada substitui a premissa de custo de capital da rota
+    (`caso.PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA` — WACC nas rotas firm e rampa, Ke
+    na equity) no vetor do cenário da manchete, e o preço sai do motor pelo mesmo
+    caminho de sempre. `premissa_substituida` viaja junto para que a tela diga QUAL
+    premissa foi trocada sem reimplementar a dicotomia. É leitura, nunca fair value
+    — o rótulo é do relatório; a conta é daqui."""
+    retorno = caso.get("retorno_exigido")
+    if retorno is None:
+        return None
+    premissa = PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA[caso["rota"]]
+    nome_cenario = manchete["cenario"]
+    premissas = {**caso["cenarios"][nome_cenario]["premissas"], premissa: retorno["taxa"]}
+    return {
+        "taxa": retorno["taxa"],
+        "premissa_substituida": premissa,
+        "preco_acao": _preco_do_vetor(caso, nome_cenario, premissas, nd_efetivo, moeda, rf),
+    }
+
+
+def _valor_ponderado(caso: dict, cenarios: dict) -> dict | None:
+    """`resultados.valor_ponderado` (D3): a soma de peso x preço dos cenários.
+
+    Os pesos são julgamento do analista, declarados em pontos percentuais e já
+    confirmados pelo gate como uma distribuição sobre cenários existentes que soma
+    100 — aqui só se compõe a soma, sobre os preços que os próprios cenários
+    publicaram (`cenarios.<n>.valor.preco_acao`, o do motor). Fora da fórmula do
+    valuation: nenhum cenário muda por causa do peso, e o relatório declara que o
+    número nunca substitui bear, base e bull."""
+    pesos = caso.get("pesos_de_probabilidade")
+    if pesos is None:
+        return None
+    valor = sum(peso / SOMA_DOS_PESOS * cenarios[nome]["valor"]["preco_acao"]
+                for nome, peso in pesos.items())
+    return {"valor": valor, "pesos": pesos}
+
+
+def _cross_check(caso: dict, manchete: dict, nd_efetivo: float,
+                  moeda: str | None, rf: float | None) -> dict | None:
+    """`resultados.cross_check` (D4): o preço da rota OPOSTA e a diferença contra a
+    manchete.
+
+    O vetor coerente da rota oposta e a métrica dela vêm do caso, já validados como
+    completos para aquela rota (`caso._validar_cross_check` roda `_validar_premissas`
+    com ela); o preço sai das mesmas funções de precificação que o caso inteiro usa
+    — nunca uma segunda álgebra. `nd_efetivo` é o do próprio caso: o gate já recusou
+    uma rota de cross-check que atravessa a ponte num caso que não a declara, então
+    aqui a ponte existe sempre que é preciso. `diferenca_vs_manchete` é fração de
+    comparação, com o sinal do segundo método contra a manchete (positiva quando o
+    segundo método vale mais)."""
+    cross_check = caso.get("cross_check")
+    if cross_check is None:
+        return None
+    rota_oposta = cross_check["rota"]
+    metrica = cross_check["metrica_base"]
+    premissas = cross_check["premissas"]
+    acoes = caso["acoes_diluidas"]
+
+    if rota_oposta == "firm":
+        _saida, valor, _algebra, _multiplo = precificar_firm(
+            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda, rf=rf)
+    elif rota_oposta == "rampa":
+        _saida, valor, _algebra, _multiplo = precificar_rampa(
+            premissas, nd_efetivo, acoes, moeda, rf=rf)
+    else:  # equity
+        _saida, valor, _algebra, _multiplo = precificar_equity(
+            premissas, metrica["valor"], acoes, moeda, rf=rf)
+
+    preco_acao = valor["preco_acao"]
+    return {
+        "rota": rota_oposta,
+        "preco_acao": preco_acao,
+        "diferenca_vs_manchete": preco_acao / manchete["preco_acao"] - 1,
+    }
+
+
 def avaliar(caso: dict) -> dict:
     """Roda o motor por cenário na rota do caso e monta o conteúdo de `resultados.json`.
 
@@ -1295,6 +1385,14 @@ def avaliar(caso: dict) -> dict:
     resultado["escolhas_metodologicas"] = _escolhas_precificadas(
         caso, resultado["manchete"], nd_efetivo, moeda, rf)
     resultado["empilhamento"] = _empilhamento(resultado["escolhas_metodologicas"])
+
+    # Fatia 5G, Task 2 (D2/D3/D4): as três leituras da §9 depois das sensibilidades,
+    # SEMPRE publicadas — `null` sem o bloco que as declara. Como o painel acima, as
+    # três leem a manchete (o cenário e o preço contra os quais comparam).
+    resultado["retorno_exigido"] = _retorno_exigido(
+        caso, resultado["manchete"], nd_efetivo, moeda, rf)
+    resultado["valor_ponderado"] = _valor_ponderado(caso, cenarios)
+    resultado["cross_check"] = _cross_check(caso, resultado["manchete"], nd_efetivo, moeda, rf)
 
     # Fatia 5D, Task 1 (D3/D4): o que só a integração sabe sobre o escopo do
     # caso, SEMPRE publicado — um campo de contrato ausente não pode sumir em

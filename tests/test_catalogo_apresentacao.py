@@ -254,6 +254,12 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
     "o impacto de uma escolha metodológica — fração de comparação entre o ramo alternativo e a manchete, "
     "não um valor que a entrega conclua": (
         "escolhas_metodologicas.*.impacto",),
+    "a diferença do cross-check contra a manchete — fração de comparação entre dois métodos, como o impacto "
+    "de uma escolha": (
+        "cross_check.diferenca_vs_manchete",),
+    "os pesos de probabilidade — julgamento do analista sobre os cenários, fora da fórmula do valuation "
+    "(§8.2), ecoados ao lado do valor que compõem": (
+        "valor_ponderado.pesos.*",),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 
@@ -430,8 +436,9 @@ _NAO_SAO_INSUMOS: dict[str, tuple[str, ...]] = {
         "sensibilidades.grades_2d.*.pontos_x.*",
         "sensibilidades.grades_2d.*.pontos_y.*"),
     "julgamento declarado — a sobreposição que leva o cenário da manchete ao outro ramo de uma escolha "
-    "metodológica é a escolha do analista, não um fato sobre a companhia nem sobre o mercado": (
-        "escolhas_metodologicas.*.sobreposicoes.*",),
+    "metodológica, e o peso de probabilidade de cada cenário (§8.2: fora da fórmula), são escolha do "
+    "analista, não fato sobre a companhia nem sobre o mercado": (
+        "escolhas_metodologicas.*.sobreposicoes.*", "pesos_de_probabilidade.*"),
 }
 
 

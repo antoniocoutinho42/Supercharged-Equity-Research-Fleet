@@ -315,3 +315,30 @@ def test_sem_declaracao_a_tela_forward_e_a_escala_saem_nulas(resultados):
         assert "mercado_tela_forward" in r and r["mercado_tela_forward"] is None, nome
         assert "escala_monetaria" in r and r["escala_monetaria"] is None, nome
     assert resultados["escala"][1]["escala_monetaria"] == "milhoes"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Tasks 1 e 2 (D1/D2/D3/D4 do plano docs/superpowers/plans/2026-09-15-v4-
+# item5g-alternativas.md): o painel de escolhas e as três leituras da §9 — campos de
+# contrato que nunca somem em silêncio.
+# --------------------------------------------------------------------------
+
+def test_o_painel_e_as_tres_leituras_sao_sempre_publicados(resultados):
+    """Toda fixture e toda variante publica os cinco campos. Sem o bloco que a declara,
+    cada leitura sai `null` e o painel sai vazio, sem alerta; com ele, a variante
+    correspondente publica o conteúdo. Os dois lados têm de aparecer."""
+    vistas = {"escolhas": 0, "empilhamento": 0, "retorno_exigido": 0,
+              "valor_ponderado": 0, "cross_check": 0}
+    for nome, (caso, r) in resultados.items():
+        assert isinstance(r["escolhas_metodologicas"], list), nome
+        assert ("escolhas_metodologicas" in caso) is bool(r["escolhas_metodologicas"]), nome
+        assert "empilhamento" in r, nome
+        vistas["escolhas"] += bool(r["escolhas_metodologicas"])
+        vistas["empilhamento"] += r["empilhamento"] is not None
+        for campo, bloco in (("retorno_exigido", "retorno_exigido"),
+                             ("valor_ponderado", "pesos_de_probabilidade"),
+                             ("cross_check", "cross_check")):
+            assert campo in r, (nome, campo)
+            assert (r[campo] is not None) is (bloco in caso), (nome, campo)
+            vistas[campo] += r[campo] is not None
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"

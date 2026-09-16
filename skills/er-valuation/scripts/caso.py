@@ -369,6 +369,9 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     "metrica_forward", "escala_monetaria", "conservacao_de_capital",
     # Fatia 5G, Task 1: validado por `_validar_escolhas_metodologicas` (mais abaixo).
     "escolhas_metodologicas",
+    # Fatia 5G, Task 2: validados por `_validar_retorno_exigido`,
+    # `_validar_pesos_de_probabilidade` e `_validar_cross_check` (mais abaixo).
+    "retorno_exigido", "pesos_de_probabilidade", "cross_check",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -467,7 +470,8 @@ def validar(caso: Caso) -> None:
     desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
     -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
     'sotp', 'fronteira_de_escopo', 'metrica_forward', 'escala_monetaria',
-    'conservacao_de_capital' e 'escolhas_metodologicas', só quando
+    'conservacao_de_capital', 'escolhas_metodologicas', 'retorno_exigido',
+    'pesos_de_probabilidade' e 'cross_check', só quando
     presentes. As duas recusas de
     'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
     registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
@@ -549,6 +553,9 @@ def validar(caso: Caso) -> None:
     _validar_escala_monetaria(caso)
     _validar_conservacao_de_capital(caso, rota)
     _validar_escolhas_metodologicas(caso, rota)
+    _validar_retorno_exigido(caso, rota)
+    _validar_pesos_de_probabilidade(caso, cenarios)
+    _validar_cross_check(caso, rota)
 
 
 def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
@@ -3059,6 +3066,204 @@ def _validar_escolhas_metodologicas(caso: Caso, rota: str) -> None:
             "declarado no caso não há alavanca nenhuma a modelar. Declare 'degrau', ou "
             "remova a escolha."
         )
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 2 (D2/D3/D4 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): três leituras opcionais que a §9 pede depois das sensibilidades.
+#
+# 'retorno_exigido' (D2) é a pergunta "que valor resulta ao exigir retorno de X%":
+# a taxa substitui o custo de capital do cenário da manchete, uma rota por vez.
+# Recusada com 'sotp' (a manchete vem da composição das partes, cada uma com o
+# próprio custo de capital) e com 'degrau' (o preço da manchete é o do P/VP com
+# degrau, e a substituição atravessaria duas composições ao mesmo tempo).
+#
+# 'pesos_de_probabilidade' (D3) são julgamento do analista, FORA da fórmula: o
+# wrapper compõe a soma de peso x preço, e a entrega diz que o número nunca
+# substitui bear, base e bull. Exigem dois cenários ou mais e soma exata de 100;
+# recusados com 'sotp', que tem um preço só.
+#
+# 'cross_check' (D4) é o segundo método declarado: o vetor coerente da ROTA OPOSTA,
+# precificado pelo mesmo motor. A rota do caso é recusada (não seria segundo
+# método); uma rota que atravessa a ponte da dívida exige que o caso declare
+# 'ponte', senão não há inputs coerentes para chegar a preço por ação — e a
+# metodologia manda declarar a ausência, nunca calcular em silêncio.
+# --------------------------------------------------------------------------
+
+# Qual premissa o retorno exigido substitui em cada rota. As rotas firm e rampa
+# descontam ao WACC; a equity, ao Ke — a mesma dicotomia que `reversa.py` já aplica
+# ao eixo de custo de capital.
+PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA: dict[str, str] = {
+    "firm": "wacc", "equity": "ke", "rampa": "wacc",
+}
+
+# Soma exata dos pesos, em pontos percentuais. Não é tolerância de arredondamento:
+# um conjunto de pesos que não fecha em 100 não é uma distribuição.
+SOMA_DOS_PESOS: float = 100.0
+
+_CHAVES_RETORNO_EXIGIDO_PERMITIDAS: frozenset = frozenset({"taxa"})
+_CHAVES_CROSS_CHECK_PERMITIDAS: frozenset = frozenset({"rota", "metrica_base", "ancora", "premissas"})
+_CHAVES_METRICA_DO_CROSS_CHECK_PERMITIDAS: frozenset = frozenset({"tipo", "valor"})
+
+# As rotas que atravessam a ponte da dívida para chegar a preço por ação — as mesmas
+# que `_validar_ponte` exige que declarem o bloco.
+_ROTAS_COM_PONTE: tuple = ("firm", "rampa")
+
+
+def _recusar_junto_de(caso: Caso, bloco: str, outro: str, razao: str) -> None:
+    """Recusa `bloco` quando o caso declara `outro`, nomeando a razão econômica."""
+    if caso.get(outro) is not None:
+        raise CasoInvalido(
+            f"bloco '{bloco}' presente junto de '{outro}': {razao} Remova um dos dois."
+        )
+
+
+def _validar_retorno_exigido(caso: Caso, rota: str) -> None:
+    """Valida o bloco opcional 'retorno_exigido': combinações, chaves e a taxa.
+    Ausente ou `None` é um caso sem a leitura."""
+    retorno = caso.get("retorno_exigido")
+    if retorno is None:
+        return
+
+    if not isinstance(retorno, dict):
+        raise CasoInvalido(
+            f"campo 'retorno_exigido' não é um objeto: {retorno!r}. Declare 'taxa', o retorno "
+            "exigido em pontos percentuais."
+        )
+    _recusar_junto_de(
+        caso, "retorno_exigido", "sotp",
+        "com soma de partes o preço da manchete vem da composição das partes, cada uma com o "
+        "próprio custo de capital — substituir um custo só não produziria o preço da manchete "
+        "sob o retorno exigido.")
+    _recusar_junto_de(
+        caso, "retorno_exigido", "degrau",
+        "o preço da manchete é o do P/VP justo com degrau, composto pelo motor a partir da "
+        "transição — substituir o custo de capital atravessaria as duas composições ao mesmo "
+        "tempo, e o preço resultante não seria comparável ao da manchete.")
+    _recusar_chave_desconhecida(retorno, _CHAVES_RETORNO_EXIGIDO_PERMITIDAS, "'retorno_exigido'")
+
+    taxa = retorno.get("taxa")
+    if not _numero_valido(taxa) or not _finito(taxa) or not 0 < taxa <= 100:
+        raise CasoInvalido(
+            f"'retorno_exigido.taxa' inválida: {taxa!r}. É o retorno exigido em PONTOS "
+            f"PERCENTUAIS (12.0 significa 12%, nunca 0.12), a mesma convenção de "
+            f"'{PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA[rota]}' — precisa ser um número finito "
+            "acima de zero e até 100: retorno exigido nulo ou negativo não desconta nada."
+        )
+
+
+def _validar_pesos_de_probabilidade(caso: Caso, cenarios: dict) -> None:
+    """Valida o campo opcional 'pesos_de_probabilidade': combinação, nomes de cenário,
+    quantidade e soma. Ausente ou `None` é um caso sem valor ponderado."""
+    pesos = caso.get("pesos_de_probabilidade")
+    if pesos is None:
+        return
+
+    if not isinstance(pesos, dict):
+        raise CasoInvalido(
+            f"campo 'pesos_de_probabilidade' não é um objeto: {pesos!r}. Mapeia o nome de cada "
+            "cenário ao peso dele, em pontos percentuais."
+        )
+    _recusar_junto_de(
+        caso, "pesos_de_probabilidade", "sotp",
+        "com soma de partes existe um preço só, o da composição — não há cenários a ponderar.")
+
+    if len(pesos) < 2:
+        raise CasoInvalido(
+            f"'pesos_de_probabilidade' com menos de dois cenários: {sorted(pesos)!r}. Ponderar "
+            "um cenário só devolve o preço dele com outro nome — o valor ponderado existe para "
+            "dizer o que a distribuição de cenários implica, e uma distribuição precisa de dois "
+            "pontos ou mais."
+        )
+    for nome in sorted(pesos):
+        _validar_cenario_alvo(f"pesos_de_probabilidade.{nome}", nome, cenarios)
+        peso = pesos[nome]
+        if not _numero_valido(peso) or not _finito(peso) or peso < 0:
+            raise CasoInvalido(
+                f"'pesos_de_probabilidade.{nome}' inválido: {peso!r}. Cada peso é um número "
+                "finito e não negativo, em pontos percentuais."
+            )
+    soma = sum(pesos.values())
+    if soma != SOMA_DOS_PESOS:
+        raise CasoInvalido(
+            f"'pesos_de_probabilidade' soma {soma!r}, não {SOMA_DOS_PESOS}: os pesos são uma "
+            "distribuição sobre os cenários declarados, em pontos percentuais. Uma soma "
+            "diferente de 100 publicaria um valor ponderado que não é média de nada — o "
+            "wrapper não normaliza em silêncio."
+        )
+
+
+def _validar_cross_check(caso: Caso, rota: str) -> None:
+    """Valida o bloco opcional 'cross_check': rota oposta, ponte, chaves, métrica,
+    âncora e o vetor completo da rota declarada. Ausente ou `None` é um caso sem
+    cross-check calculado — a ausência é declarada em prosa, na Análise."""
+    cross_check = caso.get("cross_check")
+    if cross_check is None:
+        return
+
+    if not isinstance(cross_check, dict):
+        raise CasoInvalido(
+            f"campo 'cross_check' não é um objeto: {cross_check!r}. Declare 'rota', "
+            "'metrica_base' ({tipo, valor}), 'ancora' e 'premissas' da rota oposta."
+        )
+    _recusar_chave_desconhecida(cross_check, _CHAVES_CROSS_CHECK_PERMITIDAS, "'cross_check'")
+
+    rota_oposta = cross_check.get("rota")
+    _exigir_texto(rota_oposta, "cross_check.rota")
+    if rota_oposta not in _PREMISSAS_POR_ROTA:
+        sugestao = difflib.get_close_matches(rota_oposta, _PREMISSAS_POR_ROTA, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'cross_check.rota' desconhecida: '{rota_oposta}'.{dica}Rotas aceitas: "
+            f"{', '.join(sorted(_PREMISSAS_POR_ROTA))}."
+        )
+    if rota_oposta == rota:
+        raise CasoInvalido(
+            f"'cross_check.rota' é a rota do próprio caso ('{rota}'): o cross-check é o SEGUNDO "
+            "método — a rota oposta, com o vetor coerente dela. Repetir a rota do caso não "
+            "confronta nada; seria o mesmo caminho com outro vetor."
+        )
+    if rota_oposta in _ROTAS_COM_PONTE and "ponte" not in caso:
+        raise CasoInvalido(
+            f"'cross_check.rota' é '{rota_oposta}', que chega em EV e atravessa a ponte da "
+            "dívida até preço por ação, mas o caso não declara 'ponte' (a rota "
+            f"'{rota}' não a admite). Sem dívida líquida e linhas de balanço não existem "
+            "inputs coerentes para o segundo método: declare a ausência do cross-check na "
+            "Análise, em vez de calcular um preço que nenhum balanço sustenta."
+        )
+
+    metrica = cross_check.get("metrica_base")
+    if not isinstance(metrica, dict):
+        raise CasoInvalido(
+            f"'cross_check.metrica_base' ausente ou não é um objeto: {metrica!r}. Declare "
+            "'tipo' e 'valor' — a escala do segundo método é a da rota dele, não a do caso."
+        )
+    _recusar_chave_desconhecida(
+        metrica, _CHAVES_METRICA_DO_CROSS_CHECK_PERMITIDAS, "'cross_check.metrica_base'")
+    tipo = metrica.get("tipo")
+    aceitas = METRICAS_POR_ROTA[rota_oposta]
+    _exigir_texto(tipo, "cross_check.metrica_base.tipo")
+    if tipo not in aceitas:
+        raise CasoInvalido(
+            f"'cross_check.metrica_base.tipo' incompatível com a rota '{rota_oposta}': "
+            f"'{tipo}'. Rota '{rota_oposta}' aceita apenas {', '.join(sorted(aceitas))}."
+        )
+    valor = metrica.get("valor")
+    if not _numero_valido(valor) or not _finito(valor):
+        raise CasoInvalido(
+            f"'cross_check.metrica_base.valor' ausente ou não é um número finito: {valor!r}. "
+            "É a escala sobre a qual o segundo método chega a preço."
+        )
+
+    ancora = cross_check.get("ancora")
+    if not isinstance(ancora, str) or not ancora.strip():
+        raise CasoInvalido(
+            f"'cross_check.ancora' ausente ou vazia: {ancora!r}. O vetor do segundo método tem "
+            "de vir de um observável concreto, como todo cenário do caso — vetor sem âncora é "
+            "vetor inventado, e um cross-check inventado confirma o que quiser."
+        )
+
+    _validar_premissas("cross_check", cross_check.get("premissas"), rota_oposta)
 
 
 def carregar(caminho: Path) -> Caso:

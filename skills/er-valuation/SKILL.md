@@ -197,6 +197,30 @@ composição das partes, e o impacto compararia bases que não se correspondem);
 uma sobreposição — fora desta versão) e `alavanca_de_lucro` só é aceita num caso
 que declare `degrau`.
 
+Bloco opcional `retorno_exigido` (`{taxa}`): que valor resulta ao exigir retorno
+de X%. `taxa` em **pontos percentuais** (a convenção de `wacc`/`ke`), finita,
+acima de zero e até 100; nenhuma outra chave. Recusado junto de `sotp` (a
+manchete vem da composição das partes, cada uma com o próprio custo de capital) e
+de `degrau` (a manchete é o P/VP justo com degrau). É leitura, nunca fair value —
+o rótulo é do relatório.
+
+Campo opcional `pesos_de_probabilidade` (`{<cenário>: pp}`): os pesos, em pontos
+percentuais, de que sai o valor ponderado. Dois cenários ou mais, cada nome
+declarado em `cenarios`, cada peso finito e não negativo, soma **exatamente**
+`caso.SOMA_DOS_PESOS` (100) — o wrapper não normaliza em silêncio. Recusados
+junto de `sotp`, que tem um preço só. São julgamento do analista, fora da fórmula
+do valuation, e fora dos insumos que exigem proveniência.
+
+Bloco opcional `cross_check` (`{rota, metrica_base: {tipo, valor}, ancora,
+premissas}`): o segundo método declarado — o vetor coerente da rota OPOSTA. `rota`
+é uma rota conhecida e diferente da do caso (a do caso é recusada: não seria
+segundo método); uma rota que atravessa a ponte da dívida (`firm`, `rampa`) exige
+que o caso declare `ponte` — sem ela não existem inputs coerentes, e a
+metodologia manda declarar a ausência em vez de calcular. `metrica_base.tipo` é
+uma métrica daquela rota, `ancora` é texto não vazio e `premissas` é um vetor
+COMPLETO dela, validado pela mesma regra dos cenários (obrigatórias presentes,
+desconhecidas recusadas, numéricas finitas).
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -272,6 +296,18 @@ convenção que já mora aqui):
   `avaliar.DIRECOES_DO_EMPILHAMENTO`), ou `null`; sempre publicado. É a leitura de
   coerência interna dos cenários da metodologia, e nesta fatia é alerta de tela,
   não disclosure de QC.
+- `retorno_exigido` — `{taxa, premissa_substituida, preco_acao}` quando o caso
+  declara o bloco, ou `null`; sempre publicado. O preço é o do cenário da manchete
+  com a premissa de custo de capital da rota substituída pela taxa
+  (`caso.PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA`: WACC em firm e rampa, Ke em
+  equity), pelo mesmo motor de sempre.
+- `valor_ponderado` — `{valor, pesos}` ou `null`; sempre publicado. `valor` é a
+  soma de peso × preço sobre os preços que os cenários já publicaram; `pesos` ecoa
+  o que o caso declarou.
+- `cross_check` — `{rota, preco_acao, diferenca_vs_manchete}` ou `null`; sempre
+  publicado. O preço vem das mesmas funções de precificação, sobre o vetor da rota
+  oposta que o caso declara; a diferença é fração de comparação contra a manchete,
+  positiva quando o segundo método vale mais.
 - `fronteira_de_escopo` — o bloco que o gate validou, ou `null`; sempre
   publicado (ver "Contrato do caso").
 - `limitacoes` — lista de chaves, sempre publicada e possivelmente vazia, das

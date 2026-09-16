@@ -1360,7 +1360,10 @@
       "sensibilidades.grades_1d.*.pontos.*.valor",
       "sensibilidades.grades_2d.*.celulas.*.*.valor",
       "sotp.preco_acao",
-      "escolhas_metodologicas.*.preco_alternativa"
+      "escolhas_metodologicas.*.preco_alternativa",
+      "retorno_exigido.preco_acao",
+      "valor_ponderado.valor",
+      "cross_check.preco_acao"
     ],
     "fração": [
       "manchete.upside",
@@ -1424,6 +1427,9 @@
     "sotp.partes.*.premissas.*",
     "sotp.topo.*",
     "sotp.materialidade.blended.metrica_base.valor",
-    "sotp.materialidade.blended.premissas.*"
+    "sotp.materialidade.blended.premissas.*",
+    "retorno_exigido.taxa",
+    "cross_check.metrica_base.valor",
+    "cross_check.premissas.*"
   ]
 }

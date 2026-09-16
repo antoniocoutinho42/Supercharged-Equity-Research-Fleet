@@ -264,6 +264,50 @@ def _caso_equity_com_degrau_e_escolhas() -> dict:
     return _com_escolhas(_com_degrau(_equity()), "alavanca_de_lucro", {"roe": 20.0})
 
 
+# Fatia 5G, Task 2 (D2/D3/D4): as três leituras da §9 depois das sensibilidades. O
+# retorno exigido é recusado junto de SOTP e de degrau; os pesos, junto de SOTP; o
+# cross-check pela rota firm exige a ponte, que a rota equity não admite.
+_CROSS_CHECK_EQUITY = {
+    "rota": "equity",
+    "metrica_base": {"tipo": "LL", "valor": 450.0},
+    "ancora": "fixture da matriz",
+    "premissas": {"g": 5.0, "roe": 15.0, "ke": 12.0, "n": 10, "tv": "convergencia"},
+}
+_CROSS_CHECK_FIRM = {
+    "rota": "firm",
+    "metrica_base": {"tipo": "EBITDA", "valor": 1000.0},
+    "ancora": "fixture da matriz",
+    "premissas": {"g": 5.0, "roic": 12.0, "wacc": 10.0, "n": 10, "da": 20.0,
+                  "tax": 25.0, "tv": "gordon"},
+}
+
+
+def _com_topo(caso: dict, **campos) -> dict:
+    c = copy.deepcopy(caso)
+    c.update(copy.deepcopy(campos))
+    return c
+
+
+def _caso_firm_com_sotp_e_retorno_exigido() -> dict:
+    return _com_topo(_caso_firm_com_sotp(), retorno_exigido={"taxa": 14.0})
+
+
+def _caso_firm_com_sotp_e_pesos() -> dict:
+    return _com_topo(_caso_firm_com_sotp(), pesos_de_probabilidade={"base": 70.0, "bull": 30.0})
+
+
+def _caso_equity_com_degrau_e_retorno_exigido() -> dict:
+    return _com_topo(_com_degrau(_equity()), retorno_exigido={"taxa": 18.0})
+
+
+def _caso_firm_com_cross_check_equity() -> dict:
+    return _com_topo(_firm(), cross_check=_CROSS_CHECK_EQUITY)
+
+
+def _caso_equity_com_cross_check_firm() -> dict:
+    return _com_topo(_equity(), cross_check=_CROSS_CHECK_FIRM)
+
+
 def _caso_firm_nopat_com_conservacao() -> dict:
     c = _com_conservacao(_firm())
     c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "fonte": "fixture da matriz"}
@@ -325,9 +369,17 @@ MATRIZ = {
     # e aceito junto de 'degrau' — a combinação que a alavanca de lucro exige.
     ("firm", "sotp+escolhas_metodologicas"): (_caso_firm_com_sotp_e_escolhas, False),
     ("equity", "degrau+escolhas_metodologicas"): (_caso_equity_com_degrau_e_escolhas, True),
+    # Fatia 5G, Task 2 (D2/D3/D4): o retorno exigido não convive com a composição de
+    # partes nem com a do degrau; os pesos, com um preço só, não têm o que ponderar; e
+    # o cross-check pela rota firm precisa da ponte que a rota equity não admite.
+    ("firm", "sotp+retorno_exigido"): (_caso_firm_com_sotp_e_retorno_exigido, False),
+    ("firm", "sotp+pesos_de_probabilidade"): (_caso_firm_com_sotp_e_pesos, False),
+    ("equity", "degrau+retorno_exigido"): (_caso_equity_com_degrau_e_retorno_exigido, False),
+    ("firm", "cross_check_equity"): (_caso_firm_com_cross_check_equity, True),
+    ("equity", "cross_check_firm"): (_caso_equity_com_cross_check_firm, False),
 }
 
-assert len(MATRIZ) == 19, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6) e as 2 células de escolhas_metodologicas (5G, D1), exatamente uma vez cada"
+assert len(MATRIZ) == 24, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6), as 2 células de escolhas_metodologicas (5G, D1) e as 5 das três leituras (5G, D2/D3/D4), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

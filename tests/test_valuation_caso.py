@@ -1608,3 +1608,97 @@ def test_recusas_das_escolhas_metodologicas_nomeiam_a_regra(caso, nomeado):
     with pytest.raises(CasoInvalido) as erro:
         validar(caso())
     assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 2 (D2/D3/D4 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): 'retorno_exigido', 'pesos_de_probabilidade' e 'cross_check'.
+# --------------------------------------------------------------------------
+
+_CROSS_CHECK_EQUITY = {
+    "rota": "equity",
+    "metrica_base": {"tipo": "LL", "valor": 450.0},
+    "ancora": "lucro líquido normalizado 2023-2025",
+    "premissas": {"g": 5.0, "roe": 15.0, "ke": 12.0, "n": 10, "tv": "convergencia"},
+}
+
+
+def _firm_com_dois_cenarios() -> dict:
+    c = _firm()
+    c["cenarios"]["bull"] = json.loads(json.dumps(c["cenarios"]["base"]))
+    c["cenario_base"] = "base"
+    return c
+
+
+def _cross_check_com(**campos) -> dict:
+    return {**json.loads(json.dumps(_CROSS_CHECK_EQUITY)), **campos}
+
+
+def test_as_tres_leituras_declaradas_sao_aceitas_e_nulas_sao_ausencia():
+    caso = _firm_com_dois_cenarios()
+    caso["retorno_exigido"] = {"taxa": 14.0}
+    caso["pesos_de_probabilidade"] = {"base": 70.0, "bull": 30.0}
+    caso["cross_check"] = _cross_check_com()
+    validar(caso)
+    validar(_com(_firm(), retorno_exigido=None, pesos_de_probabilidade=None, cross_check=None))
+
+
+def test_cross_check_pela_rota_firm_exige_a_ponte_que_so_as_rotas_com_ponte_declaram():
+    """A rota equity não admite 'ponte', então dela não sai cross-check firm; de um caso
+    firm sai cross-check rampa, porque a ponte do caso é a mesma."""
+    rampa = {"receita0": 1000.0, "ebitda0": 300.0, "da_parque": 80.0, "wk": 10.0,
+             "kappa": 1.2, "g2": 3.0, "wacc": 10.0, "tax": 25.0, "t_rampa": 4,
+             "n": 10, "util": 70.0, "tv": "convergencia"}
+    validar(_com(_firm(), cross_check={"rota": "rampa", "metrica_base": {"tipo": "EBITDA0", "valor": 300.0},
+                                       "ancora": "capacidade instalada do parque", "premissas": rampa}))
+
+
+@pytest.mark.parametrize("caso,nomeado", [
+    pytest.param(lambda: _com(_fixture("caso_sotp_segmento.json"), retorno_exigido={"taxa": 14.0}),
+                 "'retorno_exigido' presente junto de 'sotp'", id="retorno_com_sotp"),
+    pytest.param(lambda: _com(_fixture("caso_degrau.json"), retorno_exigido={"taxa": 14.0}),
+                 "'retorno_exigido' presente junto de 'degrau'", id="retorno_com_degrau"),
+    pytest.param(lambda: _com(_firm(), retorno_exigido={"taxa": 0.0}),
+                 "'retorno_exigido.taxa' inválida", id="retorno_com_taxa_zero"),
+    pytest.param(lambda: _com(_firm(), retorno_exigido={"taxa": 120.0}),
+                 "'retorno_exigido.taxa' inválida", id="retorno_com_taxa_acima_de_100"),
+    pytest.param(lambda: _com(_firm(), retorno_exigido={"taxa": float("nan")}),
+                 "'retorno_exigido.taxa' inválida", id="retorno_com_taxa_nao_finita"),
+    pytest.param(lambda: _com(_firm(), retorno_exigido={"taxas": 14.0}),
+                 "Você quis dizer 'taxa'?", id="retorno_com_chave_desconhecida"),
+    pytest.param(lambda: _com(_fixture("caso_sotp_segmento.json"),
+                              pesos_de_probabilidade={"base": 70.0, "bull": 30.0}),
+                 "'pesos_de_probabilidade' presente junto de 'sotp'", id="pesos_com_sotp"),
+    pytest.param(lambda: _com(_firm(), pesos_de_probabilidade={"base": 100.0}),
+                 "com menos de dois cenários", id="pesos_com_um_cenario_so"),
+    pytest.param(lambda: _com(_firm_com_dois_cenarios(), pesos_de_probabilidade={"base": 70.0, "bull": 20.0}),
+                 "soma 90.0, não 100.0", id="pesos_que_nao_somam_100"),
+    pytest.param(lambda: _com(_firm_com_dois_cenarios(), pesos_de_probabilidade={"base": 70.0, "bea": 30.0}),
+                 "'pesos_de_probabilidade.bea' aponta para cenário inexistente", id="peso_de_cenario_inexistente"),
+    pytest.param(lambda: _com(_firm_com_dois_cenarios(), pesos_de_probabilidade={"base": 130.0, "bull": -30.0}),
+                 "'pesos_de_probabilidade.bull' inválido", id="peso_negativo"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(rota="firm")),
+                 "'cross_check.rota' é a rota do próprio caso", id="cross_check_na_rota_do_caso"),
+    pytest.param(lambda: _com(_equity(), cross_check=_cross_check_com(
+        rota="firm", metrica_base={"tipo": "EBITDA", "valor": 1000.0},
+        premissas={"g": 5.0, "roic": 12.0, "wacc": 10.0, "n": 10, "da": 20.0, "tax": 25.0, "tv": "gordon"})),
+        "mas o caso não declara 'ponte'", id="cross_check_firm_sem_ponte"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(rota="equty")),
+                 "Você quis dizer 'equity'?", id="cross_check_com_rota_desconhecida"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(
+        premissas={"g": 5.0, "roe": 15.0, "n": 10, "tv": "convergencia"})),
+        "cross_check: premissa obrigatória 'ke' ausente", id="cross_check_com_vetor_incompleto"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(
+        premissas={"g": 5.0, "roe": 15.0, "ke": 12.0, "n": 10, "tv": "convergencia", "roic": 12.0})),
+        "cross_check: premissa 'roic' desconhecida", id="cross_check_com_premissa_de_outra_rota"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(metrica_base={"tipo": "EBITDA", "valor": 1.0})),
+                 "'cross_check.metrica_base.tipo' incompatível com a rota 'equity'", id="cross_check_com_metrica_da_outra_rota"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(ancora="  ")),
+                 "'cross_check.ancora' ausente ou vazia", id="cross_check_sem_ancora"),
+    pytest.param(lambda: _com(_firm(), cross_check=_cross_check_com(rotas="equity")),
+                 "chave desconhecida em 'cross_check'", id="cross_check_com_chave_desconhecida"),
+])
+def test_recusas_das_tres_leituras_nomeiam_a_regra(caso, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(caso())
+    assert nomeado in str(erro.value)
