@@ -1270,6 +1270,88 @@
       }
     }
   },
+  "escolhas_metodologicas": {
+    "base_do_lucro": {
+      "rotulo": {
+        "pt-BR": "Base do lucro: reportada ou normalizada"
+      },
+      "gatilho": {
+        "pt-BR": "O resultado do período está fora da média do ciclo — a base reportada e a normalizada divergem."
+      }
+    },
+    "alavanca_de_lucro": {
+      "rotulo": {
+        "pt-BR": "Alavanca de lucro: modelada com probabilidade ou tratada como opcionalidade fora do preço"
+      },
+      "gatilho": {
+        "pt-BR": "A companhia tem um degrau de nível identificado — capacidade ociosa, preço administrado, contrato a renovar — ainda não capturado no resultado corrente."
+      }
+    },
+    "rentabilidade": {
+      "rotulo": {
+        "pt-BR": "Rentabilidade: marginal apurada ou forward de consenso"
+      },
+      "gatilho": {
+        "pt-BR": "O retorno do capital novo apurado diverge do retorno que o consenso projeta."
+      }
+    },
+    "crescimento": {
+      "rotulo": {
+        "pt-BR": "Crescimento: derivado do reinvestimento ou do guidance e do consenso"
+      },
+      "gatilho": {
+        "pt-BR": "O crescimento que o reinvestimento sustenta diverge do guidance vigente ou do consenso."
+      }
+    },
+    "hipotese_terminal": {
+      "rotulo": {
+        "pt-BR": "Hipótese terminal: como o retorno acima do custo de capital termina"
+      },
+      "gatilho": {
+        "pt-BR": "A rentabilidade do capital novo apurada nesta análise muda a hipótese sobre como o retorno excedente se dissipa no terminal."
+      }
+    },
+    "regime_do_driver_no_terminal": {
+      "rotulo": {
+        "pt-BR": "Regime do driver no terminal: congelado ou acompanhando a inflação"
+      },
+      "gatilho": {
+        "pt-BR": "Um driver exógeno de preço domina a receita, e o terminal precisa declarar se ele fica congelado ou segue a inflação."
+      }
+    },
+    "caixa_excedente_em_hibrida_financeira": {
+      "rotulo": {
+        "pt-BR": "Caixa e excedente numa companhia com braço financeiro: zero ou saldo bruto"
+      },
+      "gatilho": {
+        "pt-BR": "A companhia tem braço financeiro: o caixa é liquidez operacional e regulatória, não excedente devolvível ao acionista."
+      }
+    },
+    "ano_de_capex_no_par_d_rir": {
+      "rotulo": {
+        "pt-BR": "Ano de capex de estado estacionário no par depreciação x reinvestimento: corrente ou guidance de longo prazo"
+      },
+      "gatilho": {
+        "pt-BR": "O capex corrente diverge do capex de estado estacionário que o guidance de longo prazo indica."
+      }
+    },
+    "fronteira_de_consolidacao": {
+      "rotulo": {
+        "pt-BR": "Fronteira de consolidação com minoritários e coinvestimento: valor contábil ou econômico estimado"
+      },
+      "gatilho": {
+        "pt-BR": "Minoritários e coinvestimento passam de cerca de 20% do patrimônio líquido."
+      }
+    },
+    "leitura_de_capacidade": {
+      "rotulo": {
+        "pt-BR": "Leitura de capacidade pré-construída: ociosidade ignorada ou capacidade modelada"
+      },
+      "gatilho": {
+        "pt-BR": "A companhia tem capacidade pré-construída ociosa, com utilização observável ou receita por ativo confrontável contra pares a plena carga."
+      }
+    }
+  },
   "conclusoes_de_valor": {
     "preço por ação": [
       "manchete.preco_acao",
@@ -1277,7 +1359,8 @@
       "cenarios.*.sem_degrau.valor.preco_acao",
       "sensibilidades.grades_1d.*.pontos.*.valor",
       "sensibilidades.grades_2d.*.celulas.*.*.valor",
-      "sotp.preco_acao"
+      "sotp.preco_acao",
+      "escolhas_metodologicas.*.preco_alternativa"
     ],
     "fração": [
       "manchete.upside",

@@ -796,3 +796,100 @@ def test_a_conservacao_que_o_motor_nao_fecha_em_numero_e_recusa_nomeada(bloco_do
     with pytest.raises(MotorFalhou, match=nomeado):
         _conservacao_publicada({"conservacao_capital": bloco_do_motor},
                                caso_da_variante("conservacao_fecha")["conservacao_de_capital"])
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1 (D1 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): o painel de escolhas metodológicas. O caso declara; o wrapper
+# precifica a alternativa sobre o cenário da manchete e publica preço, impacto,
+# materialidade e o alerta de coerência interna dos cenários.
+# --------------------------------------------------------------------------
+
+from avaliar import (  # noqa: E402
+    DIRECOES_DO_EMPILHAMENTO, LIMIAR_DE_ESCOLHA_MATERIAL, precificar_firm,
+)
+
+
+def _com_escolhas(fixture: str, escolhas: list) -> dict:
+    caso = carregar(FIXTURES / fixture)
+    caso["escolhas_metodologicas"] = escolhas
+    return caso
+
+
+def test_o_preco_da_alternativa_e_o_cenario_da_manchete_com_as_sobreposicoes():
+    """O oráculo é montado aqui, não copiado do wrapper: o vetor do cenário da manchete
+    com as sobreposições por cima, pela mesma função que precifica o cenário. E o
+    impacto é esse preço contra o da manchete."""
+    caso = caso_da_variante("escolhas")
+    r = avaliar(caso)
+    nd_efetivo = r["ponte"]["nd_efetivo"]
+    premissas_centrais = caso["cenarios"][r["manchete"]["cenario"]]["premissas"]
+
+    assert [escolha["chave"] for escolha in r["escolhas_metodologicas"]] == [
+        "rentabilidade", "crescimento", "ano_de_capex_no_par_d_rir"]
+    for publicada, declarada in zip(r["escolhas_metodologicas"], caso["escolhas_metodologicas"]):
+        _saida, valor, _algebra, _multiplo = precificar_firm(
+            {**premissas_centrais, **declarada["sobreposicoes"]}, caso["metrica_base"]["tipo"],
+            caso["metrica_base"]["valor"], nd_efetivo, caso["acoes_diluidas"], caso["moeda"])
+        assert publicada["preco_alternativa"] == pytest.approx(valor["preco_acao"]), declarada["chave"]
+        assert publicada["impacto"] == pytest.approx(
+            valor["preco_acao"] / r["manchete"]["preco_acao"] - 1), declarada["chave"]
+        assert publicada["sobreposicoes"] == declarada["sobreposicoes"]
+        assert publicada["no_caso_base"] == declarada["no_caso_base"]
+        assert publicada["gatilho_disparou"] == declarada.get("gatilho_disparou")
+
+
+def test_a_materialidade_separa_os_dois_lados_do_limiar():
+    """`caso_minimo_firm` vale R$ 61,91. ROIC 20% leva a R$ 69,72 (+12,6%, acima do
+    limiar de 10%); g 8% leva a R$ 67,04 (+8,3%, abaixo). Números conferidos no motor."""
+    escolhas = avaliar(caso_da_variante("escolhas"))["escolhas_metodologicas"]
+    material, nao_material = escolhas[0], escolhas[1]
+    assert material["preco_alternativa"] == pytest.approx(69.72, abs=0.01)
+    assert abs(material["impacto"]) > LIMIAR_DE_ESCOLHA_MATERIAL and material["material"] is True
+    assert nao_material["preco_alternativa"] == pytest.approx(67.04, abs=0.01)
+    assert abs(nao_material["impacto"]) < LIMIAR_DE_ESCOLHA_MATERIAL and nao_material["material"] is False
+
+
+def test_o_alerta_de_empilhamento_sai_com_duas_fora_da_central_na_mesma_direcao():
+    """Duas escolhas com o caso-base FORA da posição central e impacto do mesmo sinal
+    acendem o alerta, nomeando a direção e as chaves; uma só, ou uma alternativa ao lado
+    de uma central, não acendem nada."""
+    conservadora, otimista = DIRECOES_DO_EMPILHAMENTO
+    duas_alternativas = [
+        {"chave": "rentabilidade", "no_caso_base": "alternativa", "sobreposicoes": {"roic": 20.0}},
+        {"chave": "crescimento", "no_caso_base": "alternativa", "sobreposicoes": {"g": 8.0}},
+    ]
+    r = avaliar(_com_escolhas("caso_minimo_firm.json", duas_alternativas))
+    assert r["empilhamento"] == {"direcao": conservadora, "chaves": ["rentabilidade", "crescimento"]}
+
+    uma_so = avaliar(_com_escolhas("caso_minimo_firm.json", duas_alternativas[:1]))
+    assert uma_so["empilhamento"] is None
+
+    uma_central = avaliar(_com_escolhas("caso_minimo_firm.json", [
+        duas_alternativas[0], {**duas_alternativas[1], "no_caso_base": "central"}]))
+    assert uma_central["empilhamento"] is None
+
+    # Direções opostas não empilham: a que pesa mais é a que sai nomeada.
+    direcoes_opostas = avaliar(_com_escolhas("caso_minimo_firm.json", duas_alternativas + [
+        {"chave": "ano_de_capex_no_par_d_rir", "no_caso_base": "alternativa", "sobreposicoes": {"da": 24.0}}]))
+    assert direcoes_opostas["empilhamento"]["direcao"] == conservadora
+    assert otimista not in direcoes_opostas["empilhamento"]["chaves"]
+
+
+def test_com_degrau_a_alternativa_e_precificada_com_degrau():
+    """O preço publicado do cenário com degrau é o COM degrau; a alternativa passa pelo
+    mesmo subcomando, sobre o vetor sobreposto — senão o impacto compararia o com-degrau
+    contra o sem-degrau, e uma escolha sem efeito nenhum sairia material."""
+    caso = _com_escolhas("caso_degrau.json", [
+        {"chave": "alavanca_de_lucro", "no_caso_base": "central", "sobreposicoes": {"roe": 20.0}}])
+    r = avaliar(caso)
+    (escolha,) = r["escolhas_metodologicas"]
+    cenario = r["cenarios"][r["manchete"]["cenario"]]
+    assert escolha["preco_alternativa"] != pytest.approx(cenario["sem_degrau"]["valor"]["preco_acao"])
+    assert escolha["impacto"] == pytest.approx(
+        escolha["preco_alternativa"] / r["manchete"]["preco_acao"] - 1)
+
+
+def test_sem_o_bloco_o_painel_sai_vazio_e_sem_alerta():
+    r = _res_firm()
+    assert r["escolhas_metodologicas"] == [] and r["empilhamento"] is None

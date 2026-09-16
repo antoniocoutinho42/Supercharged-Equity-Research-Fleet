@@ -1538,3 +1538,73 @@ def test_recusas_da_conservacao_de_capital_nomeiam_a_regra(caso, nomeado):
     with pytest.raises(CasoInvalido) as erro:
         validar(caso())
     assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1 (D1 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): 'escolhas_metodologicas', lista de escolhas declaradas com
+# vocabulário fechado na chave, na posição do caso-base e nas sobreposições.
+# --------------------------------------------------------------------------
+
+def _escolha(**campos) -> dict:
+    return {"chave": "rentabilidade", "no_caso_base": "central",
+            "sobreposicoes": {"roic": 20.0}, **campos}
+
+
+def test_escolhas_metodologicas_declaradas_sao_aceitas_e_nulas_sao_ausencia():
+    validar(_com(_firm(), escolhas_metodologicas=[_escolha()]))
+    validar(_com(_firm(), escolhas_metodologicas=[
+        _escolha(no_caso_base="alternativa", sobreposicoes={"g": 8.0, "roic": 14.0}),
+        _escolha(chave="crescimento", gatilho_disparou={"observavel": "Guidance acima do reinvestimento."}),
+    ]))
+    validar(_com(_equity(), escolhas_metodologicas=[_escolha(sobreposicoes={"roe": 20.0})]))
+    validar(_com(_firm(), escolhas_metodologicas=None))
+
+
+def test_alavanca_de_lucro_e_aceita_com_degrau_declarado():
+    """D1: a alavanca de lucro é a escolha entre modelar o degrau com probabilidade e
+    tratá-lo como opcionalidade — com o degrau declarado, ela é declarável."""
+    caso = _fixture("caso_degrau.json")
+    caso["escolhas_metodologicas"] = [
+        {"chave": "alavanca_de_lucro", "no_caso_base": "central", "sobreposicoes": {"roe": 20.0}}]
+    validar(caso)
+
+
+@pytest.mark.parametrize("caso,nomeado", [
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(chave="rentabilidad")]),
+                 "Você quis dizer 'rentabilidade'?", id="chave_fora_do_vocabulario_com_sugestao"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(), _escolha(sobreposicoes={"g": 8.0})]),
+                 "'escolhas_metodologicas.1.chave' repetida", id="chave_repetida"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={})]),
+                 "'escolhas_metodologicas.0.sobreposicoes' vazia", id="sobreposicoes_vazia"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"roe": 20.0})]),
+                 "não é premissa da rota 'firm'", id="sobreposicao_fora_da_rota"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"tv": "book"})]),
+                 "que não é premissa numérica", id="sobreposicao_nao_numerica"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(sobreposicoes={"roic": "20"})]),
+                 "não é um número finito", id="sobreposicao_textual"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(no_caso_base="centra")]),
+                 "Você quis dizer 'central'?", id="posicao_fora_do_vocabulario"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(chave="leitura_de_capacidade")]),
+                 "que esta versão não precifica", id="leitura_de_capacidade_fora_da_v4"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(chave="alavanca_de_lucro")]),
+                 "declarada num caso sem 'degrau'", id="alavanca_de_lucro_sem_degrau"),
+    pytest.param(lambda: _com(_fixture("caso_sotp_segmento.json"), escolhas_metodologicas=[_escolha()]),
+                 "presente junto de 'sotp'", id="junto_de_sotp"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(gatilho_disparou={"observaveis": "x"})]),
+                 "Você quis dizer 'observavel'?", id="chave_desconhecida_no_gatilho"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(gatilho_disparou={"observavel": "  "})]),
+                 "'escolhas_metodologicas.0.gatilho_disparou.observavel' ausente ou vazio", id="gatilho_sem_observavel"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[_escolha(posicao="central")]),
+                 "chave desconhecida em 'escolhas_metodologicas.0'", id="chave_desconhecida_na_escolha"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=[]),
+                 "bloco 'escolhas_metodologicas' vazio", id="lista_vazia"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas={"chave": "rentabilidade"}),
+                 "'escolhas_metodologicas' não é uma lista", id="nao_e_lista"),
+    pytest.param(lambda: _com(_firm(), escolhas_metodologicas=["rentabilidade"]),
+                 "escolhas_metodologicas.0 não é um objeto", id="entrada_nao_e_objeto"),
+])
+def test_recusas_das_escolhas_metodologicas_nomeiam_a_regra(caso, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(caso())
+    assert nomeado in str(erro.value)

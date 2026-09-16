@@ -377,6 +377,21 @@ _CHAVES_DO_DEGRAU_ORDEM: tuple[str, ...] = (
 _ALERTAS_DA_CONSERVACAO: tuple[tuple[str, str], ...] = (("ALERTA", "conservacao_capital_nao_fecha"),)
 _CHAVES_DA_CONSERVACAO: tuple[str, ...] = tuple(chave for _campo, chave in _ALERTAS_DA_CONSERVACAO)
 
+# Fatia 5G, Task 1 (D1): o limiar de ~10% do vendor (`references/aplicacao.md` §5b,
+# item 4: "escolha alternativa movendo > ~10% ⟹ a tabela traz as duas"). Constante
+# NOMEADA da integração, como `_LIMIAR_DIVERGENCIA_DE_BASE_PCT` acima e pela mesma
+# razão: decidir "material" é metodologia, e o relatório nunca conhece limiar — ele
+# lê o booleano `material` que este módulo publica. Fração, não ponto percentual: é
+# comparada contra |impacto|, que é uma fração de preço.
+LIMIAR_DE_ESCOLHA_MATERIAL: float = 0.10
+
+# A direção em que o caso-base está fora da posição central, quando está. É a leitura
+# de coerência interna dos cenários do vendor (§5b, item 4): o caso-base no ramo
+# conservador de várias escolhas ao mesmo tempo não é prudência, é cenário incoerente
+# — e o mesmo vale para o lado otimista. 'conservadora' é o caso-base ABAIXO do ramo
+# central (a alternativa vale mais, impacto positivo); 'otimista', acima.
+DIRECOES_DO_EMPILHAMENTO: tuple[str, str] = ("conservadora", "otimista")
+
 
 def _conservacao_publicada(saida_motor: dict, conservacao: dict) -> dict:
     """`cenarios.<n>.conservacao_capital` (fatia 5F, Task 3, D6): a saída do motor
@@ -983,6 +998,119 @@ def _monta_cenario_rampa(cenario: dict, saida_motor: dict, valor: dict,
     return resultado
 
 
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1 (D1): o painel de escolhas metodológicas. As escolhas são
+# declaradas pelo analista (`caso.ESCOLHAS_METODOLOGICAS`, validadas no gate); aqui
+# o wrapper só PRECIFICA a alternativa de cada uma — o cenário da manchete com as
+# sobreposições declaradas por cima — e publica preço, impacto e materialidade.
+# Nenhuma conta nova: a alternativa passa pela MESMA função de precificação que o
+# cenário da manchete percorreu, inclusive o degrau.
+# --------------------------------------------------------------------------
+
+def _preco_do_vetor(caso: dict, nome_cenario: str, premissas: dict,
+                     nd_efetivo: float, moeda: str | None, rf: float | None) -> float:
+    """Preço por ação de um vetor de premissas qualquer, pelo MESMO caminho que o
+    cenário `nome_cenario` percorreu em `avaliar()`.
+
+    Irmã de `sensibilidades._precificar_celula` (que cobre só firm/equity, as duas
+    rotas que o gate admite para grade), estendida às três rotas e ao degrau: um
+    caso com degrau publica o preço COM degrau em `cenarios.<n>.valor.preco_acao`,
+    e uma alternativa precificada sem ele produziria um preço de outra base — o
+    impacto compararia o com-degrau contra o sem-degrau. O degrau é aplicado pelo
+    motor, no mesmo subcomando de sempre (`precificar_degrau`), sobre o vetor já
+    sobreposto; `niveis[0]` é o nível-alvo do cenário (D8 da fatia D).
+
+    Não recebe `conservacao`: a conservação de capital é diagnóstico do cenário
+    declarado, não da alternativa — a mesma disciplina que já exclui as células de
+    grade, as partes de SOTP e o teto.
+    """
+    rota = caso["rota"]
+    metrica = caso["metrica_base"]
+    acoes = caso["acoes_diluidas"]
+
+    if rota == "firm":
+        _saida, valor, _algebra, _multiplo = precificar_firm(
+            premissas, metrica["tipo"], metrica["valor"], nd_efetivo, acoes, moeda, rf=rf)
+        return valor["preco_acao"]
+    if rota == "rampa":
+        _saida, valor, _algebra, _multiplo = precificar_rampa(
+            premissas, nd_efetivo, acoes, moeda, rf=rf)
+        return valor["preco_acao"]
+
+    bloco_degrau = caso.get("degrau")
+    if bloco_degrau is None:
+        _saida, valor, _algebra, _multiplo = precificar_equity(
+            premissas, metrica["valor"], acoes, moeda, rf=rf)
+        return valor["preco_acao"]
+
+    saida_degrau = precificar_degrau(
+        premissas, bloco_degrau, bloco_degrau["m"][nome_cenario]["valor"], moeda, rf=rf)
+    niveis = saida_degrau.get("niveis") or []
+    if not niveis:
+        raise MotorFalhou(
+            f"motor não devolveu nível de degrau para o vetor alternativo: {saida_degrau!r}."
+        )
+    return _exigir_valor(niveis[0], "preco_acao")
+
+
+def _escolhas_precificadas(caso: dict, manchete: dict, nd_efetivo: float,
+                            moeda: str | None, rf: float | None) -> list[dict]:
+    """`resultados.escolhas_metodologicas`: cada escolha declarada, com o preço do
+    ramo alternativo, o impacto dele sobre o preço da manchete e a materialidade.
+
+    A alternativa é o cenário da manchete com as sobreposições por cima — o oráculo
+    que o teste monta é exatamente esse. `impacto` é fração de comparação (quanto o
+    outro ramo moveria o preço da manchete), nunca uma conclusão de valor; `material`
+    aplica `LIMIAR_DE_ESCOLHA_MATERIAL` ao módulo do impacto, e é a decisão que o
+    relatório consome sem conhecer limiar nenhum. `gatilho_disparou` sai como o caso
+    o declarou, ou `null` — o wrapper nunca avalia gatilho.
+    """
+    nome_cenario = manchete["cenario"]
+    preco_da_manchete = manchete["preco_acao"]
+    premissas_centrais = caso["cenarios"][nome_cenario]["premissas"]
+
+    publicadas = []
+    for escolha in caso.get("escolhas_metodologicas") or []:
+        sobreposicoes = escolha["sobreposicoes"]
+        preco_alternativa = _preco_do_vetor(
+            caso, nome_cenario, {**premissas_centrais, **sobreposicoes}, nd_efetivo, moeda, rf)
+        impacto = preco_alternativa / preco_da_manchete - 1
+        publicadas.append({
+            "chave": escolha["chave"],
+            "no_caso_base": escolha["no_caso_base"],
+            "sobreposicoes": sobreposicoes,
+            "preco_alternativa": preco_alternativa,
+            "impacto": impacto,
+            "material": abs(impacto) > LIMIAR_DE_ESCOLHA_MATERIAL,
+            "gatilho_disparou": escolha.get("gatilho_disparou"),
+        })
+    return publicadas
+
+
+def _empilhamento(escolhas: list[dict]) -> dict | None:
+    """`resultados.empilhamento`: o alerta de coerência interna dos cenários — duas ou
+    mais escolhas com o caso-base FORA da posição central, todas na mesma direção.
+
+    Só as `alternativa` contam: uma escolha em que o caso-base está no ramo central
+    não empilha nada. A direção vem do sinal do impacto (ver
+    `DIRECOES_DO_EMPILHAMENTO`); impacto exatamente zero não tem direção. Com as duas
+    direções presentes, sai a de mais escolhas — elas não se empilham, se compensam,
+    e o alerta nomeia o lado que pesa; `max` desempata pela primeira direção na ordem
+    de declaração. Nesta fatia o alerta é leitura da tela, não disclosure de QC.
+    """
+    conservadora, otimista = DIRECOES_DO_EMPILHAMENTO
+    grupos: dict[str, list[str]] = {}
+    for escolha in escolhas:
+        if escolha["no_caso_base"] != "alternativa" or escolha["impacto"] == 0:
+            continue
+        direcao = conservadora if escolha["impacto"] > 0 else otimista
+        grupos.setdefault(direcao, []).append(escolha["chave"])
+    if not grupos:
+        return None
+    direcao, chaves = max(grupos.items(), key=lambda par: len(par[1]))
+    return {"direcao": direcao, "chaves": chaves} if len(chaves) > 1 else None
+
+
 def avaliar(caso: dict) -> dict:
     """Roda o motor por cenário na rota do caso e monta o conteúdo de `resultados.json`.
 
@@ -1159,6 +1287,14 @@ def avaliar(caso: dict) -> dict:
     # Fatia 5F, Task 2 (D5): a tela forward, SEMPRE publicada — `null` sem
     # `metrica_forward` declarada no caso.
     resultado["mercado_tela_forward"] = _montar_mercado_tela_forward(caso, nd_efetivo)
+
+    # Fatia 5G, Task 1 (D1): o painel de escolhas metodológicas, SEMPRE publicado —
+    # lista vazia sem declaração, e `empilhamento` `null` sem alerta. Roda depois da
+    # manchete, de quem lê o cenário e o preço contra os quais cada alternativa é
+    # precificada e comparada.
+    resultado["escolhas_metodologicas"] = _escolhas_precificadas(
+        caso, resultado["manchete"], nd_efetivo, moeda, rf)
+    resultado["empilhamento"] = _empilhamento(resultado["escolhas_metodologicas"])
 
     # Fatia 5D, Task 1 (D3/D4): o que só a integração sabe sobre o escopo do
     # caso, SEMPRE publicado — um campo de contrato ausente não pode sumir em

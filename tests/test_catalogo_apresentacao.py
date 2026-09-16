@@ -24,6 +24,7 @@ from caso import TV_CANON as TV_CANON_GATE  # noqa: E402
 from caso import CAMPOS_DA_PONTE, POLITICA_TV_OPCOES, _PREMISSAS_POR_ROTA, carregar  # noqa: E402
 from caso import CLASSES_DE_FRONTEIRA_DE_ESCOPO, LIMITACOES_DE_REVERSA, reversa_indisponivel  # noqa: E402
 from caso import ANOS_BASE_DO_CAPEX, EIXO_OBRIGATORIO, EIXOS_DE_REVERSA, ESCALAS_MONETARIAS, _TRIANGULO_POR_ROTA  # noqa: E402
+from caso import ESCOLHAS_METODOLOGICAS  # noqa: E402
 import diagnosticos  # noqa: E402
 import reversa  # noqa: E402
 
@@ -148,7 +149,7 @@ def test_chaves_de_topo_do_catalogo():
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
         "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
         "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor", "variaveis_do_triangulo",
-        "anos_base_do_capex",
+        "anos_base_do_capex", "escolhas_metodologicas",
     }
 
 
@@ -250,6 +251,9 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
         "sotp.partes.*.efeito_c7_alternativa_gp_%",),
     "o diagnóstico da conservação de capital: capital consumido × encargos de reposição e de crescimento": (
         "cenarios.*.conservacao_capital.**",),
+    "o impacto de uma escolha metodológica — fração de comparação entre o ramo alternativo e a manchete, "
+    "não um valor que a entrega conclua": (
+        "escolhas_metodologicas.*.impacto",),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 
@@ -425,6 +429,9 @@ _NAO_SAO_INSUMOS: dict[str, tuple[str, ...]] = {
         "sensibilidades.grades_1d.*.pontos.*",
         "sensibilidades.grades_2d.*.pontos_x.*",
         "sensibilidades.grades_2d.*.pontos_y.*"),
+    "julgamento declarado — a sobreposição que leva o cenário da manchete ao outro ramo de uma escolha "
+    "metodológica é a escolha do analista, não um fato sobre a companhia nem sobre o mercado": (
+        "escolhas_metodologicas.*.sobreposicoes.*",),
 }
 
 
@@ -833,6 +840,42 @@ def test_variaveis_do_triangulo_sao_as_do_triangulo_que_nao_sao_premissa():
 def test_anos_base_do_capex_do_catalogo_sao_os_do_gate():
     assert set(CAT["anos_base_do_capex"]) == ANOS_BASE_DO_CAPEX
     _rotulos_em_todo_idioma("anos_base_do_capex")
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1 (D1): as dez escolhas metodológicas do vendor. O relatório mostra
+# cada uma pelo rótulo daqui e pelo gatilho descrito aqui — nunca pela chave crua, e
+# nunca com um gatilho que ele mesmo tenha de saber avaliar. Mesma trava de upgrade
+# dos eixos de reversa e dos anos-base do capex: uma escolha nova no gate sem entrada
+# aqui reprova na integração.
+# --------------------------------------------------------------------------
+
+def test_escolhas_metodologicas_do_catalogo_sao_as_dez_do_gate_com_rotulo_e_gatilho():
+    assert set(CAT["escolhas_metodologicas"]) == ESCOLHAS_METODOLOGICAS
+    assert len(ESCOLHAS_METODOLOGICAS) == 10, sorted(ESCOLHAS_METODOLOGICAS)
+    for chave, info in CAT["escolhas_metodologicas"].items():
+        assert set(info) == {"rotulo", "gatilho"}, (chave, sorted(info))
+        for idioma in CAT["idiomas"]:
+            assert info["gatilho"].get(idioma, "").strip(), (chave, idioma)
+    _rotulos_em_todo_idioma("escolhas_metodologicas")
+
+
+def test_toda_escolha_publicada_pelas_variantes_tem_entrada_no_catalogo():
+    """Trava de upgrade sobre o que o wrapper de fato publica: a chave de cada escolha
+    em `resultados.escolhas_metodologicas`, e a de cada escolha citada pelo alerta de
+    empilhamento, está no catálogo — e alguma variante publica as duas coisas, senão a
+    trava seria vacuamente verde."""
+    vistas, com_empilhamento = set(), 0
+    for nome in CASOS_E_VARIANTES:
+        _caso, r = _caso_e_resultados(nome)
+        vistas.update(escolha["chave"] for escolha in r["escolhas_metodologicas"])
+        empilhamento = r["empilhamento"]
+        if empilhamento is not None:
+            vistas.update(empilhamento["chaves"])
+            com_empilhamento += 1
+    assert vistas, "nenhuma escolha publicada — trava vacuamente verde"
+    assert com_empilhamento, "nenhum alerta de empilhamento publicado — trava vacuamente verde"
+    assert vistas <= set(CAT["escolhas_metodologicas"]), vistas - set(CAT["escolhas_metodologicas"])
 
 
 def test_disclosure_da_conservacao_de_capital_nomeia_a_chave_da_integracao_sem_limiar():

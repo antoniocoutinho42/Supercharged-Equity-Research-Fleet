@@ -245,6 +245,25 @@ def _caso_rampa_com_conservacao() -> dict:
     return _com_conservacao(_rampa())
 
 
+# Fatia 5G, Task 1 (D1): a menor escolha metodológica declarável. Junto de 'sotp' o
+# bloco é recusado no gate (a manchete vem da composição das partes); junto de
+# 'degrau' é a combinação que a alavanca de lucro exige, e roda de ponta a ponta —
+# a alternativa passa pelo mesmo subcomando de degrau que o cenário percorreu.
+def _com_escolhas(caso: dict, chave: str, sobreposicoes: dict) -> dict:
+    c = copy.deepcopy(caso)
+    c["escolhas_metodologicas"] = [
+        {"chave": chave, "no_caso_base": "central", "sobreposicoes": dict(sobreposicoes)}]
+    return c
+
+
+def _caso_firm_com_sotp_e_escolhas() -> dict:
+    return _com_escolhas(_caso_firm_com_sotp(), "rentabilidade", {"roic": 20.0})
+
+
+def _caso_equity_com_degrau_e_escolhas() -> dict:
+    return _com_escolhas(_com_degrau(_equity()), "alavanca_de_lucro", {"roe": 20.0})
+
+
 def _caso_firm_nopat_com_conservacao() -> dict:
     c = _com_conservacao(_firm())
     c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "fonte": "fixture da matriz"}
@@ -301,9 +320,14 @@ MATRIZ = {
     ("equity", "conservacao_de_capital"): (_caso_equity_com_conservacao, False),
     ("rampa", "conservacao_de_capital"): (_caso_rampa_com_conservacao, False),
     ("firm", "conservacao_de_capital+nopat"): (_caso_firm_nopat_com_conservacao, False),
+    # Fatia 5G, Task 1 (D1): 'escolhas_metodologicas' é recusado junto de 'sotp' (a
+    # manchete vem da composição das partes, e o impacto compararia bases diferentes)
+    # e aceito junto de 'degrau' — a combinação que a alavanca de lucro exige.
+    ("firm", "sotp+escolhas_metodologicas"): (_caso_firm_com_sotp_e_escolhas, False),
+    ("equity", "degrau+escolhas_metodologicas"): (_caso_equity_com_degrau_e_escolhas, True),
 }
 
-assert len(MATRIZ) == 17, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5) e as 3 de conservacao_de_capital (5F, D6), exatamente uma vez cada"
+assert len(MATRIZ) == 19, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6) e as 2 células de escolhas_metodologicas (5G, D1), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

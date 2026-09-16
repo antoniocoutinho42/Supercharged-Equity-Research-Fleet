@@ -181,6 +181,22 @@ finito, as duas fontes textos não vazios, `ano_base` `corrente` ou
 `guidance_longo_prazo` (`caso.ANOS_BASE_DO_CAPEX`), nenhuma outra chave em
 nível nenhum; nulo é ausência.
 
+Bloco opcional `escolhas_metodologicas`: a lista das escolhas metodológicas da
+metodologia (as dez de `references/aplicacao.md` §5b, item 4), **declaradas pelo
+analista** — o wrapper nunca avalia gatilho, só precifica. Cada entrada traz
+`chave` (uma de `caso.ESCOLHAS_METODOLOGICAS`; fora do vocabulário, recusa com
+sugestão — e repetida, recusa), `no_caso_base` (`central` ou `alternativa`,
+`caso.POSICOES_DA_ESCOLHA`), `sobreposicoes` (mapa não vazio premissa da rota →
+número finito, que leva o cenário da manchete ao outro ramo — premissa de outra
+rota, premissa não numérica ou valor não finito são recusa nomeada) e, opcional,
+`gatilho_disparou: {observavel}` (texto não vazio). Nenhuma outra chave, em
+nível nenhum; lista vazia e nulo são recusa e ausência, respectivamente.
+Recusado inteiro junto de `sotp` (com soma de partes o preço da manchete vem da
+composição das partes, e o impacto compararia bases que não se correspondem);
+`leitura_de_capacidade` é recusada pelo nome (trocaria a arquitetura do vetor, não
+uma sobreposição — fora desta versão) e `alavanca_de_lucro` só é aceita num caso
+que declare `degrau`.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -242,6 +258,20 @@ convenção que já mora aqui):
   (`avaliar._LIMIAR_DIVERGENCIA_DE_BASE_PCT`, fonte única, espelhado e travado
   em `motor_espelho.js`). A decisão "acima do limiar" é desta camada: a QC do
   relatório consome a chave e não compara limiar nenhum.
+- `escolhas_metodologicas` — o painel de escolhas, sempre publicado (lista vazia
+  sem declaração): por escolha declarada, `chave`, `no_caso_base`,
+  `sobreposicoes` e `gatilho_disparou` como o caso os declarou, mais
+  `preco_alternativa` (o cenário da manchete precificado com as sobreposições por
+  cima, pelo mesmo caminho que o cenário percorreu — inclusive o degrau),
+  `impacto` (esse preço contra o da manchete, fração de comparação) e `material`
+  (o módulo do impacto acima de `avaliar.LIMIAR_DE_ESCOLHA_MATERIAL`, o limiar de
+  ~10% da metodologia). O relatório lê o booleano e nunca compara limiar nenhum.
+- `empilhamento` — `{direcao, chaves}` quando duas ou mais escolhas têm o
+  caso-base FORA da posição central e na mesma direção (`conservadora` quando o
+  caso-base vale menos que o ramo central, `otimista` quando vale mais —
+  `avaliar.DIRECOES_DO_EMPILHAMENTO`), ou `null`; sempre publicado. É a leitura de
+  coerência interna dos cenários da metodologia, e nesta fatia é alerta de tela,
+  não disclosure de QC.
 - `fronteira_de_escopo` — o bloco que o gate validou, ou `null`; sempre
   publicado (ver "Contrato do caso").
 - `limitacoes` — lista de chaves, sempre publicada e possivelmente vazia, das
@@ -290,7 +320,8 @@ cada premissa, em uma linha, e a síntese — texto de metodologia, nunca um
 número); e o rótulo das variáveis do triângulo que não são premissa
 (`variaveis_do_triangulo`); o rótulo de cada ano-base do capex
 (`anos_base_do_capex`); e, em `disclosures.conservacao_de_capital`, o texto e a
-chave da conservação de capital que não fecha)
+chave da conservação de capital que não fecha; e o rótulo e o gatilho descrito de
+cada escolha metodológica — `escolhas_metodologicas`, as dez do gate)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

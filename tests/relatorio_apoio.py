@@ -190,6 +190,35 @@ def _conservacao_nao_fecha(caso: dict) -> dict:
     return _com_conservacao_de_capital(caso, 300.0, 0.0)
 
 
+def _escolhas(caso: dict) -> dict:
+    """`caso_minimo_firm` (preço da manchete R$ 61,91) com três escolhas metodológicas
+    declaradas (D1 da 5G), escolhidas para exercer os dois lados do limiar de
+    materialidade e o alerta de coerência interna dos cenários:
+
+    - `rentabilidade` com o caso-base no ramo ALTERNATIVO: o retorno do capital novo
+      do consenso (ROIC 20%) leva o preço a ≈ R$ 69,72, impacto ≈ +12,6% — acima do
+      limiar, material;
+    - `crescimento` também no ramo ALTERNATIVO: g de 8% leva a ≈ R$ 67,04, impacto
+      ≈ +8,3% — abaixo do limiar. As duas fora da central na mesma direção acendem o
+      alerta de empilhamento (`conservadora`: o caso-base vale menos que os dois
+      ramos centrais);
+    - `ano_de_capex_no_par_d_rir` no ramo CENTRAL, com o gatilho declarado como
+      disparado: d de 24% leva a ≈ R$ 58,56, impacto ≈ −5,4%. Central, não entra no
+      empilhamento.
+    """
+    c = copy.deepcopy(caso)
+    c["escolhas_metodologicas"] = [
+        {"chave": "rentabilidade", "no_caso_base": "alternativa",
+         "sobreposicoes": {"roic": 20.0}},
+        {"chave": "crescimento", "no_caso_base": "alternativa",
+         "sobreposicoes": {"g": 8.0}},
+        {"chave": "ano_de_capex_no_par_d_rir", "no_caso_base": "central",
+         "sobreposicoes": {"da": 24.0},
+         "gatilho_disparou": {"observavel": "Capex do guidance de longo prazo acima do capex do ano corrente."}},
+    ]
+    return c
+
+
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
     "forward_firm": ("caso_minimo_firm.json", _forward_firm),
@@ -197,6 +226,7 @@ VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "escala": ("caso_rampa.json", _escala),
     "conservacao_fecha": ("caso_minimo_firm.json", _conservacao_fecha),
     "conservacao_nao_fecha": ("caso_minimo_firm.json", _conservacao_nao_fecha),
+    "escolhas": ("caso_minimo_firm.json", _escolhas),
 }
 
 

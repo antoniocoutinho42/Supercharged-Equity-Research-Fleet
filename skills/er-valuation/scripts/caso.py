@@ -367,6 +367,8 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Fatia 5F, Tasks 2 e 3: validadas por `_validar_metrica_forward`,
     # `_validar_escala_monetaria` e `_validar_conservacao_de_capital` (mais abaixo).
     "metrica_forward", "escala_monetaria", "conservacao_de_capital",
+    # Fatia 5G, Task 1: validado por `_validar_escolhas_metodologicas` (mais abaixo).
+    "escolhas_metodologicas",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -464,8 +466,9 @@ def validar(caso: Caso) -> None:
     triângulo quando a rota tiver um, premissas obrigatórias, premissas
     desconhecidas) -> cenario_base (A3, obrigatório com mais de um cenário)
     -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
-    'sotp', 'fronteira_de_escopo', 'metrica_forward', 'escala_monetaria' e
-    'conservacao_de_capital', só quando presentes. As duas recusas de
+    'sotp', 'fronteira_de_escopo', 'metrica_forward', 'escala_monetaria',
+    'conservacao_de_capital' e 'escolhas_metodologicas', só quando
+    presentes. As duas recusas de
     'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
     registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
     modifica `caso`; não preenche nada — só confirma ou recusa.
@@ -545,6 +548,7 @@ def validar(caso: Caso) -> None:
     _validar_metrica_forward(caso, rota)
     _validar_escala_monetaria(caso)
     _validar_conservacao_de_capital(caso, rota)
+    _validar_escolhas_metodologicas(caso, rota)
 
 
 def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
@@ -2844,6 +2848,216 @@ def _validar_conservacao_de_capital(caso: Caso, rota: str) -> None:
             f"'conservacao_de_capital.capex_total.ano_base' fora do vocabulário: '{ano_base}'.{dica}"
             "O capex do ano-base é o corrente ou o do guidance de longo prazo — declare qual. "
             f"Anos-base aceitos: {', '.join(sorted(ANOS_BASE_DO_CAPEX))}."
+        )
+
+
+# --------------------------------------------------------------------------
+# Fatia 5G, Task 1 (D1 do plano docs/superpowers/plans/2026-09-15-v4-item5g-
+# alternativas.md): bloco opcional 'escolhas_metodologicas' — a sensibilidade às
+# escolhas metodológicas da §5b do vendor, item 4.
+#
+# As escolhas são DECLARADAS pelo analista; o wrapper só precifica. O caso diz, de
+# cada escolha, a chave (o vocabulário abaixo, as dez do vendor), a posição que o
+# caso-base ocupa nela, as sobreposições que levam o cenário da manchete ao outro
+# ramo e, quando existir, o observável que disparou o gatilho da escolha. Nenhum
+# gatilho é AVALIADO aqui: reconhecer que os minoritários passaram de ~20% do PL, ou
+# que o capex corrente diverge do de estado estacionário, é trabalho do analista —
+# o gate só confere que o que foi declarado é declarável.
+#
+# Duas escolhas do vocabulário não são precificáveis nesta fatia, e a recusa é
+# nomeada em vez de silenciosa:
+#   - 'leitura_de_capacidade' trocaria a ROTA inteira (o ramo capacidade usa RiR por
+#     componente e as fases da capacidade pré-construída, não uma sobreposição sobre
+#     o vetor) — fica fora da v4, como dívida do plano;
+#   - 'alavanca_de_lucro' só existe com degrau: sem o degrau declarado no caso, não
+#     há alavanca a modelar nem a excluir, e a escolha seria uma declaração vazia.
+# --------------------------------------------------------------------------
+
+# As DEZ do vendor (`vendor/multiplos-justos/references/aplicacao.md` §5b, item 4).
+# A base monetária NÃO entra: é invariante de coerência reportado à parte, nunca uma
+# décima primeira escolha econômica. O catálogo de apresentação rotula exatamente
+# estas dez e descreve o gatilho de cada uma (trava em
+# tests/test_catalogo_apresentacao.py) — o relatório nunca aprende o vocabulário.
+ESCOLHAS_METODOLOGICAS: frozenset = frozenset({
+    "base_do_lucro",
+    "alavanca_de_lucro",
+    "rentabilidade",
+    "crescimento",
+    "hipotese_terminal",
+    "regime_do_driver_no_terminal",
+    "caixa_excedente_em_hibrida_financeira",
+    "ano_de_capex_no_par_d_rir",
+    "fronteira_de_consolidacao",
+    "leitura_de_capacidade",
+})
+
+# Onde o CASO-BASE está em cada escolha: no ramo central da metodologia, ou no
+# alternativo. É a declaração que a coerência interna dos cenários confronta — o
+# caso-base fora da central em várias escolhas, todas na mesma direção, não é
+# prudência, é cenário incoerente (o alerta sai em `avaliar`, nunca aqui).
+POSICOES_DA_ESCOLHA: frozenset = frozenset({"central", "alternativa"})
+
+# A escolha que trocaria a rota inteira, fora da v4; e a que só existe com degrau.
+ESCOLHA_FORA_DA_V4: str = "leitura_de_capacidade"
+ESCOLHA_QUE_EXIGE_DEGRAU: str = "alavanca_de_lucro"
+
+_CHAVES_DA_ESCOLHA_PERMITIDAS: frozenset = frozenset({
+    "chave", "no_caso_base", "sobreposicoes", "gatilho_disparou",
+})
+_CHAVES_DO_GATILHO_PERMITIDAS: frozenset = frozenset({"observavel"})
+
+
+def _validar_escolha(prefixo: str, escolha: Any, rota: str, vistas: set) -> None:
+    """Valida UMA entrada de 'escolhas_metodologicas': forma, chave, posição,
+    sobreposições e gatilho. `vistas` acumula as chaves já declaradas, para a recusa
+    de chave repetida."""
+    if not isinstance(escolha, dict):
+        raise CasoInvalido(
+            f"{prefixo} não é um objeto: {escolha!r}. Cada escolha declara 'chave', "
+            "'no_caso_base' e 'sobreposicoes' (e 'gatilho_disparou', quando o gatilho "
+            "da escolha disparou)."
+        )
+    _recusar_chave_desconhecida(escolha, _CHAVES_DA_ESCOLHA_PERMITIDAS, f"'{prefixo}'")
+
+    chave = escolha.get("chave")
+    _exigir_texto(chave, f"{prefixo}.chave")
+    if chave not in ESCOLHAS_METODOLOGICAS:
+        sugestao = difflib.get_close_matches(chave, ESCOLHAS_METODOLOGICAS, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'{prefixo}.chave' fora do vocabulário: '{chave}'.{dica}"
+            "A sensibilidade às escolhas metodológicas cobre um conjunto fechado, que o "
+            "catálogo rotula e cujo gatilho ele descreve — uma chave desconhecida sairia "
+            "no painel sem rótulo e sem gatilho. Escolhas aceitas: "
+            f"{', '.join(sorted(ESCOLHAS_METODOLOGICAS))}."
+        )
+    if chave in vistas:
+        raise CasoInvalido(
+            f"'{prefixo}.chave' repetida: '{chave}'. Cada escolha aparece uma vez — duas "
+            "entradas da mesma escolha publicariam dois preços alternativos para o mesmo "
+            "ramo, e o alerta de coerência interna dos cenários a contaria duas vezes."
+        )
+    vistas.add(chave)
+
+    if chave == ESCOLHA_FORA_DA_V4:
+        raise CasoInvalido(
+            f"'{prefixo}.chave' é '{chave}', que esta versão não precifica: o ramo de "
+            "capacidade troca a arquitetura inteira do vetor (reinvestimento por "
+            "componente, fases da capacidade pré-construída, depreciação do estado "
+            "estacionário), não uma sobreposição sobre o cenário da manchete. Declare-a "
+            "em prosa na análise, fora do painel."
+        )
+    no_caso_base = escolha.get("no_caso_base")
+    _exigir_texto(no_caso_base, f"{prefixo}.no_caso_base")
+    if no_caso_base not in POSICOES_DA_ESCOLHA:
+        sugestao = difflib.get_close_matches(no_caso_base, POSICOES_DA_ESCOLHA, n=1)
+        dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+        raise CasoInvalido(
+            f"'{prefixo}.no_caso_base' fora do vocabulário: '{no_caso_base}'.{dica}"
+            "O caso-base ocupa o ramo central da escolha ou o alternativo — sem essa "
+            "declaração não há como saber de que lado o caso-base está, e o alerta de "
+            f"coerência interna dos cenários fica cego. Posições aceitas: "
+            f"{', '.join(sorted(POSICOES_DA_ESCOLHA))}."
+        )
+
+    sobreposicoes = escolha.get("sobreposicoes")
+    if not isinstance(sobreposicoes, dict):
+        raise CasoInvalido(
+            f"'{prefixo}.sobreposicoes' não é um objeto: {sobreposicoes!r}. É o mapa "
+            "premissa -> número que leva o cenário da manchete ao outro ramo da escolha."
+        )
+    if not sobreposicoes:
+        raise CasoInvalido(
+            f"'{prefixo}.sobreposicoes' vazia: a alternativa sairia idêntica ao cenário da "
+            "manchete, com impacto zero. Uma escolha sem nada que a mova não é uma escolha "
+            "— declare a premissa que muda de ramo, ou remova a entrada."
+        )
+    permitidas = _PREMISSAS_POR_ROTA[rota]
+    for premissa in sorted(sobreposicoes):
+        _exigir_texto(premissa, f"{prefixo}.sobreposicoes")
+        if premissa not in permitidas:
+            sugestao = difflib.get_close_matches(premissa, permitidas, n=1)
+            dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+            raise CasoInvalido(
+                f"'{prefixo}.sobreposicoes' cita '{premissa}', que não é premissa da rota "
+                f"'{rota}'.{dica}A alternativa é precificada pelo mesmo motor, sobre o mesmo "
+                "vetor do cenário da manchete: uma chave que o motor não conhece seria "
+                f"ignorada em silêncio. Premissas aceitas: {', '.join(sorted(permitidas))}."
+            )
+        if premissa in _PREMISSAS_NAO_NUMERICAS:
+            raise CasoInvalido(
+                f"'{prefixo}.sobreposicoes' cita '{premissa}', que não é premissa numérica: "
+                "a sobreposição move a alternativa por um número sobre o vetor da manchete. "
+                "Uma escolha que troca a convenção terminal ou a política de caixa se declara "
+                "pelas premissas numéricas do terminal, não pela convenção em si."
+            )
+        valor = sobreposicoes[premissa]
+        if not _numero_valido(valor) or not _finito(valor):
+            raise CasoInvalido(
+                f"'{prefixo}.sobreposicoes.{premissa}' não é um número finito: {valor!r}. O "
+                "motor recebe esse valor direto, sem conversão — texto, bool, NaN ou Infinity "
+                "envenenam o preço da alternativa em silêncio."
+            )
+
+    gatilho = escolha.get("gatilho_disparou")
+    if gatilho is None:
+        return
+    if not isinstance(gatilho, dict):
+        raise CasoInvalido(
+            f"'{prefixo}.gatilho_disparou' não é um objeto: {gatilho!r}. Declare "
+            "'observavel' — o que, no caso, fez o gatilho da escolha disparar."
+        )
+    _recusar_chave_desconhecida(
+        gatilho, _CHAVES_DO_GATILHO_PERMITIDAS, f"'{prefixo}.gatilho_disparou'")
+    observavel = gatilho.get("observavel")
+    if not isinstance(observavel, str) or not observavel.strip():
+        raise CasoInvalido(
+            f"'{prefixo}.gatilho_disparou.observavel' ausente ou vazio: {observavel!r}. Um "
+            "gatilho declarado como disparado sem o observável que o disparou é afirmação "
+            "que ninguém pode conferir — a escolha sobe ao nível principal do painel por "
+            "causa dele."
+        )
+
+
+def _validar_escolhas_metodologicas(caso: Caso, rota: str) -> None:
+    """Valida o bloco opcional 'escolhas_metodologicas'. Ausente ou `None` é um caso
+    sem painel de escolhas.
+
+    Recusado inteiro junto de 'sotp': com soma de partes, a manchete é a composição
+    das partes, cada uma com vetor próprio — reprecificar o vetor do cenário da
+    manchete produziria um preço que não é o da manchete, e o impacto compararia
+    bases que não se correspondem. Mesma disciplina das demais leituras desta fatia.
+    """
+    escolhas = caso.get("escolhas_metodologicas")
+    if escolhas is None:
+        return
+
+    if caso.get("sotp") is not None:
+        raise CasoInvalido(
+            "bloco 'escolhas_metodologicas' presente junto de 'sotp': com soma de partes o "
+            "preço da manchete vem da composição das partes, cada uma com o próprio vetor — "
+            "a alternativa, precificada sobre o vetor de um cenário, não produziria o preço "
+            "da manchete, e o impacto compararia bases diferentes. Remova um dos dois."
+        )
+    _exigir_lista(escolhas, "escolhas_metodologicas")
+    if not escolhas:
+        raise CasoInvalido(
+            "bloco 'escolhas_metodologicas' vazio: declare ao menos uma escolha, ou remova o "
+            "bloco — uma lista vazia e a ausência do bloco dizem a mesma coisa por dois "
+            "caminhos."
+        )
+
+    vistas: set = set()
+    for indice, escolha in enumerate(escolhas):
+        _validar_escolha(f"escolhas_metodologicas.{indice}", escolha, rota, vistas)
+
+    if ESCOLHA_QUE_EXIGE_DEGRAU in vistas and caso.get("degrau") is None:
+        raise CasoInvalido(
+            f"escolha '{ESCOLHA_QUE_EXIGE_DEGRAU}' declarada num caso sem 'degrau': a "
+            "alavanca de lucro é a escolha entre modelar o degrau de nível com "
+            "probabilidade e tratá-lo como opcionalidade fora do preço — sem o degrau "
+            "declarado no caso não há alavanca nenhuma a modelar. Declare 'degrau', ou "
+            "remova a escolha."
         )
 
 
