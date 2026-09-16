@@ -158,7 +158,11 @@ CAMPOS_RAMPA: tuple = ("g1_%", "d_trajetoria_fase1_%", "d2_fase2_%", "rir_fase1_
 # (justos.py ~1954), nao em rampa_bifasica; ver o comentario em motor_espelho.js junto do mesmo
 # array para a razao e para o achado sobre o alias 'spread' (discrepancia do plano, reportada na
 # task).
-AVISOS_RAMPA: tuple = ("aviso_colheita", "aviso_delator", "aviso_gp")
+# [item 5, fatia I, task 2 — A7] `avisos_dominio` e o quarto: nasce em
+# `avaliar_dominios_cli` (justos.py:1624-1629, ANTES de qualquer handler) e `jprint` o
+# injeta por ultimo no dict de saida — dai a posicao no fim desta tupla, que e a ordem
+# que o filtro de `_avaliar_rampa` usa. Ver o comentario gemeo em motor_espelho.js.
+AVISOS_RAMPA: tuple = ("aviso_colheita", "aviso_delator", "aviso_gp", "avisos_dominio")
 
 
 def _problema(resolver: str, fn: str, args: dict, alvo: float, lo: float, hi: float,
@@ -582,6 +586,15 @@ def _bloco_rampa() -> list[dict]:
     v.append(_problema_rampa(
         {**base, "g1": 6.0, "tv": "gordon", "roic_tv": 12.0, "gp": 2.0, "n": 10},
         nd_efetivo=400.0, acoes=120.0))
+
+    # --- C2 (item 5, fatia I, task 2 — A7). `tax` fora de [0%, 100%]: REGIME ANÔMALO em
+    # `avaliar_dominios_cli` (justos.py:1624-1629) — AVISO, não recusa: o vetor é calculado
+    # assim mesmo, e `jprint` injeta `avisos_dominio` na saída. Um `tax` negativo é o caso
+    # plausível (NOL, crédito fiscal), não um valor exótico. Só a rota RAMPA leva o aviso ao
+    # `resultados` (`_monta_cenario_rampa` é passthrough; `_monta_cenario` é whitelist
+    # fechada) — a assimetria que A7 registra. Com ponte.
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "n": 10, "tax": -5.0},
+                             nd_efetivo=400.0, acoes=120.0))
 
     # --- D. g1 < 0 (colheita) -> aviso_colheita; SEM ponte (nd_efetivo/acoes nulos -> valor só
     # tem "EV") — combina os dois itens do brief num problema só, de propósito.
@@ -1151,7 +1164,8 @@ def gerar() -> list[dict]:
     preserva."""
     rng = random.Random(SEMENTE_SOLVER)
     problemas = (_bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
-                + _bloco_diag() + _bloco_degrau() + _bloco_conservacao() + _bloco_reversa())
+                + _bloco_diag() + _bloco_degrau() + _bloco_conservacao() + _bloco_reversa()
+                + _bloco_triangulo())
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -1274,9 +1288,12 @@ def _avaliar_grade1d(problema: dict) -> dict:
     spec = {"premissa": args["premissa"], "pontos": args["pontos"],
             "triangulo": _spec_triangulo(args["rota"])}
     resultado = grade_1d(caso, _NOME_CENARIO, spec, args["nd_efetivo"])
-    celulas = [{"x": p["x"], "valor": p["valor"], "multiplo": p["multiplo"]}
+    chaves = resultado["diagnosticos_unicos_chaves"]
+    celulas = [{"x": p["x"], "valor": p["valor"], "multiplo": p["multiplo"],
+                "diagnosticos_chaves": [chaves[i] for i in p["diag"]]}
                for p in resultado["pontos"]]
-    return {"id": problema["id"], "celulas": celulas, **_CAMPOS_SOLVER_VAZIOS}
+    return {"id": problema["id"], "celulas": celulas,
+            "diagnosticos_unicos_chaves": chaves, **_CAMPOS_SOLVER_VAZIOS}
 
 
 def _avaliar_grade2d(problema: dict) -> dict:
@@ -1284,18 +1301,22 @@ def _avaliar_grade2d(problema: dict) -> dict:
     verdade. `celulas` preserva a forma linha x coluna de
     `resultado["celulas"]` (`celulas[i][j]` = `pontos_y[i]` x `pontos_x[j]`,
     a MESMA orientação que `sensibilidades.grade_2d` documenta), reduzindo
-    cada célula a `{x, y, valor, multiplo}` — sem `diag`, mesma razão de
-    `_avaliar_grade1d`."""
+    cada célula a `{x, y, valor, multiplo, diagnosticos_chaves}`, com os índices
+    `diag` já resolvidos para as chaves daquela célula — mesma razão de
+    `_avaliar_grade1d`, ver ali."""
     args = problema["args"]
     caso = _caso_minimo_grade(args)
     spec = {"premissa_x": args["premissa_x"], "pontos_x": args["pontos_x"],
             "premissa_y": args["premissa_y"], "pontos_y": args["pontos_y"],
             "triangulo": _spec_triangulo(args["rota"])}
     resultado = grade_2d(caso, _NOME_CENARIO, spec, args["nd_efetivo"])
-    celulas = [[{"x": c["x"], "y": c["y"], "valor": c["valor"], "multiplo": c["multiplo"]}
+    chaves = resultado["diagnosticos_unicos_chaves"]
+    celulas = [[{"x": c["x"], "y": c["y"], "valor": c["valor"], "multiplo": c["multiplo"],
+                 "diagnosticos_chaves": [chaves[i] for i in c["diag"]]}
                 for c in linha]
                for linha in resultado["celulas"]]
-    return {"id": problema["id"], "celulas": celulas, **_CAMPOS_SOLVER_VAZIOS}
+    return {"id": problema["id"], "celulas": celulas,
+            "diagnosticos_unicos_chaves": chaves, **_CAMPOS_SOLVER_VAZIOS}
 
 
 def _avaliar_rampa(problema: dict) -> dict:
@@ -1664,6 +1685,102 @@ def _avaliar_reversa(problema: dict) -> dict:
     return publicado
 
 
+# ---------------------------------------------------------------------------
+# Bloco 9 (item 5, fatia I, task 2): o TRIANGULO g = RiR x retorno (D7). O `rir`
+# vira numero publicado, e o lado Python tem DOIS ancoras, nao um: a identidade
+# do caso (`g = rir x retorno`, uma linha) e — o que trava de verdade — o VALOR
+# QUE A PROSA DO MOTOR TRAZ, lido da eco que o motor congelado emite em toda
+# avaliacao (`RiR = g/ROIC = 41.7%` na rota firm; `Retencao g/ROE = 26.7%` na
+# equity). Sem esse segundo ancora, o numero novo seria conferido contra a conta
+# que o proprio espelho faz — nao contra o motor.
+# ---------------------------------------------------------------------------
+
+# O prefixo da eco do motor que carrega o numero, por rota, e o separador do
+# campo seguinte na MESMA linha. Verbatim de justos.py:538 (firm) e 643 (equity).
+_PREFIXO_DO_RIR_POR_ROTA: dict[str, str] = {
+    "firm": "RiR = g/ROIC = ",
+    "equity": "Retenção g/ROE = ",
+}
+_FIM_DO_RIR_NA_PROSA = "%"
+
+_RETORNO_DO_TRIANGULO: dict[str, str] = {"firm": "roic", "equity": "roe"}
+
+
+def _problema_triangulo(rota: str, premissas: dict, triangulo: dict,
+                        moeda: str = "BRL-nominal") -> dict:
+    return {"id": 0, "tipo": "triangulo",
+            "args": {"rota": rota, "premissas": premissas, "triangulo": triangulo,
+                     "moeda": moeda}}
+
+
+def _bloco_triangulo() -> list[dict]:
+    """As TRES configuracoes de `{inputs, output}`, nas DUAS rotas. Onde `rir` e
+    INPUT, ele entra no vetor com o valor da identidade (`g/retorno`) — `rir` nao e
+    premissa do caso (`caso.py`: `test_variaveis_do_triangulo_sao_as_do_triangulo_que
+    _nao_sao_premissa`), e e' o laboratorio que o oferece como campo quando a
+    configuracao o declara input; o vetor do motor nunca o ve."""
+    v = []
+    for rota, premissas in (("firm", dict(g=5.0, roic=12.0, wacc=10.0, n=10, da=20.0, tax=25.0,
+                                          tv="gordon", roic_tv=10.0, gp=3.0)),
+                            ("equity", dict(g=4.0, roe=15.0, ke=13.0, n=8, tv="gordon",
+                                            roe_tv=13.0, gp=3.0, gde=0.0, nde=0.0))):
+        retorno = _RETORNO_DO_TRIANGULO[rota]
+        rir = premissas["g"] / premissas[retorno]
+        for inputs, output in ((["g", retorno], "rir"),
+                               (["g", "rir"], retorno),
+                               ([retorno, "rir"], "g")):
+            vetor = dict(premissas)
+            if "rir" in inputs:
+                vetor["rir"] = rir
+            v.append(_problema_triangulo(rota, vetor, {"inputs": inputs, "output": output}))
+    return v
+
+
+def _rir_da_prosa_do_motor(rota: str, premissas: dict, moeda: str) -> float:
+    """O numero que a eco do motor congelado escreve para a identidade, em FRACAO.
+    Roda o motor de verdade (`motor.rodar`, o mesmo subprocesso de `_avaliar_diag`)
+    sobre o vetor SEM `rir` — `rir` nao e flag da CLI, e o motor a recalcula sozinho.
+    Uma eco ausente e erro nomeado: sem ela nao ha ancora, e comparar o espelho com
+    a conta do proprio espelho nao prova nada."""
+    vetor = {chave: valor for chave, valor in premissas.items() if chave != "rir"}
+    saida = rodar(rota, vetor, None, moeda)
+    prefixo = _PREFIXO_DO_RIR_POR_ROTA[rota]
+    linha = next((m for m in saida.get("diagnosticos") or [] if m.startswith(prefixo)), None)
+    if linha is None:
+        raise MotorFalhou(
+            f"o motor nao emitiu a eco da identidade do triangulo na rota {rota!r} "
+            f"(prefixo {prefixo!r}) — sem ela o `rir` publicado nao tem ancora."
+        )
+    texto = linha[len(prefixo):].split(_FIM_DO_RIR_NA_PROSA, 1)[0]
+    return float(texto) / 100.0
+
+
+def _avaliar_triangulo(problema: dict) -> dict:
+    """Um problema `tipo: "triangulo"` — a identidade `g = RiR x retorno` resolvida
+    para a variavel que o caso declara como `output`, MAIS o `rir` da prosa do motor.
+    A identidade e uma linha e nao tem wrapper Python para chamar (o `rir` so existia
+    na prosa ate esta fatia — divida aberta pela 5F, D8); o que a torna verificavel e
+    o ancora do motor, publicado ao lado."""
+    args = problema["args"]
+    rota, premissas, triangulo = args["rota"], args["premissas"], args["triangulo"]
+    retorno = _RETORNO_DO_TRIANGULO[rota]
+    g, r, rir = premissas["g"], premissas[retorno], premissas.get("rir")
+
+    if triangulo["output"] == "rir":
+        valor = None if r == 0 else g / r
+    elif triangulo["output"] == retorno:
+        valor = None if rir == 0 else g / rir
+    else:
+        valor = rir * r
+
+    return {"id": problema["id"],
+            "variavel": triangulo["output"],
+            "valor": valor,
+            "rir": valor if triangulo["output"] == "rir" else rir,
+            "rir_da_prosa_do_motor": _rir_da_prosa_do_motor(rota, premissas, args["moeda"]),
+            **_CAMPOS_SOLVER_VAZIOS}
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
@@ -1674,6 +1791,7 @@ _DESPACHO_POR_TIPO = {
     "degrau": _avaliar_degrau,
     "conservacao": _avaliar_conservacao,
     "reversa": _avaliar_reversa,
+    "triangulo": _avaliar_triangulo,
 }
 
 

@@ -148,7 +148,8 @@ def test_chaves_de_topo_do_catalogo():
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
         "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
-        "leituras_do_nivel", "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor",
+        "leituras_do_nivel", "teto_do_crescimento_gratuito", "teto_da_alavanca",
+        "escalas_monetarias", "formacao_do_valor",
         "variaveis_do_triangulo", "anos_base_do_capex", "escolhas_metodologicas",
     }
 
@@ -797,6 +798,32 @@ def test_teto_do_crescimento_gratuito_tem_rotulo_e_texto_em_todo_idioma():
     assert set(teto) == {"rotulo", "texto"}, sorted(teto)
     for idioma in CAT["idiomas"]:
         assert teto["rotulo"].get(idioma, "").strip() and teto["texto"].get(idioma, "").strip(), idioma
+
+
+def test_teto_da_alavanca_tem_rotulo_e_texto_em_todo_idioma():
+    """Fatia 5I, Task 2 (D10/A11): o rótulo do teto da alavanca. A chave viva
+    (`degrau_alerta`) já existia e o rótulo dela já dizia "reporte como teto da
+    alavanca, não como cenário" — o que faltava era o rótulo DO TETO, para o cartão do
+    cenário marcado. Mesma forma de `teto_do_crescimento_gratuito`, ao lado dele: o
+    relatório lê o catálogo, nunca escreve a frase."""
+    teto = CAT["teto_da_alavanca"]
+    assert set(teto) == {"rotulo", "texto"}, sorted(teto)
+    for idioma in CAT["idiomas"]:
+        assert teto["rotulo"].get(idioma, "").strip() and teto["texto"].get(idioma, "").strip(), idioma
+    # O rótulo do DIAGNÓSTICO que acende a marca continua sendo o do motor, e é outro:
+    # um é a chave do alerta, o outro é o nome do que o cenário passa a ser.
+    assert "degrau_alerta" in CAT["diagnosticos"], "a chave viva do teto sumiu do catálogo"
+
+
+def test_toda_variavel_do_triangulo_declara_unidade_do_vocabulario():
+    """Fatia 5I, Task 2 (D7): o `rir` virou NÚMERO publicado (a fachada o resolve por
+    cenário), e número publicado sem unidade é número cru na tela. A unidade sai do
+    vocabulário `unidades`, o mesmo que a leitura da reversa e as premissas usam —
+    nunca uma palavra escrita no relatório."""
+    variaveis = CAT["variaveis_do_triangulo"]
+    assert variaveis, "nenhuma variável do triângulo — trava vacuamente verde"
+    for chave, info in variaveis.items():
+        assert info.get("unidade") in CAT["unidades"], (chave, info.get("unidade"))
 
 
 def test_toda_unidade_que_a_leitura_da_reversa_publica_esta_no_catalogo():

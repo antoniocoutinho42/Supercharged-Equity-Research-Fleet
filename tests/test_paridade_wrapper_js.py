@@ -584,3 +584,98 @@ def test_fixture_de_reversa_cobre_o_que_discrimina():
     assert any(a["limitacoes"] == ["iso_nao_calculada"] for a in ok), "iso_nao_calculada nunca acende"
     assert any(a["limitacoes"] == [] for a in ok), "iso_nao_calculada nunca apaga"
     assert {p["args"]["rota"] for p in probs} >= {"firm", "equity"}, "uma rota so"
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5I, Task 2 — o diagnostico por CELULA das grades, e o triangulo
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_grade_publica_as_chaves_de_diagnostico_da_celula():
+    """A §8.4 proibe numero VIVO com diagnostico CONGELADO, e a grade e' numero vivo
+    desde esta fatia. A comparacao e' CELULA A CELULA, sobre a lista ORDENADA de
+    chaves daquela celula — NUNCA sobre `diag` nem sobre a lista deduplicada da
+    grade (A5): o wrapper dedupa por MENSAGEM e classifica depois, o espelho nunca
+    teve as mensagens e dedupa por CHAVE. As duas listas tem comprimentos
+    diferentes sempre que duas mensagens colapsam na mesma chave — e e' o que
+    acontece de verdade nesta fixture, porque a mensagem de `firm_rir` carrega o
+    valor do RiR e muda de celula para celula. O teste EXIGE esse caso: sem ele,
+    comparar `diag` passaria por acidente e a armadilha ficaria aberta."""
+    probs = _problemas({"grade1d", "grade2d"})
+    assert probs, "fixture sem grades"
+    py, js = avaliar_python(probs), _lado_js()
+
+    fora, celulas_com_chave, colapso_exercitado = [], 0, False
+    for p, a in zip(probs, py):
+        b = js[p["id"]]
+        cel_py = (a["celulas"] if p["tipo"] == "grade1d"
+                  else [c for lin in a["celulas"] for c in lin])
+        cel_js = (b["celulas"] if p["tipo"] == "grade1d"
+                  else [c for lin in b["celulas"] for c in lin])
+        assert len(cel_py) == len(cel_js), p["id"]
+        for i, (cp, cj) in enumerate(zip(cel_py, cel_js)):
+            if cp["diagnosticos_chaves"] != cj["diagnosticos_chaves"]:
+                fora.append((p["id"], i, cp["diagnosticos_chaves"], cj["diagnosticos_chaves"]))
+            celulas_com_chave += len(cj["diagnosticos_chaves"])
+        # A armadilha, medida: a dedup do wrapper (por MENSAGEM) e a do espelho (por
+        # CHAVE) nao tem o mesmo comprimento quando a mensagem varia com a celula.
+        if len(a["diagnosticos_unicos_chaves"]) != len(b["diagnosticos_unicos_chaves"]):
+            colapso_exercitado = True
+    assert not fora, f"{len(fora)} celulas com chaves divergentes; primeiras 3: {fora[:3]}"
+    assert celulas_com_chave >= 1, "nenhuma celula publicou chave de diagnostico"
+    assert colapso_exercitado, (
+        "nenhuma grade exercita o colapso mensagem->chave — comparar `diag` passaria "
+        "por acidente nesta fixture, e a armadilha de A5 ficaria sem trava")
+    # A orientacao nao-quadrada da grade 2D continua exigida: uma grade quadrada
+    # esconde transposicao de eixos (a licao da 3C), e as chaves por celula nao a
+    # denunciariam sozinhas.
+    assert any(len(p["args"]["pontos_x"]) != len(p["args"]["pontos_y"])
+               for p in probs if p["tipo"] == "grade2d"), "toda grade 2D e quadrada"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_triangulo_resolve_a_terceira_variavel():
+    """D7: o `rir` vira NUMERO publicado. As tres configuracoes de `{inputs, output}`,
+    nas duas rotas, contra a identidade `g = rir x retorno` do caso — e, o que trava
+    de verdade, contra o VALOR QUE A PROSA DO MOTOR TRAZ (a eco `RiR = g/ROIC` na
+    rota firm, `Retencao g/ROE` na equity), na precisao em que o motor a escreve
+    (`{:.1%}`). Sem esse segundo ancora, o numero novo seria conferido contra a
+    conta que o proprio espelho faz."""
+    probs = _problemas({"triangulo"})
+    assert probs, "fixture sem problemas de triangulo"
+    py, js = avaliar_python(probs), _lado_js()
+
+    fora, contra_a_prosa = [], []
+    for p, a in zip(probs, py):
+        b = js[p["id"]]
+        for campo in ("variavel", "valor", "rir"):
+            if a[campo] != b[campo]:
+                fora.append((p["id"], campo, a[campo], b[campo]))
+        # O ancora do motor: o `rir` do espelho, escrito como o motor o escreve.
+        if f"{b['rir']:.1%}" != f"{a['rir_da_prosa_do_motor']:.1%}":
+            contra_a_prosa.append((p["id"], b["rir"], a["rir_da_prosa_do_motor"]))
+    assert not fora, f"divergencias (id, campo, py, js): {fora[:3]}"
+    assert not contra_a_prosa, f"rir fora do que a prosa do motor traz: {contra_a_prosa}"
+
+    saidas = {(p["args"]["rota"], p["args"]["triangulo"]["output"]) for p in probs}
+    assert saidas == {("firm", "rir"), ("firm", "roic"), ("firm", "g"),
+                      ("equity", "rir"), ("equity", "roe"), ("equity", "g")}, saidas
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_avisos_dominio_da_rampa_acende_no_espelho_como_no_wrapper():
+    """A7: `tax` fora de [0%, 100%] e' REGIME ANOMALO em `avaliar_dominios_cli` —
+    aviso, nao recusa: o vetor e' calculado assim mesmo, e `jprint` injeta
+    `avisos_dominio` na saida. So' chega ao `resultados` pela rota RAMPA (o
+    `_monta_cenario` de firm/equity e' whitelist fechada), e por isso a quarta
+    entrada de `AVISOS_RAMPA` e a checagem vivem aqui."""
+    probs = _problemas({"rampa"})
+    py, js = avaliar_python(probs), _lado_js()
+    fora = [(p["id"], a["avisos"], js[p["id"]]["avisos"])
+            for p, a in zip(probs, py)
+            if not a["recusado"] and a["avisos"] != js[p["id"]]["avisos"]]
+    assert not fora, f"avisos divergentes (id, py, js): {fora[:3]}"
+    acesos = [a for a in py if not a["recusado"] and "avisos_dominio" in a["avisos"]]
+    apagados = [a for a in py if not a["recusado"] and "avisos_dominio" not in a["avisos"]]
+    assert acesos, "nenhum problema de rampa acende avisos_dominio"
+    assert apagados, "todo problema de rampa acende avisos_dominio — trava vacuamente verde"

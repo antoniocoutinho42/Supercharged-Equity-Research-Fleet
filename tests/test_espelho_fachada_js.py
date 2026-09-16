@@ -1105,3 +1105,123 @@ def test_a_limitacao_da_leitura_acende_e_apaga_com_a_edicao_na_mesma_chamada(tmp
     # Mesmo gatilho, mesma chamada: o teto do crescimento gratuito aparece com a
     # limitação e some com ela.
     assert editado["reversa"]["teto_do_crescimento_gratuito"]["multiplo"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5I, Task 2 — sensibilidades vivas, teto da alavanca e o rir por cenário
+# ---------------------------------------------------------------------------
+
+FIXTURE_COM_GRADES = "caso_reversa_firm.json"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_as_grades_vivas_reproduzem_as_do_resultados_celula_a_celula(tmp_path):
+    """A fachada publica `sensibilidades.{grades_1d, grades_2d}` no shape do
+    `resultados`, e o comparador as cobre — os dois números e as CHAVES de cada
+    célula. `diag` não entra no comparador de propósito (A5): o wrapper dedupa por
+    MENSAGEM e o espelho por CHAVE, então os índices vivem em espaços diferentes; o
+    que os dois lados compartilham é a lista ordenada de chaves da célula."""
+    caso, resultados = _caso_e_resultados(FIXTURE_COM_GRADES)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    vivas = saida["vivo"]["sensibilidades"]
+    publicadas = resultados["sensibilidades"]
+    assert len(vivas["grades_1d"]) == len(publicadas["grades_1d"]) >= 1
+    assert len(vivas["grades_2d"]) == len(publicadas["grades_2d"]) >= 1
+
+    for viva, publicada in zip(vivas["grades_1d"], publicadas["grades_1d"]):
+        assert viva["premissa"] == publicada["premissa"]
+        assert len(viva["pontos"]) == len(publicada["pontos"])
+        for celula_viva, celula_py in zip(viva["pontos"], publicada["pontos"]):
+            assert _erro_relativo(celula_py["valor"], celula_viva["valor"]) <= TAU
+            chaves_py = [publicada["diagnosticos_unicos_chaves"][i] for i in celula_py["diag"]]
+            assert celula_viva["diagnosticos_chaves"] == chaves_py, celula_viva["x"]
+
+    grade_viva = vivas["grades_2d"][0]
+    grade_py = publicadas["grades_2d"][0]
+    assert len(grade_viva["celulas"]) == len(grade_py["pontos_y"])
+    assert all(len(linha) == len(grade_py["pontos_x"]) for linha in grade_viva["celulas"])
+
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_comparador_prende_a_celula_da_grade_nos_dois_numeros_e_nas_chaves(tmp_path):
+    """Adulterar o valor de uma célula, ou a lista de chaves dela, tem de pintar
+    vermelho nomeando a grade e a célula — senão as grades estariam "no badge" só de
+    nome."""
+    caso, resultados = _caso_e_resultados(FIXTURE_COM_GRADES)
+    resultados["sensibilidades"]["grades_1d"][0]["pontos"][2]["valor"] += 3.5
+    comparacao = _fachada(caso, resultados, tmp_path)["comparacao"]
+    assert comparacao["ok"] is False
+    assert any("grades_1d[0].celula[2].valor" in d["chave"]
+               for d in comparacao["divergencias"]), comparacao["divergencias"]
+
+    caso2, resultados2 = _caso_e_resultados(FIXTURE_COM_GRADES)
+    resultados2["sensibilidades"]["grades_1d"][0]["pontos"][1]["diag"] = []
+    comparacao2 = _fachada(caso2, resultados2, tmp_path)["comparacao"]
+    assert comparacao2["ok"] is False
+    assert any("grades_1d[0].celula[1].diagnosticos_chaves" in d["chave"]
+               for d in comparacao2["divergencias"]), comparacao2["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_rir_sai_como_numero_por_cenario_e_o_catalogo_o_rotula(tmp_path):
+    """D7: o `rir` deixa de existir só na prosa da eco do motor e vira número
+    publicado por cenário, junto com a variável que a configuração do triângulo
+    declara como `output`. O catálogo o rotula e declara a unidade — sem isso o
+    relatório mostraria número cru."""
+    caso, resultados = _caso_e_resultados(FIXTURE_COM_GRADES)
+    saida = _fachada(caso, resultados, tmp_path)
+    triangulo = saida["vivo"]["cenarios"]["base"]["triangulo"]
+    premissas = caso["cenarios"]["base"]["premissas"]
+    assert triangulo["variavel"] == caso["cenarios"]["base"]["triangulo"]["output"]
+    assert triangulo["retorno"] == "roic"
+    assert _erro_relativo(premissas["g"] / premissas["roic"], triangulo["rir"]) <= TAU
+    assert CATALOGO["variaveis_do_triangulo"]["rir"]["unidade"] in CATALOGO["unidades"]
+
+    # A rota rampa não tem triângulo (`caso.py` não o declara para ela): `null`,
+    # nunca um número inventado a partir de um vocabulário que ela não tem.
+    caso_rampa, resultados_rampa = _caso_e_resultados("caso_rampa.json")
+    vivo_rampa = _fachada(caso_rampa, resultados_rampa, tmp_path)["vivo"]
+    assert all(c["triangulo"] is None for c in vivo_rampa["cenarios"].values())
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_teto_da_alavanca_acende_e_apaga_com_a_edicao_na_mesma_chamada(tmp_path):
+    """D10/A11: a chave viva já existia (`degrau_alerta`) e o rótulo dela no catálogo
+    diz literalmente "reporte como teto da alavanca, não como cenário" — mas o cenário
+    com o alerta aceso continuava exibido COMO CENÁRIO. Agora a fachada deriva o
+    booleano da lista viva, e ele acende e apaga com a edição na mesma sequência de
+    chamadas (§8.4). `laboratorio.js` lê um booleano e um rótulo, nunca o predicado."""
+    caso, _ = _caso_e_resultados("caso_degrau.json")
+    alavancado = json.loads(json.dumps(caso))
+    # `ALERTA` do motor: rentabilidade pós-degrau > max(2 x custo, 30%). Com h =
+    # 19,3/14,0 e m ~ 1, um ROE de 40% cruza o limiar; 20% (o do caso) não.
+    alavancado["cenarios"]["base"]["premissas"]["roe"] = 40.0
+
+    original, editado = _avaliar_em_sequencia([caso, alavancado], tmp_path)
+
+    assert original["cenarios"]["base"]["teto_da_alavanca"] is False
+    assert "degrau_alerta" not in original["cenarios"]["base"]["degrau"]["diagnosticos_chaves"]
+
+    assert editado["cenarios"]["base"]["teto_da_alavanca"] is True
+    assert "degrau_alerta" in editado["cenarios"]["base"]["degrau"]["diagnosticos_chaves"]
+
+    # O rótulo do teto vem do catálogo, não da fachada nem do relatório.
+    teto = CATALOGO["teto_da_alavanca"]
+    assert set(teto) == {"rotulo", "texto"}
+    for idioma in CATALOGO["idiomas"]:
+        assert teto["rotulo"].get(idioma, "").strip() and teto["texto"].get(idioma, "").strip()
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+@pytest.mark.parametrize("fixture", FIXTURES_DE_CASO)
+def test_todo_cenario_declara_o_teto_da_alavanca_como_booleano(fixture, tmp_path):
+    """A marca é de TODO cenário, não só dos que têm degrau: um cenário sem bloco de
+    degrau declara `false` — ausência nunca vale como "não sei"."""
+    caso, resultados = _caso_e_resultados(fixture)
+    vivo = _fachada(caso, resultados, tmp_path)["vivo"]
+    for nome, cenario in vivo["cenarios"].items():
+        assert cenario["teto_da_alavanca"] in (True, False), (nome, cenario["teto_da_alavanca"])

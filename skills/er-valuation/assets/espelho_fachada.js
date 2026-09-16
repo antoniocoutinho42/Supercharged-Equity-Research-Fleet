@@ -331,6 +331,19 @@
     return [].concat(...formas);
   }
 
+  // Fatia 5I, Task 2 (D10): a chave VIVA que marca o cenario como teto da alavanca.
+  // E' `degrau_alerta` — a mesma que `precificarDegrau` acende e que o catalogo rotula
+  // com "reporte como teto da alavanca, nao como cenario". O nome mora aqui, num ponto
+  // so, e o predicado e' presenca na lista de alertas do degrau daquele cenario: acende
+  // e apaga com a edicao, na mesma chamada, como a §8.4 exige.
+  const CHAVE_DO_TETO_DA_ALAVANCA = 'degrau_alerta';
+
+  function tetoDaAlavanca(cenario) {
+    const alertas = cenario.degrau ? cenario.degrau.diagnosticos_chaves : null;
+    if (!Array.isArray(alertas)) return false;
+    return alertas.includes(CHAVE_DO_TETO_DA_ALAVANCA);
+  }
+
   // As chaves de um cenario firm/equity PRECIFICADO (Task 3). Do lado Python,
   // `_monta_cenario` classifica as mensagens da MESMA chamada do motor que
   // produziu o preco, com `moeda` e `rf`; o espelho ja' devolve as chaves
@@ -467,6 +480,20 @@
     // depois das tres pernas acima, para que nenhuma delas precise lembrar.
     for (const nome of Object.keys(cenarios)) {
       cenarios[nome].diagnosticos_exibidos = listaExibida(cenarios[nome]);
+      // Fatia 5I, Task 2 (D10): o TETO DA ALAVANCA. A chave viva ja' existe
+      // (`degrau_alerta`, aceso por `precificarDegrau`) e o rotulo dela no catalogo
+      // diz literalmente "reporte como teto da alavanca, nao como cenario" — mas o
+      // cenario com o alerta aceso continuava exibido COMO CENARIO. A fachada deriva
+      // o booleano da lista VIVA; `laboratorio.js` le um booleano e um rotulo, e nunca
+      // conhece o predicado.
+      cenarios[nome].teto_da_alavanca = tetoDaAlavanca(cenarios[nome]);
+      // Fatia 5I, Task 2 (D7): o `rir` como NUMERO por cenario — ate aqui ele so'
+      // existia na prosa da eco do motor (divida aberta pela 5F, D8). O triangulo e'
+      // por cenario (`caso.cenarios.<n>.triangulo`), e a rota rampa nao tem nenhum.
+      const triangulo = caso.cenarios[nome].triangulo;
+      cenarios[nome].triangulo = (triangulo && rota !== 'rampa')
+        ? M.resolverTriangulo({ rota, premissas: caso.cenarios[nome].premissas, triangulo })
+        : null;
     }
 
     const vivo = { cenarios };
@@ -479,6 +506,46 @@
     // do motor: `sem_solucao`, `sugestao`, `guardas_v9_4`, `premissas_fixadas` e
     // `nivel_implicito` (D11) continuam so' no Python, e um espelho que os
     // reproduzisse estaria reimplementando a REDACAO do motor, nao a metodologia.
+    // Fatia 5I, Task 2: as SENSIBILIDADES ao vivo, no shape do `resultados` —
+    // `{grades_1d, grades_2d}`, com `diag` e `diagnosticos_unicos_chaves` por grade e
+    // `diagnosticos_chaves` por CELULA. A dedup do espelho e' por CHAVE (ele nunca teve
+    // as mensagens do motor) e a do wrapper e' por MENSAGEM: os dois `diag` apontam para
+    // espacos de indices DIFERENTES sempre que duas mensagens colapsam na mesma chave, e
+    // e' por isso que a celula publica tambem a lista ORDENADA de chaves — e' ela que o
+    // comparador confronta, nunca os indices.
+    if (caso.sensibilidades) {
+      const cenarioDasGrades = caso.sensibilidades.cenario;
+      const premissasDasGrades = caso.cenarios[cenarioDasGrades].premissas;
+      const comum = { rota, premissas: premissasDasGrades, metrica, ndEfetivo, acoes, moeda, rf };
+      vivo.sensibilidades = {
+        grades_1d: (caso.sensibilidades.grades_1d || []).map((spec) => {
+          const g = M.grade1D({ ...comum, premissa: spec.premissa, pontos: spec.pontos });
+          return {
+            premissa: spec.premissa,
+            pontos: g.celulas,
+            diagnosticos_unicos_chaves: g.diagnosticos_unicos_chaves,
+          };
+        }),
+        grades_2d: (caso.sensibilidades.grades_2d || []).map((spec) => {
+          const g = M.grade2D({
+            ...comum,
+            premissaX: spec.premissa_x,
+            pontosX: spec.pontos_x,
+            premissaY: spec.premissa_y,
+            pontosY: spec.pontos_y,
+          });
+          return {
+            premissa_x: spec.premissa_x,
+            premissa_y: spec.premissa_y,
+            pontos_x: spec.pontos_x,
+            pontos_y: spec.pontos_y,
+            celulas: g.celulas,
+            diagnosticos_unicos_chaves: g.diagnosticos_unicos_chaves,
+          };
+        }),
+      };
+    }
+
     if (caso.reversa) {
       const premissasDaReversa = caso.cenarios[caso.reversa.cenario].premissas;
       const alvo = M.alvoDeMercado({ rota, preco: precoDeTela, acoes, ndEfetivo, metrica });
@@ -608,6 +675,53 @@
     });
   }
 
+  // As chaves de UMA celula do lado Python: `diag` sao INDICES em
+  // `diagnosticos_unicos_chaves` daquela grade (`sensibilidades.py:_indices_diagnosticos`).
+  // Resolver antes de comparar e' o que torna os dois lados comparaveis (A5).
+  function chavesDaCelulaPython(grade, celula) {
+    const unicas = grade.diagnosticos_unicos_chaves;
+    if (!Array.isArray(unicas) || !Array.isArray(celula.diag)) return undefined;
+    return celula.diag.map((i) => unicas[i]);
+  }
+
+  function compararGrades(divergencias, nome, gradesPython, gradesVivas, celulasDe) {
+    const lista = Array.isArray(gradesPython) ? gradesPython : [];
+    if (lista.length !== gradesVivas.length) {
+      divergencias.push({
+        cenario: 'sensibilidades',
+        chave: `${nome} (quantidade de grades)`,
+        python: lista.length,
+        js: gradesVivas.length,
+        erro_relativo: null,
+      });
+      return;
+    }
+    gradesVivas.forEach((viva, indice) => {
+      const py = lista[indice];
+      const celulasPython = celulasDe(py);
+      const celulasVivas = celulasDe(viva);
+      const onde = `${nome}[${indice}]`;
+      if (celulasPython.length !== celulasVivas.length) {
+        divergencias.push({
+          cenario: 'sensibilidades',
+          chave: `${onde} (quantidade de celulas)`,
+          python: celulasPython.length,
+          js: celulasVivas.length,
+          erro_relativo: null,
+        });
+        return;
+      }
+      celulasVivas.forEach((celula, i) => {
+        registrar(divergencias, 'sensibilidades', `${onde}.celula[${i}].valor`,
+          celulasPython[i].valor, celula.valor);
+        registrar(divergencias, 'sensibilidades', `${onde}.celula[${i}].multiplo`,
+          celulasPython[i].multiplo, celula.multiplo);
+        registrarLista(divergencias, 'sensibilidades', `${onde}.celula[${i}].diagnosticos_chaves`,
+          chavesDaCelulaPython(py, celulasPython[i]), celula.diagnosticos_chaves);
+      });
+    });
+  }
+
   /**
    * O badge de paridade, como FATO: recomputa cada cenario do `caso` e compara
    * com o `resultados` publicado, numero a numero, na tolerancia dos harnesses
@@ -686,6 +800,29 @@
         registrarLista(divergencias, nome, 'conservacao_capital.diagnosticos_chaves',
           py.conservacao_capital ? py.conservacao_capital.diagnosticos_chaves : undefined,
           js.conservacao_capital.diagnosticos_chaves);
+      }
+    }
+
+    // Fatia 5I, Task 2: as grades entram no badge celula a celula — os DOIS numeros
+    // e as CHAVES daquela celula. `diag` NAO e' comparado: o wrapper dedupa por
+    // MENSAGEM e o espelho por CHAVE, entao os indices vivem em espacos diferentes
+    // (A5). O que os dois lados compartilham e' a lista ORDENADA de chaves por
+    // celula, e e' ela que o comparador resolve dos dois lados antes de comparar.
+    if (vivo.sensibilidades) {
+      const py = resultados.sensibilidades;
+      if (py === undefined || py === null) {
+        divergencias.push({
+          cenario: 'sensibilidades',
+          chave: 'sensibilidades_ausente_no_resultados',
+          python: null,
+          js: vivo.sensibilidades.grades_1d.length + vivo.sensibilidades.grades_2d.length,
+          erro_relativo: null,
+        });
+      } else {
+        compararGrades(divergencias, 'grades_1d', py.grades_1d, vivo.sensibilidades.grades_1d,
+          (grade) => grade.pontos);
+        compararGrades(divergencias, 'grades_2d', py.grades_2d, vivo.sensibilidades.grades_2d,
+          (grade) => [].concat(...grade.celulas));
       }
     }
 

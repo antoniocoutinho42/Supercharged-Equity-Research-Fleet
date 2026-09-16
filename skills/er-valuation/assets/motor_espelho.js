@@ -737,20 +737,58 @@ function alvoDeMercado({ rota, preco, acoes, ndEfetivo, metrica }) {
 // esconde uma transposicao de eixos (o teste passava com os eixos trocados) — por isso o
 // harness de paridade desta task (test_grades_tem_a_orientacao_do_wrapper) exige uma grade
 // NAO quadrada.
-function grade1D({ rota, premissas, metrica, ndEfetivo, acoes, premissa, pontos }) {
-  return pontos.map((x) => {
-    const vetor = { ...premissas, [premissa]: x };
-    const { valor, multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
-    return { x, valor, multiplo };
-  });
+// [item 5, fatia I, task 2 — A5] O diagnostico por CELULA. Ate aqui as grades devolviam
+// so' `{x, valor, multiplo}` e o comentario acima explicava por que a dedup do wrapper
+// ficava de fora; a §8.4 proibe numero VIVO com diagnostico CONGELADO, e a grade e' numero
+// vivo desde esta fatia. O que muda e' o que o espelho tem para deduplicar:
+//
+// o wrapper acumula `diagnosticos_unicos` pelas MENSAGENS do motor e classifica DEPOIS
+// (`diagnosticos.classificar`); o espelho nunca teve as mensagens — `diagnosticosFirm`/
+// `diagnosticosEquity` produzem as CHAVES direto. Deduplicar por CHAVE da uma lista de
+// comprimento DIFERENTE sempre que duas mensagens distintas colapsam na mesma chave, e
+// entao `diag` (os indices) aponta para outro espaco de indices dos dois lados. Por isso
+// cada celula publica TAMBEM `diagnosticos_chaves`, a lista ORDENADA daquela celula: e' ela
+// que bate com `[classificar(m) for m in mensagens_da_celula]` do wrapper, celula a celula,
+// e e' por ela que a paridade e conferida — nunca pelos indices.
+function acumuladorDeChaves() {
+  const unicas = [];
+  return {
+    unicas,
+    indices(chaves) {
+      return chaves.map((chave) => {
+        let i = unicas.indexOf(chave);
+        if (i === -1) { unicas.push(chave); i = unicas.length - 1; }
+        return i;
+      });
+    },
+  };
 }
 
-function grade2D({ rota, premissas, metrica, ndEfetivo, acoes, premissaX, pontosX, premissaY, pontosY }) {
-  return pontosY.map((y) => pontosX.map((x) => {
+function grade1D({ rota, premissas, metrica, ndEfetivo, acoes, premissa, pontos, moeda = null, rf = null }) {
+  const acumulador = acumuladorDeChaves();
+  const celulas = pontos.map((x) => {
+    const vetor = { ...premissas, [premissa]: x };
+    const { valor, multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
+    const chaves = rota === 'firm'
+      ? diagnosticosFirm(vetor, moeda, rf) : diagnosticosEquity(vetor, moeda, rf);
+    return { x, valor, multiplo, diagnosticos_chaves: chaves, diag: acumulador.indices(chaves) };
+  });
+  return { celulas, diagnosticos_unicos_chaves: acumulador.unicas };
+}
+
+function grade2D({ rota, premissas, metrica, ndEfetivo, acoes, premissaX, pontosX, premissaY,
+  pontosY, moeda = null, rf = null }) {
+  // Um acumulador so' para a grade INTEIRA, como o wrapper: as linhas nao reiniciam a lista
+  // entre si, do contrario a mesma chave picotaria em indices diferentes conforme a linha.
+  const acumulador = acumuladorDeChaves();
+  const celulas = pontosY.map((y) => pontosX.map((x) => {
     const vetor = { ...premissas, [premissaX]: x, [premissaY]: y };
     const { valor, multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
-    return { x, y, valor, multiplo };
+    const chaves = rota === 'firm'
+      ? diagnosticosFirm(vetor, moeda, rf) : diagnosticosEquity(vetor, moeda, rf);
+    return { x, y, valor, multiplo, diagnosticos_chaves: chaves, diag: acumulador.indices(chaves) };
   }));
+  return { celulas, diagnosticos_unicos_chaves: acumulador.unicas };
 }
 
 // ============================================================================
@@ -784,7 +822,30 @@ const CAMPOS_RAMPA = [
 // ali. A ORDEM dentro deste array so' precisa concordar entre os dois lados (o filtro
 // `AVISOS_RAMPA.filter(chave => chave in saidaMotor)` usa a ordem do ARRAY, nao a de insercao no
 // dict) — nao ha' semantica de "quem roda primeiro" sendo espelhada aqui.
-const AVISOS_RAMPA = ['aviso_colheita', 'aviso_delator', 'aviso_gp'];
+// [item 5, fatia I, task 2 — A7] 'avisos_dominio' e' o QUARTO, e e' de natureza ainda
+// diferente dos tres: nao nasce nem no nucleo (colheita/delator) nem no handler da rampa
+// (aviso_gp), e sim em `avaliar_dominios_cli` (justos.py:1624-1629), que roda ANTES de
+// qualquer handler e acumula em `_DOMAIN_WARNINGS`; `jprint` (justos.py:1641-1645) o injeta
+// no dict de saida com `setdefault`, POR ULTIMO — dai a posicao no fim deste array (o filtro
+// abaixo usa a ordem do ARRAY). So' chega ao `resultados` na rota RAMPA, porque
+// `_monta_cenario_rampa` e' passthrough e `_monta_cenario` e' whitelist fechada
+// (avaliar.py:888-905) — assimetria herdada do wrapper, nao aberta aqui.
+const AVISOS_RAMPA = ['aviso_colheita', 'aviso_delator', 'aviso_gp', 'avisos_dominio'];
+
+// avaliar_dominios_cli, ramo dos AVISOS (justos.py:1624-1629): 'tax' e 'da' fora de
+// [0%, 100%] sao REGIME ANOMALO — aviso, nao erro (o vetor e' calculado assim mesmo).
+// Valores em PONTO PERCENTUAL BRUTO, como a funcao Python os le. 'da' nunca chega pela
+// rota rampa (o subparser tem `--da-parque`, nao `--da`, e PREMISSAS_RAMPA nao a admite):
+// fica aqui porque a funcao espelhada a checa, com a mesma disciplina de
+// dominioCliRecusa — fiel a funcao real, nao so' aos sintomas ja' observados.
+const CHAVES_DOMINIO_ENTRE_0_E_100 = ['tax', 'da'];
+
+function avisoDeDominio(premissas) {
+  return CHAVES_DOMINIO_ENTRE_0_E_100.some((nome) => {
+    const v = premissas[nome];
+    return v !== undefined && v !== null && (v < 0 || v > 100);
+  });
+}
 
 // rampaBifasica espelha SOMENTE a funcao nucleo `rampa_bifasica` — mesma assinatura (em FRACAO,
 // como o resto deste arquivo), mesmos defaults (g1/util/roic_tv/roic_book = null, gp = 0.0,
@@ -996,6 +1057,12 @@ function precificarRampa({
     saidaMotor.aviso_gp = true;
   }
 
+  // A7: o aviso de REGIME ANOMALO da CLI, decidido sobre o vetor BRUTO (ponto percentual),
+  // como `avaliar_dominios_cli` o decide — antes de premissasParaNucleo, nunca sobre a fracao.
+  if (avisoDeDominio(premissas)) {
+    saidaMotor.avisos_dominio = true;
+  }
+
   if (!Number.isFinite(saidaMotor['EV/EBITDA0'])) {
     return { recusado: true };
   }
@@ -1061,21 +1128,31 @@ function resolverAlvo(item) {
 
 function resolverGrade1D(item) {
   const a = item.args;
-  const celulas = grade1D({
+  const g = grade1D({
     rota: a.rota, premissas: a.premissas, metrica: a.metrica, ndEfetivo: a.nd_efetivo,
-    acoes: a.acoes, premissa: a.premissa, pontos: a.pontos, moeda: a.moeda,
+    acoes: a.acoes, premissa: a.premissa, pontos: a.pontos, moeda: a.moeda, rf: a.rf ?? null,
   });
-  return { id: item.id, celulas, ...CAMPOS_SOLVER_VAZIOS };
+  return {
+    id: item.id,
+    celulas: g.celulas,
+    diagnosticos_unicos_chaves: g.diagnosticos_unicos_chaves,
+    ...CAMPOS_SOLVER_VAZIOS,
+  };
 }
 
 function resolverGrade2D(item) {
   const a = item.args;
-  const celulas = grade2D({
+  const g = grade2D({
     rota: a.rota, premissas: a.premissas, metrica: a.metrica, ndEfetivo: a.nd_efetivo,
     acoes: a.acoes, premissaX: a.premissa_x, pontosX: a.pontos_x,
-    premissaY: a.premissa_y, pontosY: a.pontos_y, moeda: a.moeda,
+    premissaY: a.premissa_y, pontosY: a.pontos_y, moeda: a.moeda, rf: a.rf ?? null,
   });
-  return { id: item.id, celulas, ...CAMPOS_SOLVER_VAZIOS };
+  return {
+    id: item.id,
+    celulas: g.celulas,
+    diagnosticos_unicos_chaves: g.diagnosticos_unicos_chaves,
+    ...CAMPOS_SOLVER_VAZIOS,
+  };
 }
 
 // [item 4, fatia C, task 1] `args` de um problema de rampa esta' no MESMO shape do contrato
@@ -2275,6 +2352,58 @@ function reverterEixos({ rota, eixos, premissas, alvo, base, metrica, ndEfetivo,
   return resultado;
 }
 
+// ============================================================================
+// TRIANGULO g = RiR x retorno (item 5, fatia I, task 2 — D7)
+// ============================================================================
+// A identidade tem TRES variaveis nomeadas (caso.py:TRIANGULO_FIRM/TRIANGULO_EQUITY) e
+// DOIS graus de liberdade: o caso declara duas como `inputs` e a terceira como `output`.
+// Mora AQUI, e nao em `laboratorio.js`, porque e' identidade de METODOLOGIA (§8.3/§15.15):
+// `tests/test_relatorio_fronteira.py` varre o arquivo do laboratorio com uma lista DERIVADA
+// deste espelho e do catalogo, e `rir`/`roic`/`g` nao podem aparecer la'.
+//
+// As tres variaveis trafegam em PONTO PERCENTUAL para `g` e para o retorno (a convencao do
+// caso), e o `rir` e' RAZAO PURA — `g/retorno` e' adimensional, e dividir dois pontos
+// percentuais ja' da a razao: 5,0 / 12,0 = 0,4167, o mesmo numero que a prosa da eco
+// `firm_rir` do motor escreve ("RiR = g/ROIC"). Nao ha' conversao a fazer, e inventar uma
+// (x100) trocaria a unidade do numero publicado.
+const RETORNO_DO_TRIANGULO = { firm: 'roic', equity: 'roe' };
+
+// A terceira variavel, resolvida pela identidade, mais o `rir` SEMPRE como numero — nas
+// tres configuracoes ele e' input ou output, e a aba mostra o triangulo fechado nos dois
+// casos. `valor` e' `null` (nunca NaN, nunca um numero inventado) quando a identidade nao
+// fecha: retorno zero com `rir` de saida, `rir` zero com retorno de saida.
+function resolverTriangulo({ rota, premissas, triangulo }) {
+  const retorno = RETORNO_DO_TRIANGULO[rota];
+  if (retorno === undefined) throw new Error(`resolverTriangulo: rota sem triangulo: ${rota}`);
+  const vocabulario = new Set(['g', retorno, 'rir']);
+  const declaradas = new Set([...triangulo.inputs, triangulo.output]);
+  if (triangulo.inputs.length !== 2 || declaradas.size !== 3
+      || [...declaradas].some((nome) => !vocabulario.has(nome))) {
+    throw new Error(
+      `resolverTriangulo: triangulo fora do vocabulario da rota ${rota} `
+      + `(${[...vocabulario].join(', ')}): inputs=${JSON.stringify(triangulo.inputs)}, `
+      + `output=${JSON.stringify(triangulo.output)}`);
+  }
+  const g = premissas.g;
+  const r = premissas[retorno];
+  const rirDeclarado = premissas.rir;
+
+  let valor;
+  if (triangulo.output === 'rir') valor = (r === 0) ? null : g / r;
+  else if (triangulo.output === retorno) valor = (rirDeclarado === 0) ? null : g / rirDeclarado;
+  else valor = rirDeclarado * r;
+
+  if (!Number.isFinite(valor)) valor = null;
+  const rir = triangulo.output === 'rir' ? valor : rirDeclarado;
+  return { variavel: triangulo.output, valor, rir, retorno };
+}
+
+function resolverTrianguloItem(item) {
+  const a = item.args;
+  const t = resolverTriangulo({ rota: a.rota, premissas: a.premissas, triangulo: a.triangulo });
+  return { id: item.id, variavel: t.variavel, valor: t.valor, rir: t.rir, ...CAMPOS_SOLVER_VAZIOS };
+}
+
 // Problema `tipo: 'reversa'` da fixture de paridade: o caso minimo inteiro de uma
 // vez (alvo + eixos + limitacoes + teto), contra `reversa.reverter` do lado Python.
 function resolverReversa(item) {
@@ -2349,6 +2478,9 @@ function avaliarItem(item) {
   if (item.tipo === 'reversa') {
     return resolverReversa(item);
   }
+  if (item.tipo === 'triangulo') {
+    return resolverTrianguloItem(item);
+  }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
 
@@ -2379,6 +2511,7 @@ const superficiePublica = {
   faixaDeBusca, alvoNormalizado, baseDoAlvo, capImplicito, betaImplicito,
   motivoDoEixo, leituraDoEixo, resolucaoDoEixo, limitacoesDaLeitura, LIMITACOES_DA_LEITURA,
   tetoDoCrescimentoGratuito, reverterEixos, resolverReversa,
+  RETORNO_DO_TRIANGULO, resolverTriangulo, resolverTrianguloItem, avisoDeDominio,
   tvCanon, cliRecusa,
   avaliarItem, avaliarItens,
 };

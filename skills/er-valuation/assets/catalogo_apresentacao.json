@@ -1103,6 +1103,14 @@
       "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. Nenhuma hipótese de crescimento pago chega a este múltiplo; a distância entre ele e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
     }
   },
+  "teto_da_alavanca": {
+    "rotulo": {
+      "pt-BR": "Teto da alavanca"
+    },
+    "texto": {
+      "pt-BR": "A rentabilidade pós-degrau deste vetor não se sustenta como estado estacionário: o número mede até onde a alavanca operacional poderia levar o valor, não um cenário a ponderar. Leia-o como teto, nunca como caso."
+    }
+  },
   "escalas_monetarias": {
     "milhares": {
       "rotulo": {
@@ -1267,7 +1275,8 @@
     "rir": {
       "rotulo": {
         "pt-BR": "Taxa de reinvestimento (crescimento ÷ retorno do capital novo)"
-      }
+      },
+      "unidade": "fração"
     }
   },
   "anos_base_do_capex": {
