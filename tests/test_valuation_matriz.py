@@ -139,6 +139,17 @@ def _caso_equity_com_reversa() -> dict:
     return _com_reversa(_equity())
 
 
+def _caso_equity_com_reversa_e_consenso() -> dict:
+    """Fatia 5H, Task 1 (D1/D2): o consenso da reversa na rota EQUITY. O nível implícito
+    divide o valor de mercado pelo múltiplo justo corrente — e os dois números são
+    resolvidos por rota (`market_cap` sem ponte, `PL_curr` em vez de `EV/EBITDA_curr`).
+    É a célula que pega um dict indexado por rota tocado sem checar pertencimento."""
+    c = _com_reversa(_equity())
+    c["reversa"]["consenso"] = {"t1": {"valor": 520.0, "periodo": "2026E"},
+                                "t2": {"valor": 560.0, "periodo": "2027E"}}
+    return c
+
+
 def _caso_equity_com_sensibilidades() -> dict:
     return _com_sensibilidades(_equity(), "ke", TRIANGULO_EQUITY)
 
@@ -377,9 +388,11 @@ MATRIZ = {
     ("equity", "degrau+retorno_exigido"): (_caso_equity_com_degrau_e_retorno_exigido, False),
     ("firm", "cross_check_equity"): (_caso_firm_com_cross_check_equity, True),
     ("equity", "cross_check_firm"): (_caso_equity_com_cross_check_firm, False),
+    # Fatia 5H, Task 1 (D1/D2): o consenso da reversa na rota que não atravessa ponte.
+    ("equity", "reversa+consenso"): (_caso_equity_com_reversa_e_consenso, True),
 }
 
-assert len(MATRIZ) == 24, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6), as 2 células de escolhas_metodologicas (5G, D1) e as 5 das três leituras (5G, D2/D3/D4), exatamente uma vez cada"
+assert len(MATRIZ) == 25, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6), as 2 células de escolhas_metodologicas (5G, D1), as 5 das três leituras (5G, D2/D3/D4) e a do consenso da reversa (5H, D1), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

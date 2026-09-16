@@ -433,7 +433,7 @@ import json  # noqa: E402
 
 from avaliar import avaliar  # noqa: E402
 from motor import MotorFalhou  # noqa: E402
-from reversa import RESOLVER_POR_EIXO, _beta_implicito, leitura_do_eixo  # noqa: E402
+from reversa import RESOLVER_POR_EIXO, _beta_implicito, _leitura_chave_do_nivel, leitura_do_eixo  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "tests"))
 from relatorio_apoio import carregar_fixture_ou_variante  # noqa: E402
@@ -578,3 +578,88 @@ def test_identificacao_indisponivel_e_toque_tangencial_saem_sem_numero_inventado
 def test_a_leitura_recusa_nomeando_a_saida_que_nao_sabe_ler(nome_eixo, saida):
     with pytest.raises(MotorFalhou):
         leitura_do_eixo(nome_eixo, "firm", saida)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 1 (D1/D2): o nível implícito da métrica-base e o confronto temporal
+# contra o consenso declarado. A conta é do motor (subcomando `nivel`); o que se mede
+# aqui é a chamada que este wrapper monta e a chave que ele classifica.
+# --------------------------------------------------------------------------
+
+_CONSENSO_ACIMA_DA_IMPLICITA = {"t1": {"valor": 1040.0, "periodo": "2026E"},
+                                "t2": {"valor": 1100.0, "periodo": "2027E"}}
+
+
+def _com_consenso(consenso: dict) -> dict:
+    c = _caso()
+    c["reversa"]["consenso"] = consenso
+    return c
+
+
+def test_o_nivel_implicito_e_o_valor_de_mercado_sobre_o_multiplo_justo_publicado():
+    """O oráculo da conta, com os dois números que a própria integração publica: a
+    métrica implícita é o valor de mercado do alvo dividido pelo múltiplo justo CORRENTE
+    do cenário da reversa — o mesmo que `cenarios.<cenário>.multiplos` traz. Preço 55 x
+    100 ações + dívida líquida 500 = 6.000 de EV de mercado; múltiplo justo 6,6906x =>
+    EBITDA implícito 896,78 contra os 1.000 declarados, um degrau de −10,3%."""
+    resultados = avaliar(_caso())
+    reversa = resultados["reversa"]
+    nivel = reversa["nivel_implicito"]
+    justo = resultados["cenarios"]["base"]["multiplos"]["EV/EBITDA_curr"]
+
+    assert reversa["alvo"]["valor_de_mercado"] == pytest.approx(6000.0)
+    assert justo == pytest.approx(6.6906, abs=1e-4)
+    assert nivel["metrica_base_implicita"] == pytest.approx(
+        reversa["alvo"]["valor_de_mercado"] / justo, abs=0.01)
+    assert nivel["metrica_base_atual"] == pytest.approx(1000.0)
+    assert nivel["fator_k_implicito"] == pytest.approx(0.8968, abs=1e-4)
+    assert nivel["degrau_implicito_%"] == pytest.approx(-10.3, abs=0.05)
+
+
+def test_sem_consenso_declarado_nao_ha_razoes_nem_leitura():
+    """Sem `reversa.consenso` o motor não emite razão nenhuma nem a prosa da leitura, e
+    o wrapper não inventa classificação: `leitura_chave` sai nula, e o nível implícito
+    continua publicado — o degrau que o preço embute não depende de haver consenso."""
+    nivel = reverter(_caso(), "base", 500.0)["nivel_implicito"]
+    assert nivel["leitura_chave"] is None
+    assert "leitura" not in nivel
+    assert not [chave for chave in nivel if chave.startswith("razao_vs_consenso")]
+
+
+@pytest.mark.parametrize("t2,leitura,razao_t1,razao_t2", [
+    (720.0, "antecipacao_temporal", 1.3797, 1.2455),
+    (700.0, "acima_do_consenso", 1.3797, 1.2811),
+], ids=["dentro_de_125", "acima_de_125"])
+def test_a_leitura_do_confronto_temporal_vira_dos_125_por_cento_do_maior_consenso(
+        t2, leitura, razao_t1, razao_t2):
+    """O limiar do vendor (§4 de `references/aplicacao.md`, calibrado em J8), medido dos
+    dois lados com a MESMA implícita (896,78): contra t+2 de 720 o teto é 900 e a
+    leitura é antecipação temporal; contra 700 o teto cai para 875 e a hipótese terminal
+    passa a estar no preço. As duas razões saem do motor, uma por ponto declarado."""
+    nivel = reverter(_com_consenso({"t1": {"valor": 650.0, "periodo": "2026E"},
+                                    "t2": {"valor": t2, "periodo": "2027E"}}),
+                     "base", 500.0)["nivel_implicito"]
+    assert nivel["leitura_chave"] == leitura
+    assert nivel["razao_vs_consenso_t1"] == pytest.approx(razao_t1, abs=1e-4)
+    assert nivel["razao_vs_consenso_t2"] == pytest.approx(razao_t2, abs=1e-4)
+    # A prosa do motor continua publicada, íntegra, ao lado da chave — o relatório lê a
+    # chave e nunca o texto.
+    assert nivel["leitura"].startswith(leitura + ":")
+
+
+def test_so_o_ponto_declarado_vira_razao():
+    """Um consenso só com t+1 produz uma razão só — o wrapper nunca completa o ponto que
+    o caso não declarou."""
+    nivel = reverter(_com_consenso({"t1": {"valor": 1040.0, "periodo": "2026E"}}),
+                     "base", 500.0)["nivel_implicito"]
+    assert nivel["razao_vs_consenso_t1"] == pytest.approx(896.78 / 1040.0, abs=1e-3)
+    assert "razao_vs_consenso_t2" not in nivel
+    assert nivel["leitura_chave"] == "antecipacao_temporal"
+
+
+def test_uma_leitura_do_nivel_fora_do_vocabulario_e_motor_falhou_nomeado():
+    """Mesma disciplina de `_identificacao_da_raiz`: um prefixo que o catálogo não
+    rotula é recusa nomeada, nunca código cru na tela."""
+    assert _leitura_chave_do_nivel({"leitura": "acima_do_consenso: texto do motor"}) == "acima_do_consenso"
+    with pytest.raises(MotorFalhou):
+        _leitura_chave_do_nivel({"leitura": "fantasia_terminal: texto do motor"})

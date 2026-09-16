@@ -145,6 +145,23 @@ def _reversa_sem_raiz(caso: dict) -> dict:
     return c
 
 
+def _consenso(caso: dict) -> dict:
+    """`caso_minimo_firm` com a reversa composta e o consenso de t+1/t+2 declarado (D1 da
+    5H): o preço de R$ 55,00 embute EBITDA de ≈ 897 (valor de mercado 6.000 ÷ múltiplo
+    justo corrente ≈ 6,69) contra os 1.000 da métrica-base — um degrau implícito NEGATIVO.
+    O consenso (1.040 em t+1, 1.100 em t+2) fica acima da implícita, que por isso cabe
+    folgadamente dentro dos 125% do maior ponto: a leitura é `antecipacao_temporal`.
+
+    É a única variante que exerce os dois pontos do consenso; sem t2 o padrão
+    `reversa.consenso.t2.valor` do catálogo ficaria ocioso nas travas de insumo."""
+    c = com_bloco_de_reversa_valido(caso)
+    c["reversa"]["consenso"] = {
+        "t1": {"valor": 1040.0, "periodo": "2026E"},
+        "t2": {"valor": 1100.0, "periodo": "2027E"},
+    }
+    return c
+
+
 def _forward_firm(caso: dict) -> dict:
     """`caso_minimo_firm` com a métrica forward declarada (D5 da 5F): EBITDA de 1.100 no ano
     seguinte, contra 1.000 da métrica-base — a tela forward é o mesmo valor de mercado sobre ela."""
@@ -259,6 +276,7 @@ def _alternativas(caso: dict) -> dict:
 
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
+    "consenso": ("caso_minimo_firm.json", _consenso),
     "forward_firm": ("caso_minimo_firm.json", _forward_firm),
     "forward_equity": ("caso_minimo_equity.json", _forward_equity),
     "escala": ("caso_rampa.json", _escala),

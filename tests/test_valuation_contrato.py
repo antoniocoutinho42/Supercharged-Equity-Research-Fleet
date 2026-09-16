@@ -23,6 +23,7 @@ from caso import (  # noqa: E402
     LIMITACOES_DE_REVERSA, TV_CANON, CasoInvalido, carregar, reversa_indisponivel, validar,
 )
 import diagnosticos  # noqa: E402
+import reversa as reversa_modulo  # noqa: E402
 from reversa import limitacoes_da_leitura  # noqa: E402
 
 # O construtor do bloco 'reversa' de teste e as variantes compostas (D14 da 5F) moram em
@@ -342,3 +343,47 @@ def test_o_painel_e_as_tres_leituras_sao_sempre_publicados(resultados):
             assert (r[campo] is not None) is (bloco in caso), (nome, campo)
             vistas[campo] += r[campo] is not None
     assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
+
+
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 1 (D1/D2 do plano docs/superpowers/plans/2026-09-15-v4-item5h-leitura-
+# de-preco.md): o nível implícito anda com a reversa — dentro dela, sempre, com as
+# chaves do motor mais a leitura classificada; sem reversa, não há bloco onde procurá-lo.
+# --------------------------------------------------------------------------
+
+_CHAVES_DO_NIVEL_IMPLICITO = {"metrica_base_atual", "metrica_base_implicita",
+                              "fator_k_implicito", "degrau_implicito_%", "leitura_chave"}
+
+
+def test_o_nivel_implicito_existe_se_e_so_se_a_reversa_existe(resultados):
+    """E as razões contra o consenso existem se e só se o caso o declara, ponto a ponto
+    — nunca uma razão sem consenso, nunca um consenso sem razão."""
+    vistas = {"com_reversa": 0, "sem_reversa": 0, "com_consenso": 0, "sem_consenso": 0}
+    for nome, (caso, r) in resultados.items():
+        if "reversa" not in r:
+            vistas["sem_reversa"] += 1
+            continue
+        vistas["com_reversa"] += 1
+        nivel = r["reversa"]["nivel_implicito"]
+        assert _CHAVES_DO_NIVEL_IMPLICITO <= set(nivel), (nome, sorted(nivel))
+        consenso = caso["reversa"].get("consenso") or {}
+        vistas["com_consenso" if consenso else "sem_consenso"] += 1
+        for ponto in ("t1", "t2"):
+            assert (f"razao_vs_consenso_{ponto}" in nivel) is (ponto in consenso), (nome, ponto)
+        assert (nivel["leitura_chave"] is not None) is bool(consenso), nome
+        assert nivel["leitura_chave"] in (None, *reversa_modulo.LEITURAS_DO_NIVEL), nome
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
+
+
+def test_o_valor_de_mercado_do_alvo_e_o_numerador_do_multiplo_de_tela(resultados):
+    """O número que o nível implícito recebe em `--alvo-valor` é o NUMERADOR da mesma
+    conta que produz o múltiplo de mercado — nunca uma segunda conta: valor de mercado
+    ÷ métrica-base = múltiplo do alvo, em toda rota que tem reversa."""
+    vistos = 0
+    for nome, (caso, r) in resultados.items():
+        if "reversa" not in r:
+            continue
+        alvo = r["reversa"]["alvo"]
+        assert alvo["valor_de_mercado"] / caso["metrica_base"]["valor"] == pytest.approx(alvo["valor"])
+        vistos += 1
+    assert vistos, "nenhuma fixture com reversa — trava vacuamente verde"

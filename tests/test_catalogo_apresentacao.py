@@ -148,8 +148,8 @@ def test_chaves_de_topo_do_catalogo():
         "unidades", "ponte", "premissas", "multiplos", "diagnosticos", "disclosures", "recusas",
         "fronteiras_de_escopo", "limitacoes", "conclusoes_de_valor", "insumos_do_caso",
         "eixos_de_reversa", "motivos_da_leitura", "identificacoes", "posicoes_na_banda",
-        "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor", "variaveis_do_triangulo",
-        "anos_base_do_capex", "escolhas_metodologicas",
+        "leituras_do_nivel", "teto_do_crescimento_gratuito", "escalas_monetarias", "formacao_do_valor",
+        "variaveis_do_triangulo", "anos_base_do_capex", "escolhas_metodologicas",
     }
 
 
@@ -766,11 +766,30 @@ def test_eixos_de_reversa_do_catalogo_sao_os_do_gate_com_o_obrigatorio_do_gate()
     ("motivos_da_leitura", reversa.MOTIVOS_DA_LEITURA),
     ("identificacoes", reversa.IDENTIFICACOES),
     ("posicoes_na_banda", reversa.POSICOES_NA_BANDA),
+    # Fatia 5H, Task 1 (D2): as duas leituras do confronto temporal.
+    ("leituras_do_nivel", reversa.LEITURAS_DO_NIVEL),
 ])
 def test_vocabularios_da_leitura_da_reversa_sao_as_tuplas_da_integracao(secao, vocabulario):
     assert len(set(vocabulario)) == len(vocabulario), vocabulario
     assert set(CAT[secao]) == set(vocabulario), set(CAT[secao]) ^ set(vocabulario)
     _rotulos_em_todo_idioma(secao)
+
+
+def test_toda_leitura_do_nivel_publicada_pelas_variantes_tem_rotulo_no_catalogo():
+    """Fatia 5H, Task 1 (D2): a `leitura_chave` que o wrapper classifica é rotulada pelo
+    catálogo — o relatório mostra o rótulo, nunca a chave crua e nunca a prosa do motor.
+    Alguma variante tem de exercer uma leitura de verdade, senão a trava fica vacuamente
+    verde sobre um vocabulário que nada publica."""
+    vistas = set()
+    for nome in CASOS_E_VARIANTES:
+        _caso, resultados = _caso_e_resultados(nome)
+        nivel = (resultados.get("reversa") or {}).get("nivel_implicito")
+        if nivel is None:
+            continue
+        chave = nivel["leitura_chave"]
+        assert chave is None or chave in CAT["leituras_do_nivel"], (nome, chave)
+        vistas.add(chave)
+    assert vistas - {None}, f"nenhuma leitura do nível publicada: {vistas}"
 
 
 def test_teto_do_crescimento_gratuito_tem_rotulo_e_texto_em_todo_idioma():

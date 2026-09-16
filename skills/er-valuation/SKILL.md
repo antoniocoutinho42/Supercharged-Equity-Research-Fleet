@@ -38,6 +38,18 @@ normaliza saída.
   (`valor`, `posicao` de `reversa.POSICOES_NA_BANDA`, `distancia`, `banda`,
   `unidade`). Com um eixo primário sem raiz, o teto do crescimento gratuito
   roda e publica também `chave`, o múltiplo que carrega.
+- **Nível implícito e confronto temporal** — ao lado do menu de eixos, que lê
+  o preço em TAXA, `reversa.nivel_implicito` o lê em NÍVEL: que métrica-base o
+  preço embute, dadas as taxas do cenário (valor de mercado ÷ múltiplo justo
+  corrente, conta do subcomando `nivel` do motor), e como esse nível se
+  confronta com o consenso de t+1/t+2 que o caso declara. A saída do motor vai
+  íntegra — `metrica_base_atual`, `metrica_base_implicita`,
+  `fator_k_implicito`, `degrau_implicito_%`, `razao_vs_consenso_t1`/`_t2` e a
+  prosa `leitura` — mais `leitura_chave`, a classificação do prefixo dessa
+  prosa (`reversa.LEITURAS_DO_NIVEL`: `antecipacao_temporal` até 125% do maior
+  consenso declarado, `acima_do_consenso` acima disso). Sem consenso no caso
+  não há razões nem leitura, e `leitura_chave` sai `null`. O relatório lê a
+  chave e o rótulo do catálogo, nunca a prosa do motor.
 - **Grades de sensibilidade** — constrói, célula a célula no motor, as
   grades 1D e 2D de preço por ação que o caso declarar. Cada célula é um
   subprocesso do motor — a soma de células declaradas (`grades_1d` +
@@ -124,6 +136,16 @@ nenhuma taxa livre de risco nem prêmio de risco de mercado abaixo de um
 ponto percentual ocorre na prática, então esse intervalo só pode ser uma
 fração digitada por engano, não uma taxa válida. `erp` também é recusado
 quando `<= 0` — é o denominador da inversão do CAPM em beta implícito.
+
+Bloco opcional `reversa`: `cenario` (nome de um cenário declarado), `eixos`
+(ao menos um, sempre incluindo `custo_capital`) e `consenso`, também opcional
+— o confronto temporal da §4 da aplicação. `consenso` declara `t1` e, quando
+houver, `t2`, cada um com `valor` (o consenso da **mesma métrica** de
+`metrica_base`, na mesma escala, finito e positivo) e `periodo` (texto não
+vazio: sem ele, "t+1" não diz de que exercício é). Os dois valores são insumo
+com proveniência — o wrapper nunca os lê do ledger. O vocabulário do bloco é
+fechado nos três campos: um nome digitado errado é recusado, e não um
+confronto temporal declarado que silenciosamente não acontece.
 
 Bloco opcional `sensibilidades`: `cenario` (nome de um cenário declarado),
 `grades_1d` e `grades_2d`. Cada célula de grade é um subprocesso do motor
@@ -365,8 +387,8 @@ registro que `caso.reversa_indisponivel` consulta, e as que declaram `"iso"`
 a `reversa.LIMITACOES_DA_LEITURA`; e os vocabulários da leitura da reversa —
 `eixos_de_reversa`, com o rótulo e `obrigatorio` amarrado a
 `caso.EIXO_OBRIGATORIO`; `motivos_da_leitura`, `identificacoes` e
-`posicoes_na_banda`, as tuplas de `reversa.py`; e `teto_do_crescimento_gratuito`,
-com rótulo e texto; o rótulo de cada escala monetária (`escalas_monetarias`,
+`posicoes_na_banda` e `leituras_do_nivel`, as tuplas de `reversa.py`; e
+`teto_do_crescimento_gratuito`, com rótulo e texto; o rótulo de cada escala monetária (`escalas_monetarias`,
 as do gate) e a marca `escala_monetaria` das unidades de montante; o quadro
 "como o valor é formado" de cada rota (`formacao_do_valor`: a função de
 cada premissa, em uma linha, e a síntese — texto de metodologia, nunca um
@@ -408,7 +430,9 @@ toda premissa numérica de cenário, de parte de SOTP e do vetor `blended` da
 materialidade; o topo do SOTP (custos corporativos, participações não
 consolidadas e o desconto de holding, quando declarado); os números do degrau; e,
 de `mercado`, `rf`, `erp` e a banda de beta observado, que alimentam a âncora
-macro do gp e o beta implícito da reversa. Fica fora a configuração de execução
+macro do gp e o beta implícito da reversa; e os dois pontos de
+`reversa.consenso`, contra os quais o nível implícito é confrontado. Fica fora a
+configuração de execução
 — os pontos declarados das grades de sensibilidade e o teto de células
 (`limite_de_celulas`) —, e texto nunca é insumo. Todo insumo mapeado é material:
 um limiar seria o relatório estimando impacto no valuation. O mapa é para o QC

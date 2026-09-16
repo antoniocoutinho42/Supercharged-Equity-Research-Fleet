@@ -59,6 +59,16 @@ múltiplo que publica), e o gatilho dele é também o da limitação `iso_nao_ca
 (`LIMITACOES_DA_LEITURA`): a curva iso-valor, que o motor manda rodar junto do teto,
 não é calculada pelo Fleet — e isso sai publicado em `resultados.limitacoes`, nunca
 omitido.
+
+Fatia 5H, Task 1 (D2 do plano `docs/superpowers/plans/2026-09-15-v4-item5h-leitura-de-
+preco.md`): ao lado do menu de eixos — que lê o preço em TAXA —, `reverter` publica
+também `nivel_implicito`, que o lê em NÍVEL: que métrica-base o preço embute, dadas as
+taxas do cenário, e como esse nível se confronta com o consenso de t+1/t+2 que o caso
+declara (`reversa.consenso`, o confronto temporal do vendor, `references/aplicacao.md`
+§4). A conta é do motor (subcomando `nivel`); este módulo monta a chamada com números
+que já existem e classifica o prefixo da prosa em `leitura_chave`
+(`LEITURAS_DO_NIVEL`), o mesmo padrão do degrau: chave classificada na integração,
+prosa do motor nunca exibida.
 """
 
 from typing import Any, Callable
@@ -176,6 +186,27 @@ _UNIDADE_DO_BETA = "beta"
 # `identificacao()` chaveia o intervalo pela tolerância (`intervalo_para_alvo_±1%`).
 _PREFIXO_DO_INTERVALO = "intervalo_para_alvo_±"
 
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 1 (D2): o nível implícito e o confronto temporal. Tupla DESTE
+# módulo, rotulada pelo catálogo (`leituras_do_nivel`) e travada contra ele por
+# igualdade de conjunto em tests/test_catalogo_apresentacao.py.
+# --------------------------------------------------------------------------
+
+# As duas leituras do confronto temporal (vendor `references/aplicacao.md` §4, calibrado
+# em J8): a métrica implícita até 125% do maior consenso declarado é ANTECIPAÇÃO
+# TEMPORAL — o mercado desconta uma base futura, e a reversa correta passa a ser sobre o
+# vetor consenso; acima disso, a hipótese terminal está no preço. Os códigos são o
+# PREFIXO da prosa que o motor escreve em `leitura` (`"<codigo>: <texto>"`): a chave sai
+# classificada aqui, e a prosa do motor nunca chega à tela. Mesma disciplina de
+# `MOTIVOS_DA_LEITURA`.
+LEITURAS_DO_NIVEL: tuple[str, ...] = ("antecipacao_temporal", "acima_do_consenso")
+
+# O subcomando do motor que faz a conta (justos.py, `nivel_implicito`, linhas 957-1000)
+# e os dois pontos do consenso que ele aceita, na ordem em que o caso os declara.
+_SUBCOMANDO_DO_NIVEL = "nivel"
+_PONTOS_DO_CONSENSO: tuple[str, ...] = ("t1", "t2")
+_SEPARADOR_DA_LEITURA = ":"
+
 
 def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
                     valor_da_metrica: float | None = None) -> dict:
@@ -238,6 +269,7 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
 
     if rota == "firm":
         ev_mercado = market_cap + nd_efetivo
+        valor_de_mercado = ev_mercado
         valor = ev_mercado / metrica_valor
         base = "ebitda" if metrica["tipo"] == "EBITDA" else "nopat"
         algebra = (
@@ -248,6 +280,7 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
         )
     elif rota == "rampa":
         ev_mercado = market_cap + nd_efetivo
+        valor_de_mercado = ev_mercado
         valor = ev_mercado / metrica_valor
         base = "ebitda0"
         algebra = (
@@ -257,6 +290,7 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
             f"{metrica['tipo']} {metrica_valor} = {valor}"
         )
     elif rota == "equity":
+        valor_de_mercado = market_cap
         valor = market_cap / metrica_valor
         base = "pl"
         algebra = (
@@ -271,7 +305,14 @@ def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
             "nesta fatia."
         )
 
-    return {"valor": valor, "algebra": algebra, "base": base}
+    # `valor_de_mercado` (fatia 5H, Task 1, D2): o NUMERADOR desta mesma conta — o EV
+    # de mercado nas rotas que atravessam a ponte, o market cap na equity —, publicado
+    # ao lado do múltiplo em vez de ficar só dentro da `algebra`. É o que o subcomando
+    # `nivel` do motor recebe em `--alvo-valor`; sem ele, `nivel_implicito` teria de
+    # refazer a mesma soma numa segunda cópia da conta (a lição do FIX 2 da revisão
+    # final), ou reconstruí-la multiplicando o múltiplo pela métrica-base de volta.
+    return {"valor": valor, "valor_de_mercado": valor_de_mercado,
+            "algebra": algebra, "base": base}
 
 
 def _posicao_e_distancia(beta: float, banda: list | None) -> tuple[str, float | None]:
@@ -670,6 +711,87 @@ def teto_do_crescimento_gratuito(caso: Caso, nome_cenario: str, nd_efetivo: floa
     }
 
 
+def _multiplo_justo_corrente(caso: Caso, nome_cenario: str) -> float:
+    """O múltiplo justo CORRENTE do cenário-alvo da reversa, pelo motor: a avaliação
+    direta (`ev`/`pe`) do vetor central do cenário, lida no campo que
+    `_campo_do_multiplo` resolve para a rota e a métrica-base. É o mesmo número que
+    `avaliar._monta_cenario` publica em `cenarios.<cenário>.multiplos.<chave>` — o
+    múltiplo não depende da escala (só das taxas), e um teste prende a igualdade.
+
+    Roda o motor de novo em vez de receber o número já publicado: `reverter` é chamável
+    com `(caso, nome_cenario, nd_efetivo)` desde a fatia B, e um quarto parâmetro
+    obrigatório mudaria a assinatura em todo call site só para repassar um número que o
+    motor devolve de graça. Mesma forma de chamada de `teto_do_crescimento_gratuito`,
+    que também avalia um vetor do cenário por conta própria."""
+    rota = caso["rota"]
+    mercado = caso.get("mercado")
+    saida = rodar(rota, caso["cenarios"][nome_cenario]["premissas"], None, caso["moeda"],
+                  rf=mercado.get("rf") if mercado else None)
+    return _exigir_valor(saida, _campo_do_multiplo(rota, caso["metrica_base"]["tipo"]))
+
+
+def _leitura_chave_do_nivel(saida: dict) -> str | None:
+    """A chave da leitura do confronto temporal, extraída do PREFIXO da prosa que o
+    motor escreve em `leitura` (`"antecipacao_temporal: ..."`). `None` quando o caso não
+    declara consenso — sem consenso o motor não emite `leitura` nenhuma, e inventar uma
+    classificação aqui seria o wrapper decidindo o que o motor não decidiu.
+
+    Um prefixo fora de `LEITURAS_DO_NIVEL` é `MotorFalhou` nomeado, pela mesma razão de
+    `_identificacao_da_raiz`: o catálogo não o rotula, e o relatório mostraria código
+    cru — ou, pior, a prosa do motor."""
+    prosa = saida.get("leitura")
+    if prosa is None:
+        return None
+    chave = str(prosa).split(_SEPARADOR_DA_LEITURA, 1)[0].strip()
+    if chave not in LEITURAS_DO_NIVEL:
+        raise MotorFalhou(
+            f"leitura do nível implícito fora do vocabulário do confronto temporal: {chave!r}. "
+            f"Leituras conhecidas: {', '.join(LEITURAS_DO_NIVEL)}."
+        )
+    return chave
+
+
+def nivel_implicito(caso: Caso, alvo: dict, multiplo_justo: float) -> dict:
+    """Reversa em degrau (fatia 5H, Task 1, D2): que NÍVEL da métrica-base o preço
+    embute, dadas as taxas do cenário — `métrica_implícita = valor de mercado ÷ múltiplo
+    justo` —, confrontado com o consenso de t+1/t+2 que o caso declara.
+
+    A conta é do motor (`justos.nivel_implicito`, subcomando `nivel`): este wrapper só
+    monta a chamada com números que já existem — o valor de mercado de
+    `alvo_de_mercado` (`--alvo-valor`), o múltiplo justo corrente do cenário
+    (`--multiplo`), a métrica-base do caso (`--metrica-base`) e cada ponto de
+    `reversa.consenso` (`--consenso-t1`/`--consenso-t2`) — e publica a saída ÍNTEGRA
+    mais `leitura_chave`, a classificação do prefixo da prosa. Mesma disciplina de
+    `leitura_do_eixo`: nada do motor é removido, renomeado ou reformatado, e o relatório
+    lê a chave, nunca o texto.
+
+    Sem consenso declarado, o motor não emite `razao_vs_consenso_*` nem `leitura`, e
+    `leitura_chave` sai `None` — o nível implícito continua publicado, porque o degrau
+    que o preço embute não depende de haver consenso contra o que confrontá-lo.
+
+    `--vol`/`--preco-base` (o `preco_driver_implicito` do motor) ficam de fora: nenhum
+    caso declara volume, e sem ele o motor não roda esse ramo.
+    """
+    consenso = caso["reversa"].get("consenso") or {}
+    argumentos: dict = {
+        "alvo-valor": alvo["valor_de_mercado"],
+        "multiplo": multiplo_justo,
+        "metrica-base": caso["metrica_base"]["valor"],
+    }
+    for nome in _PONTOS_DO_CONSENSO:
+        ponto = consenso.get(nome)
+        if ponto is not None:
+            argumentos[f"consenso-{nome}"] = ponto["valor"]
+
+    saida = rodar(caso["rota"], argumentos, None, None, subcomando=_SUBCOMANDO_DO_NIVEL)
+    if "erro" in saida:
+        raise MotorFalhou(
+            f"motor recusou o nível implícito: {saida['erro']!r} (múltiplo justo "
+            f"{multiplo_justo!r}, valor de mercado {alvo['valor_de_mercado']!r})."
+        )
+    return {**saida, "leitura_chave": _leitura_chave_do_nivel(saida)}
+
+
 def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     """Roda a reversa em todo eixo declarado em `caso["reversa"]["eixos"]`.
 
@@ -748,7 +870,15 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
 
         eixos[nome_eixo] = saida
 
-    resultado: dict = {"alvo": alvo, "eixos": eixos}
+    # Fatia 5H, Task 1 (D2): o nível implícito da métrica-base e o confronto temporal,
+    # SEMPRE publicados ao lado do menu de eixos — o que o preço embute em NÍVEL, contra
+    # o que ele embute em TAXA. Sem consenso declarado no caso, o bloco sai sem razões e
+    # com `leitura_chave` nula (ver `nivel_implicito`).
+    resultado: dict = {
+        "alvo": alvo,
+        "eixos": eixos,
+        "nivel_implicito": nivel_implicito(caso, alvo, _multiplo_justo_corrente(caso, nome_cenario)),
+    }
 
     if _algum_eixo_primario_sem_raiz(resultado):
         resultado["teto_do_crescimento_gratuito"] = teto_do_crescimento_gratuito(

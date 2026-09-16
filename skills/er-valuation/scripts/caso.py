@@ -1795,9 +1795,76 @@ def _validar_cenario_base(caso: Caso, cenarios: dict) -> None:
     _validar_cenario_alvo("cenario_base", caso.get("cenario_base"), cenarios)
 
 
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 1 (D1 do plano docs/superpowers/plans/2026-09-15-v4-item5h-
+# leitura-de-preco.md): o consenso declarado da reversa — o confronto temporal do
+# vendor (`references/aplicacao.md` §4): a métrica implícita no preço lida contra o
+# consenso de t+1 e t+2, antes de qualquer conclusão de fantasia terminal. Os dois
+# valores são INSUMO com proveniência, na mesma métrica de `metrica_base` (o gate não
+# converte escala nenhuma); o wrapper nunca os lê do ledger. `t1` é obrigatório: sem
+# nenhum ponto de consenso não há confronto, e um bloco vazio diria a mesma coisa que
+# não declarar o bloco, por dois caminhos.
+# --------------------------------------------------------------------------
+
+_CHAVES_DA_REVERSA_PERMITIDAS: frozenset = frozenset({"cenario", "eixos", "consenso"})
+_CHAVES_DO_CONSENSO_PERMITIDAS: frozenset = frozenset({"t1", "t2"})
+_CHAVES_DO_PONTO_DO_CONSENSO: frozenset = frozenset({"valor", "periodo"})
+_PONTO_OBRIGATORIO_DO_CONSENSO: str = "t1"
+
+
+def _validar_consenso_da_reversa(reversa: dict) -> None:
+    """Valida o bloco opcional 'reversa.consenso' (D1): chaves em todo nível, o ponto
+    obrigatório, o valor de cada ponto e o período que o data. Ausente ou `None` é uma
+    reversa sem confronto temporal — o nível implícito sai sem razões e sem leitura."""
+    consenso = reversa.get("consenso")
+    if consenso is None:
+        return
+
+    if not isinstance(consenso, dict):
+        raise CasoInvalido(
+            f"campo 'reversa.consenso' não é um objeto: {consenso!r}. Declare 't1' (e, quando "
+            "houver, 't2'), cada um com 'valor' e 'periodo'."
+        )
+    _recusar_chave_desconhecida(consenso, _CHAVES_DO_CONSENSO_PERMITIDAS, "'reversa.consenso'")
+
+    if _PONTO_OBRIGATORIO_DO_CONSENSO not in consenso:
+        raise CasoInvalido(
+            f"'reversa.consenso' sem '{_PONTO_OBRIGATORIO_DO_CONSENSO}': {sorted(consenso)!r}. O "
+            "confronto temporal (§4 da aplicação) compara a métrica implícita no preço com o "
+            "consenso de t+1 e t+2 — sem o primeiro ponto não há contra o que confrontar, e um "
+            "bloco vazio é o mesmo que não declarar o bloco."
+        )
+
+    for nome in sorted(consenso):
+        ponto = consenso[nome]
+        prefixo = f"reversa.consenso.{nome}"
+        if not isinstance(ponto, dict):
+            raise CasoInvalido(
+                f"'{prefixo}' não é um objeto: {ponto!r}. Declare 'valor' (na mesma métrica de "
+                "'metrica_base') e 'periodo'."
+            )
+        _recusar_chave_desconhecida(ponto, _CHAVES_DO_PONTO_DO_CONSENSO, f"'{prefixo}'")
+
+        valor = ponto.get("valor")
+        if not _numero_valido(valor) or not _finito(valor) or valor <= 0:
+            raise CasoInvalido(
+                f"'{prefixo}.valor' inválido: {valor!r}. É o consenso da MESMA métrica de "
+                "'metrica_base', na mesma escala — precisa ser um número finito e positivo, "
+                "porque a razão entre a métrica implícita e ele é o confronto temporal."
+            )
+
+        periodo = ponto.get("periodo")
+        if not isinstance(periodo, str) or not periodo.strip():
+            raise CasoInvalido(
+                f"campo '{prefixo}.periodo' ausente ou vazio: {periodo!r}. O consenso é fato de "
+                "mercado datado: sem o período, 't+1' e 't+2' não dizem de que exercício são e o "
+                "confronto temporal não é auditável."
+            )
+
+
 def _validar_reversa(caso: Caso, cenarios: dict) -> None:
     """Valida o bloco opcional 'reversa': limitação da rota, eixos, eixo
-    obrigatório e cenário-alvo.
+    obrigatório, cenário-alvo e o consenso do confronto temporal.
 
     A exigência de 'mercado' (rf, erp) quando 'reversa' está presente já foi
     confirmada por `_validar_mercado` antes desta função rodar — não é
@@ -1822,6 +1889,10 @@ def _validar_reversa(caso: Caso, cenarios: dict) -> None:
             f"campo 'reversa' não é um objeto: {reversa!r}. Declare "
             "'cenario' e 'eixos'."
         )
+    # Fatia 5H, Task 1: o bloco ganhou um terceiro campo ('consenso'), e sem esta
+    # recusa um nome digitado errado ali dentro sumiria em silêncio — o confronto
+    # temporal simplesmente não aconteceria, com o caso declarando que aconteceu.
+    _recusar_chave_desconhecida(reversa, _CHAVES_DA_REVERSA_PERMITIDAS, "'reversa'")
 
     eixos = reversa.get("eixos")
     if not isinstance(eixos, list) or not eixos:
@@ -1855,6 +1926,8 @@ def _validar_reversa(caso: Caso, cenarios: dict) -> None:
 
     cenario_nome = reversa.get("cenario")
     _validar_cenario_alvo("reversa.cenario", cenario_nome, cenarios)
+
+    _validar_consenso_da_reversa(reversa)
 
 
 def _validar_pontos(prefixo: str, pontos: Any) -> None:

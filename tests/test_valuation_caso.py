@@ -1770,3 +1770,72 @@ def test_recusas_dos_alvos_de_sobreposicao_nomeiam_a_regra(caso, nomeado):
     with pytest.raises(CasoInvalido) as erro:
         validar(caso())
     assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 1 (D1): o consenso declarado da reversa — o confronto temporal da §4
+# da aplicação. Uma recusa por regra, cada uma nomeando o campo.
+# --------------------------------------------------------------------------
+
+_CONSENSO_VALIDO = {"t1": {"valor": 1040.0, "periodo": "2026E"},
+                    "t2": {"valor": 1100.0, "periodo": "2027E"}}
+
+
+def _com_consenso(consenso) -> dict:
+    c = _reversa()
+    c["reversa"]["consenso"] = consenso
+    return c
+
+
+def test_consenso_valido_com_os_dois_pontos_passa():
+    validar(_com_consenso(json.loads(json.dumps(_CONSENSO_VALIDO))))
+    validar(_com_consenso({"t1": {"valor": 1040.0, "periodo": "2026E"}}))
+
+
+@pytest.mark.parametrize("consenso,trechos", [
+    ([{"valor": 1040.0}], ["'reversa.consenso' não é um objeto"]),
+    ({}, ["'reversa.consenso' sem 't1'"]),
+    ({"t2": {"valor": 1100.0, "periodo": "2027E"}}, ["'reversa.consenso' sem 't1'"]),
+    ({"t1": {"valor": 1040.0, "periodo": "2026E"}, "t3": {"valor": 1.0, "periodo": "2028E"}},
+     ["chave desconhecida em 'reversa.consenso'", "'t3'"]),
+    ({"t1": {"valor": 1040.0, "periodo": "2026E", "fonte": "x"}},
+     ["chave desconhecida em 'reversa.consenso.t1'", "'fonte'"]),
+    ({"t1": {"valor": 0.0, "periodo": "2026E"}}, ["'reversa.consenso.t1.valor' inválido"]),
+    ({"t1": {"valor": -10.0, "periodo": "2026E"}}, ["'reversa.consenso.t1.valor' inválido"]),
+    ({"t1": {"valor": float("inf"), "periodo": "2026E"}}, ["'reversa.consenso.t1.valor' inválido"]),
+    ({"t1": {"valor": "1040", "periodo": "2026E"}}, ["'reversa.consenso.t1.valor' inválido"]),
+    ({"t1": {"valor": 1040.0, "periodo": "   "}}, ["'reversa.consenso.t1.periodo' ausente ou vazio"]),
+    ({"t1": {"valor": 1040.0}}, ["'reversa.consenso.t1.periodo' ausente ou vazio"]),
+    ({"t1": {"valor": 1040.0, "periodo": "2026E"}, "t2": 1100.0},
+     ["'reversa.consenso.t2' não é um objeto"]),
+], ids=["nao-objeto", "vazio", "so-t2", "ponto-desconhecido", "chave-do-ponto-desconhecida",
+        "valor-zero", "valor-negativo", "valor-nao-finito", "valor-texto", "periodo-vazio",
+        "periodo-ausente", "ponto-nao-objeto"])
+def test_consenso_malformado_recusa_nomeando(consenso, trechos):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(_com_consenso(consenso))
+    for trecho in trechos:
+        assert trecho in str(erro.value), str(erro.value)
+
+
+def test_chave_desconhecida_na_reversa_recusa_com_sugestao():
+    """O bloco 'reversa' passou a ter vocabulário fechado: sem isso, um 'consensos'
+    digitado errado sairia ignorado — o caso declararia o confronto temporal e o motor
+    rodaria sem ele."""
+    c = _reversa()
+    c["reversa"]["consensos"] = json.loads(json.dumps(_CONSENSO_VALIDO))
+    with pytest.raises(CasoInvalido) as erro:
+        validar(c)
+    assert "chave desconhecida em 'reversa'" in str(erro.value)
+    assert "Você quis dizer 'consenso'?" in str(erro.value)
+
+
+def test_consenso_fora_da_reversa_e_chave_de_topo_desconhecida():
+    """O consenso só existe DENTRO da reversa (D1): declarado no topo do caso, é a
+    recusa de chave de topo desconhecida, nomeando-o — nunca um bloco aceito e ignorado."""
+    c = _firm()
+    c["consenso"] = json.loads(json.dumps(_CONSENSO_VALIDO))
+    with pytest.raises(CasoInvalido) as erro:
+        validar(c)
+    assert "chave de topo desconhecida" in str(erro.value).lower()
+    assert "consenso" in str(erro.value)

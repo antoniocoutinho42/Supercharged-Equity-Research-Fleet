@@ -1083,6 +1083,18 @@
       }
     }
   },
+  "leituras_do_nivel": {
+    "antecipacao_temporal": {
+      "rotulo": {
+        "pt-BR": "Antecipação temporal: a métrica implícita no preço fica até um quarto acima do consenso de t+1/t+2 — o mercado desconta uma base futura, e a reconciliação correta é sobre o vetor do consenso, não sobre uma hipótese terminal"
+      }
+    },
+    "acima_do_consenso": {
+      "rotulo": {
+        "pt-BR": "Acima do consenso: a métrica implícita no preço excede o consenso de t+1/t+2 com folga — a hipótese terminal está no preço, e a leitura segue para o teto do crescimento gratuito"
+      }
+    }
+  },
   "teto_do_crescimento_gratuito": {
     "rotulo": {
       "pt-BR": "Teto do crescimento gratuito"
@@ -1416,6 +1428,8 @@
     "mercado.rf",
     "mercado.erp",
     "mercado.beta_observado.*",
+    "reversa.consenso.t1.valor",
+    "reversa.consenso.t2.valor",
     "degrau.indice_atual.valor",
     "degrau.piso_teorico",
     "degrau.indice_alvo.valor",
