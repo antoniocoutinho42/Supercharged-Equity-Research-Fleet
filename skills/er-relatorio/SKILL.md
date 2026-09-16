@@ -213,7 +213,10 @@ lê o que o preço embute) —, um banner abre a aba declarando o escopo (cobert
 e encerramento não se aplicam), os avisos obrigatórios sobem para logo abaixo
 dele e toda conclusão de valor sai com o rótulo condicional, pelo mesmo
 mecanismo da fronteira de escopo (o produto é o SEGUNDO gatilho de
-`render._leitura_condicional`). Como a rota rampa não admite reversa, um caso
+`render._leitura_condicional`). Pela mesma razão, `analise.faixa` **não é
+exigida** ali e, declarada, é o HARD FAIL `produto_com_preco_alvo` — uma faixa
+de preços é preço-alvo de manchete, e quem decide isso é o mapa das conclusões
+de valor sobre os preços que ela aponta, nunca o nome do campo. Como a rota rampa não admite reversa, um caso
 de rampa só pode ser entregue como `analise`. Exigir de cada produto o que ele
 pede — a Tese sob `analise`, o escopo sob `leitura_de_preco` — é trabalho do
 `er-analise` (item 8), não deste contrato. O `ledger` tem a forma
@@ -236,7 +239,7 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 
 | Nível | Chaves | Forma |
 |---|---|---|
-| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida`, `o_que_esta_no_preco`, `escolhas`, `cross_check` e `reteste_terminal` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
+| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo e **sob o produto `analise`**; `visao_nao_consensual`, `mudou_desde_analise_fornecida`, `o_que_esta_no_preco`, `escolhas`, `cross_check` e `reteste_terminal` opcionais | nos dois regimes que não concluem valor, `faixa` declarada passa na forma e é HARD FAIL: `fronteira_com_preco_alvo` sob fronteira, `produto_com_preco_alvo` sob `leitura_de_preco`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
 | `faixa` | `piso`, `base`, `teto` | cada um o NOME de um cenário de `resultados.cenarios` — o número vem de lá, nunca do analista |
 | `veredicto` | `texto` | o preço de tela, a data e a fonte vêm de `caso.preco` |
 | `premissas_decisivas[]` | `chave`, `derivacao` obrigatórias; `parte` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC); com `parte` — o nome de uma parte de `resultados.sotp.partes`, texto não vazio —, premissa da rota da parte, declarada nela (QC), com o número e a contraprova da parte (`sotp.partes.<índice>.premissas.<chave>` no caso) |
@@ -426,7 +429,7 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `vinculo_fora_do_vocabulario` | HARD FAIL | item de `perguntas[].vinculo` ou de `positives`/`negatives[].mecanismo` que não é premissa da rota (`catalogo.premissas.<rota>`) — num SOTP, também das rotas das partes — nem bloco econômico (`catalogo.blocos`) |
 | `premissa_decisiva_fora_do_cenario` | HARD FAIL | `premissas_decisivas[].chave` que não é premissa da rota no catálogo declarada no cenário da manchete; com `parte`, a parte não está em `resultados.sotp.partes` (pelo nome), ou a chave não é premissa da rota dela declarada nas premissas dela |
 | `faixa_fora_de_ordem` | HARD FAIL | ponta da faixa que não nomeia um cenário publicado com preço; preço de `piso` acima do de `base`, ou de `base` acima do de `teto`; `base` diferente do cenário da manchete |
-| `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou um número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`) chegando à Tese por um dos três lugares — placeholder `resultados:` num texto da lista de prosa, `chave` de série `engine` ou `chave` de overlay; o achado nomeia o lugar, o caminho e a unidade da família. A decisão lê o mapa, nunca o nome do campo; o preço e o múltiplo de tela não estão nele e continuam permitidos, e `livre:` fica fora |
+| `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada — reconhecida pelos preços que ela aponta (`cenarios.*.valor.preco_acao`) no mapa, nunca pelo nome do campo —, ou um número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`) chegando à Tese por um dos três lugares — placeholder `resultados:` num texto da lista de prosa, `chave` de série `engine` ou `chave` de overlay; o achado nomeia o lugar, o caminho e a unidade da família. A decisão lê o mapa, nunca o nome do campo; o preço e o múltiplo de tela não estão nele e continuam permitidos, e `livre:` fica fora |
 | `fronteira_de_escopo_desconhecida` | HARD FAIL | sob fronteira de escopo, o catálogo não rotula a classe no idioma da entrega ou não publica `conclusoes_de_valor` — sem o mapa nenhum número de valor seria reconhecido, e a regra falha fechada |
 | `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente. Sob `analise`, uma limitação publicada que o catálogo declare com `afeta: "reversa"` a dispensa — a decisão lê a declaração, nunca o nome da chave; sob `leitura_de_preco`, nenhuma dispensa, e a mensagem nomeia o produto que a exige |
 | `limitacao_desconhecida` | HARD FAIL | chave de `resultados.limitacoes` que o catálogo não declara com rótulo no idioma e com `afeta` |
@@ -511,6 +514,7 @@ Os códigos de QC que servem a outras seções do desenho:
 | `eixos_de_reversa_desconhecidos` | HARD FAIL | §9: o que está no preço — sem a declaração dos eixos no catálogo, a regra do eixo obrigatório sem raiz falha fechada |
 | `escolha_sem_razao` | HARD FAIL | §8.2 e §18.3: o painel de escolhas metodológicas traz a razão econômica de cada escolha, e nenhuma escolha que a metodologia declara sem default recebe default |
 | `escolhas_desconhecidas` | HARD FAIL | §8.2: o painel de escolhas metodológicas — sem a declaração das escolhas no catálogo, o rótulo e o gatilho de cada uma sairiam como código cru, e a regra falha fechada |
+| `produto_com_preco_alvo` | HARD FAIL | §5: os dois produtos — sob `leitura_de_preco` a entrega lê o que o preço embute e não conclui valor, e a faixa piso–base–teto é preço-alvo de manchete. Mesma regra da fronteira de escopo, com o produto como segundo gatilho |
 
 ## As três abas (`render.py`)
 

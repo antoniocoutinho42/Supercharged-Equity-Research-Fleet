@@ -85,6 +85,11 @@ metodologia: a conservação acende pela chave que a integração publica, o eix
 obrigatório pela flag do catálogo, e o ponto central por igualdade exata entre dois
 números do mesmo caso. Ver `_achados_da_valuation`.
 
+Fatia 5H, item 5, Task 2/2b: `analise_sem_reversa` passa a receber o PRODUTO da
+execução — sob `leitura_de_preco` nenhuma limitação publicada dispensa a reversa —, e
+`produto_com_preco_alvo` (HARD FAIL) recusa a faixa piso–teto declarada nesse produto,
+pela mesma regra da fronteira de escopo, com o produto como segundo gatilho.
+
 Fatia 5G, item 5, Task 3 (D1): o painel de escolhas metodológicas — `escolha_sem_razao`
 e `escolhas_desconhecidas`, os dois HARD FAIL. O primeiro é a §18.3 no QC (nenhuma
 escolha sem default recebe default: a que a integração precificou sai com a razão
@@ -996,12 +1001,57 @@ def _referencias_a_resultados(entrega: dict) -> list[tuple[str, str, str]]:
     return referencias
 
 
+def _params_da_faixa_como_preco_alvo(entrega: dict, catalogo: dict) -> dict | None:
+    """Os `params` da recusa quando a faixa piso–teto declarada é PREÇO-ALVO, ou `None`.
+
+    A decisão é uma só, para os dois regimes que não concluem valor — a fronteira de escopo
+    (5D, D3) e o produto `leitura_de_preco` (5H, Task 2b) —; o código do achado é de quem
+    chama, porque é ele quem sabe qual regime disparou (e porque o código de um `Achado` é
+    sempre literal, para a trava da cobertura da §11 conseguir lê-lo da AST).
+
+    A faixa não é um número: são três nomes de cenário. Quem decide que ela é preço-alvo é o
+    MAPA da integração sobre os preços que ela aponta (`cenarios.<cenário>.valor.preco_acao`,
+    `CAMINHO_DO_PRECO_DA_FAIXA`) — nunca o nome do campo, a lição de F2 da 5D. Um mapa que não
+    os cobrisse tiraria a faixa da regra, e é a integração quem manda; sem mapa nenhum, o
+    caminho da fronteira já reprova por `fronteira_de_escopo_desconhecida`.
+    """
+    faixa = _objeto(entrega.get("analise")).get("faixa")
+    mapa = placeholders.conclusoes_de_valor(catalogo)
+    if not isinstance(faixa, dict) or mapa is None:
+        return None
+    for papel in contrato_entrega.PAPEIS_DA_FAIXA:
+        nome = faixa.get(papel)
+        if not isinstance(nome, str):
+            continue
+        caminho = ".".join(("cenarios", nome, *CAMINHO_DO_PRECO_DA_FAIXA))
+        familia = placeholders.conclusao_de_valor(caminho, mapa)
+        if familia is not None:
+            unidade, _padrao = familia
+            return {"trecho": json.dumps(faixa, ensure_ascii=False, sort_keys=True),
+                    "caminho": caminho, "unidade": unidade}
+    return None
+
+
+def _achados_preco_alvo_do_produto(entrega: dict, catalogo: dict, produto: str) -> list[Achado]:
+    """`produto_com_preco_alvo` (HARD FAIL, 5H, Task 2b; §5 do desenho): sob
+    `leitura_de_preco` a entrega LÊ o que o preço embute e não conclui valor — e uma faixa de
+    preços é preço-alvo de manchete. Mesma regra da fronteira de escopo, com o produto como
+    segundo gatilho; a forma já deixou de exigir a faixa nesse produto (`entrega.py`)."""
+    params = (_params_da_faixa_como_preco_alvo(entrega, catalogo)
+              if produto == contrato_entrega.PRODUTO_DA_LEITURA_DE_PRECO else None)
+    if params is None:
+        return []
+    return [Achado("HARD_FAIL", "produto_com_preco_alvo", "analise.faixa",
+                   {"produto": produto, **params})]
+
+
 def _achados_fronteira_de_escopo(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
     """Sob `resultados.fronteira_de_escopo` (D3; §14 do desenho) a Tese é uma conclusão
     condicional, sem preço-alvo de manchete.
 
     - HARD FAIL `fronteira_com_preco_alvo` (§11: "fronteira de escopo declarada com
-      fair value por ação como conclusão principal"): a Tese declara `faixa`, ou um
+      fair value por ação como conclusão principal"): a Tese declara `faixa` — cujos
+      preços o mapa cobre (`_achado_da_faixa_como_preco_alvo`) —, ou um
       número que a integração declara conclusão de valor (`catalogo.conclusoes_de_
       valor`, lido por `placeholders.conclusao_de_valor`) chega a ela por um dos três
       lugares de `_referencias_a_resultados`. O achado nomeia o lugar, o caminho e a
@@ -1016,20 +1066,20 @@ def _achados_fronteira_de_escopo(entrega: dict, catalogo: dict, idioma: str) -> 
       idioma, ou não publica o mapa. Sem o mapa nenhum número de valor seria
       reconhecido: a regra falha fechada, e a correção é do catálogo.
 
-    Fora da fronteira, `faixa` ausente é recusa de forma (`entrega.py`)."""
+    Fora da fronteira e sob o produto `analise`, `faixa` ausente é recusa de forma
+    (`entrega.py`); sob `leitura_de_preco`, quem a recusa declarada é
+    `_achados_preco_alvo_do_produto`."""
     fronteira = _objeto(entrega.get("resultados")).get("fronteira_de_escopo")
     if fronteira is None:
         return []
     classe = str(fronteira.get("classe")) if isinstance(fronteira, dict) else str(fronteira)
-    analise = _objeto(entrega.get("analise"))
     onde_da_fronteira = "resultados.fronteira_de_escopo"
 
     achados: list[Achado] = []
-    if "faixa" in analise:
-        achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", "analise.faixa", {
-            "classe": classe, "trecho": json.dumps(analise["faixa"], ensure_ascii=False, sort_keys=True),
-            "caminho": _SEM_VALOR, "unidade": _SEM_VALOR,
-        }))
+    params_da_faixa = _params_da_faixa_como_preco_alvo(entrega, catalogo)
+    if params_da_faixa is not None:
+        achados.append(Achado("HARD_FAIL", "fronteira_com_preco_alvo", "analise.faixa",
+                              {"classe": classe, **params_da_faixa}))
     mapa = placeholders.conclusoes_de_valor(catalogo)
     if mapa is not None:
         for onde, trecho, caminho in _referencias_a_resultados(entrega):
@@ -1128,6 +1178,7 @@ def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]
             + _achados_premissas_decisivas(analise, resultados, catalogo)
             + _achados_faixa(entrega, idioma)
             + _achados_fronteira_de_escopo(entrega, catalogo, idioma)
+            + _achados_preco_alvo_do_produto(entrega, catalogo, contrato_entrega.produto(entrega))
             + _achados_reversa_e_limitacoes(resultados, catalogo, idioma,
                                             contrato_entrega.produto(entrega))
             + _achados_tese_dependente_de_uma_premissa(analise))

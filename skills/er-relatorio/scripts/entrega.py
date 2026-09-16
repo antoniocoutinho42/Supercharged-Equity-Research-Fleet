@@ -672,7 +672,7 @@ def _chaves_publicadas_das_escolhas(resultados: dict) -> list[str]:
             if isinstance(escolha, dict) and isinstance(escolha.get("chave"), str)]
 
 
-def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger) -> None:
+def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger, produto: str) -> None:
     """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4 + 5F/D12-D13 + 5G/D1-D5): vocabulário fechado
     em todo nível. `resultados` só é lido para a condicional da faixa (D1/D3), para a presença
     da reversa que o julgamento do que está no preço lê (D12) e, desde a 5G, para as escolhas
@@ -683,10 +683,17 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger)
     # D1/D3: uma faixa de preços é preço-alvo. Fora da fronteira de escopo ela é
     # exigida; sob ela, declará-la é o HARD FAIL `fronteira_com_preco_alvo` — a
     # forma continua validada, e o QC nomeia o problema.
-    if resultados["fronteira_de_escopo"] is None and "faixa" not in analise:
+    # 5H, Task 2b: o produto é o SEGUNDO regime que não conclui valor. Sob
+    # `leitura_de_preco` a faixa não é exigida (a Tese não existe nesse produto) e,
+    # declarada, é o HARD FAIL `produto_com_preco_alvo` — mesma divisão de trabalho
+    # entre forma e QC.
+    sem_preco_alvo = (resultados["fronteira_de_escopo"] is not None
+                      or produto == PRODUTO_DA_LEITURA_DE_PRECO)
+    if not sem_preco_alvo and "faixa" not in analise:
         raise EntregaInvalida(
-            "campo obrigatório ausente em 'analise': 'faixa' — fora da fronteira de escopo, a Tese "
-            "declara a faixa piso–base–teto pelos nomes dos cenários de 'resultados.cenarios'."
+            "campo obrigatório ausente em 'analise': 'faixa' — fora da fronteira de escopo e sob o "
+            f"produto '{PRODUTO_PADRAO}', a Tese declara a faixa piso–base–teto pelos nomes dos "
+            "cenários de 'resultados.cenarios'."
         )
 
     conclusao = _objeto_fechado(analise["conclusao"], CHAVES_DE_CONCLUSAO, CHAVES_DE_CONCLUSAO, "analise.conclusao")
@@ -905,7 +912,7 @@ def _validar(entrega: Any, contrato: ContratoDoLedger) -> None:
         except exhibits.ContratoDeExhibitInvalido as erro:
             raise EntregaInvalida(str(erro)) from erro
 
-    _validar_analise(entrega["analise"], resultados, contrato)
+    _validar_analise(entrega["analise"], resultados, contrato, produto(entrega))
     _validar_ledger(entrega["ledger"], contrato)
 
     # D5: o que mudou desde a análise fornecida, sem o confronto que classifica

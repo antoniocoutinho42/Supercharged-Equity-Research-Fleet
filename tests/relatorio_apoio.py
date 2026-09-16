@@ -42,6 +42,7 @@ FIXTURES = RAIZ / "tests" / "fixtures"
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-relatorio" / "scripts"))
 import qc  # noqa: E402
+from entrega import PRODUTO_DA_LEITURA_DE_PRECO  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
 from avaliar import avaliar  # noqa: E402
@@ -309,7 +310,7 @@ TEXTO_CONCLUSAO_PADRAO = "Valor justo de {{resultados:manchete.preco_acao|moeda}
 TEXTO_CONCLUSAO_SOB_FRONTEIRA = "Conclusão condicional, sem preço-alvo de manchete sob fronteira de escopo."
 
 
-def _tese_padrao(resultados: dict) -> dict:
+def _tese_padrao(resultados: dict, produto: str | None = None) -> dict:
     """Uma Tese válida (D1) para o `resultados` que `avaliar()` acabou de
     publicar — e que não dispara, ela mesma, regra nenhuma (armadilha 2 do
     briefing da Task 2):
@@ -320,7 +321,9 @@ def _tese_padrao(resultados: dict) -> dict:
       `tese_dependente_de_uma_premissa`);
     - faixa com nomes de `resultados.cenarios`: a base no cenário da manchete, o
       piso e o teto nos cenários de menor e de maior preço — os três coincidem num
-      caso de cenário único —, e nenhuma faixa sob fronteira de escopo (D3);
+      caso de cenário único —, e nenhuma faixa sob fronteira de escopo (D3) nem sob o
+      produto `leitura_de_preco` (5H, Task 2b): nos dois, uma faixa de preços é
+      preço-alvo de manchete;
     - uma premissa decisiva: a primeira premissa da rota, na ordem do catálogo,
       que o cenário da manchete declara;
     - todas as perguntas com `sem_exhibit` — um exhibit passado a
@@ -375,7 +378,7 @@ def _tese_padrao(resultados: dict) -> dict:
             {"risco": "Regulação tarifária mais restritiva.", "observavel": "Decisões do regulador setorial."},
         ],
     }
-    if resultados["fronteira_de_escopo"] is None:
+    if resultados["fronteira_de_escopo"] is None and produto != PRODUTO_DA_LEITURA_DE_PRECO:
         precos = {nome: cenario["valor"]["preco_acao"] for nome, cenario in resultados["cenarios"].items()}
         tese["faixa"] = {"piso": min(precos, key=precos.get), "base": cenario_da_manchete,
                          "teto": max(precos, key=precos.get)}
@@ -614,7 +617,7 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         "conclusao": {"texto": texto_conclusao or conclusao_padrao},
         "exhibits": exhibits if exhibits is not None else [],
     }
-    analise.update(tese if tese is not None else _tese_padrao(resultados))
+    analise.update(tese if tese is not None else _tese_padrao(resultados, produto))
     if consenso is not None:
         analise["consenso"] = copy.deepcopy(consenso)
 

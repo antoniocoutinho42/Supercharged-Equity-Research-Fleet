@@ -1038,9 +1038,14 @@ def test_o_dicionario_rotula_todo_codigo_dos_vocabularios_novos(grupo, vocabular
 CONSENSO = "consenso"
 
 
-def _com_produto(fonte: str, produto: str) -> dict:
+def _com_produto(fonte: str, produto: str, com_faixa: bool = False) -> dict:
+    """A entrega de `fonte` declarada sob `produto`. Sob `leitura_de_preco` a faixa sai junto
+    (`com_faixa=False`): ela não é exigida ali e, declarada, é o HARD FAIL
+    `produto_com_preco_alvo` — `com_faixa=True` é justamente para exercer essa recusa."""
     entrega_dict = _entrega(fonte)
     entrega_dict["execucao"]["produto"] = produto
+    if produto == entrega.PRODUTO_DA_LEITURA_DE_PRECO and not com_faixa:
+        entrega_dict["analise"].pop("faixa", None)
     return entrega_dict
 
 
@@ -1122,3 +1127,59 @@ def test_toda_aba_declarada_por_produto_tem_rotulo_e_todo_produto_tem_abas():
     for abas in render.ABAS_DO_PRODUTO.values():
         for nome in abas:
             assert DICIONARIO["interface"]["abas"][nome].strip(), nome
+
+
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 2b: a faixa piso–teto sob `leitura_de_preco` — não exigida na forma, e
+# recusada como preço-alvo quando declarada, pela mesma regra da fronteira de escopo.
+# --------------------------------------------------------------------------
+
+def test_sob_leitura_de_preco_a_faixa_nao_e_exigida_e_a_entrega_passa(tmp_path):
+    """Lado de cá: sem faixa, a entrega passa na forma e emite sem HARD FAIL — enquanto a
+    MESMA entrega sob `analise` é recusada na forma por faltar a faixa."""
+    sem_faixa = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+    assert "faixa" not in sem_faixa["analise"]
+    _carregar(sem_faixa, tmp_path / "leitura")
+    assert [a.codigo for a in _achados(sem_faixa) if a.nivel == "HARD_FAIL"] == []
+
+    como_analise = copy.deepcopy(sem_faixa)
+    como_analise["execucao"]["produto"] = entrega.PRODUTO_PADRAO
+    with pytest.raises(entrega.EntregaInvalida) as erro:
+        _carregar(como_analise, tmp_path / "analise")
+    assert "campo obrigatório ausente em 'analise': 'faixa'" in str(erro.value)
+
+
+def test_a_faixa_declarada_sob_leitura_de_preco_passa_na_forma_e_e_hard_fail_nomeando_o_produto():
+    """Lado de lá: a forma continua validando a faixa (o QC é quem nomeia o problema), e a
+    recusa nomeia o produto, o caminho dos preços que a faixa aponta e a unidade da família —
+    reconhecida pelo MAPA da integração, nunca pelo nome do campo. Sob `analise` a mesma
+    entrega não dispara nada."""
+    com_faixa = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO, com_faixa=True)
+    faixa = com_faixa["analise"]["faixa"]
+    assert isinstance(faixa, dict)
+
+    (achado,) = _do_codigo(_achados(com_faixa), "produto_com_preco_alvo")
+    assert (achado.nivel, achado.onde) == ("HARD_FAIL", "analise.faixa")
+    assert achado.params["produto"] == entrega.PRODUTO_DA_LEITURA_DE_PRECO
+    assert achado.params["caminho"] == f"cenarios.{faixa['piso']}.valor.preco_acao"
+    assert achado.params["unidade"] == "preço por ação"
+    # O `{` que sobra na mensagem é o do `trecho` (a faixa serializada), não um marcador.
+    mensagem = DICIONARIO["qc"][achado.codigo].format(onde=achado.onde, **achado.params)
+    assert entrega.PRODUTO_DA_LEITURA_DE_PRECO in mensagem and achado.params["caminho"] in mensagem
+
+    como_analise = copy.deepcopy(com_faixa)
+    como_analise["execucao"]["produto"] = entrega.PRODUTO_PADRAO
+    assert _do_codigo(_achados(como_analise), "produto_com_preco_alvo") == []
+    assert [a.codigo for a in _achados(como_analise) if a.nivel == "HARD_FAIL"] == []
+
+
+def test_a_faixa_e_preco_alvo_pelo_mapa_da_integracao_e_nunca_pelo_nome_do_campo():
+    """E3, a lição de F2 da 5D aplicada aos dois gatilhos: tirando do mapa o padrão dos preços
+    por cenário, a faixa deixa de ser preço-alvo — nos dois regimes. Um QC que decidisse pelo
+    nome do campo ficaria igual nos dois catálogos."""
+    com_faixa = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO, com_faixa=True)
+    sem_o_padrao = copy.deepcopy(CATALOGO)
+    sem_o_padrao["conclusoes_de_valor"]["preço por ação"].remove("cenarios.*.valor.preco_acao")
+
+    assert _do_codigo(_achados(com_faixa), "produto_com_preco_alvo") != []
+    assert _do_codigo(_achados(com_faixa, sem_o_padrao), "produto_com_preco_alvo") == []

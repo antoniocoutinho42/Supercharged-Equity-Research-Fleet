@@ -1685,8 +1685,13 @@ LEITURA_DE_PRECO = entrega.PRODUTO_DA_LEITURA_DE_PRECO
 
 
 def _como_produto(entrega_dict: dict, produto: str) -> dict:
+    """A mesma entrega declarada sob `produto`. Sob `leitura_de_preco` a faixa sai junto: ela
+    não é exigida ali e, declarada, é o HARD FAIL `produto_com_preco_alvo` (Task 2b) — é o que
+    uma Tese composta para esse produto não declararia."""
     copia = copy.deepcopy(entrega_dict)
     copia["execucao"]["produto"] = produto
+    if produto == LEITURA_DE_PRECO:
+        copia["analise"].pop("faixa", None)
     return copia
 
 
