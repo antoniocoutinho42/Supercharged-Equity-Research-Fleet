@@ -360,7 +360,12 @@ def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
     - o julgamento e o observável do que está no preço (`analise.o_que_esta_no_preco`),
       desde a 5F (Task 4, D12): a aba Valuation os exibe, depois de tudo o que a Tese
       mostra. A âncora de cada cenário, que a Valuation também mostra, não entra: é texto
-      do caso publicado pela integração e sai como dado (ajuste de D9 no regime de 15/09).
+      do caso publicado pela integração e sai como dado (ajuste de D9 no regime de 15/09);
+    - a razão de cada escolha metodológica (`analise.escolhas.<i>.razao`), a razão da
+      ausência do cross-check (`analise.cross_check.ausente.razao`) e o texto do re-teste
+      terminal (`analise.reteste_terminal.texto`), desde a 5G (Task 3, D1/D4/D5) — na
+      ordem da aba: o painel de escolhas vem antes do que está no preço, e o cross-check e
+      o re-teste depois dele.
 
     Identificador e vocabulário (`id`, `tema`, `vetor`, `incorporacao`, `vinculo`,
     `mecanismo`, `chave`, os nomes da faixa, os ids de exhibit, a classe da fronteira,
@@ -421,9 +426,14 @@ def campos_de_prosa(entrega: dict) -> list[tuple[str, str]]:
         for posicao, overlay in enumerate(_lista(exhibit.get("overlays"))):
             _texto(f"{onde}.overlays.{posicao}.rotulo", _objeto(overlay).get("rotulo"))
         _texto(f"{onde}.caption", exhibit.get("caption"))
+    for indice, escolha in enumerate(_lista(analise.get("escolhas"))):
+        _texto(f"analise.escolhas.{indice}.razao", _objeto(escolha).get("razao"))
     o_que_esta_no_preco = _objeto(analise.get("o_que_esta_no_preco"))
     for campo in ("julgamento", "observavel"):
         _texto(f"analise.o_que_esta_no_preco.{campo}", o_que_esta_no_preco.get(campo))
+    _texto("analise.cross_check.ausente.razao",
+           _objeto(_objeto(analise.get("cross_check")).get("ausente")).get("razao"))
+    _texto("analise.reteste_terminal.texto", _objeto(analise.get("reteste_terminal")).get("texto"))
     return campos
 
 

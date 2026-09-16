@@ -220,7 +220,7 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 
 | Nível | Chaves | Forma |
 |---|---|---|
-| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida` e `o_que_esta_no_preco` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
+| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo; `visao_nao_consensual`, `mudou_desde_analise_fornecida`, `o_que_esta_no_preco`, `escolhas`, `cross_check` e `reteste_terminal` opcionais | sob fronteira, `faixa` declarada passa na forma e é o HARD FAIL `fronteira_com_preco_alvo`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
 | `faixa` | `piso`, `base`, `teto` | cada um o NOME de um cenário de `resultados.cenarios` — o número vem de lá, nunca do analista |
 | `veredicto` | `texto` | o preço de tela, a data e a fonte vêm de `caso.preco` |
 | `premissas_decisivas[]` | `chave`, `derivacao` obrigatórias; `parte` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC); com `parte` — o nome de uma parte de `resultados.sotp.partes`, texto não vazio —, premissa da rota da parte, declarada nela (QC), com o número e a contraprova da parte (`sotp.partes.<índice>.premissas.<chave>` no caso) |
@@ -230,6 +230,9 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 | `visao_nao_consensual` | `texto` | |
 | `mudou_desde_analise_fornecida` | `linhas` | de uma a três linhas |
 | `o_que_esta_no_preco` | `julgamento`, `observavel` | opcional, e só com `resultados.reversa` (sem ela, recusa de forma): qual reconciliação exige a menor violência às âncoras observáveis, e o observável que a testaria — os dois textos são prosa auditável, que a Valuation exibe ao fim do que está no preço |
+| `escolhas[]` | `chave`, `razao` | opcional (fatia 5G), e só com escolhas em `resultados.escolhas_metodologicas`; cada `chave` é uma das publicadas — outra é recusa de forma, com sugestão por `difflib`. Que TODA escolha publicada tenha razão é o HARD FAIL `escolha_sem_razao`. A `razao` é prosa auditável, e o painel da Valuation a exibe ao lado do preço alternativo e do impacto |
+| `cross_check` | `ausente` (`{"razao"}`) | opcional (fatia 5G): a razão de NÃO haver segundo método (§8.1). Declará-lo com `resultados.cross_check` publicado é recusa de forma — o bloco declara a ausência, não comenta o que existe. A `razao` é prosa auditável |
+| `reteste_terminal` | `resultado`, `texto` | opcional (fatia 5G): `resultado` ∈ `mantida`, `trocada` — vocabulário de processo, rotulado pelo dicionário; `texto` é prosa auditável |
 
 **O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
 Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) — num SOTP,
@@ -419,6 +422,8 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `dataset_sem_proveniencia` | HARD FAIL | dataset usado por série `direta` ou `derivada` com `ledger` vazio |
 | `insumos_do_caso_desconhecidos` | HARD FAIL | o catálogo não publica `insumos_do_caso` na forma do contrato — sem o mapa nenhum insumo seria exigido, e as regras de proveniência falham fechadas |
 | `eixos_de_reversa_desconhecidos` | HARD FAIL | `resultados.reversa` publicada e o catálogo sem `eixos_de_reversa` na forma — `obrigatorio` booleano e rótulo no idioma para cada eixo publicado —: sem a declaração nenhum eixo seria obrigatório, e a regra do eixo obrigatório sem raiz falha fechada |
+| `escolha_sem_razao` | HARD FAIL | uma por chave de `resultados.escolhas_metodologicas` que `analise.escolhas` não declara — com o rótulo da escolha no catálogo; nenhuma escolha que a metodologia deixa em aberto recebe default (§18.3), e o painel da §8.2 só sai com escolha, alternativa, impacto e razão |
+| `escolhas_desconhecidas` | HARD FAIL | `resultados.escolhas_metodologicas` publicado e o catálogo sem `escolhas_metodologicas` na forma — rótulo e gatilho no idioma para cada chave publicada —: sem eles o painel sairia com o código cru, e a regra falha fechada |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
@@ -488,6 +493,8 @@ Os códigos de QC que servem a outras seções do desenho:
 | `placeholder_em_dado_da_tese` | HARD FAIL | §9 e §6.3: o consenso e o ledger que a Tese exibe são dado atribuído, nunca prosa com placeholder |
 | `eixo_obrigatorio_da_reversa_sem_raiz` | REQUIRED DISCLOSURE | §9: o que está no preço, com o custo de capital implícito sempre — um alvo de mercado inalcançável nesse eixo é leitura do preço, e sai declarado |
 | `eixos_de_reversa_desconhecidos` | HARD FAIL | §9: o que está no preço — sem a declaração dos eixos no catálogo, a regra do eixo obrigatório sem raiz falha fechada |
+| `escolha_sem_razao` | HARD FAIL | §8.2 e §18.3: o painel de escolhas metodológicas traz a razão econômica de cada escolha, e nenhuma escolha que a metodologia declara sem default recebe default |
+| `escolhas_desconhecidas` | HARD FAIL | §8.2: o painel de escolhas metodológicas — sem a declaração das escolhas no catálogo, o rótulo e o gatilho de cada uma sairiam como código cru, e a regra falha fechada |
 
 ## As três abas (`render.py`)
 

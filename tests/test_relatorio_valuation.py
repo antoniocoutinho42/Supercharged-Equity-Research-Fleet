@@ -6,6 +6,10 @@ D4 (o eixo obrigatório da reversa sem raiz), D5 (as bases do par forward), D6 (
 capital), D11 (o ponto central da grade e a sensibilidade pouco informativa), D12 (o julgamento do
 que está no preço, opcional) e D13 (a premissa decisiva de uma parte de SOTP).
 
+E a fatia 5G (docs/superpowers/plans/2026-09-15-v4-item5g-alternativas.md), Task 3: os três blocos
+opcionais que a Tese ganha (D1/D4/D5) e as duas regras do painel de escolhas metodológicas —
+`escolha_sem_razao` e `escolhas_desconhecidas`, os dois HARD FAIL.
+
 - FORMA, código 1 (`entrega.carregar`): uma recusa por campo novo.
 - CONTEÚDO, código 2 (`qc.avaliar`): cada regra com um caso que dispara e um vizinho que não
   dispara. Nenhuma regra guarda limiar de metodologia: a conservação acende pela chave que o
@@ -41,6 +45,10 @@ GRADES = "caso_reversa_firm.json"
 # Duas partes de rotas diferentes: "Base instalada" (rampa) e "Expansão" (firm).
 SOTP_SAFRA = "caso_sotp_safra.json"
 SEM_REVERSA = "caso_rampa.json"
+# Fatia 5G: as duas variantes compostas do lote A — quatro escolhas metodológicas
+# precificadas, e as três leituras opcionais (retorno exigido, pesos, cross-check).
+ESCOLHAS = "escolhas"
+ALTERNATIVAS = "alternativas"
 
 
 @functools.lru_cache(maxsize=None)
@@ -101,6 +109,28 @@ _RECUSAS_DE_FORMA = [
     pytest.param(SOTP_SAFRA, lambda e: e["analise"]["premissas_decisivas"][0].update(parte=""),
                  ["'analise.premissas_decisivas.0.parte' ausente ou vazio"],
                  id="parte-vazia"),
+    # Fatia 5G, Task 3 (D1/D4/D5): os três blocos novos, um campo cada.
+    pytest.param(ESCOLHAS, lambda e: e["analise"]["escolhas"][0].update(razao="   "),
+                 ["'analise.escolhas.0.razao' ausente ou vazio"],
+                 id="razao-de-escolha-vazia"),
+    pytest.param(ESCOLHAS, lambda e: e["analise"]["escolhas"][0].update(chave="rentabilidad"),
+                 ["'analise.escolhas.0.chave' dá razão a uma escolha que "
+                  "'resultados.escolhas_metodologicas' não publica", "'rentabilidad'",
+                  "Você quis dizer 'rentabilidade'?"],
+                 id="razao-de-escolha-que-nao-foi-publicada"),
+    pytest.param(GRADES, lambda e: e["analise"].update(escolhas=[{"chave": "rentabilidade", "razao": "A âncora."}]),
+                 ["'analise.escolhas' declarado sem escolha nenhuma em 'resultados.escolhas_metodologicas'"],
+                 id="escolhas-sem-escolha-publicada"),
+    pytest.param(ALTERNATIVAS, lambda e: e["analise"].update(cross_check={"ausente": {"razao": "Sem vetor coerente."}}),
+                 ["'analise.cross_check' declarado com 'resultados.cross_check' publicado"],
+                 id="ausencia-do-cross-check-com-cross-check-publicado"),
+    pytest.param(GRADES, lambda e: e["analise"].update(cross_check={"ausente": {"razao": "Sem vetor.", "motivo": "x"}}),
+                 ["chave desconhecida em 'analise.cross_check.ausente'", "'motivo'"],
+                 id="cross-check-ausente-com-chave-desconhecida"),
+    pytest.param(GRADES, lambda e: e["analise"].update(reteste_terminal={"resultado": "mantido", "texto": "A regra."}),
+                 ["'analise.reteste_terminal.resultado' fora do vocabulário fechado", "'mantido'",
+                  "Você quis dizer 'mantida'?"],
+                 id="reteste-terminal-fora-do-vocabulario"),
 ]
 
 
@@ -390,6 +420,101 @@ def test_a_premissa_de_uma_parte_que_nao_existe_ou_que_ela_nao_declara_e_hard_fa
     assert [(a.nivel, a.onde, a.params["chave"], a.params["parte"]) for a in achados] == [
         ("HARD_FAIL", "analise.premissas_decisivas.0.chave", chave, parte)]
 
+
+# ==========================================================================
+# Fatia 5G, Task 3 (D1): o painel de escolhas metodológicas no QC — a razão de cada escolha
+# publicada (§8.2/§18.3) e a declaração delas no catálogo (a regra falha fechada). E os três
+# textos novos na lista de prosa auditada (D1/D4/D5).
+# ==========================================================================
+
+def _rotulo_da_escolha(chave: str) -> str:
+    return CATALOGO["escolhas_metodologicas"][chave]["rotulo"][IDIOMA]
+
+
+def _sem_razao(entrega_dict: dict, chaves: list) -> list:
+    """Os achados `escolha_sem_razao` da entrega com as razões de `chaves` retiradas."""
+    sem = copy.deepcopy(entrega_dict)
+    sem["analise"]["escolhas"] = [escolha for escolha in sem["analise"]["escolhas"]
+                                  if escolha["chave"] not in chaves]
+    return [(a.nivel, a.onde, a.params["chave"], a.params["rotulo"])
+            for a in _do_codigo(_achados(sem), "escolha_sem_razao")]
+
+
+def test_a_escolha_publicada_sem_razao_reprova_com_o_rotulo_do_catalogo_e_com_a_razao_passa():
+    """§18.3: nenhuma escolha que a metodologia deixa em aberto recebe default. A variante
+    publica quatro escolhas; a Tese padrão dá razão às quatro, e a entrega passa. Retirada a
+    razão de uma, só ela acende, no seu índice — uma regra que olhasse a lista inteira, ou
+    que parasse na primeira, não distinguiria isso."""
+    escolhas = _entrega(ESCOLHAS)
+    publicadas = [escolha["chave"] for escolha in escolhas["resultados"]["escolhas_metodologicas"]]
+    assert len(publicadas) > 2, "a variante precisa de mais de duas escolhas para o teste discriminar"
+    assert [escolha["chave"] for escolha in escolhas["analise"]["escolhas"]] == publicadas
+    assert _do_codigo(_achados(escolhas), "escolha_sem_razao") == []
+
+    assert _sem_razao(escolhas, [publicadas[1]]) == [
+        ("HARD_FAIL", "resultados.escolhas_metodologicas.1.chave", publicadas[1],
+         _rotulo_da_escolha(publicadas[1]))]
+    assert _sem_razao(escolhas, publicadas) == [
+        ("HARD_FAIL", f"resultados.escolhas_metodologicas.{indice}.chave", chave, _rotulo_da_escolha(chave))
+        for indice, chave in enumerate(publicadas)]
+
+    sem_escolhas = _entrega()
+    assert sem_escolhas["resultados"]["escolhas_metodologicas"] == []
+    assert "escolhas" not in sem_escolhas["analise"]
+    assert _do_codigo(_achados(sem_escolhas), "escolha_sem_razao") == []
+
+
+@pytest.mark.parametrize("adulterar", [
+    pytest.param(lambda catalogo: catalogo.pop("escolhas_metodologicas"), id="sem-a-secao"),
+    pytest.param(lambda catalogo: catalogo["escolhas_metodologicas"]["rentabilidade"]["rotulo"].pop(IDIOMA),
+                 id="sem-rotulo-no-idioma"),
+    pytest.param(lambda catalogo: catalogo["escolhas_metodologicas"]["crescimento"].pop("gatilho"),
+                 id="sem-o-gatilho"),
+])
+def test_sem_as_escolhas_declaradas_no_catalogo_a_regra_da_razao_falha_fechada(adulterar):
+    """No molde de `eixos_de_reversa_desconhecidos`: sem rótulo e gatilho no idioma, o painel
+    sairia com o código cru da escolha. A entrega do teste é a que acenderia `escolha_sem_razao`
+    nas quatro — sob o catálogo adulterado, nenhuma acende, e sai o HARD FAIL fechado."""
+    escolhas = _entrega(ESCOLHAS)
+    del escolhas["analise"]["escolhas"]
+    assert len(_do_codigo(_achados(escolhas), "escolha_sem_razao")) == 4
+    assert _do_codigo(_achados(escolhas), "escolhas_desconhecidas") == []
+
+    catalogo = copy.deepcopy(CATALOGO)
+    adulterar(catalogo)
+    achados = _achados(escolhas, catalogo)
+    assert [(a.nivel, a.onde, a.params["idioma"]) for a in _do_codigo(achados, "escolhas_desconhecidas")] == [
+        ("HARD_FAIL", "resultados.escolhas_metodologicas", IDIOMA)]
+    assert _do_codigo(achados, "escolha_sem_razao") == []
+
+    sem_escolhas = _entrega()
+    assert _do_codigo(_achados(sem_escolhas, catalogo), "escolhas_desconhecidas") == []
+
+
+_TEXTO_SEM_DIGITO = "A âncora observável sustenta a leitura sem forçar nenhuma premissa."
+_TEXTO_COM_DIGITO = "O consenso projeta retorno de 20% sobre o capital novo."
+
+
+@pytest.mark.parametrize("fonte,instalar,onde", [
+    pytest.param(ESCOLHAS, lambda e, texto: e["analise"]["escolhas"][0].update(razao=texto),
+                 "analise.escolhas.0.razao", id="razao-da-escolha"),
+    pytest.param(GRADES, lambda e, texto: e["analise"].update(cross_check={"ausente": {"razao": texto}}),
+                 "analise.cross_check.ausente.razao", id="razao-da-ausencia-do-cross-check"),
+    pytest.param(GRADES, lambda e, texto: e["analise"].update(
+        reteste_terminal={"resultado": "mantida", "texto": texto}),
+        "analise.reteste_terminal.texto", id="texto-do-reteste-terminal"),
+])
+def test_os_textos_novos_sao_prosa_auditada_e_um_digito_solto_neles_e_numero_sem_proveniencia(
+        fonte, instalar, onde, tmp_path):
+    entrega_dict = _entrega(fonte)
+    instalar(entrega_dict, _TEXTO_SEM_DIGITO)
+    _carregar(entrega_dict, tmp_path)
+    assert dict(placeholders.campos_de_prosa(entrega_dict)).get(onde) == _TEXTO_SEM_DIGITO
+    assert _do_codigo(_achados(entrega_dict), "numero_sem_proveniencia") == []
+
+    instalar(entrega_dict, _TEXTO_COM_DIGITO)
+    assert [(a.nivel, a.onde) for a in _do_codigo(_achados(entrega_dict), "numero_sem_proveniencia")] == [
+        ("HARD_FAIL", onde)]
 
 # ==========================================================================
 # Task 5 (D15): a aba Valuation renderizada, na ordem da §9, e o par forward e a premissa de parte na

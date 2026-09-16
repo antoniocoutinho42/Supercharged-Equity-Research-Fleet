@@ -306,7 +306,9 @@ def _tese_padrao(resultados: dict) -> dict:
     - uma premissa decisiva: a primeira premissa da rota, na ordem do catálogo,
       que o cenário da manchete declara;
     - todas as perguntas com `sem_exhibit` — um exhibit passado a
-      `montar_entrega` fica fora das perguntas, como antes da 5D.
+      `montar_entrega` fica fora das perguntas, como antes da 5D;
+    - uma razão por escolha metodológica publicada (5G, D1), que o HARD FAIL
+      `escolha_sem_razao` exige.
     """
     blocos = sorted(CATALOGO["blocos"], key=lambda bloco: CATALOGO["blocos"][bloco]["ordem"])
     earning_power, crescimento, custo_de_capital, duracao = blocos[:4]
@@ -359,6 +361,16 @@ def _tese_padrao(resultados: dict) -> dict:
         precos = {nome: cenario["valor"]["preco_acao"] for nome, cenario in resultados["cenarios"].items()}
         tese["faixa"] = {"piso": min(precos, key=precos.get), "base": cenario_da_manchete,
                          "teto": max(precos, key=precos.get)}
+    # Fatia 5G, Task 3 (D1): toda escolha metodológica publicada exige a razão econômica do
+    # analista (HARD FAIL `escolha_sem_razao`) — a Tese padrão a declara para cada uma, com o
+    # texto sem dígito, como todo o resto daqui.
+    escolhas = resultados.get("escolhas_metodologicas") or []
+    if escolhas:
+        tese["escolhas"] = [
+            {"chave": escolha["chave"],
+             "razao": "O caso-base segue a leitura que as âncoras observáveis sustentam sem forçar nenhuma."}
+            for escolha in escolhas
+        ]
     # Fatia 5F, Task 4 (D12): o julgamento do que está no preço é opcional e só cabe com a
     # reversa; a Tese padrão o declara sempre que ela existe, para a aba Valuation exercê-lo.
     if resultados.get("reversa") is not None:

@@ -41,6 +41,15 @@ lê é recusa de forma. Da premissa decisiva de uma parte de SOTP
 (`premissas_decisivas[].parte`, D13) a forma confere só o texto; se a parte
 existe e declara a premissa é QC.
 
+A 5G (D1/D4/D5) acrescenta três blocos opcionais à Tese, com a mesma disciplina: a
+razão econômica de cada escolha metodológica (`analise.escolhas`) só cabe com escolhas
+publicadas em `resultados.escolhas_metodologicas`, e cada `chave` tem de ser uma delas
+(recusa com sugestão por `difflib`); a razão da AUSÊNCIA do cross-check
+(`analise.cross_check.ausente`) só cabe SEM `resultados.cross_check`; e o re-teste da
+hipótese terminal (`analise.reteste_terminal`) traz o vocabulário de processo
+`mantida`/`trocada` e o texto. Que TODA escolha publicada tenha razão é QC
+(`escolha_sem_razao`), não forma.
+
 O ledger (5E, D1) tem a forma do contrato `ledger/1` do `er-evidencia`, que
 `builder.py` lê e entrega a `carregar`: as chaves de cada nível e os
 vocabulários fechados vêm do contrato lido, nunca de uma cópia aqui — e "exige
@@ -139,12 +148,14 @@ MAXIMO_DE_LINHAS_DO_QUE_MUDOU: int = 3
 CHAVES_DE_ANALISE: frozenset = frozenset({
     "conclusao", "exhibits", "faixa", "veredicto", "consenso", "premissas_decisivas", "positives",
     "negatives", "perguntas", "riscos", "visao_nao_consensual", "mudou_desde_analise_fornecida",
-    "o_que_esta_no_preco",
+    "o_que_esta_no_preco", "escolhas", "cross_check", "reteste_terminal",
 })
 # `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as outras
-# três são opcionais — `o_que_esta_no_preco` (5F, D12) só cabe com a reversa.
+# são opcionais — `o_que_esta_no_preco` (5F, D12) só cabe com a reversa, e as três da
+# 5G (D1/D4/D5) só cabem com o bloco de `resultados` que cada uma lê.
 CHAVES_DE_ANALISE_OBRIGATORIAS: frozenset = CHAVES_DE_ANALISE - {
     "faixa", "visao_nao_consensual", "mudou_desde_analise_fornecida", "o_que_esta_no_preco",
+    "escolhas", "cross_check", "reteste_terminal",
 }
 CHAVES_DE_CONCLUSAO: frozenset = frozenset({"texto"})
 CHAVES_DE_FAIXA: frozenset = frozenset(PAPEIS_DA_FAIXA)
@@ -160,6 +171,21 @@ CHAVES_DO_QUE_ESTA_NO_PRECO: frozenset = frozenset({"julgamento", "observavel"})
 # O bloco de `resultados` que esse julgamento lê: nome do contrato `resultados/1`, o
 # mesmo que o QC confere em `analise_sem_reversa` (`qc.BLOCO_DA_REVERSA`).
 BLOCO_DA_REVERSA: str = "reversa"
+# 5G, D1/D4/D5: os três blocos opcionais da fatia das alternativas. `escolhas` é a razão
+# econômica de cada escolha metodológica que a integração precificou (§8.2: o painel é
+# escolha, alternativa, impacto E razão); `cross_check` declara a AUSÊNCIA do segundo
+# método (§8.1: "sem inputs coerentes, declara-se a ausência"); e `reteste_terminal` é o
+# resultado do re-teste da hipótese terminal, com o texto que o justifica. Os dois
+# primeiros leem um bloco de `resultados`, como o julgamento lê a reversa.
+CHAVES_DE_ESCOLHA: frozenset = frozenset({"chave", "razao"})
+CHAVES_DE_CROSS_CHECK: frozenset = frozenset({"ausente"})
+CHAVES_DE_CROSS_CHECK_AUSENTE: frozenset = frozenset({"razao"})
+CHAVES_DE_RETESTE_TERMINAL: frozenset = frozenset({"resultado", "texto"})
+# Vocabulário de PROCESSO (D5), não de metodologia: a hipótese terminal do caso-base
+# sobreviveu ao re-teste, ou foi trocada por outra.
+RESULTADOS_DO_RETESTE_TERMINAL: frozenset = frozenset({"mantida", "trocada"})
+BLOCO_DAS_ESCOLHAS: str = "escolhas_metodologicas"
+BLOCO_DO_CROSS_CHECK: str = "cross_check"
 CHAVES_DE_POSITIVE_OU_NEGATIVE: frozenset = frozenset({
     "afirmacao", "vetor", "mecanismo", "observavel", "incorporacao", "razao",
 })
@@ -605,10 +631,24 @@ def _validar_pergunta(valor: Any, onde: str, ids_de_exhibit: list[str]) -> None:
         _exigir_texto_nao_vazio(sem_exhibit["razao"], f"{onde}.sem_exhibit.razao")
 
 
+def _chaves_publicadas_das_escolhas(resultados: dict) -> list[str]:
+    """As chaves que `resultados.escolhas_metodologicas` publica, na ordem publicada.
+
+    `resultados` é OPACO aqui (E3): este módulo nunca revalida o contrato da integração,
+    e o que não tem a forma esperada simplesmente não conta como chave publicada — quem
+    nomeia um painel malformado é o QC (`escolhas_desconhecidas`), sobre o mesmo bloco."""
+    publicadas = resultados.get(BLOCO_DAS_ESCOLHAS)
+    if not isinstance(publicadas, list):
+        return []
+    return [escolha["chave"] for escolha in publicadas
+            if isinstance(escolha, dict) and isinstance(escolha.get("chave"), str)]
+
+
 def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger) -> None:
-    """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4 + 5F/D12-D13): vocabulário fechado em todo
-    nível. `resultados` só é lido para a condicional da faixa (D1/D3) e para a presença da
-    reversa que o julgamento do que está no preço lê (D12); o contrato do ledger, para a
+    """`analise` (A1 + 5B/G1 + 5D/D1-D5 + 5E/D4 + 5F/D12-D13 + 5G/D1-D5): vocabulário fechado
+    em todo nível. `resultados` só é lido para a condicional da faixa (D1/D3), para a presença
+    da reversa que o julgamento do que está no preço lê (D12) e, desde a 5G, para as escolhas
+    que a integração precificou e o cross-check que ela publicou; o contrato do ledger, para a
     âncora do consenso ausente."""
     analise = _objeto_fechado(analise, CHAVES_DE_ANALISE, CHAVES_DE_ANALISE_OBRIGATORIAS, "analise")
 
@@ -700,6 +740,57 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger)
                                 CHAVES_DO_QUE_ESTA_NO_PRECO, onde)
         for campo in sorted(CHAVES_DO_QUE_ESTA_NO_PRECO):
             _exigir_texto_nao_vazio(bloco[campo], f"{onde}.{campo}")
+
+    # 5G, D1: opcional; declarado, dá razão às escolhas que a integração PRECIFICOU. Sem
+    # nenhuma publicada não há a que dar razão, e uma chave fora das publicadas sairia da
+    # tela em silêncio — as duas são recusa de forma. Que toda escolha publicada tenha a
+    # sua razão é o HARD FAIL `escolha_sem_razao` (§18.3), não forma: o analista que
+    # esqueceu uma razão é nomeado pelo QC, com o rótulo da escolha.
+    if "escolhas" in analise:
+        onde = "analise.escolhas"
+        publicadas = _chaves_publicadas_das_escolhas(resultados)
+        if not publicadas:
+            raise EntregaInvalida(
+                f"'{onde}' declarado sem escolha nenhuma em 'resultados.{BLOCO_DAS_ESCOLHAS}': a razão "
+                "econômica é de uma escolha metodológica que o valuation precificou, e esta entrega não "
+                "precifica nenhuma — retire o bloco, ou declare as escolhas no caso."
+            )
+        for indice, escolha in enumerate(_exigir_lista(analise["escolhas"], onde)):
+            onde_da_escolha = f"{onde}.{indice}"
+            escolha = _objeto_fechado(escolha, CHAVES_DE_ESCOLHA, CHAVES_DE_ESCOLHA, onde_da_escolha)
+            chave = _exigir_texto_nao_vazio(escolha["chave"], f"{onde_da_escolha}.chave")
+            if chave not in publicadas:
+                sugestao = difflib.get_close_matches(chave, publicadas, n=1)
+                dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+                raise EntregaInvalida(
+                    f"'{onde_da_escolha}.chave' dá razão a uma escolha que 'resultados.{BLOCO_DAS_ESCOLHAS}' "
+                    f"não publica: '{chave}'.{dica}Escolhas publicadas: {', '.join(publicadas)}."
+                )
+            _exigir_texto_nao_vazio(escolha["razao"], f"{onde_da_escolha}.razao")
+
+    # 5G, D4: o bloco declara a AUSÊNCIA do cross-check. Com o segundo método publicado,
+    # declarar por que ele não existe é contradição — recusa de forma, como o julgamento
+    # do que está no preço sem a reversa.
+    if "cross_check" in analise:
+        onde = "analise.cross_check"
+        if resultados.get(BLOCO_DO_CROSS_CHECK) is not None:
+            raise EntregaInvalida(
+                f"'{onde}' declarado com 'resultados.{BLOCO_DO_CROSS_CHECK}' publicado: este bloco declara "
+                "a razão de NÃO haver cross-check, e esta entrega traz o preço da rota oposta — retire o "
+                "bloco, ou retire o cross-check do caso."
+            )
+        bloco = _objeto_fechado(analise["cross_check"], CHAVES_DE_CROSS_CHECK, CHAVES_DE_CROSS_CHECK, onde)
+        ausente = _objeto_fechado(bloco["ausente"], CHAVES_DE_CROSS_CHECK_AUSENTE,
+                                  CHAVES_DE_CROSS_CHECK_AUSENTE, f"{onde}.ausente")
+        _exigir_texto_nao_vazio(ausente["razao"], f"{onde}.ausente.razao")
+
+    # 5G, D5: o re-teste da hipótese terminal — vocabulário de processo, e o texto em prosa.
+    if "reteste_terminal" in analise:
+        onde = "analise.reteste_terminal"
+        bloco = _objeto_fechado(analise["reteste_terminal"], CHAVES_DE_RETESTE_TERMINAL,
+                                CHAVES_DE_RETESTE_TERMINAL, onde)
+        _exigir_do_vocabulario(bloco["resultado"], RESULTADOS_DO_RETESTE_TERMINAL, f"{onde}.resultado")
+        _exigir_texto_nao_vazio(bloco["texto"], f"{onde}.texto")
 
 
 def _validar(entrega: Any, contrato: ContratoDoLedger) -> None:

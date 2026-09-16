@@ -84,6 +84,13 @@ decisiva, o vínculo e a contraprova passam a ler as partes de SOTP. Nenhum limi
 metodologia: a conservação acende pela chave que a integração publica, o eixo
 obrigatório pela flag do catálogo, e o ponto central por igualdade exata entre dois
 números do mesmo caso. Ver `_achados_da_valuation`.
+
+Fatia 5G, item 5, Task 3 (D1): o painel de escolhas metodológicas — `escolha_sem_razao`
+e `escolhas_desconhecidas`, os dois HARD FAIL. O primeiro é a §18.3 no QC (nenhuma
+escolha sem default recebe default: a que a integração precificou sai com a razão
+econômica do analista, §8.2); o segundo é a falha fechada do molde de
+`eixos_de_reversa_desconhecidos`. O limiar de materialidade das escolhas continua fora
+daqui — é da integração, e o relatório só lê a decisão. Ver `_achados_das_escolhas`.
 """
 
 import json
@@ -766,6 +773,12 @@ MAXIMO_DE_PERGUNTAS_ESPECIFICAS: int = 2
 # `entrega.py` desde a 5F (D12), cuja forma também o lê: o julgamento do que está no
 # preço só cabe com a reversa.
 BLOCO_DA_REVERSA: str = contrato_entrega.BLOCO_DA_REVERSA
+
+# O bloco de `resultados` com as escolhas metodológicas que a integração precificou
+# (5G, D1) — o mesmo nome de contrato que a forma lê para exigir que uma razão
+# declarada tenha escolha publicada. QUAIS são as dez e o que dispara cada uma é
+# metodologia, e vem do catálogo; daqui só a presença.
+BLOCO_DAS_ESCOLHAS: str = contrato_entrega.BLOCO_DAS_ESCOLHAS
 
 # De onde cada ponta da faixa lê o seu preço (D1): `resultados.cenarios.<nome>.
 # valor.preco_acao`, o caminho que o contrato da faixa declara. É leitura de
@@ -1693,12 +1706,53 @@ def _achados_eixos_da_reversa(resultados: dict, catalogo: dict, idioma: str) -> 
     return achados
 
 
+def _achados_das_escolhas(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """As duas regras do painel de escolhas metodológicas (5G, Task 3, D1):
+
+    - HARD FAIL `escolhas_desconhecidas`: com escolhas publicadas em
+      `resultados.escolhas_metodologicas`, o catálogo não declara `escolhas_metodologicas`
+      na forma do contrato — rótulo E gatilho no idioma da entrega, para cada chave
+      publicada. Sem a declaração o painel sairia com o código cru da escolha, e a regra
+      falha fechada, no molde de `eixos_de_reversa_desconhecidos`;
+    - HARD FAIL `escolha_sem_razao`: uma por chave publicada sem razão declarada em
+      `analise.escolhas` (§8.2 — o painel é escolha, alternativa, impacto E razão
+      econômica; §18.3 — nenhuma escolha que a metodologia declara sem default recebe
+      default). Que a razão exista é conteúdo, não forma: a forma já recusou uma razão sem
+      escolha publicada e uma chave fora das publicadas (`entrega._validar_analise`).
+
+    O limiar de materialidade e o alerta de empilhamento NÃO são lidos aqui: quem os
+    calcula é a integração, e nesta fatia o empilhamento é leitura da tela (D1)."""
+    publicadas = [escolha for escolha in _lista(_objeto(entrega.get("resultados")).get(BLOCO_DAS_ESCOLHAS))
+                  if isinstance(escolha, dict)]
+    if not publicadas:
+        return []
+    chaves = [escolha.get("chave") for escolha in publicadas]
+    declaradas = catalogo.get("escolhas_metodologicas")
+
+    def _declarada(chave) -> bool:
+        info = _objeto(declaradas.get(chave)) if isinstance(declaradas, dict) and isinstance(chave, str) else {}
+        textos = [_objeto(info.get(campo)).get(idioma) for campo in ("rotulo", "gatilho")]
+        return all(isinstance(texto, str) and bool(texto.strip()) for texto in textos)
+
+    if not isinstance(declaradas, dict) or not declaradas or not all(_declarada(chave) for chave in chaves):
+        return [Achado("HARD_FAIL", "escolhas_desconhecidas", f"resultados.{BLOCO_DAS_ESCOLHAS}", {
+            "escolhas": ", ".join(str(chave) for chave in chaves) or _SEM_VALOR, "idioma": idioma})]
+
+    com_razao = {_objeto(escolha).get("chave")
+                 for escolha in _lista(_objeto(entrega.get("analise")).get("escolhas"))}
+    return [Achado("HARD_FAIL", "escolha_sem_razao", f"resultados.{BLOCO_DAS_ESCOLHAS}.{indice}.chave",
+                   {"chave": str(chave), "rotulo": declaradas[chave]["rotulo"][idioma]})
+            for indice, chave in enumerate(chaves) if chave not in com_razao]
+
+
 def _achados_da_valuation(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
-    """As regras da Task 4 que leem os blocos da aba Valuation, na ordem da aba: a
-    conservação de capital (cenários), as grades de sensibilidade e o que está no preço."""
+    """As regras da Task 4 da 5F que leem os blocos da aba Valuation, na ordem da aba: a
+    conservação de capital (cenários), as grades de sensibilidade, o painel de escolhas
+    metodológicas (5G) e o que está no preço."""
     resultados = _objeto(entrega.get("resultados"))
     return (_achados_conservacao_de_capital(resultados, catalogo, idioma)
             + _achados_das_grades(entrega, catalogo, idioma)
+            + _achados_das_escolhas(entrega, catalogo, idioma)
             + _achados_eixos_da_reversa(resultados, catalogo, idioma))
 
 
