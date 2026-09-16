@@ -567,6 +567,7 @@
   .formacao-rotulo,
   .formacao-sintese,
   .reversa-teto-texto,
+  .nivel-implicito-leitura,
   .reversa-congelado-nota {
     font-size: 0.88rem;
     color: var(--cor-texto-suave);
@@ -582,6 +583,7 @@
   .valuation-cenario,
   .reversa-eixo,
   .reversa-teto,
+  .reversa-nivel-implicito,
   .reversa-julgamento,
   .valuation-escolha {
     border: 1px solid var(--cor-borda);
@@ -592,6 +594,7 @@
   .valuation-cenario h3,
   .reversa-eixo h3,
   .reversa-teto h3,
+  .reversa-nivel-implicito h3,
   .reversa-julgamento h3,
   .valuation-escolha h3,
   .formacao-multiplos h3 {
@@ -602,9 +605,29 @@
   .grade-1d td:first-child {
     white-space: nowrap;
   }
+  /* Fatia 5H: o banner do produto abre a aba na entrega reduzida à Valuation. */
+  .produto-banner {
+    border: 1px solid var(--cor-acento);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 0 0 16px;
+  }
+  .produto-banner h2 {
+    margin: 0 0 6px;
+    border: 0;
+    padding: 0;
+    font-size: 1rem;
+    color: var(--cor-acento);
+  }
+  .produto-banner p {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--cor-texto-suave);
+  }
   /* Fatia 5G: o painel de escolhas e as três leituras depois do que está no preço. */
   .valuation-escolha-numeros,
-  .valuation-cross-check-numeros {
+  .valuation-cross-check-numeros,
+  .nivel-implicito-numeros {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
@@ -644,26 +667,19 @@
   <header class="cabecalho-relatorio">
     <h1>$titulo</h1>
   </header>
-  <nav class="abas-nav" role="tablist">
-    <button type="button" class="aba-botao" role="tab" data-aba="tese" aria-selected="true">$rotulo_aba_tese</button>
-    <button type="button" class="aba-botao" role="tab" data-aba="valuation" aria-selected="false">$rotulo_aba_valuation</button>
-    <button type="button" class="aba-botao" role="tab" data-aba="evidencia" aria-selected="false">$rotulo_aba_evidencia</button>
-  </nav>
-  <section id="aba-tese" class="aba-painel" role="tabpanel" data-aba-painel="tese">
-    $corpo_tese
-  </section>
-  <section id="aba-valuation" class="aba-painel" role="tabpanel" data-aba-painel="valuation" hidden>
-    $corpo_valuation
-  </section>
-  <section id="aba-evidencia" class="aba-painel" role="tabpanel" data-aba-painel="evidencia" hidden>
-    $corpo_evidencia
-  </section>
+  $nav_abas
+  $paineis
 </div>
 <script>
 (function () {
   "use strict";
   var botoes = document.querySelectorAll(".aba-botao");
   var paineis = document.querySelectorAll(".aba-painel");
+  // Fatia 5H: a Leitura de preco sai com uma aba so, e sem navegacao. Sem botao nao ha
+  // o que selecionar -- e o painel unico, que o render.py emite sem `hidden`, ja esta
+  // visivel. Retorno explicito: um laco sobre zero botoes nao erraria, mas esconder a
+  // intencao num no-op e o jeito de alguem "consertar" o no-op depois.
+  if (botoes.length === 0) { return; }
   function selecionar(nomeAba) {
     for (var i = 0; i < botoes.length; i++) {
       var ativo = botoes[i].getAttribute("data-aba") === nomeAba;

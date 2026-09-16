@@ -54,6 +54,14 @@ preço, lido pela `leitura` que a integração publica. A escala dos montantes e
 só onde a unidade do catálogo a declara; a premissa decisiva de uma parte de SOTP
 e o vínculo multi-rota saem rotulados na Tese; e o bootstrap pareia cada matriz ao
 seu host pelo índice (ver "Aba Valuation na ordem da §9").
+
+Fatia 5H, Task 2 (D3/D4): a página tem as abas que o PRODUTO da execução declara
+(`ABAS_DO_PRODUTO`). Sob `leitura_de_preco` sai uma aba só, a Valuation — sem
+navegação, e sem compor a Tese e a Evidência —, aberta pelo banner do produto e
+pelos avisos obrigatórios, que na Análise moram na Tese; e o produto vira o SEGUNDO
+gatilho de `_leitura_condicional`, ao lado da fronteira de escopo. A seção "o que
+está no preço" ganha o nível implícito da métrica-base, com a leitura do confronto
+temporal pelo rótulo do catálogo.
 """
 
 import html
@@ -830,7 +838,8 @@ def _conclusao_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
         f'{bloco_faixa}'
         f'{_veredicto_html(caso, idioma, moeda, dicionario, prosa)}'
         f'<div class="tese-multiplos">'
-        f'{_multiplos_html(resultados, catalogo, idioma, dicionario, omitir_conclusao_de_valor=True)}</div>'
+        f'{_multiplos_html(resultados, catalogo, idioma, dicionario, contrato_entrega.produto(entrega),
+                           omitir_conclusao_de_valor=True)}</div>'
         f'{_consenso_html(entrega, idioma, dicionario)}'
         '</section>'
     )
@@ -1348,7 +1357,7 @@ def _unidade_publicada(catalogo: dict, caminho: str) -> str:
 
 
 def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, idioma: str, dicionario: dict,
-                   moeda: str | None) -> str:
+                   moeda: str | None, produto: str) -> str:
     """D10: uma grade 1D como tabela estática, sem JS (§10: "cinco números numa tabela podem
     comunicar melhor que um gráfico") — o ponto pela unidade da premissa, o preço pela unidade que a
     grade publica e o múltiplo pela do mapa —, com o ponto do cenário que a grade perturbou marcado
@@ -1365,9 +1374,10 @@ def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, id
     rotulo = _rotulo_premissa(catalogo, rota, premissa, idioma)
     colunas = [
         rotulo,
-        _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_coluna_preco", CAMINHO_DOS_PRECOS_DA_GRADE_1D),
+        _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_coluna_preco",
+                          CAMINHO_DOS_PRECOS_DA_GRADE_1D, produto=produto),
         _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_coluna_multiplo",
-                          CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D),
+                          CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D, produto=produto),
     ]
     linhas = []
     for ponto in _campo_de_contrato(grade, "pontos", onde):
@@ -1385,25 +1395,26 @@ def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, id
         ]
         linhas.append("<tr>" + "".join(f"<td>{_texto_de_dado_html(celula)}</td>" for celula in celulas) + "</tr>")
     titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_titulo", CAMINHO_DOS_PRECOS_DA_GRADE_1D,
-                               cenario=cenario, premissa=rotulo)
+                               produto=produto, cenario=cenario, premissa=rotulo)
     cabecalho = "".join(f'<th class="grade-rotulo">{_texto_de_dado_html(coluna)}</th>' for coluna in colunas)
     return (f'<section class="sensibilidade-1d"><h2>{_texto_de_dado_html(titulo)}</h2>'
             f'<table class="grade-1d"><thead><tr>{cabecalho}</tr></thead>'
             f'<tbody>{"".join(linhas)}</tbody></table></section>')
 
 
-def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
+def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+                         dicionario: dict, produto: str) -> str:
     """As sensibilidades, na ordem publicada: uma tabela por grade 1D (D10, `_grade_1d_html`) e,
     depois, o host VAZIO de cada matriz 2D, com o `data-painel-indice` pelo qual o bootstrap a pareia
     à sua spec (achado 14) — só o `svg.js` o preenche. Nenhuma seção sem grade (S6)."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     moeda = caso.get("moeda")
-    blocos = [_grade_1d_html(caso, resultados, grade, catalogo, idioma, dicionario, moeda)
+    blocos = [_grade_1d_html(caso, resultados, grade, catalogo, idioma, dicionario, moeda, produto)
               for grade in _grades_1d(resultados)]
     for indice, grade in enumerate(_grades_2d(resultados)):
         titulo = _texto_de_dado_html(_rotulo_do_numero(
             resultados, catalogo, dicionario, "matriz_titulo", CAMINHO_DAS_CELULAS_DA_GRADE_2D,
-            cenario=_cenario_da_grade(caso),
+            produto=produto, cenario=_cenario_da_grade(caso),
             x=_rotulo_premissa(catalogo, rota, grade["premissa_x"], idioma),
             y=_rotulo_premissa(catalogo, rota, grade["premissa_y"], idioma),
         ))
@@ -1708,7 +1719,7 @@ def _congelados_html(resultados: dict, dicionario: dict) -> str:
 
 
 def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
-                       dicionario: dict) -> str:
+                       dicionario: dict, produto: str) -> str:
     """O painel inteiro, ou `""` quando não há laboratório possível (rota que
     o catálogo não conhece, ou caso sem cenário)."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
@@ -1719,11 +1730,11 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
     moeda = caso.get("moeda")
     rotulos_das_saidas = {
         "preco": _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
-                                   CAMINHO_DOS_PRECOS_POR_CENARIO),
+                                   CAMINHO_DOS_PRECOS_POR_CENARIO, produto=produto),
         "multiplo": _rotulo_do_numero(resultados, catalogo, dicionario, "multiplo_justo_titulo",
-                                      CAMINHO_DOS_MULTIPLOS_POR_CENARIO),
+                                      CAMINHO_DOS_MULTIPLOS_POR_CENARIO, produto=produto),
         "upside": _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
-                                    CAMINHO_DOS_UPSIDES_POR_CENARIO),
+                                    CAMINHO_DOS_UPSIDES_POR_CENARIO, produto=produto),
     }
 
     paineis = "".join(
@@ -1832,8 +1843,9 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
 
 
 # --------------------------------------------------------------------------
-# Leitura condicional (fatia 5D, onda de correção da revisão final, F1). Sob
-# fronteira de escopo, todo número que a integração declara conclusão de valor
+# Leitura condicional (fatia 5D, onda de correção da revisão final, F1; fatia 5H,
+# D4). Sob fronteira de escopo — ou sob o produto `leitura_de_preco`, o segundo
+# gatilho —, todo número que a integração declara conclusão de valor
 # (`catalogo.conclusoes_de_valor`) é leitura condicional: na Conclusão da Tese
 # ele não sai, e na Valuation sai com o rótulo condicional do dicionário
 # (`valuation.condicional.<chave>`). A decisão é uma só, em `_leitura_condicional`:
@@ -1881,13 +1893,19 @@ FORMATO_DA_FRACAO_DE_COMPARACAO: str = "pct1"
 FORMATO_DO_PESO: str = "pp0"
 
 
-def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str) -> bool:
-    """`True` quando o número que a página exibe em `caminho` é, sob fronteira de
-    escopo, conclusão de valor pelo mapa da integração (`placeholders.conclusao_de_
-    valor`). Fora da fronteira, sempre `False` — e o mapa nem é lido. Sob ela, um
+def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str, produto: str) -> bool:
+    """`True` quando o número que a página exibe em `caminho` é conclusão de valor pelo
+    mapa da integração (`placeholders.conclusao_de_valor`) E a entrega está num regime
+    que não conclui valor. São DOIS gatilhos, com o mesmo efeito na tela:
+
+    - fronteira de escopo declarada (5D, D3): a §14 recusa preço-alvo de manchete;
+    - produto `leitura_de_preco` (5H, D4): a entrega lê o preço, não o conclui.
+
+    Fora dos dois, sempre `False` — e o mapa nem é lido. Sob qualquer um deles, um
     catálogo sem o mapa é recusa nomeada: o QC já o reprovou (`fronteira_de_escopo_
     desconhecida`), e este módulo nunca decide ao acaso o que é preço-alvo."""
-    if _campo_de_contrato(resultados, "fronteira_de_escopo", "resultados") is None:
+    sob_fronteira = _campo_de_contrato(resultados, "fronteira_de_escopo", "resultados") is not None
+    if not sob_fronteira and produto != contrato_entrega.PRODUTO_DA_LEITURA_DE_PRECO:
         return False
     mapa = placeholders.conclusoes_de_valor(catalogo)
     if mapa is None:
@@ -1899,18 +1917,21 @@ def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str) -> bool
 
 
 def _rotulo_do_numero(resultados: dict, catalogo: dict, dicionario: dict, chave: str, caminho: str,
-                      **valores) -> str:
+                      *, produto: str, **valores) -> str:
     """O rótulo do número exibido em `caminho`: `valuation.<chave>`, ou — quando ele é
     leitura condicional (`_leitura_condicional`) — `valuation.condicional.<chave>`. Um
     número que o mapa passe a cobrir sem forma condicional no dicionário é
     `ChaveDeInterfaceAusente`, nomeada: nunca uma conclusão de valor com o rótulo de
-    sempre sob fronteira."""
-    if _leitura_condicional(resultados, catalogo, caminho):
+    sempre sob fronteira ou sob o produto que só lê o preço.
+
+    `produto` é NOMEADO e sem default (5H, D4): um call site que o esqueça quebra alto,
+    em vez de sair com o rótulo de sempre debaixo do produto errado."""
+    if _leitura_condicional(resultados, catalogo, caminho, produto):
         return t(dicionario, f"valuation.condicional.{chave}", **valores)
     return t(dicionario, f"valuation.{chave}", **valores)
 
 
-def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict,
+def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict, produto: str,
                     omitir_conclusao_de_valor: bool = False) -> str:
     """O múltiplo justo da manchete ao lado do múltiplo de tela, cada lado com o
     rótulo da própria chave (a regra 4 de `resultados/1` garante a mesma base) —
@@ -1945,9 +1966,10 @@ def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: d
         ]
     blocos = []
     for chave_do_rotulo, caminho, multiplo in lados:
-        if omitir_conclusao_de_valor and _leitura_condicional(resultados, catalogo, caminho):
+        if omitir_conclusao_de_valor and _leitura_condicional(resultados, catalogo, caminho, produto):
             continue
-        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho)
+        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho,
+                                   produto=produto)
         if multiplo is None:
             valor_fmt = t(dicionario, "valuation.sem_valor")
             nota_html = html.escape(t(dicionario, "valuation.metrica_forward_nao_declarada"))
@@ -2032,7 +2054,7 @@ def _faixa_da_valuation_html(analise: dict, resultados: dict, idioma: str, moeda
 
 
 def _formacao_do_valor_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
-                            dicionario: dict) -> str:
+                            dicionario: dict, produto: str) -> str:
     """D15, 2 (D8): o quadro "como o valor é formado", colapsável — o texto de metodologia do
     catálogo (`formacao_do_valor.<rota>`) com os números do cenário da manchete: cada passo cuja
     premissa o cenário declara (na rampa, `util` e `g1` são alternativas, e só a declarada
@@ -2089,7 +2111,7 @@ def _formacao_do_valor_html(resultados: dict, catalogo: dict, idioma: str, moeda
         for chave, valor in _campo_de_contrato(cenario, "multiplos", onde).items()
     ]
     titulo_dos_multiplos = _rotulo_do_numero(resultados, catalogo, dicionario, "formacao_multiplos_titulo",
-                                             CAMINHO_DOS_MULTIPLOS_POR_CENARIO)
+                                             CAMINHO_DOS_MULTIPLOS_POR_CENARIO, produto=produto)
     partes.append(f'<div class="formacao-multiplos"><h3>{html.escape(titulo_dos_multiplos)}</h3>'
                   f'<ul>{"".join(itens)}</ul></div>')
 
@@ -2099,7 +2121,8 @@ def _formacao_do_valor_html(resultados: dict, catalogo: dict, idioma: str, moeda
         campo = caminho.rsplit(".", 1)[-1]
         if campo not in cenario:
             continue
-        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho)
+        rotulo = _rotulo_do_numero(resultados, catalogo, dicionario, chave_do_rotulo, caminho,
+                                   produto=produto)
         valor = _formatar_na_unidade(cenario[campo], catalogo, _unidade_publicada(catalogo, caminho), idioma, moeda,
                                      escala)
         montantes.append('<div class="metrica">' + _valor_html("metrica-rotulo", rotulo)
@@ -2114,7 +2137,7 @@ def _formacao_do_valor_html(resultados: dict, catalogo: dict, idioma: str, moeda
 
 
 def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
-                                dicionario: dict) -> str:
+                                dicionario: dict, produto: str) -> str:
     """D15, 3 (D9): cada cenário publicado — o nome; a âncora, texto do caso que a integração publica
     em `resultados.cenarios.<nome>.ancora`, como dado (ajuste de D9 no regime de 15/09); o triângulo,
     entradas e saída pelos rótulos do catálogo, ou — sem `triangulo` publicado, a rota rampa — a frase
@@ -2123,9 +2146,9 @@ def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, m
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     escala = resultados.get("escala_monetaria")
     rotulo_do_preco = _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
-                                        CAMINHO_DOS_PRECOS_POR_CENARIO)
+                                        CAMINHO_DOS_PRECOS_POR_CENARIO, produto=produto)
     rotulo_do_upside = _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
-                                         CAMINHO_DOS_UPSIDES_POR_CENARIO)
+                                         CAMINHO_DOS_UPSIDES_POR_CENARIO, produto=produto)
     unidade_do_preco = _unidade_publicada(catalogo, CAMINHO_DOS_PRECOS_POR_CENARIO)
     unidade_do_upside = _unidade_publicada(catalogo, CAMINHO_DOS_UPSIDES_POR_CENARIO)
     artigos = []
@@ -2157,7 +2180,8 @@ def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, m
                           _formatar_na_unidade(upside, catalogo, unidade_do_upside, idioma, moeda, escala))
             + '</div></div></article>'
         )
-    titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo", CAMINHO_DOS_PRECOS_POR_CENARIO)
+    titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo",
+                               CAMINHO_DOS_PRECOS_POR_CENARIO, produto=produto)
     return f'<section class="valuation-cenarios"><h2>{html.escape(titulo)}</h2>{"".join(artigos)}</section>'
 
 
@@ -2247,6 +2271,71 @@ def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, 
             f'<p class="reversa-teto-texto">{html.escape(texto)}</p></div>')
 
 
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 2 (D2/D4): o nível implícito na seção "o que está no preço", e o banner
+# do produto que abre a aba quando a entrega é uma Leitura de preço.
+#
+# O nível implícito é a leitura do preço em NÍVEL, ao lado do menu de eixos, que o lê em
+# TAXA: nada aqui é conclusão de valor (a §14 mantém a leitura do preço sob fronteira), e
+# por isso nenhum número desta seção passa por `_rotulo_do_numero`. A métrica implícita é
+# um MONTANTE, na mesma unidade e na mesma escala das linhas da ponte; o degrau sai em
+# pontos percentuais, como o motor o publica; cada razão contra o consenso é uma
+# comparação entre dois níveis, e sai como múltiplo. A leitura sai pelo RÓTULO do catálogo
+# (`leituras_do_nivel`) — nunca a chave, nunca a prosa do motor, que fica em `resultados`.
+# --------------------------------------------------------------------------
+
+# O degrau implícito já vem em pontos percentuais do motor (`degrau_implicito_%`: -10.3 é
+# -10,3%), como o `pp1` do dicionário espera — nunca multiplicado de novo.
+FORMATO_DO_DEGRAU_IMPLICITO: str = "pp1"
+# A razão entre a métrica implícita e um ponto do consenso: quantas vezes um é o outro.
+FORMATO_DA_RAZAO_CONTRA_O_CONSENSO: str = "x2"
+# Os pontos do consenso que a integração pode publicar, na ordem temporal.
+PONTOS_DO_CONSENSO: tuple = ("t1", "t2")
+
+
+def _banner_do_produto_html(dicionario: dict) -> str:
+    """D4: o banner que abre a aba sob `leitura_de_preco`, declarando o escopo da entrega
+    reduzida — cobertura e encerramento não se aplicam. Texto do dicionário; este módulo
+    não escreve prosa."""
+    return ('<section class="produto-banner">'
+            f'<h2>{html.escape(t(dicionario, "valuation.produto_banner_titulo"))}</h2>'
+            f'<p>{html.escape(t(dicionario, "valuation.produto_banner_escopo"))}</p>'
+            '</section>')
+
+
+def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str | None,
+                          escala: Any, dicionario: dict) -> str:
+    """D2/D4: o que o preço embute em NÍVEL — a métrica-base implícita, o degrau contra a
+    métrica declarada, as razões contra cada ponto do consenso e o rótulo da leitura do
+    confronto temporal. Sem consenso declarado no caso não há razões nem leitura, e a
+    seção sai só com o nível e o degrau."""
+    onde = "resultados.reversa.nivel_implicito"
+    linhas = [
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_metrica_titulo"),
+                      _formatar_na_unidade(_campo_de_contrato(nivel, "metrica_base_implicita", onde), catalogo,
+                                           UNIDADE_DOS_MONTANTES_DA_PONTE, idioma, moeda, escala)),
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_degrau_titulo"),
+                      placeholders.formatar(_campo_de_contrato(nivel, "degrau_implicito_%", onde),
+                                            FORMATO_DO_DEGRAU_IMPLICITO, idioma)),
+    ]
+    for ponto in PONTOS_DO_CONSENSO:
+        razao = nivel.get(f"razao_vs_consenso_{ponto}")
+        if razao is None:
+            continue
+        linhas.append(_metrica_html(
+            t(dicionario, f"valuation.nivel_implicito_razao_{ponto}_titulo"),
+            placeholders.formatar(razao, FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, idioma)))
+
+    partes = [f'<div class="nivel-implicito-numeros">{"".join(linhas)}</div>']
+    chave = nivel.get("leitura_chave")
+    if chave is not None:
+        partes.append('<p class="nivel-implicito-leitura">' + _texto_de_dado_html(
+            _rotulo_de_secao_do_catalogo(catalogo, "leituras_do_nivel", chave, idioma)) + '</p>')
+    return (f'<div class="reversa-nivel-implicito">'
+            f'<h3>{html.escape(t(dicionario, "valuation.nivel_implicito_titulo"))}</h3>'
+            f'{"".join(partes)}</div>')
+
+
 def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
     """D15, 7: o que está no preço, congelado nas premissas originais (§8.4) — cada eixo da reversa
     (`_eixo_da_reversa_html`), o teto do crescimento gratuito quando publicado, as limitações publicadas
@@ -2260,6 +2349,10 @@ def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicion
     if isinstance(reversa, dict):
         for nome, eixo in _campo_de_contrato(reversa, "eixos", "resultados.reversa").items():
             partes.append(_eixo_da_reversa_html(nome, eixo, catalogo, idioma, moeda, dicionario))
+        # 5H, Task 2 (D2): a leitura em NÍVEL, depois dos eixos, que leem em TAXA.
+        partes.append(_nivel_implicito_html(
+            _campo_de_contrato(reversa, "nivel_implicito", "resultados.reversa"),
+            catalogo, idioma, moeda, resultados.get("escala_monetaria"), dicionario))
         teto = reversa.get("teto_do_crescimento_gratuito")
         if isinstance(teto, dict):
             partes.append(_teto_do_crescimento_gratuito_html(teto, catalogo, idioma, dicionario))
@@ -2325,7 +2418,7 @@ def _rotulo_e_gatilho_da_escolha(catalogo: dict, chave: Any, idioma: str) -> tup
 
 
 def _escolha_html(indice: int, escolha: dict, resultados: dict, catalogo: dict, idioma: str,
-                  moeda: str | None, dicionario: dict, prosa: dict, razoes: dict) -> str:
+                  moeda: str | None, dicionario: dict, prosa: dict, razoes: dict, produto: str) -> str:
     """Uma escolha do painel (§8.2: escolha central | alternativa | impacto | razão
     econômica): o rótulo e o gatilho do catálogo, a posição do caso-base pelo rótulo do
     dicionário, o preço do ramo alternativo e o impacto sobre a manchete, a razão do
@@ -2342,7 +2435,7 @@ def _escolha_html(indice: int, escolha: dict, resultados: dict, catalogo: dict, 
                            _campo_de_contrato(escolha, "no_caso_base", onde)))),
         '<div class="valuation-escolha-numeros">'
         + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "escolha_preco_titulo",
-                                          CAMINHO_DO_PRECO_DA_ALTERNATIVA),
+                                          CAMINHO_DO_PRECO_DA_ALTERNATIVA, produto=produto),
                         _formatar_na_unidade(_campo_de_contrato(escolha, "preco_alternativa", onde), catalogo,
                                              _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DA_ALTERNATIVA),
                                              idioma, moeda, escala))
@@ -2380,7 +2473,8 @@ def _painel_de_escolhas_html(entrega: dict, catalogo: dict, idioma: str, diciona
 
     principais, avancadas = [], []
     for indice, escolha in enumerate(escolhas):
-        bloco = _escolha_html(indice, escolha, resultados, catalogo, idioma, moeda, dicionario, prosa, razoes)
+        bloco = _escolha_html(indice, escolha, resultados, catalogo, idioma, moeda, dicionario, prosa, razoes,
+                              contrato_entrega.produto(entrega))
         no_principal = escolha.get("gatilho_disparou") is not None or escolha.get("material") is True
         (principais if no_principal else avancadas).append(bloco)
 
@@ -2401,7 +2495,7 @@ def _painel_de_escolhas_html(entrega: dict, catalogo: dict, idioma: str, diciona
 
 
 def _retorno_exigido_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
-                          dicionario: dict) -> str:
+                          dicionario: dict, produto: str) -> str:
     """D2 (§8.2: "que valor resulta se eu exigir retorno de X%?"): a taxa pela unidade da
     premissa que ela substituiu, a premissa pelo rótulo do catálogo e o preço que resulta —
     colapsado, e com a nota de que é leitura, jamais fair value. Sem o bloco, nada."""
@@ -2421,7 +2515,7 @@ def _retorno_exigido_html(resultados: dict, catalogo: dict, idioma: str, moeda: 
                          _valor_html("retorno-exigido-premissa",
                                      _rotulo_premissa(catalogo, rota, premissa, idioma)))
         + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "retorno_exigido_preco_titulo",
-                                          CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO),
+                                          CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO, produto=produto),
                         _formatar_na_unidade(_campo_de_contrato(retorno, "preco_acao", onde), catalogo,
                                              _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO),
                                              idioma, moeda, resultados.get("escala_monetaria")))
@@ -2432,7 +2526,7 @@ def _retorno_exigido_html(resultados: dict, catalogo: dict, idioma: str, moeda: 
 
 
 def _valor_ponderado_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
-                          dicionario: dict) -> str:
+                          dicionario: dict, produto: str) -> str:
     """D3 (§8.2: pesos "fora da fórmula"): a soma de peso × preço que a integração compôs,
     com cada peso ao lado do seu cenário — colapsado, e com a nota de que o número nunca
     substitui bear, base e bull. Sem o bloco, nada."""
@@ -2447,7 +2541,7 @@ def _valor_ponderado_html(resultados: dict, catalogo: dict, idioma: str, moeda: 
         for nome, peso in _campo_de_contrato(ponderado, "pesos", onde).items())
     corpo = (
         _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "valor_ponderado_valor_titulo",
-                                        CAMINHO_DO_VALOR_PONDERADO),
+                                        CAMINHO_DO_VALOR_PONDERADO, produto=produto),
                       _formatar_na_unidade(_campo_de_contrato(ponderado, "valor", onde), catalogo,
                                            _unidade_publicada(catalogo, CAMINHO_DO_VALOR_PONDERADO),
                                            idioma, moeda, resultados.get("escala_monetaria")))
@@ -2475,7 +2569,8 @@ def _cross_check_html(entrega: dict, catalogo: dict, idioma: str, moeda: str | N
                                        _rotulo_rota(catalogo, _campo_de_contrato(cross_check, "rota", onde), idioma)))
             + '<div class="valuation-cross-check-numeros">'
             + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "cross_check_preco_titulo",
-                                              CAMINHO_DO_PRECO_DO_CROSS_CHECK),
+                                              CAMINHO_DO_PRECO_DO_CROSS_CHECK,
+                                              produto=contrato_entrega.produto(entrega)),
                             _formatar_na_unidade(_campo_de_contrato(cross_check, "preco_acao", onde), catalogo,
                                                  _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DO_CROSS_CHECK),
                                                  idioma, moeda, resultados.get("escala_monetaria")))
@@ -2510,20 +2605,30 @@ def _reteste_terminal_html(analise: dict, dicionario: dict, prosa: dict) -> str:
     return _secao_html("valuation-reteste-terminal", t(dicionario, "valuation.reteste_terminal_titulo"), corpo)
 
 
-def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict,
+def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, dicionario: dict, prosa: dict,
                      com_laboratorio: bool = False) -> str:
     """A aba inteira, na ordem de D15, com as quatro seções que a 5G acrescenta (ver as
-    duas seções acima)."""
+    duas seções acima).
+
+    Fatia 5H, Task 2 (D4): sob o produto `leitura_de_preco` a aba é a entrega inteira, e
+    por isso abre com o banner do produto e, logo abaixo dele, os avisos obrigatórios —
+    que na Análise moram na Tese, a aba que este produto não compõe. Sob `analise`, os
+    dois blocos não existem e a aba sai exatamente como antes desta fatia."""
     caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
     moeda = caso.get("moeda")
     manchete = resultados["manchete"]
+    produto = contrato_entrega.produto(entrega)
+
+    topo = ""
+    if produto == contrato_entrega.PRODUTO_DA_LEITURA_DE_PRECO:
+        topo = _banner_do_produto_html(dicionario) + _disclosures_html(achados, dicionario, prosa)
 
     preco_fmt = _texto_de_dado_html(placeholders.formatar(manchete["preco_acao"], "moeda", idioma, moeda))
     upside_fmt = _texto_de_dado_html(placeholders.formatar(manchete["upside"], "pct1", idioma))
     rotulo_do_preco = _rotulo_do_numero(resultados, catalogo, dicionario, "preco_justo_titulo",
-                                        CAMINHO_DO_PRECO_DA_MANCHETE)
+                                        CAMINHO_DO_PRECO_DA_MANCHETE, produto=produto)
     rotulo_do_upside = _rotulo_do_numero(resultados, catalogo, dicionario, "upside_titulo",
-                                         CAMINHO_DO_UPSIDE_DA_MANCHETE)
+                                         CAMINHO_DO_UPSIDE_DA_MANCHETE, produto=produto)
     cabecalho = (
         f'<div class="metrica">'
         f'<span class="metrica-rotulo">{html.escape(rotulo_do_preco)}</span>'
@@ -2535,7 +2640,7 @@ def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
         f'</div>'
     )
 
-    bloco_multiplos = _multiplos_html(resultados, catalogo, idioma, dicionario)
+    bloco_multiplos = _multiplos_html(resultados, catalogo, idioma, dicionario, produto)
     if "multiplo" in manchete:
         # B2 (achado F2): rota e convenção terminal vêm de `resultados`
         # (dados já canonicalizados pela integração), nunca de `caso` --
@@ -2572,23 +2677,24 @@ def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
             f'{html.escape(t(dicionario, "valuation.laboratorio_manchete_congelada"))}</p>'
         )
 
-    laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario)
+    laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario, produto)
                    if com_laboratorio else "")
     return (
+        f'{topo}'
         f'<section class="valuation-cabecalho">{cabecalho}</section>'
         f'{nota_manchete}'
         f'{_faixa_da_valuation_html(analise, resultados, idioma, moeda, dicionario)}'
         f'<section class="valuation-multiplos">{bloco_multiplos}</section>'
         f'<section class="valuation-rota">{bloco_rota}</section>'
-        f'{_formacao_do_valor_html(resultados, catalogo, idioma, moeda, dicionario)}'
-        f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario)}'
+        f'{_formacao_do_valor_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
+        f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{laboratorio}'
         f'{_ponte_html(resultados, catalogo, idioma, dicionario, moeda)}'
         f'{_painel_de_escolhas_html(entrega, catalogo, idioma, dicionario, prosa)}'
-        f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario)}'
+        f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario, produto)}'
         f'{_o_que_esta_no_preco_html(entrega, catalogo, idioma, dicionario, prosa)}'
-        f'{_retorno_exigido_html(resultados, catalogo, idioma, moeda, dicionario)}'
-        f'{_valor_ponderado_html(resultados, catalogo, idioma, moeda, dicionario)}'
+        f'{_retorno_exigido_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
+        f'{_valor_ponderado_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{_cross_check_html(entrega, catalogo, idioma, moeda, dicionario, prosa)}'
         f'{_reteste_terminal_html(analise, dicionario, prosa)}'
     )
@@ -2912,6 +3018,54 @@ def _log_html(log: list, dicionario: dict) -> str:
     return bloco_log
 
 
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 2 (D4): quais abas a página tem, e a navegação entre elas.
+#
+# A Análise é a entrega de três abas de sempre. A Leitura de preço sai "reduzida à aba
+# Valuation" (§5, literal): uma aba só, sem navegação e sem os painéis das outras duas —
+# que nem chegam a ser compostos. A aba que abre a página nunca vem escondida; as demais
+# vêm com `hidden`, e o bootstrap de `template.html` as troca. Com uma aba só não há
+# botão nenhum, e o bootstrap não tem o que trocar.
+# --------------------------------------------------------------------------
+
+ABA_DA_TESE: str = "tese"
+ABA_DA_VALUATION: str = "valuation"
+ABA_DA_EVIDENCIA: str = "evidencia"
+
+ABAS_DO_PRODUTO: dict = {
+    contrato_entrega.PRODUTO_PADRAO: (ABA_DA_TESE, ABA_DA_VALUATION, ABA_DA_EVIDENCIA),
+    contrato_entrega.PRODUTO_DA_LEITURA_DE_PRECO: (ABA_DA_VALUATION,),
+}
+
+if set(ABAS_DO_PRODUTO) != contrato_entrega.PRODUTOS:
+    raise ImportError(
+        "ABAS_DO_PRODUTO (render.py) e entrega.PRODUTOS divergiram — todo produto do "
+        "contrato tem de declarar aqui de que abas a página dele é feita, senão um "
+        "produto novo sairia sem página nenhuma."
+    )
+
+
+def _nav_abas_html(abas: tuple, dicionario: dict) -> str:
+    """A navegação entre as abas — nada, com uma aba só: uma lista de navegação de um
+    item é moldura sem função, e a aba única fica visível sem ela."""
+    if len(abas) < 2:
+        return ""
+    botoes = "".join(
+        f'<button type="button" class="aba-botao" role="tab" data-aba="{nome}" '
+        f'aria-selected="{"true" if indice == 0 else "false"}">'
+        f'{html.escape(t(dicionario, f"abas.{nome}"))}</button>'
+        for indice, nome in enumerate(abas))
+    return f'<nav class="abas-nav" role="tablist">{botoes}</nav>'
+
+
+def _paineis_das_abas_html(abas: tuple, corpos: dict) -> str:
+    """Um painel por aba, na ordem da navegação; só a primeira abre visível."""
+    return "".join(
+        f'<section id="aba-{nome}" class="aba-painel" role="tabpanel" data-aba-painel="{nome}"'
+        f'{"" if indice == 0 else " hidden"}>\n    {corpos[nome]}\n  </section>'
+        for indice, nome in enumerate(abas))
+
+
 def _ler_asset(nome: str) -> str:
     """Lê um asset PRÓPRIO do skill (`assets/<nome>`) como texto -- usado só
     para os vendorizados/adaptador do uPlot (Task 2). Nunca a integração
@@ -2971,6 +3125,8 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     caso = entrega["caso"]
     resultados = entrega["resultados"]
     dados = entrega.get("dados") or {}
+    produto = contrato_entrega.produto(entrega)
+    abas = ABAS_DO_PRODUTO[produto]
 
     empresa = _texto_de_dado_html(str(caso.get("companhia", "")))
     ticker = _texto_de_dado_html(str(execucao.get("ticker", "")))
@@ -2982,11 +3138,17 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     # Fatia 5D, Task 3: todo texto de `analise` que a Tese exibe sai daqui — a
     # mesma lista de prosa que o QC varreu e que o `log` da Evidência registra.
     prosa, _log_da_prosa = placeholders.resolver_prosa(entrega, idioma)
-    corpo_tese = _tese_html(entrega, catalogo, achados, idioma, dicionario, titulo, prosa, exhibits_resolvidos)
-    corpo_valuation = _valuation_html(entrega, catalogo, idioma, dicionario, prosa,
-                                       com_laboratorio=laboratorio is not None)
-    corpo_evidencia = _evidencia_html(entrega, catalogo, log, log_exhibits, idioma, dicionario, prosa,
-                                      ficha_tecnica)
+    # Fatia 5H, Task 2 (D4): a entrega reduzida à Valuation não COMPÕE a Tese nem a
+    # Evidência — não é uma página com duas abas escondidas, são duas abas que não
+    # existem.
+    corpos = {ABA_DA_VALUATION: _valuation_html(entrega, catalogo, achados, idioma, dicionario, prosa,
+                                                com_laboratorio=laboratorio is not None)}
+    if ABA_DA_TESE in abas:
+        corpos[ABA_DA_TESE] = _tese_html(entrega, catalogo, achados, idioma, dicionario, titulo, prosa,
+                                         exhibits_resolvidos)
+    if ABA_DA_EVIDENCIA in abas:
+        corpos[ABA_DA_EVIDENCIA] = _evidencia_html(entrega, catalogo, log, log_exhibits, idioma, dicionario,
+                                                   prosa, ficha_tecnica)
 
     # Os painéis SVG da Valuation entram no MESMO `<script type="application/
     # json">` dos exhibits (uma chave a mais, `paineis_valuation`) — nunca um
@@ -3044,12 +3206,8 @@ def compor(entrega: dict, catalogo: dict, achados: list, log: list, idioma: str,
     return string.Template(modelo).substitute(
         idioma=html.escape(str(idioma)),
         titulo=titulo,
-        rotulo_aba_tese=html.escape(t(dicionario, "abas.tese")),
-        rotulo_aba_valuation=html.escape(t(dicionario, "abas.valuation")),
-        rotulo_aba_evidencia=html.escape(t(dicionario, "abas.evidencia")),
-        corpo_tese=corpo_tese,
-        corpo_valuation=corpo_valuation,
-        corpo_evidencia=corpo_evidencia,
+        nav_abas=_nav_abas_html(abas, dicionario),
+        paineis=_paineis_das_abas_html(abas, corpos),
         css_uplot=css_uplot,
         js_uplot=js_uplot,
         js_graficos=js_graficos,

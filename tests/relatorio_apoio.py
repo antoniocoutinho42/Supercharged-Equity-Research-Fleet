@@ -550,7 +550,8 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
                     compor_reversa: bool = True,
                     ledger: dict | None = None,
                     consenso: dict | None = None,
-                    compor_ledger: bool = True) -> dict:
+                    compor_ledger: bool = True,
+                    produto: str | None = None) -> dict:
     """Monta um `entrega.json` válido (dict) a partir de uma fixture de caso.
 
     Roda `avaliar()` pelo caminho de produção — o `resultados` embutido
@@ -596,6 +597,9 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     é acrescentado: a entrega leva exatamente `ledger` (ou o ledger vazio), `consenso`
     (ou nenhum) e os datasets como vieram — é assim que um teste declara, por exemplo,
     um dataset sem proveniência.
+
+    `produto` (5H, Task 2, D3): declara `execucao.produto`. `None` (o padrão) NÃO declara
+    o campo — a entrega de sempre, que o default `analise` cobre.
     """
     caso = carregar_caso(FIXTURES / nome_fixture)
     if mutar_caso is not None:
@@ -614,13 +618,17 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
     if consenso is not None:
         analise["consenso"] = copy.deepcopy(consenso)
 
+    execucao = {
+        "id": id_execucao,
+        "ticker": ticker or caso.get("ticker") or "TESTE3",
+        "idioma": idioma,
+    }
+    if produto is not None:
+        execucao["produto"] = produto
+
     entrega_dict = {
         "versao_contrato": "entrega/1",
-        "execucao": {
-            "id": id_execucao,
-            "ticker": ticker or caso.get("ticker") or "TESTE3",
-            "idioma": idioma,
-        },
+        "execucao": execucao,
         "caso": caso,
         "resultados": resultados,
         "analise": analise,

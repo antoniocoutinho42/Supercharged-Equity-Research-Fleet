@@ -149,6 +149,14 @@ _RECUSAS_DE_FORMA = [
                  ["'analise.reteste_terminal.resultado' fora do vocabulário fechado", "'mantido'",
                   "Você quis dizer 'mantida'?"],
                  id="reteste-terminal-fora-do-vocabulario"),
+    # Fatia 5H, Task 2 (D3): o produto da execução, opcional e de vocabulário fechado.
+    pytest.param(GRADES, lambda e: e["execucao"].update(produto="leitura"),
+                 ["'execucao.produto' fora do vocabulário fechado", "'leitura'",
+                  "analise, leitura_de_preco"],
+                 id="produto-fora-do-vocabulario"),
+    pytest.param(GRADES, lambda e: e["execucao"].update(produtos="analise"),
+                 ["chave desconhecida em 'execucao'", "'produtos'", "Você quis dizer 'produto'?"],
+                 id="produto-com-nome-errado"),
 ]
 
 
@@ -1019,3 +1027,98 @@ def test_o_dicionario_rotula_todo_codigo_dos_vocabularios_novos(grupo, vocabular
     empilhamento) e o que o contrato aceita (o resultado do re-teste) têm rótulo no dicionário —
     nenhum código cru chega à tela por um vocabulário que cresceu do outro lado."""
     assert set(VALUATION[grupo]) == vocabulario()
+
+
+# ==========================================================================
+# Fatia 5H, Task 2 (D2/D4): o produto da execução — a reversa que a Leitura de preço exige,
+# e o nível implícito na seção "o que está no preço".
+# ==========================================================================
+
+# A fixture sem reversa publica a limitação que, na Análise, a dispensa.
+CONSENSO = "consenso"
+
+
+def _com_produto(fonte: str, produto: str) -> dict:
+    entrega_dict = _entrega(fonte)
+    entrega_dict["execucao"]["produto"] = produto
+    return entrega_dict
+
+
+def test_a_leitura_de_preco_exige_a_reversa_mesmo_com_a_limitacao_publicada_e_nomeia_o_produto():
+    """D4: na Análise, uma limitação declarada pelo catálogo como supressora da reversa
+    dispensa a reversa; sob `leitura_de_preco`, nenhuma dispensa — a entrega inteira É a
+    leitura do que o preço embute. Mesmo código, com o produto nos parâmetros."""
+    sem_reversa = _entrega(SEM_REVERSA)
+    assert sem_reversa["resultados"]["limitacoes"], "a fixture tem de publicar a limitação"
+    assert sem_reversa["resultados"].get("reversa") is None
+    assert _do_codigo(_achados(sem_reversa), "analise_sem_reversa") == []
+
+    como_leitura = _com_produto(SEM_REVERSA, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+    (achado,) = _do_codigo(_achados(como_leitura), "analise_sem_reversa")
+    assert achado.nivel == "HARD_FAIL"
+    assert achado.params["produto"] == entrega.PRODUTO_DA_LEITURA_DE_PRECO
+    assert achado.params["limitacoes"] == ", ".join(sem_reversa["resultados"]["limitacoes"])
+
+    com_reversa = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+    assert _do_codigo(_achados(com_reversa), "analise_sem_reversa") == []
+
+
+def test_a_mensagem_da_regra_nomeia_o_produto_e_a_linha_da_11_continua_uma_so():
+    """A §11 não ganhou linha: é o mesmo código nos dois produtos, e o dicionário resolve o
+    `{produto}` que o QC passa."""
+    como_leitura = _com_produto(SEM_REVERSA, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+    (achado,) = _do_codigo(_achados(como_leitura), "analise_sem_reversa")
+    mensagem = DICIONARIO["qc"][achado.codigo].format(onde=achado.onde, **achado.params)
+    assert entrega.PRODUTO_DA_LEITURA_DE_PRECO in mensagem
+    assert "{" not in mensagem
+
+
+def test_o_nivel_implicito_entra_no_que_esta_no_preco_com_o_rotulo_do_catalogo():
+    """D2: a métrica implícita como montante, o degrau em pontos percentuais, uma razão por
+    ponto de consenso declarado e a leitura pelo RÓTULO do catálogo — nunca a chave, nunca a
+    prosa do motor, que continua publicada em `resultados` e não chega à tela."""
+    entrega_dict = _entrega(CONSENSO)
+    nivel = entrega_dict["resultados"]["reversa"]["nivel_implicito"]
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["o_que_esta_no_preco_titulo"])
+    bloco = _um(secao, classe="reversa-nivel-implicito")
+
+    assert _titulo_da(bloco) == VALUATION["nivel_implicito_titulo"]
+    assert list(zip([_visivel(el) for el in _todos(bloco, classe="metrica-rotulo")],
+                    [_visivel(el) for el in _todos(bloco, classe="metrica-valor")])) == [
+        (VALUATION["nivel_implicito_metrica_titulo"], _moeda(entrega_dict, nivel["metrica_base_implicita"])),
+        (VALUATION["nivel_implicito_degrau_titulo"],
+         placeholders.formatar(nivel["degrau_implicito_%"], render.FORMATO_DO_DEGRAU_IMPLICITO, IDIOMA)),
+        (VALUATION["nivel_implicito_razao_t1_titulo"],
+         placeholders.formatar(nivel["razao_vs_consenso_t1"], render.FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, IDIOMA)),
+        (VALUATION["nivel_implicito_razao_t2_titulo"],
+         placeholders.formatar(nivel["razao_vs_consenso_t2"], render.FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, IDIOMA)),
+    ]
+
+    chave = nivel["leitura_chave"]
+    assert chave == "antecipacao_temporal", "a variante tem de exercer uma leitura de verdade"
+    assert _visivel(_um(bloco, classe="nivel-implicito-leitura")) == (
+        CATALOGO["leituras_do_nivel"][chave]["rotulo"][IDIOMA])
+    texto_da_aba = _visivel(_aba(_pagina(entrega_dict), "valuation"))
+    assert chave not in texto_da_aba
+    assert nivel["leitura"][:40] not in texto_da_aba
+
+
+def test_sem_consenso_o_nivel_sai_so_com_o_degrau_e_sem_leitura():
+    """A fixture sem `reversa.consenso`: nenhuma razão, nenhuma leitura — e o bloco continua,
+    porque o degrau que o preço embute não depende de haver consenso."""
+    entrega_dict = _entrega()
+    assert entrega_dict["resultados"]["reversa"]["nivel_implicito"]["leitura_chave"] is None
+    bloco = _um(_secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["o_que_esta_no_preco_titulo"]),
+                classe="reversa-nivel-implicito")
+    assert [_visivel(el) for el in _todos(bloco, classe="metrica-rotulo")] == [
+        VALUATION["nivel_implicito_metrica_titulo"], VALUATION["nivel_implicito_degrau_titulo"]]
+    assert _todos(bloco, classe="nivel-implicito-leitura") == []
+
+
+def test_toda_aba_declarada_por_produto_tem_rotulo_e_todo_produto_tem_abas():
+    """Um produto novo no contrato sem abas declaradas no render — ou uma aba sem rótulo no
+    dicionário — reprova aqui, e não com uma página sem navegação."""
+    assert set(render.ABAS_DO_PRODUTO) == entrega.PRODUTOS
+    for abas in render.ABAS_DO_PRODUTO.values():
+        for nome in abas:
+            assert DICIONARIO["interface"]["abas"][nome].strip(), nome

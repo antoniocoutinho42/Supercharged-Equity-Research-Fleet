@@ -117,7 +117,31 @@ CHAVES_DE_TOPO: frozenset = frozenset({
 })
 CHAVES_DE_TOPO_OBRIGATORIAS: frozenset = CHAVES_DE_TOPO - {"dados", "confronto"}
 
-CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma"})
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 2 (D3 do plano docs/superpowers/plans/2026-09-15-v4-item5h-leitura-
+# de-preco.md): o PRODUTO da execução. A §5 do desenho tem dois — a Análise, que é a
+# entrega inteira, e a Leitura de preço, reduzida à aba Valuation. `execucao.produto` é
+# opcional: sem ele, `analise`, que é o que a §5 manda escolher na dúvida, e a página
+# não muda um byte em relação à de hoje.
+# --------------------------------------------------------------------------
+
+PRODUTO_PADRAO: str = "analise"
+PRODUTO_DA_LEITURA_DE_PRECO: str = "leitura_de_preco"
+PRODUTOS: frozenset = frozenset({PRODUTO_PADRAO, PRODUTO_DA_LEITURA_DE_PRECO})
+
+CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma", "produto"})
+CHAVES_DE_EXECUCAO_OBRIGATORIAS: frozenset = CHAVES_DE_EXECUCAO - {"produto"}
+
+
+def produto(entrega: dict) -> str:
+    """O produto que a entrega declara, ou `analise` — o default da §5. Ponto único: o
+    QC e o render leem o produto daqui, nunca `execucao.get("produto")` cada um por si
+    (duas leituras do mesmo campo divergiriam no dia em que o default mudasse).
+
+    `entrega.carregar` já recusou um valor fora de `PRODUTOS`; esta leitura serve
+    também a um chamador direto de `render.compor`, que pode não ter passado pelo gate."""
+    declarado = (entrega.get("execucao") or {}).get("produto")
+    return declarado if declarado in PRODUTOS else PRODUTO_PADRAO
 
 # --------------------------------------------------------------------------
 # Fatia 5D, item 5, Task 2 (D1/D5): a Tese do analista em `analise`, com
@@ -561,13 +585,17 @@ def _validar_confronto(valor: Any) -> None:
 def _validar_execucao(execucao: Any) -> None:
     execucao = _exigir_objeto(execucao, "execucao")
     _recusar_chave_desconhecida(execucao, CHAVES_DE_EXECUCAO, "execucao")
-    for campo in sorted(CHAVES_DE_EXECUCAO):
+    for campo in sorted(CHAVES_DE_EXECUCAO_OBRIGATORIAS):
         if campo not in execucao:
             raise EntregaInvalida(f"campo obrigatório ausente em 'execucao': '{campo}'.")
 
     _exigir_texto_nao_vazio(execucao["id"], "execucao.id")
     _exigir_texto_nao_vazio(execucao["ticker"], "execucao.ticker")
     idioma = _exigir_texto_nao_vazio(execucao["idioma"], "execucao.idioma")
+    # 5H, D3: opcional, mas nunca um valor fora do vocabulário — um produto desconhecido
+    # cairia no default e a entrega sairia com o escopo errado, em silêncio.
+    if "produto" in execucao:
+        _exigir_do_vocabulario(execucao["produto"], PRODUTOS, "execucao.produto")
 
     if not (_DIR_I18N / f"{idioma}.json").exists():
         disponiveis = sorted(p.stem for p in _DIR_I18N.glob("*.json"))

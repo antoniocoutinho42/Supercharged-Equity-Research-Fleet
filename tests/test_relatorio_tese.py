@@ -1673,3 +1673,104 @@ def test_os_textos_que_o_grafico_escreve_saem_resolvidos_no_payload_e_nunca_a_ch
     linhas = [[_visivel(celula) for celula in _todos(linha, tag="td")] for linha in _todos(tabela, tag="tr")]
     assert [f"analise.exhibits.{indice_da_receita}.overlays.0.rotulo", "caso", "preco.valor", "moeda", str(preco),
             _moeda(entrega_dict, preco)] in linhas, linhas
+
+
+# --------------------------------------------------------------------------
+# Fatia 5H, Task 2 (D3/D4): a página de uma Leitura de preço — uma aba só, com o banner do
+# produto e os avisos obrigatórios no topo, e toda conclusão de valor em leitura
+# condicional. Sem o campo, a página de hoje não muda um byte.
+# --------------------------------------------------------------------------
+
+LEITURA_DE_PRECO = entrega.PRODUTO_DA_LEITURA_DE_PRECO
+
+
+def _como_produto(entrega_dict: dict, produto: str) -> dict:
+    copia = copy.deepcopy(entrega_dict)
+    copia["execucao"]["produto"] = produto
+    return copia
+
+
+def test_sem_o_campo_a_pagina_e_a_mesma_que_com_o_produto_padrao(tmp_path):
+    """D3: `execucao.produto` é opcional, com `analise` como default — e o default não é uma
+    página parecida, é a MESMA página, byte a byte."""
+    sem_campo = _entrega()
+    assert "produto" not in sem_campo["execucao"]
+    com_padrao = _como_produto(sem_campo, entrega.PRODUTO_PADRAO)
+    assert (_pagina_pelo_builder(sem_campo, tmp_path / "sem")
+            == _pagina_pelo_builder(com_padrao, tmp_path / "padrao"))
+
+
+def test_a_leitura_de_preco_tem_uma_aba_so_com_o_banner_e_os_avisos_no_topo(tmp_path):
+    """D4: a entrega reduzida à Valuation — sem navegação, sem os painéis da Tese e da
+    Evidência (que nem chegam a ser compostos), e com o banner do produto abrindo a aba,
+    seguido dos avisos obrigatórios, que na Análise moram na Tese."""
+    analise = _pagina_pelo_builder(_entrega(), tmp_path / "analise")
+    leitura = _pagina_pelo_builder(_como_produto(_entrega(), LEITURA_DE_PRECO), tmp_path / "leitura")
+
+    arvore_analise, arvore_leitura = _arvore(analise), _arvore(leitura)
+    assert [el["attrs"]["data-aba-painel"] for el in _elementos(arvore_analise)
+            if "data-aba-painel" in el["attrs"]] == ["tese", "valuation", "evidencia"]
+    assert [el["attrs"]["data-aba-painel"] for el in _elementos(arvore_leitura)
+            if "data-aba-painel" in el["attrs"]] == ["valuation"]
+    assert _todos(arvore_leitura, classe="aba-botao") == []
+    assert _todos(arvore_leitura, classe="abas-nav") == []
+    # A aba única nunca vem escondida: sem botão, ninguém a mostraria.
+    assert "hidden" not in _aba(leitura, "valuation")["attrs"]
+
+    aba = _aba(leitura, "valuation")
+    secoes = _secoes(aba)
+    banner, avisos = secoes[0], secoes[1]
+    assert "produto-banner" in _classes(banner)
+    assert _visivel(banner) == f'{VALUATION["produto_banner_titulo"]} {VALUATION["produto_banner_escopo"]}'
+    assert "disclosures" in _classes(avisos)
+    assert _todos(_aba(analise, "valuation"), classe="produto-banner") == []
+    assert _todos(_aba(analise, "valuation"), classe="disclosures") == []
+    assert _todos(_aba(analise, "tese"), classe="disclosures") != []
+
+
+def test_o_laboratorio_e_os_paineis_continuam_na_aba_unica(tmp_path):
+    """A aba única não é uma aba mutilada: o laboratório, o waterfall da ponte e as matrizes
+    continuam lá, com o mesmo bootstrap — o que sai é a navegação, não o conteúdo."""
+    leitura = _pagina_pelo_builder(_como_produto(_entrega(), LEITURA_DE_PRECO), tmp_path / "leitura")
+    aba = _aba(leitura, "valuation")
+    assert _todos(aba, classe="laboratorio") != []
+    assert _todos(aba, classe="painel-grafico") != []
+    for marcador in ("fleet-dados-laboratorio", "fleet-dados-exhibits"):
+        assert f'id="{marcador}"' in leitura, marcador
+
+
+def test_sob_leitura_de_preco_nenhum_numero_de_valor_sai_com_rotulo_incondicional(tmp_path):
+    """D4, o segundo gatilho de `_leitura_condicional`: a mesma varredura da fronteira de
+    escopo, agora sobre a aba única — todo rótulo com forma condicional sai condicional, e
+    nenhum sai com o rótulo de sempre. As páginas fora do produto provam que a varredura não
+    é vácua: elas exercitam todos esses lugares.
+
+    Os dois montantes da rampa ficam de fora dos dois lados: a rota rampa não admite reversa
+    (`caso.reversa_indisponivel`), e sem reversa não existe Leitura de preço — a asserção logo
+    abaixo prende essa impossibilidade, para que os dois rótulos não fiquem fora em silêncio."""
+    condicionais = VALUATION["condicional"]
+    so_da_rampa = {"formacao_vp_fase1_titulo", "formacao_valor_fase2_titulo"}
+    alcancaveis = {chave: VALUATION["condicional"][chave] for chave in condicionais if chave not in so_da_rampa}
+    incondicionais = {chave: VALUATION[chave] for chave in alcancaveis}
+
+    def _rotulos(pagina: str) -> list:
+        return _rotulos_e_titulos(_aba(pagina, "valuation"))
+
+    def _presentes(rotulos: list, modelos: dict) -> set:
+        return {chave for chave, modelo in modelos.items() if any(_e_o_rotulo(rotulo, modelo) for rotulo in rotulos)}
+
+    rampa = _como_produto(_entrega("caso_rampa.json"), LEITURA_DE_PRECO)
+    assert [a.codigo for a in _achados(rampa) if a.nivel == "HARD_FAIL"] == ["analise_sem_reversa"]
+
+    fontes = [("caso_reversa_firm.json", "tres_cenarios"), (FIXTURE, "alternativas")]
+    fora, sob = [], []
+    for indice, (fixture, variante) in enumerate(fontes):
+        entrega_dict = _entrega(fixture, variante=variante)
+        fora += _rotulos(_pagina_pelo_builder(entrega_dict, tmp_path / f"fora{indice}"))
+        sob += _rotulos(_pagina_pelo_builder(_como_produto(entrega_dict, LEITURA_DE_PRECO),
+                                             tmp_path / f"sob{indice}"))
+    assert _presentes(fora, incondicionais) == set(incondicionais), "as entregas não exercitam toda a varredura"
+    assert _presentes(fora, alcancaveis) == set()
+
+    assert [rotulo for rotulo in sob if any(_e_o_rotulo(rotulo, modelo) for modelo in incondicionais.values())] == []
+    assert _presentes(sob, alcancaveis) == set(alcancaveis)

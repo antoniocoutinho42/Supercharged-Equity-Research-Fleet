@@ -1052,7 +1052,8 @@ def _achados_fronteira_de_escopo(entrega: dict, catalogo: dict, idioma: str) -> 
     return achados
 
 
-def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str) -> list[Achado]:
+def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str,
+                                  produto: str) -> list[Achado]:
     """D4: a reversa que a Análise exige, e as limitações que a tornam impossível.
 
     Para cada chave de `resultados.limitacoes` — publicada pela integração, que
@@ -1070,7 +1071,14 @@ def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str)
 
     O nome da chave nunca é lido. `reversa_com_degrau` suprime a reversa porque a
     integração o declara; uma limitação futura de outro assunto (5F) não muda
-    esta regra."""
+    esta regra.
+
+    Fatia 5H, Task 2 (D4): sob o produto `leitura_de_preco` a reversa é OBRIGATÓRIA —
+    nenhuma limitação publicada a dispensa. A entrega inteira é a leitura do que o
+    preço embute; sem ela não sobra produto nenhum, e a limitação que na Análise
+    justifica a ausência aqui só diz que este caso não admite este produto. É o mesmo
+    código (`analise_sem_reversa`), com a mensagem nomeando o produto que a exige — a
+    §11 continua com uma linha só."""
     declaradas = _objeto(catalogo.get("limitacoes"))
     publicadas = _lista(resultados.get("limitacoes"))
     blocos_suprimidos: set[str] = set()
@@ -1088,9 +1096,12 @@ def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str)
         por_limitacao.append(Achado("REQUIRED_DISCLOSURE", "limitacao_metodologica", onde,
                                     {"limitacao": chave, "rotulo": rotulo}))
 
+    dispensada = (BLOCO_DA_REVERSA in blocos_suprimidos
+                  and produto != contrato_entrega.PRODUTO_DA_LEITURA_DE_PRECO)
     achados: list[Achado] = []
-    if resultados.get(BLOCO_DA_REVERSA) is None and BLOCO_DA_REVERSA not in blocos_suprimidos:
+    if resultados.get(BLOCO_DA_REVERSA) is None and not dispensada:
         achados.append(Achado("HARD_FAIL", "analise_sem_reversa", f"resultados.{BLOCO_DA_REVERSA}", {
+            "produto": produto,
             "limitacoes": ", ".join(str(chave) for chave in publicadas) or _SEM_VALOR,
         }))
     return achados + por_limitacao
@@ -1117,7 +1128,8 @@ def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]
             + _achados_premissas_decisivas(analise, resultados, catalogo)
             + _achados_faixa(entrega, idioma)
             + _achados_fronteira_de_escopo(entrega, catalogo, idioma)
-            + _achados_reversa_e_limitacoes(resultados, catalogo, idioma)
+            + _achados_reversa_e_limitacoes(resultados, catalogo, idioma,
+                                            contrato_entrega.produto(entrega))
             + _achados_tese_dependente_de_uma_premissa(analise))
 
 

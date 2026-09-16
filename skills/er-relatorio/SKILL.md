@@ -200,7 +200,23 @@ que decide se `analise.faixa` é exigida) — o conteúdo pertence ao contrato d
 `er-valuation`, nunca revalidado aqui. Exceção pontual: quando `caso` declara
 um `ticker`, ele tem de bater com `execucao.ticker` (identidade da empresa que
 o título da página nomeia e a que o valuation avaliou). `execucao.idioma`
-precisa ter dicionário em `assets/i18n/<idioma>.json`. O `ledger` tem a forma
+precisa ter dicionário em `assets/i18n/<idioma>.json`. `execucao.produto` é
+**opcional**, de vocabulário fechado (`analise`, `leitura_de_preco`), com
+`analise` como default — o que a §5 manda escolher na dúvida; sem o campo, a
+página é exatamente a de sempre.
+
+**Os dois produtos da §5.** Sob `analise`, a entrega é a página de três abas.
+Sob `leitura_de_preco`, ela sai **reduzida à aba Valuation**: uma aba só, sem
+navegação, e a Tese e a Evidência não são compostas. Ali a reversa é
+OBRIGATÓRIA — nenhuma limitação publicada a dispensa (é a entrega inteira que
+lê o que o preço embute) —, um banner abre a aba declarando o escopo (cobertura
+e encerramento não se aplicam), os avisos obrigatórios sobem para logo abaixo
+dele e toda conclusão de valor sai com o rótulo condicional, pelo mesmo
+mecanismo da fronteira de escopo (o produto é o SEGUNDO gatilho de
+`render._leitura_condicional`). Como a rota rampa não admite reversa, um caso
+de rampa só pode ser entregue como `analise`. Exigir de cada produto o que ele
+pede — a Tese sob `analise`, o escopo sob `leitura_de_preco` — é trabalho do
+`er-analise` (item 8), não deste contrato. O `ledger` tem a forma
 do contrato `ledger/1` do `er-evidencia`, e `analise.consenso` é obrigatório (ver
 "O ledger, o consenso e o confronto"); `ficha_tecnica` não faz parte do
 contrato — uma entrega que a declare é recusada. Produzir a entrega em produção
@@ -412,7 +428,7 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `faixa_fora_de_ordem` | HARD FAIL | ponta da faixa que não nomeia um cenário publicado com preço; preço de `piso` acima do de `base`, ou de `base` acima do de `teto`; `base` diferente do cenário da manchete |
 | `fronteira_com_preco_alvo` | HARD FAIL | sob `resultados.fronteira_de_escopo`: `faixa` declarada, ou um número que a integração declara conclusão de valor (`catalogo.conclusoes_de_valor`) chegando à Tese por um dos três lugares — placeholder `resultados:` num texto da lista de prosa, `chave` de série `engine` ou `chave` de overlay; o achado nomeia o lugar, o caminho e a unidade da família. A decisão lê o mapa, nunca o nome do campo; o preço e o múltiplo de tela não estão nele e continuam permitidos, e `livre:` fica fora |
 | `fronteira_de_escopo_desconhecida` | HARD FAIL | sob fronteira de escopo, o catálogo não rotula a classe no idioma da entrega ou não publica `conclusoes_de_valor` — sem o mapa nenhum número de valor seria reconhecido, e a regra falha fechada |
-| `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente sem nenhuma limitação publicada que o catálogo declare com `afeta: "reversa"` — a decisão lê a declaração, nunca o nome da chave |
+| `analise_sem_reversa` | HARD FAIL | `resultados.reversa` ausente. Sob `analise`, uma limitação publicada que o catálogo declare com `afeta: "reversa"` a dispensa — a decisão lê a declaração, nunca o nome da chave; sob `leitura_de_preco`, nenhuma dispensa, e a mensagem nomeia o produto que a exige |
 | `limitacao_desconhecida` | HARD FAIL | chave de `resultados.limitacoes` que o catálogo não declara com rótulo no idioma e com `afeta` |
 | `insumo_sem_proveniencia` | HARD FAIL | folha numérica do caso que `catalogo.insumos_do_caso` cobre sem registro do ledger cujo `usado_em` a nomeie — booleano não é folha numérica, e o índice de lista é segmento |
 | `usado_em_fora_dos_insumos` | HARD FAIL | caminho de `usado_em` que não nomeia uma folha numérica do caso coberta pelo mapa: o caso não tem esse número, ou ele não é insumo |
@@ -585,8 +601,12 @@ duas perguntas.
    tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
    crescimento gratuito, com o múltiplo e o texto do catálogo; as limitações publicadas da
    reversa e da curva iso; e o julgamento do analista com o observável, quando declarados.
-   Sem reversa, o rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`,
-   `sugestao`, `leitura`, `algebra`) nem código cru chega à aba;
+   Depois dos eixos — que leem o preço em TAXA — o **nível implícito** (fatia 5H), que o lê
+   em NÍVEL: a métrica-base que o preço embute (montante, na escala do caso), o degrau sobre
+   a métrica declarada, uma razão por ponto de consenso que o caso declara e a leitura do
+   confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Sem reversa, o rótulo da
+   limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`, `sugestao`, `leitura`,
+   `algebra`) nem código cru chega à aba;
 9. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
    unidade da premissa que ela substituiu, a premissa pelo rótulo do catálogo, o preço que
    resulta e a nota de que é leitura, **jamais fair value**;
@@ -604,7 +624,8 @@ duas perguntas.
 catálogo a declara (`unidades.<unidade>.escala_monetaria`): no valor original de uma
 premissa monetária do laboratório, nas premissas decisivas, nos montantes da formação do
 valor e no waterfall, pelo sufixo da receita que o `svg.js` recebe — nunca em preço por
-ação. **Sob fronteira de escopo**, todo número que o mapa da integração declara conclusão
+ação. **Sob fronteira de escopo — ou sob o produto `leitura_de_preco`**, os dois gatilhos de
+`render._leitura_condicional`, todo número que o mapa da integração declara conclusão
 de valor sai com o rótulo condicional do dicionário (`valuation.condicional`): o preço e o
 upside do cabeçalho, o múltiplo justo corrente e o forward, os múltiplos e os montantes da
 formação do valor, o título dos cenários e os rótulos de preço e upside de cada um, as três
