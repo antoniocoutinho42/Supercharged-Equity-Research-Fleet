@@ -5,6 +5,7 @@ congelado, e sim `reversa.py`/`sensibilidades.py`. Um espelho fiel ao motor e
 infiel ao wrapper produziria numeros certos no lugar errado — por isso os dois
 harnesses sao arquivos separados.
 """
+import functools
 import json
 import shutil
 import subprocess
@@ -389,3 +390,197 @@ def test_conservacao_de_capital_bate_campo_a_campo_nos_dois_lados_do_limiar():
     assert any(10 < gap < 20 and acesa for gap, acesa in gaps), gaps
     assert any(-20 < gap < -10 and acesa for gap, acesa in gaps), gaps
     assert {chave for a in py for chave in a["conservacao"]["diagnosticos_chaves"]} == set(_CHAVES_DA_CONSERVACAO)
+
+
+# ---------------------------------------------------------------------------
+# REVERSA (item 5, fatia I, task 1). O lado Python e `reversa.reverter` de verdade
+# — o WRAPPER inteiro, um caso minimo por problema. Comparamos o que a aba le desde
+# a 5F: `leitura` + `resolucao` por eixo, `limitacoes` e o teto.
+#
+# D4 do plano desta fatia, MEDIDO antes de o comparador ser escrito (relatorio do
+# lote): `curvatura_d2M_dx2` sai do comparador NOMEADAMENTE, e so' ela. A razao e'
+# estrutural, nao de tolerancia: `identificacao` divide a segunda diferenca por
+# `h**2`, e h = max(|x|,1e-4)*1e-4 vale 1e-8 numa raiz perto de zero — /1e-16. UM
+# ULP de diferenca numa das tres avaliacoes vizinhas (as outras duas bit-a-bit
+# IGUAIS) vira dezenas de unidades na curvatura: medido no primeiro problema de
+# reversa, eixo 'crescimento', Python 266,45 x JS 230,93, com mp e mm identicos e
+# so' m0 distante 1 ULP. Nenhum espelho fiel evita isso, e um badge vermelho num
+# caso legitimo TRAVA o laboratorio inteiro (laboratorio.js:394-416). A curvatura
+# continua PUBLICADA nos dois lados — e' leitura, nao decisao —, e
+# `test_a_curvatura_continua_publicada_dos_dois_lados` prende isso.
+# ---------------------------------------------------------------------------
+
+CURVATURA_FORA_DO_COMPARADOR = "curvatura"
+
+EIXOS_PERCENTUAIS = ("custo_capital", "crescimento", "rentabilidade")
+
+
+@functools.lru_cache(maxsize=1)
+def _py_reversa():
+    """`avaliar_python` dos problemas de reversa, uma vez por sessao: cada problema
+    roda o motor por SUBPROCESSO uma vez por eixo declarado, mais duas (o multiplo
+    justo corrente e o nivel implicito). Sem o cache, cada teste desta secao pagaria
+    a conta inteira de novo."""
+    probs = _problemas({"reversa"})
+    return probs, avaliar_python(probs)
+
+
+def _diferencas(python, js, caminho=""):
+    """Diferencas estruturais entre os dois lados, por igualdade EXATA — o
+    arredondamento do motor e contrato (mesma disciplina de
+    `test_rampa_bate_campo_a_campo`). `curvatura` e pulada PELO NOME, e so' ela (D4)."""
+    if isinstance(python, dict) and isinstance(js, dict):
+        fora = []
+        for chave in set(python) | set(js):
+            if chave == CURVATURA_FORA_DO_COMPARADOR:
+                continue
+            if chave not in python or chave not in js:
+                fora.append((f"{caminho}/{chave}", python.get(chave, "<ausente>"),
+                             js.get(chave, "<ausente>")))
+                continue
+            fora += _diferencas(python[chave], js[chave], f"{caminho}/{chave}")
+        return fora
+    if isinstance(python, list) and isinstance(js, list):
+        if len(python) != len(js):
+            return [(f"{caminho} (comprimento)", len(python), len(js))]
+        return [d for i, (a, b) in enumerate(zip(python, js))
+                for d in _diferencas(a, b, f"{caminho}[{i}]")]
+    return [] if python == js else [(caminho, python, js)]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_reversa_por_eixo_bate_com_o_wrapper():
+    """Contagem de raizes e de tangenciais EXATA ANTES de qualquer numero — a
+    divergencia DISCRETA (uma raiz a mais ou a menos) e a que uma comparacao de
+    valor nao pega, a licao de `test_paridade_solver_js.py`."""
+    probs, py = _py_reversa()
+    assert probs, "fixture sem problemas de reversa"
+    js = _lado_js()
+
+    contagens = []
+    for p, a in zip(probs, py):
+        if a["recusa_da_cli"]:
+            continue
+        b = js[p["id"]]
+        for eixo in EIXOS_PERCENTUAIS:
+            if eixo not in a["eixos"]:
+                continue
+            la, lb = a["eixos"][eixo]["leitura"], b["eixos"][eixo]["leitura"]
+            if len(la["raizes"]) != len(lb["raizes"]):
+                contagens.append((p["id"], eixo, "raizes", len(la["raizes"]), len(lb["raizes"])))
+            if len(la["tangenciais"]) != len(lb["tangenciais"]):
+                contagens.append((p["id"], eixo, "tangenciais",
+                                  len(la["tangenciais"]), len(lb["tangenciais"])))
+    assert not contagens, f"contagem divergente (id, eixo, campo, py, js): {contagens}"
+
+    fora = []
+    for p, a in zip(probs, py):
+        if a["recusa_da_cli"]:
+            continue
+        b = js[p["id"]]
+        fora += _diferencas(a["alvo"], b["alvo"], f"id{p['id']}/alvo")
+        fora += _diferencas(a["limitacoes"], b["limitacoes"], f"id{p['id']}/limitacoes")
+        for eixo in EIXOS_PERCENTUAIS:
+            if eixo not in a["eixos"]:
+                continue
+            fora += _diferencas(a["eixos"][eixo], b["eixos"][eixo], f"id{p['id']}/{eixo}")
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_cap_implicito_bate_com_o_wrapper():
+    """As QUATRO saidas do eixo 'cap', incluindo as duas SEM numero
+    (`cap_indefinido`, `cap_fora_da_faixa`): o espelho decide o codigo pelo mesmo
+    predicado que escolhe as duas frases verbatim do vendor (D3), e nunca monta a
+    frase."""
+    probs, py = _py_reversa()
+    js = _lado_js()
+    fora, motivos = [], set()
+    for p, a in zip(probs, py):
+        if a["recusa_da_cli"] or "cap" not in a["eixos"]:
+            continue
+        motivos.add(a["eixos"]["cap"]["leitura"]["motivo"])
+        fora += _diferencas(a["eixos"]["cap"], js[p["id"]]["eixos"]["cap"], f"id{p['id']}/cap")
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+    assert motivos == {"cap_na_faixa", "cap_na_faixa_decrescente",
+                       "cap_fora_da_faixa", "cap_indefinido"}, motivos
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_teto_do_crescimento_gratuito_bate_com_o_wrapper():
+    """O teto so' existe quando um eixo PRIMARIO nao fecha — e' o mesmo gatilho da
+    limitacao `iso_nao_calculada`. Presenca e conteudo, nos dois lados."""
+    probs, py = _py_reversa()
+    js = _lado_js()
+    fora, com_teto = [], 0
+    for p, a in zip(probs, py):
+        if a["recusa_da_cli"]:
+            continue
+        b = js[p["id"]]
+        tem_py = "teto_do_crescimento_gratuito" in a
+        assert tem_py == ("teto_do_crescimento_gratuito" in b), (p["id"], tem_py)
+        if not tem_py:
+            continue
+        com_teto += 1
+        assert a["limitacoes"] == ["iso_nao_calculada"], (p["id"], a["limitacoes"])
+        fora += _diferencas(a["teto_do_crescimento_gratuito"],
+                            b["teto_do_crescimento_gratuito"], f"id{p['id']}/teto")
+    assert com_teto >= 1, "nenhum problema aciona o teto — o gatilho nao foi exercitado"
+    assert not fora, f"{len(fora)} divergencias; primeiras 3: {fora[:3]}"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_curvatura_continua_publicada_dos_dois_lados():
+    """D4: a curvatura sai do COMPARADOR, nao da TELA. Um espelho que a omitisse
+    deixaria a aba com um numero a menos ao lado da raiz — e a regra do §8.4 proibe
+    numero vivo com diagnostico ausente. Prende tambem o caso que JUSTIFICA a
+    excecao: sem ele, a excecao nomeada estaria protegendo o que nao precisa."""
+    probs, py = _py_reversa()
+    js = _lado_js()
+    publicadas, divergentes = 0, 0
+    for p, a in zip(probs, py):
+        if a["recusa_da_cli"]:
+            continue
+        for eixo in EIXOS_PERCENTUAIS:
+            if eixo not in a["eixos"]:
+                continue
+            ra = a["eixos"][eixo]["leitura"]["raizes"]
+            rb = js[p["id"]]["eixos"][eixo]["leitura"]["raizes"]
+            for xa, xb in zip(ra, rb):
+                assert "curvatura" in xa and "curvatura" in xb, (p["id"], eixo)
+                publicadas += 1
+                if xa["curvatura"] != xb["curvatura"]:
+                    divergentes += 1
+    assert publicadas >= 1, "nenhuma raiz publicou curvatura"
+    assert divergentes >= 1, (
+        "nenhuma curvatura divergiu nesta fixture — a excecao nomeada do comparador "
+        "perdeu o caso que a justifica; remedir antes de retira-la (D4)")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_reversa_recusa_onde_a_cli_do_motor_recusa():
+    """D5/A6: `gp = -150%` faz a CLI do motor sair com codigo 2 ANTES de qualquer
+    handler — `reverter` levanta, e o espelho tem de recusar em vez de resolver uma
+    raiz que o motor nunca calcularia."""
+    probs, py = _py_reversa()
+    js = _lado_js()
+    fora = [(p["id"], a["recusa_da_cli"], js[p["id"]]["recusa_da_cli"])
+            for p, a in zip(probs, py) if a["recusa_da_cli"] != js[p["id"]]["recusa_da_cli"]]
+    assert not fora, f"recusa divergente (id, py, js): {fora}"
+    assert sum(a["recusa_da_cli"] for a in py) >= 1, "nenhuma recusa de CLI exercitada"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_fixture_de_reversa_cobre_o_que_discrimina():
+    probs, py = _py_reversa()
+    ok = [a for a in py if not a["recusa_da_cli"]]
+    motivos = {e["leitura"]["motivo"] for a in ok for e in a["eixos"].values()}
+    assert motivos == {"raiz_na_faixa", "sem_raiz_na_faixa", "cap_na_faixa",
+                       "cap_na_faixa_decrescente", "cap_fora_da_faixa",
+                       "cap_indefinido"}, motivos
+    posicoes = {a["eixos"]["custo_capital"]["leitura"]["beta"]["posicao"]
+                for a in ok if "custo_capital" in a["eixos"]}
+    assert posicoes >= {"abaixo", "dentro", "acima", "sem_banda"}, posicoes
+    assert any(a["limitacoes"] == ["iso_nao_calculada"] for a in ok), "iso_nao_calculada nunca acende"
+    assert any(a["limitacoes"] == [] for a in ok), "iso_nao_calculada nunca apaga"
+    assert {p["args"]["rota"] for p in probs} >= {"firm", "equity"}, "uma rota so"

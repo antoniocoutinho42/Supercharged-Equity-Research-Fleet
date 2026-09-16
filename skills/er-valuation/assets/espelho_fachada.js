@@ -471,6 +471,34 @@
 
     const vivo = { cenarios };
     if (temPonte) vivo.ponte = { nd_efetivo: ndEfetivo };
+
+    // Fatia 5I, Task 1 (D1): a reversa AO VIVO, nas MESMAS chaves do
+    // `resultados.json` — `reversa.alvo`, `reversa.eixos.<eixo>.{leitura,
+    // resolucao}`, `reversa.limitacoes` e o teto quando o gatilho dispara. O que
+    // o relatorio le desde a 5F (D2 daquela fatia) e' a `leitura`, nunca o payload
+    // do motor: `sem_solucao`, `sugestao`, `guardas_v9_4`, `premissas_fixadas` e
+    // `nivel_implicito` (D11) continuam so' no Python, e um espelho que os
+    // reproduzisse estaria reimplementando a REDACAO do motor, nao a metodologia.
+    if (caso.reversa) {
+      const premissasDaReversa = caso.cenarios[caso.reversa.cenario].premissas;
+      const alvo = M.alvoDeMercado({ rota, preco: precoDeTela, acoes, ndEfetivo, metrica });
+      vivo.reversa = {
+        alvo,
+        ...M.reverterEixos({
+          rota,
+          eixos: caso.reversa.eixos,
+          premissas: premissasDaReversa,
+          alvo,
+          base: M.baseDoAlvo(rota, metrica.tipo),
+          metrica,
+          ndEfetivo,
+          acoes,
+          mercado: caso.mercado,
+          moeda,
+          rf,
+        }),
+      };
+    }
     return vivo;
   }
 
@@ -526,6 +554,60 @@
     });
   }
 
+  // Fatia 5I, Task 1 (D4) — a curvatura sai do comparador NOMEADAMENTE, e so' ela.
+  // A razao e' estrutural, e foi MEDIDA antes deste comparador ser escrito:
+  // `identificacao` (motor_espelho.js) divide a segunda diferenca finita por `h**2`,
+  // e `h = max(|x|,1e-4)*1e-4` vale 1e-8 numa raiz perto de zero — divisao por 1e-16.
+  // UM ULP de diferenca numa das tres avaliacoes vizinhas (as outras duas
+  // bit-a-bit IGUAIS entre Python e JS) vira DEZENAS de unidades na curvatura:
+  // medido em 266,45 x 230,93 no eixo de crescimento da fixture de reversa, e em
+  // 70 de 524 raizes sobre a faixa REAL de roic/roe do vendor. Nenhum espelho fiel
+  // evita isso — nao e' folga de tolerancia que falta, e' informacao que o /h**2
+  // destruiu. E um badge VERMELHO num caso legitimo trava o laboratorio inteiro.
+  // A curvatura continua EXIBIDA: ela e' leitura, nao decisao.
+  const CURVATURA_FORA_DO_COMPARADOR = 'curvatura';
+
+  // Igualdade estrutural entre o que o Python publicou e o que o espelho recomputou,
+  // numero a numero na tolerancia TAU acima (nunca `===` sobre float) e por
+  // igualdade exata no resto. Devolve os CAMINHOS divergentes, para que o badge
+  // vermelho nomeie onde divergiu — a mesma disciplina de `registrar`.
+  function caminhosDivergentes(python, js, caminho) {
+    if (Array.isArray(python) || Array.isArray(js)) {
+      if (!Array.isArray(python) || !Array.isArray(js) || python.length !== js.length) {
+        return [caminho];
+      }
+      return python.flatMap((v, i) => caminhosDivergentes(v, js[i], `${caminho}[${i}]`));
+    }
+    if (python !== null && js !== null && typeof python === 'object' && typeof js === 'object') {
+      const chaves = new Set([...Object.keys(python), ...Object.keys(js)]);
+      const fora = [];
+      for (const chave of chaves) {
+        if (chave === CURVATURA_FORA_DO_COMPARADOR) continue;
+        if (!(chave in python) || !(chave in js)) { fora.push(`${caminho}.${chave}`); continue; }
+        fora.push(...caminhosDivergentes(python[chave], js[chave], `${caminho}.${chave}`));
+      }
+      return fora;
+    }
+    if (typeof python === 'number' && typeof js === 'number') {
+      const erro = erroRelativo(python, js);
+      return (erro !== null && erro <= TAU) ? [] : [caminho];
+    }
+    return python === js ? [] : [caminho];
+  }
+
+  function registrarEstrutura(divergencias, cenario, chave, python, js) {
+    const fora = caminhosDivergentes(python === undefined ? null : python,
+      js === undefined ? null : js, chave);
+    if (!fora.length) return;
+    divergencias.push({
+      cenario,
+      chave: fora.join(', '),
+      python: python === undefined ? null : python,
+      js: js === undefined ? null : js,
+      erro_relativo: null,
+    });
+  }
+
   /**
    * O badge de paridade, como FATO: recomputa cada cenario do `caso` e compara
    * com o `resultados` publicado, numero a numero, na tolerancia dos harnesses
@@ -558,6 +640,7 @@
         + 'numero errado em silencio.');
     }
 
+    const M = espelho();
     const vivo = avaliarCaso(caso);
     const cenariosPython = resultados.cenarios || {};
     const divergencias = [];
@@ -603,6 +686,54 @@
         registrarLista(divergencias, nome, 'conservacao_capital.diagnosticos_chaves',
           py.conservacao_capital ? py.conservacao_capital.diagnosticos_chaves : undefined,
           js.conservacao_capital.diagnosticos_chaves);
+      }
+    }
+
+    // Fatia 5I, Task 1 (D1): a reversa entra no badge pelas MESMAS chaves que o
+    // relatorio le — `alvo`, `leitura` e `resolucao` por eixo, o teto e as
+    // limitacoes da leitura —, nunca pela prosa do motor. `cenario` na divergencia
+    // e' o nome do eixo (ou 'reversa'): quem le o badge precisa saber QUAL eixo
+    // divergiu, do mesmo jeito que sabe qual cenario.
+    if (vivo.reversa) {
+      const py = resultados.reversa;
+      if (py === undefined || py === null) {
+        divergencias.push({
+          cenario: 'reversa',
+          chave: 'reversa_ausente_no_resultados',
+          python: null,
+          js: vivo.reversa.alvo,
+          erro_relativo: null,
+        });
+      } else {
+        registrar(divergencias, 'reversa', 'alvo.valor',
+          py.alvo ? py.alvo.valor : undefined, vivo.reversa.alvo);
+        const eixosPython = py.eixos || {};
+        for (const nomeEixo of Object.keys(vivo.reversa.eixos)) {
+          const eixoPython = eixosPython[nomeEixo];
+          registrarEstrutura(divergencias, nomeEixo, 'leitura',
+            eixoPython ? eixoPython.leitura : undefined, vivo.reversa.eixos[nomeEixo].leitura);
+          registrarEstrutura(divergencias, nomeEixo, 'resolucao',
+            eixoPython ? eixoPython.resolucao : undefined, vivo.reversa.eixos[nomeEixo].resolucao);
+        }
+        // O teto so' existe quando um eixo PRIMARIO nao fecha; presenca de um lado
+        // e ausencia do outro E' divergencia (falha fechada), nao "ok por ausencia".
+        const tetoVivo = vivo.reversa.teto_do_crescimento_gratuito;
+        const tetoPython = py.teto_do_crescimento_gratuito;
+        if (tetoVivo !== undefined || tetoPython !== undefined) {
+          registrar(divergencias, 'reversa', 'teto_do_crescimento_gratuito.multiplo',
+            tetoPython ? tetoPython.multiplo : undefined,
+            tetoVivo ? tetoVivo.multiplo : undefined);
+          registrarLista(divergencias, 'reversa', 'teto_do_crescimento_gratuito.diagnosticos_chaves',
+            tetoPython ? tetoPython.diagnosticos_chaves : undefined,
+            tetoVivo ? tetoVivo.diagnosticos_chaves : undefined);
+        }
+        // `resultados.limitacoes` (avaliar.py:1446) mistura a limitacao que SUPRIME
+        // a reversa com as da LEITURA; o filtro usa o vocabulario do espelho, nao um
+        // literal escrito aqui.
+        const daLeitura = new Set(M.LIMITACOES_DA_LEITURA);
+        registrarLista(divergencias, 'reversa', 'limitacoes',
+          (resultados.limitacoes || []).filter((chave) => daLeitura.has(chave)),
+          vivo.reversa.limitacoes);
       }
     }
 

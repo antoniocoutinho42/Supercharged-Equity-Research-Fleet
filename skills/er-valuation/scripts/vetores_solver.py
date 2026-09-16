@@ -103,7 +103,7 @@ finally:
 # bytecode aqui: os dois só chamam o motor por SUBPROCESSO (`motor.rodar`),
 # nunca por import — `motor.executar` já protege `vendor/` com
 # `PYTHONDONTWRITEBYTECODE=1` no ambiente do subprocesso.
-from reversa import alvo_de_mercado  # noqa: E402
+from reversa import alvo_de_mercado, limitacoes_da_leitura, reverter  # noqa: E402
 from sensibilidades import grade_1d, grade_2d  # noqa: E402
 
 # [item 4, fatia C, task 1] `avaliar.precificar_rampa` e `motor.MotorFalhou` — mesma razao de
@@ -1143,14 +1143,15 @@ def gerar() -> list[dict]:
 
     Os problemas de wrapper (`_bloco_wrapper`, task 3), de rampa (`_bloco_rampa`, fatia C task 1),
     de diagnóstico (`_bloco_diag`, fatia C task 2), de degrau (`_bloco_degrau`, fatia D task 2) e
-    de conservação de capital (`_bloco_conservacao`, fatia 5F task 3) vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
+    de conservação de capital (`_bloco_conservacao`, fatia 5F task 3) e de reversa (`_bloco_reversa`,
+    fatia 5I task 1) vêm SEMPRE por último, nessa ordem, depois dos 41 de solver — nunca intercalados. Isso não é
     regra da metodologia, é o que mantém `tests/test_paridade_solver_js.py` (task 2, imutável por
     regra da fatia B) alinhado por posição com os IDs que ele já conhece; a fixture inteira
     permanece uma lista única, um gerador único, como o brief da task 3 pediu e esta task
     preserva."""
     rng = random.Random(SEMENTE_SOLVER)
     problemas = (_bloco_patologico() + _bloco_aleatorio(rng) + _bloco_wrapper() + _bloco_rampa()
-                + _bloco_diag() + _bloco_degrau() + _bloco_conservacao())
+                + _bloco_diag() + _bloco_degrau() + _bloco_conservacao() + _bloco_reversa())
     for i, problema in enumerate(problemas):
         problema["id"] = i
     return problemas
@@ -1516,6 +1517,153 @@ def _avaliar_conservacao(problema: dict) -> dict:
     return {"id": problema["id"], "conservacao": publicado, **_CAMPOS_SOLVER_VAZIOS}
 
 
+# ---------------------------------------------------------------------------
+# Bloco 8 (item 5, fatia I, task 1): a REVERSA. Um problema = um caso mínimo
+# inteiro, e o lado Python é `reversa.reverter` de verdade — não o motor direto,
+# não uma reimplementação. `reverter` roda o motor por SUBPROCESSO uma vez por
+# eixo declarado, mais duas (o múltiplo justo corrente e o nível implícito, que
+# a 5H acrescentou): o bloco é pequeno DE PROPÓSITO, e o que discrimina é a
+# cobertura das saídas — as quatro do eixo 'cap', o eixo primário sem raiz (que
+# aciona o teto e a limitação) e o beta implícito dentro/fora da banda —, nunca
+# o volume.
+#
+# Um único `tipo` para os três testes de paridade da task (eixo percentual, cap,
+# teto) em vez de três: `reverter` já produz os três numa chamada, e três tipos
+# seriam três evaluators pagando o mesmo custo de subprocesso sobre o mesmo caso.
+# ---------------------------------------------------------------------------
+
+# O vetor de tests/fixtures/caso_reversa_firm.json (cenário 'base'), com a ponte
+# daquele caso (800 - 300 = 500) — o caso real da rota firm, não um vetor novo.
+_PREMISSAS_REVERSA_FIRM: dict = dict(g=5.0, roic=12.0, wacc=10.0, n=10, da=20.0, tax=25.0,
+                                     tv="gordon", roic_tv=10.0, gp=3.0)
+_MERCADO_REVERSA: dict = {"rf": 12.0, "erp": 5.5, "beta_observado": [0.85, 1.35]}
+_EIXOS_TODOS: list = ["custo_capital", "crescimento", "rentabilidade", "cap"]
+
+
+def _problema_reversa(rota: str, premissas: dict, eixos: list, metrica: dict, preco: float,
+                      acoes: float, nd_efetivo: float, mercado: dict,
+                      moeda: str = "BRL-nominal") -> dict:
+    return {"id": 0, "tipo": "reversa",
+            "args": {"rota": rota, "premissas": premissas, "eixos": eixos, "metrica": metrica,
+                     "preco": preco, "acoes": acoes, "nd_efetivo": nd_efetivo,
+                     "mercado": mercado, "moeda": moeda}}
+
+
+def _bloco_reversa() -> list[dict]:
+    v = []
+    ebitda = {"tipo": "EBITDA", "valor": 1000.0, "fonte": "fixture"}
+    ll = {"tipo": "LL", "valor": 250.0, "fonte": "fixture"}
+
+    # 1) O caso firm da fixture, quatro eixos, preço que fecha: raiz nos três
+    #    percentuais e CAP crescente na faixa (spread ROIC-WACC = +2 p.p.).
+    v.append(_problema_reversa("firm", dict(_PREMISSAS_REVERSA_FIRM), list(_EIXOS_TODOS),
+                               ebitda, 55.0, 100.0, 500.0, dict(_MERCADO_REVERSA)))
+
+    # 2) Mesmo caso, preço MUITO acima: os dois eixos primários não fecham — é o
+    #    gatilho de `sugestao`, do teto do crescimento gratuito e de
+    #    `iso_nao_calculada`. O cap também sai da faixa por cima.
+    v.append(_problema_reversa("firm", dict(_PREMISSAS_REVERSA_FIRM), list(_EIXOS_TODOS),
+                               ebitda, 400.0, 100.0, 500.0, dict(_MERCADO_REVERSA)))
+
+    # 3) Firm sob 'book' com spread NÃO positivo (ROIC 9% < WACC 10%): o ramo
+    #    `cap_indefinido`, a única saída do cap sem número e sem série.
+    v.append(_problema_reversa("firm", {**_PREMISSAS_REVERSA_FIRM, "roic": 9.0, "tv": "book",
+                                        "roic_tv": None, "gp": None},
+                               ["cap", "rentabilidade"], ebitda, 55.0, 100.0, 500.0,
+                               dict(_MERCADO_REVERSA)))
+
+    # 4) Firm com ROIC abaixo do WACC sob 'gordon': a série valor(n) DECRESCE com n
+    #    — `cap_na_faixa_decrescente`, o código que o motor escreve como frase.
+    #    Preço 55 -> M = 10,0, dentro da faixa da série (8,04-10,38): o alvo BRACKETA.
+    v.append(_problema_reversa("firm", {**_PREMISSAS_REVERSA_FIRM, "roic": 8.0}, ["cap"],
+                               ebitda, 55.0, 100.0, 500.0, dict(_MERCADO_REVERSA)))
+
+    # 5) Rota equity, quatro eixos, sem banda de beta declarada: exercita o outro
+    #    lado do `pe` (gde/nde, politica_tv) e a posição 'sem_banda' do beta.
+    v.append(_problema_reversa("equity",
+                               dict(g=4.0, roe=15.0, ke=13.0, n=8, tv="gordon", roe_tv=13.0,
+                                    gp=3.0, gde=0.0, nde=0.0),
+                               list(_EIXOS_TODOS), ll, 20.0, 100.0, 0.0,
+                               {"rf": 12.0, "erp": 5.5}))
+
+    # 5b/5c) O eixo de custo de capital sozinho, em dois preços: o beta implícito
+    #    DENTRO da banda (preço 25) e ACIMA dela (preço 20). Com o 'abaixo' do
+    #    problema 1 e o 'sem_banda' do 5, as quatro posições de `POSICOES_NA_BANDA`
+    #    alcançáveis com raiz ficam exercitadas. Um eixo só: o custo de cada problema
+    #    é uma chamada de subprocesso por eixo.
+    for preco in (25.0, 20.0):
+        v.append(_problema_reversa("firm", dict(_PREMISSAS_REVERSA_FIRM), ["custo_capital"],
+                                   ebitda, preco, 100.0, 500.0, dict(_MERCADO_REVERSA)))
+
+    # 6) Rota firm com `gp` fora do domínio da CLI (-150%): o motor de verdade sai
+    #    com código 2 sem rodar handler nenhum (D5) — nenhum eixo pode devolver raiz.
+    #    `reverter` levanta `MotorFalhou` aqui, e é isso que o lado Python publica
+    #    (`recusa_da_cli`): a recusa é o fato a comparar, não um número.
+    v.append(_problema_reversa("firm", {**_PREMISSAS_REVERSA_FIRM, "gp": -150.0},
+                               list(_EIXOS_TODOS), ebitda, 55.0, 100.0, 500.0,
+                               dict(_MERCADO_REVERSA)))
+    return v
+
+
+def _caso_minimo_reversa(args: dict) -> dict:
+    """Caso MÍNIMO para chamar `reversa.reverter` direto — só os campos que ele e
+    as três funções que ele chama (`alvo_de_mercado`, `nivel_implicito`,
+    `teto_do_crescimento_gratuito`) de fato leem. NÃO passa por `caso.validar()`,
+    pela mesma razão de `_caso_minimo_grade`: `reverter` documenta que assume essa
+    validação já feita por quem carregou o caso, e não a repete."""
+    return {
+        "rota": args["rota"],
+        "moeda": args["moeda"],
+        "preco": {"valor": args["preco"]},
+        "acoes_diluidas": args["acoes"],
+        "metrica_base": args["metrica"],
+        "mercado": args["mercado"],
+        "reversa": {"cenario": _NOME_CENARIO, "eixos": args["eixos"]},
+        "cenarios": {_NOME_CENARIO: {"premissas": args["premissas"]}},
+    }
+
+
+def _avaliar_reversa(problema: dict) -> dict:
+    """Um problema `tipo: "reversa"` — chama `reversa.reverter` de verdade e publica
+    o subconjunto que a aba lê desde a 5F (D2 daquela fatia, D1 desta): `alvo`
+    (o número), `leitura` + `resolucao` por eixo, `limitacoes` e o teto quando o
+    gatilho dispara. `sem_solucao`, `sugestao`, `guardas_v9_4`, `premissas_fixadas`,
+    `premissa_regime` e `nivel_implicito` ficam de fora — prosa e subcomando do
+    motor que o espelho não reproduz (D1/D11).
+
+    Do teto sai `multiplo`, `premissas_alteradas` e `diagnosticos_chaves`; `leitura`
+    e `diagnosticos` (as MENSAGENS) ficam no Python, mesma disciplina de
+    `_avaliar_rampa` com os avisos."""
+    args = problema["args"]
+    caso = _caso_minimo_reversa(args)
+    try:
+        resultado = reverter(caso, _NOME_CENARIO, args["nd_efetivo"])
+    except MotorFalhou:
+        # A CLI do motor recusa o vetor ANTES de qualquer handler (código 2, sem
+        # calcular nada) e `rodar` levanta — mesma convenção de `_avaliar_rampa`:
+        # a RECUSA é o fato a comparar contra o espelho, nunca um número.
+        return {"id": problema["id"], "recusa_da_cli": True, **_CAMPOS_SOLVER_VAZIOS}
+
+    eixos = {nome: {"leitura": saida["leitura"], "resolucao": saida["resolucao"]}
+             for nome, saida in resultado["eixos"].items()}
+    publicado = {
+        "id": problema["id"],
+        "recusa_da_cli": False,
+        "alvo": resultado["alvo"]["valor"],
+        "eixos": eixos,
+        "limitacoes": limitacoes_da_leitura(resultado),
+        **_CAMPOS_SOLVER_VAZIOS,
+    }
+    teto = resultado.get("teto_do_crescimento_gratuito")
+    if teto is not None:
+        publicado["teto_do_crescimento_gratuito"] = {
+            "multiplo": teto["multiplo"],
+            "premissas_alteradas": teto["premissas_alteradas"],
+            "diagnosticos_chaves": teto["diagnosticos_chaves"],
+        }
+    return publicado
+
+
 _DESPACHO_POR_TIPO = {
     "solver": _avaliar_solver,
     "alvo": _avaliar_alvo,
@@ -1525,6 +1673,7 @@ _DESPACHO_POR_TIPO = {
     "diag": _avaliar_diag,
     "degrau": _avaliar_degrau,
     "conservacao": _avaliar_conservacao,
+    "reversa": _avaliar_reversa,
 }
 
 

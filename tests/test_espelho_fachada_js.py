@@ -978,3 +978,130 @@ def test_a_conservacao_de_capital_acende_e_apaga_com_o_preco_na_mesma_chamada(tm
 
     assert _lista(desfeito, caminho, "fachada") == []
     assert desfeito["valor"]["preco_acao"] == carga["valor"]["preco_acao"]
+
+
+# ---------------------------------------------------------------------------
+# Fatia 5I, Task 1 — a REVERSA ao vivo na fachada (D1/D4/D5/D12)
+# ---------------------------------------------------------------------------
+
+FIXTURE_DE_REVERSA = "caso_reversa_firm.json"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_reversa_viva_reproduz_o_que_o_python_publicou(tmp_path):
+    """D1: a fachada publica `reversa.{alvo, eixos.<eixo>.{leitura, resolucao},
+    limitacoes}` nas MESMAS chaves do `resultados.json`, e o comparador as cobre.
+
+    O que este teste prende, além da igualdade: que o badge fica VERDE no caso
+    NÃO editado. É a condição que a decisão D4 protege — um comparador que
+    incluísse a curvatura pintaria vermelho aqui um dia, num caso legítimo, e
+    badge vermelho trava o laboratório inteiro."""
+    caso, resultados = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+
+    viva = saida["vivo"]["reversa"]
+    assert set(viva) == {"alvo", "eixos", "limitacoes"}, viva.keys()
+    assert set(viva["eixos"]) == set(caso["reversa"]["eixos"])
+    assert _erro_relativo(resultados["reversa"]["alvo"]["valor"], viva["alvo"]) <= TAU
+
+    for nome, eixo in viva["eixos"].items():
+        publicado = resultados["reversa"]["eixos"][nome]
+        assert eixo["resolucao"] == publicado["resolucao"], nome
+        assert eixo["leitura"]["motivo"] == publicado["leitura"]["motivo"], nome
+        assert eixo["leitura"]["premissa"] == publicado["leitura"]["premissa"], nome
+        assert eixo["leitura"]["cap_anos"] == publicado["leitura"]["cap_anos"], nome
+        vivas = eixo["leitura"]["raizes"]
+        pubs = publicado["leitura"]["raizes"]
+        assert len(vivas) == len(pubs), nome
+        for viva_raiz, pub_raiz in zip(vivas, pubs):
+            assert viva_raiz["valor"] == pub_raiz["valor"], nome
+            assert viva_raiz["intervalo"] == pub_raiz["intervalo"], nome
+            assert viva_raiz["identificacao"] == pub_raiz["identificacao"], nome
+            # D4: a curvatura sai do COMPARADOR, não da TELA — publicada dos dois
+            # lados, e nunca `null` onde o Python publicou número.
+            assert ("curvatura" in viva_raiz) and (viva_raiz["curvatura"] is not None), nome
+
+    assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_comparador_prende_a_leitura_de_cada_eixo_da_reversa(tmp_path):
+    """Adulterar a `leitura` publicada de um eixo tem de pintar vermelho, nomeando
+    o eixo — senão a reversa estaria "no badge" só de nome."""
+    caso, resultados = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    raiz = resultados["reversa"]["eixos"]["crescimento"]["leitura"]["raizes"][0]
+    raiz["valor"] = raiz["valor"] + 1.0
+
+    comparacao = _fachada(caso, resultados, tmp_path)["comparacao"]
+    assert comparacao["ok"] is False
+    divergencia = next(d for d in comparacao["divergencias"] if d["cenario"] == "crescimento")
+    assert "raizes[0].valor" in divergencia["chave"], divergencia["chave"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_curvatura_sozinha_nao_pinta_o_badge_de_vermelho(tmp_path):
+    """D4, medido: a curvatura divergente entre Python e JS é ULP amplificado por
+    `/h**2`, não erro de espelho — e um badge vermelho num caso legítimo trava o
+    laboratório. Uma curvatura DIFERENTE no `resultados` não pode reprovar; o
+    mesmo desvio em qualquer campo vizinho (aqui, o intervalo) tem de reprovar."""
+    caso, resultados = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    raiz = resultados["reversa"]["eixos"]["crescimento"]["leitura"]["raizes"][0]
+    assert raiz["curvatura"] is not None, "a fixture não exercita a curvatura"
+    raiz["curvatura"] = raiz["curvatura"] * 2 + 7.0
+    assert _fachada(caso, resultados, tmp_path)["comparacao"]["ok"] is True
+
+    caso2, resultados2 = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    vizinho = resultados2["reversa"]["eixos"]["crescimento"]["leitura"]["raizes"][0]
+    vizinho["intervalo"] = [vizinho["intervalo"][0] + 1.0, vizinho["intervalo"][1]]
+    assert _fachada(caso2, resultados2, tmp_path)["comparacao"]["ok"] is False
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_fachada_recusa_o_eixo_da_reversa_por_dominio_da_cli(tmp_path):
+    """D5/A6: `dominioCliRecusa` nunca alcançava `resolverProblema` — um vetor
+    editado com `gp = -150%` resolveria uma raiz onde o motor de verdade sai com
+    código 2 sem calcular nada. Agora o eixo sai `resolveu: false` com motivo
+    próprio e `leitura: null` — nunca uma raiz —, e o motor de verdade confirma a
+    recusa (o padrão que a 4C já usa)."""
+    caso, resultados = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    caso["cenarios"]["base"]["premissas"]["gp"] = -150.0
+
+    assert _motivo_segundo_o_motor(caso) == "dominio_da_cli"
+
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+    eixos = saida["vivo"]["reversa"]["eixos"]
+    assert set(eixos) == set(caso["reversa"]["eixos"])
+    for nome, eixo in eixos.items():
+        assert eixo["leitura"] is None, (nome, eixo)
+        assert eixo["resolucao"]["resolveu"] is False, (nome, eixo)
+        assert "domínio" in eixo["resolucao"]["motivo"], (nome, eixo)
+    # A limitação não acende por recusa: sem cálculo não há "eixo primário sem
+    # raiz" — o gatilho do Python é a `sugestao` que o motor nunca emitiu.
+    assert saida["vivo"]["reversa"]["limitacoes"] == []
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_limitacao_da_leitura_acende_e_apaga_com_a_edicao_na_mesma_chamada(tmp_path):
+    """D12: a curva iso continua desligada, mas a LIMITAÇÃO passa a ser viva — o
+    gatilho é `_algum_eixo_primario_sem_raiz`, que roda sobre as raízes vivas.
+    Um preço alto o bastante fecha os dois eixos primários; desfeita a edição, a
+    limitação some na mesma sequência de chamadas (a regra do §8.4 aplicada à
+    limitação: o diagnóstico anda junto com o número)."""
+    caso, _ = _caso_e_resultados(FIXTURE_DE_REVERSA)
+    caiu = json.loads(json.dumps(caso))
+    caiu["preco"]["valor"] = 400.0
+
+    original, editado = _avaliar_em_sequencia([caso, caiu], tmp_path)
+
+    assert original["reversa"]["limitacoes"] == []
+    assert original["reversa"]["eixos"]["rentabilidade"]["resolucao"]["resolveu"] is True
+    assert "teto_do_crescimento_gratuito" not in original["reversa"]
+
+    assert editado["reversa"]["limitacoes"] == ["iso_nao_calculada"]
+    assert editado["reversa"]["eixos"]["rentabilidade"]["resolucao"]["resolveu"] is False
+    assert editado["reversa"]["eixos"]["rentabilidade"]["leitura"]["motivo"] == "sem_raiz_na_faixa"
+    # Mesmo gatilho, mesma chamada: o teto do crescimento gratuito aparece com a
+    # limitação e some com ela.
+    assert editado["reversa"]["teto_do_crescimento_gratuito"]["multiplo"] is not None

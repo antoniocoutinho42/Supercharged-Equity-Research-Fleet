@@ -2919,5 +2919,318 @@
       "capex_total": 1400.0,
       "dwc": 90.0
     }
+  },
+  {
+    "id": 137,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "eixos": [
+        "custo_capital",
+        "crescimento",
+        "rentabilidade",
+        "cap"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 55.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 138,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "eixos": [
+        "custo_capital",
+        "crescimento",
+        "rentabilidade",
+        "cap"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 400.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 139,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 9.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "book",
+        "roic_tv": null,
+        "gp": null
+      },
+      "eixos": [
+        "cap",
+        "rentabilidade"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 55.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 140,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 8.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "eixos": [
+        "cap"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 55.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 141,
+    "tipo": "reversa",
+    "args": {
+      "rota": "equity",
+      "premissas": {
+        "g": 4.0,
+        "roe": 15.0,
+        "ke": 13.0,
+        "n": 8,
+        "tv": "gordon",
+        "roe_tv": 13.0,
+        "gp": 3.0,
+        "gde": 0.0,
+        "nde": 0.0
+      },
+      "eixos": [
+        "custo_capital",
+        "crescimento",
+        "rentabilidade",
+        "cap"
+      ],
+      "metrica": {
+        "tipo": "LL",
+        "valor": 250.0,
+        "fonte": "fixture"
+      },
+      "preco": 20.0,
+      "acoes": 100.0,
+      "nd_efetivo": 0.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 142,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "eixos": [
+        "custo_capital"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 25.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 143,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": 3.0
+      },
+      "eixos": [
+        "custo_capital"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 20.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
+  },
+  {
+    "id": 144,
+    "tipo": "reversa",
+    "args": {
+      "rota": "firm",
+      "premissas": {
+        "g": 5.0,
+        "roic": 12.0,
+        "wacc": 10.0,
+        "n": 10,
+        "da": 20.0,
+        "tax": 25.0,
+        "tv": "gordon",
+        "roic_tv": 10.0,
+        "gp": -150.0
+      },
+      "eixos": [
+        "custo_capital",
+        "crescimento",
+        "rentabilidade",
+        "cap"
+      ],
+      "metrica": {
+        "tipo": "EBITDA",
+        "valor": 1000.0,
+        "fonte": "fixture"
+      },
+      "preco": 55.0,
+      "acoes": 100.0,
+      "nd_efetivo": 500.0,
+      "mercado": {
+        "rf": 12.0,
+        "erp": 5.5,
+        "beta_observado": [
+          0.85,
+          1.35
+        ]
+      },
+      "moeda": "BRL-nominal"
+    }
   }
 ]

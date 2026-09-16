@@ -1786,6 +1786,525 @@ function resolverConservacao(item) {
   };
 }
 
+// ============================================================================
+// REVERSA (item 5, fatia I, task 1) — espelha o ramo `rev` de
+// vendor/multiplos-justos/scripts/justos.py (linhas 2021-2300) MAIS o wrapper
+// skills/er-valuation/scripts/reversa.py (_motivo_do_eixo, _identificacao_da_raiz,
+// _resolucao, _beta_implicito, leitura_do_eixo, teto_do_crescimento_gratuito,
+// limitacoes_da_leitura). Duas naturezas de risco, um so' caminho:
+//
+// 1) o RAMO `rev` do vendor e' ITERATIVO (solve_full, ver a secao SOLVER acima) e
+//    decide por PREDICADO (crescente/monotona/bracket); a ordem das operacoes segue o
+//    Python passo a passo, pela mesma razao daquela secao.
+// 2) o WRAPPER e' classificacao: `leitura`/`resolucao` sao o que a aba le desde a 5F
+//    (D2 daquela fatia) — e o que o comparador da fachada confronta.
+//
+// O que NAO entra aqui, por decisao D1/A3 do plano desta fatia: `sem_solucao`,
+// `sugestao` (o TEXTO), `guardas_v9_4`, `premissas_fixadas`, `premissa_regime`,
+// `nota_regime`, `nivel_implicito` (D11) e `iso` (D12) — prosa e subcomandos do motor
+// que a tela nunca mostra. Onde o motor escreve uma FRASE que o wrapper traduz para
+// codigo (`direcao` do cap -> `_MOTIVO_DO_CAP_POR_DIRECAO`; `posicao_na_banda` do beta
+// -> `_POSICAO_POR_PALAVRAS`), este espelho decide o CODIGO pelo MESMO predicado e
+// nunca monta a frase (D3) — a mesma disciplina de `AVISOS_RAMPA`, que publica `true`
+// em vez do texto do aviso.
+// ============================================================================
+
+// reversa.py:RESOLVER_POR_EIXO — eixo declarado no caso -> variavel de `--resolver`,
+// por rota. Copia da tabela do wrapper, nao uma reinterpretacao dela.
+const RESOLVER_POR_EIXO = {
+  custo_capital: { firm: 'wacc', equity: 'ke' },
+  rentabilidade: { firm: 'roic', equity: 'roe' },
+  crescimento: { firm: 'g', equity: 'g' },
+  cap: { firm: 'cap', equity: 'cap' },
+};
+
+const EIXO_DO_CUSTO_DE_CAPITAL = 'custo_capital';
+// reversa.py:EIXOS_PRIMARIOS — os unicos cujo `raizes_*` vazio aciona o teto.
+const EIXOS_PRIMARIOS = ['rentabilidade', 'crescimento'];
+// reversa.py:RENTABILIDADE_TERMINAL_INFINITA (em PONTO PERCENTUAL, como todo o vetor
+// do caso — a CLI divide por 100 depois).
+const RENTABILIDADE_TERMINAL_INFINITA = 1e6;
+// reversa.py: as unidades da leitura, chaves de `catalogo.unidades`.
+const UNIDADE_DA_RAIZ = 'pp';
+const UNIDADE_DO_CAP = 'anos_fracionarios';
+const UNIDADE_DA_CURVATURA = 'curvatura';
+const UNIDADE_DO_BETA = 'beta';
+// reversa.py:_PREFIXO_DO_INTERVALO — `identificacao()` chaveia o intervalo pela
+// tolerancia (`intervalo_para_alvo_±1%`), e a leitura o acha por PREFIXO.
+const PREFIXO_DO_INTERVALO = 'intervalo_para_alvo_±';
+// justos.py:1775 (`--tol` default 1.0, convertido por `tol = (a.tol or 1.0)/100.0`) e
+// justos.py:281/298 (`steps=800`). `reverter` nunca passa `--tol`.
+const TOL_DA_REVERSA = 0.01;
+const STEPS_DA_REVERSA = 800;
+// justos.py, ramo `cap`: a serie e' valor(n) para n INTEIRO de 1 a 60.
+const CAP_ANO_MINIMO = 1;
+const CAP_ANO_MAXIMO = 60;
+
+// Truthiness do Python, que `or` do vendor usa em `(r or 0.6)`, `(g or 0)`,
+// `(k or 0.4)`, `(kw['gp'] or 0)` e `pc(a.gp) or 0.0`: ZERO tambem cai no
+// alternativo, e NaN NAO cai (`nan or 0.6` e' `nan` em Python, porque NaN e'
+// truthy la'). `||` do JS erraria no segundo caso — NaN e' falsy aqui. A
+// diferenca nao e' teorica: `roic = 0` num vetor editado muda a faixa de busca
+// de `g` de `(-0.60, 0.0)` para `(-0.60, 0.5994)`.
+function ouPy(valor, alternativa) {
+  return (valor === null || valor === undefined || valor === 0) ? alternativa : valor;
+}
+
+// `f'{x:.3f}'` do Python sobre um numero JA' arredondado a 3 casas por
+// `arredondarPy` — a chave de `identificacao_por_raiz` (justos.py:2263). A chave
+// em si nunca e' lida pela leitura (que consome `.values()`), mas o COLAPSO
+// importa: duas raizes que formatam igual viram UMA entrada no dict do motor, e
+// `leitura_do_eixo` recusa o par por comprimento (MotorFalhou). Reproduzir a
+// chave e' reproduzir esse colapso.
+function chaveDaIdentificacao(xFracao) {
+  return arredondarPy(xFracao * 100, 3).toFixed(3) + '%';
+}
+
+// justos.py:2058-2065 — as faixas de busca `rngs`, DERIVADAS das outras premissas
+// (decisao D2 do plano: funcao, nunca constante; congelar o objeto daria a raiz
+// certa para o vetor original e a errada para o editado, que e' o caso de uso).
+// `premissas` chega em PONTOS PERCENTUAIS (convencao de caso.json) e SEM a variavel
+// resolvida, exatamente como `reverter` monta o vetor; a saida e' em FRACAO, que e'
+// a unidade em que o solver trabalha. `--rir-externo` fica de fora (D2): nenhum
+// caso o declara e o caso nao tem campo para ele.
+function faixaDeBusca({ variavel, rota, premissas }) {
+  const eq = rota === 'equity';
+  const g = pct(premissas.g ?? null);
+  const r = pct((eq ? premissas.roe : premissas.roic) ?? null);
+  const k = pct((eq ? premissas.ke : premissas.wacc) ?? null);
+  // `kw['gp']` do vendor ja' e' `pc(a.gp) or 0.0`; `rngs` le `(kw['gp'] or 0)`.
+  const gp = ouPy(pct(premissas.gp ?? null), 0.0);
+  const faixas = {
+    g: [-0.60, Math.min(0.60, ouPy(r, 0.6) * 0.999)],
+    roic: [Math.max(0.005, ouPy(g, 0) + 1e-4), 1.50],
+    roe: [Math.max(0.005, ouPy(g, 0) + 1e-4), 1.50],
+    ke: [Math.max(ouPy(gp, 0) + 1e-3, 0.005), 0.40],
+    wacc: [Math.max(ouPy(gp, 0) + 1e-3, 0.005), 0.40],
+    gp: [0.0, ouPy(k, 0.4) - 1e-3],
+  };
+  if (!(variavel in faixas)) {
+    throw new Error(`faixaDeBusca: variavel sem faixa no motor: ${variavel}`);
+  }
+  const [lo, hi] = faixas[variavel];
+  return { lo, hi };
+}
+
+// justos.py:2035-2036 — `conv = 1.0 if base != 'ebitda' else (1-d)(1-t)` e
+// `M = alvo / conv`. So' a base EBITDA converte: o `rev` resolve SEMPRE sobre
+// EV/NOPAT (firm) ou P/L (equity), e a conversao mora no ALVO, nunca na funcao.
+// `da`/`tax` ausentes ou nulas caem no default 0.0 do argparse (justos.py:1766),
+// o mesmo colapso null->ausencia->default que `premissasParaNucleo` documenta.
+function alvoNormalizado({ alvo, base, premissas }) {
+  if (base !== 'ebitda') return alvo;
+  const d = pct(premissas.da ?? null);
+  const t = pct(premissas.tax ?? null);
+  return alvo / ((1 - (d === null ? 0.0 : d)) * (1 - (t === null ? 0.0 : t)));
+}
+
+// reversa.py:alvo_de_mercado — a `base` que o alvo carrega, por rota e tipo de
+// metrica. Mora aqui (e nao na fachada) porque e' o que decide `conv` acima: a
+// mesma decisao em dois lugares divergiria (a licao do FIX 2 da 3B).
+function baseDoAlvo(rota, tipoMetrica) {
+  if (rota === 'firm') return tipoMetrica === 'EBITDA' ? 'ebitda' : 'nopat';
+  if (rota === 'rampa') return 'ebitda0';
+  if (rota === 'equity') return 'pl';
+  throw new Error(`baseDoAlvo: rota desconhecida ${rota}`);
+}
+
+// O contexto numerico de uma reversa: `g`/`r`/`k` em fracao, `kw` do lado certo e a
+// funcao BRUTA do vendor (`_raw`, justos.py:2044-2045). `base_f` do vendor so'
+// difere de `_raw` sob `--alvo-base forward`, que `reverter` nunca usa (_ALVO_BASE =
+// 'corrente', reversa.py:115) — por isso `base_f` nao aparece aqui.
+function contextoDaReversa(rota, premissas) {
+  const eq = rota === 'equity';
+  const g = pct(premissas.g ?? null);
+  const r = pct((eq ? premissas.roe : premissas.roic) ?? null);
+  const k = pct((eq ? premissas.ke : premissas.wacc) ?? null);
+  const n = premissas.n;
+  // justos.py:2037-2041 (kwf/kwe). `politica_tv`/`mid_year` chegam pelo default do
+  // argparse quando ausentes ou nulas — mesmo colapso de `premissasParaNucleo`.
+  const politicaTv = (premissas.politica_tv === null || premissas.politica_tv === undefined)
+    ? 'continua' : premissas.politica_tv;
+  const midYear = (premissas.mid_year === null || premissas.mid_year === undefined)
+    ? false : premissas.mid_year;
+  const kw = eq
+    ? {
+      tv: premissas.tv,
+      roe_tv: pct(premissas.roe_tv ?? null),
+      gp: ouPy(pct(premissas.gp ?? null), 0.0),
+      roe_book: pct(premissas.roe_book ?? null),
+      politica_tv: politicaTv,
+      mid_year: midYear,
+    }
+    : {
+      tv: premissas.tv,
+      roic_tv: pct(premissas.roic_tv ?? null),
+      gp: ouPy(pct(premissas.gp ?? null), 0.0),
+      roic_book: pct(premissas.roic_book ?? null),
+      mid_year: midYear,
+    };
+  // justos.py:2042 — `gde, nde = pc(a.gde) or 0, pc(a.nde) or 0` (so' lado equity).
+  const gde = ouPy(pct(premissas.gde ?? null), 0);
+  const nde = ouPy(pct(premissas.nde ?? null), 0);
+  const bruto = (gg, rr, kk, nn, kw2) => (eq
+    ? pe({ g: gg, roe: rr, ke: kk, n: nn, gde, nde, ...kw2 })
+    : evNopat({
+      g: gg, roic: rr, w: kk, n: nn, ...kw2,
+    }));
+  return { eq, g, r, k, n, kw, bruto };
+}
+
+// justos.py:2137-2200 — o ramo `cap`. Publica o CODIGO de `MOTIVOS_DA_LEITURA`
+// (D3), decidido pelo MESMO predicado (`crescente`) que escolhe as duas frases
+// verbatim do vendor, e o numero so' quando ele existe. As QUATRO saidas:
+// `cap_indefinido` (spread <= 0 sob book, sem numero), `cap_fora_da_faixa`
+// (as duas pontas das duas direcoes, sem numero), `cap_na_faixa` e
+// `cap_na_faixa_decrescente` (com numero).
+function capImplicito({ rota, premissas, M }) {
+  const ctx = contextoDaReversa(rota, premissas);
+  const { g, r, k, kw, bruto } = ctx;
+  const tvc = tvCanon('tv' in kw ? kw.tv : 'book');
+  const alvoNorm = arredondarPy(M, 3);
+
+  const spread = (r !== null && k !== null) ? r - k : null;
+  if (spread !== null && spread <= 0 && tvc === 'book') {
+    return { motivo_do_cap: 'cap_indefinido', CAP_implicito_anos: null,
+      alvo_normalizado: alvoNorm, aviso_monotonia: false };
+  }
+
+  const vals = [];
+  for (let n = CAP_ANO_MINIMO; n <= CAP_ANO_MAXIMO; n++) vals.push([n, bruto(g, r, k, n, kw)]);
+  const difs = [];
+  for (let i = 0; i < vals.length - 1; i++) difs.push(vals[i + 1][1] - vals[i][1]);
+  const monotona = difs.every((d) => d >= -1e-12) || difs.every((d) => d <= 1e-12);
+  const crescente = vals[vals.length - 1][1] >= vals[0][1];
+
+  // n continuo por interpolacao linear entre os anos inteiros que bracketam M.
+  const interp = (subindo) => {
+    for (let i = 0; i < vals.length - 1; i++) {
+      const [n0, v0] = vals[i];
+      const [, v1] = vals[i + 1];
+      if ((subindo && v0 < M && M <= v1) || (!subindo && v0 > M && M >= v1)) {
+        return v1 !== v0 ? n0 + (M - v0) / (v1 - v0) : n0;
+      }
+    }
+    if ((subindo && vals[0][1] >= M) || (!subindo && vals[0][1] <= M)) return vals[0][0];
+    return null;
+  };
+
+  let motivo;
+  let anos;
+  if (crescente) {
+    const hit = interp(true);
+    motivo = hit !== null ? 'cap_na_faixa' : 'cap_fora_da_faixa';
+    anos = hit !== null ? arredondarPy(hit, 1) : null;
+  } else if (M > vals[0][1] || M < vals[vals.length - 1][1]) {
+    // As duas pontas da serie decrescente: o motor escreve texto no lugar do
+    // numero, e `_motivo_do_eixo` le exatamente isso como fora da faixa.
+    motivo = 'cap_fora_da_faixa';
+    anos = null;
+  } else {
+    motivo = 'cap_na_faixa_decrescente';
+    anos = arredondarPy(interp(false), 1);
+  }
+  return { motivo_do_cap: motivo, CAP_implicito_anos: anos,
+    alvo_normalizado: alvoNorm, aviso_monotonia: !monotona };
+}
+
+// justos.py:2203-2300 — o ramo dos tres eixos PERCENTUAIS. Devolve o subconjunto
+// da saida do motor que a leitura e a resolucao leem, com a mesma forma: raizes e
+// tangenciais em PONTO PERCENTUAL arredondados, `identificacao_por_raiz` chaveada
+// como o motor a chaveia, e `sugestao` como PRESENCA (o texto fica no Python).
+function revDoEixoPercentual({ rota, variavel, premissas, M }) {
+  const ctx = contextoDaReversa(rota, premissas);
+  const { g, r, k, n, kw, bruto } = ctx;
+  const { lo, hi } = faixaDeBusca({ variavel, rota, premissas });
+
+  // justos.py:2203-2210 — `f` injeta x na variavel resolvida; `mult = f(x) + M`
+  // e' literal (nao uma chamada fresca ao nucleo): (fn(x)-M)+M nao e' sempre
+  // bit-a-bit igual a fn(x), e a paridade desta fatia e' exata no arredondado.
+  const f = (x) => {
+    let gg = g;
+    let rr = r;
+    let kk = k;
+    let kk2 = kw;
+    if (variavel === 'g') gg = x;
+    else if (variavel === 'roic' || variavel === 'roe') rr = x;
+    else if (variavel === 'ke' || variavel === 'wacc') kk = x;
+    else if (variavel === 'gp') kk2 = { ...kw, gp: x };
+    return bruto(gg, rr, kk, n, kk2) - M;
+  };
+  const mult = (x) => f(x) + M;
+
+  const { raizes, tangenciais } = resolverCompleto(f, lo, hi, STEPS_DA_REVERSA, M);
+
+  const saida = {};
+  saida[`raizes_${variavel}_%`] = raizes.map((x) => arredondarPy(x * 100, 3));
+  if (raizes.length) {
+    // Objeto chaveado como o motor o chaveia — o colapso por chave repetida e'
+    // parte do contrato (ver `chaveDaIdentificacao`).
+    const porRaiz = {};
+    for (const x of raizes) porRaiz[chaveDaIdentificacao(x)] = identificacao(mult, x, M, TOL_DA_REVERSA);
+    saida.identificacao_por_raiz = porRaiz;
+  }
+  if (tangenciais.length) {
+    saida[`raizes_tangenciais_${variavel}_%`] = tangenciais.map((t) => ({
+      'x_%': arredondarPy(t.x * 100, 3),
+      residuo: arredondarPy(t.residuo, 6),
+    }));
+  }
+  // justos.py:2278-2295 — `sugestao` so' existe quando NAO ha raiz NEM tangencial e
+  // a variavel e' primaria. E' o gatilho de `limitacoes_da_leitura` e do teto; o
+  // TEXTO fica no Python (A3).
+  if (!raizes.length && !tangenciais.length && ['g', 'roic', 'roe'].includes(variavel)) {
+    saida.sugestao = true;
+  }
+  return saida;
+}
+
+// reversa.py:_motivo_do_eixo — o classificador UNICO das saidas do `rev`, lido
+// pela leitura E pela resolucao (nunca duas copias da mesma decisao). No eixo
+// 'cap' o codigo ja' vem decidido por `capImplicito` (D3): o espelho nunca monta
+// a frase `direcao` do vendor para traduzi-la de volta.
+function motivoDoEixo(nomeEixo, variavel, saida) {
+  if (nomeEixo === 'cap') return saida.motivo_do_cap;
+  const raizes = saida[`raizes_${variavel}_%`];
+  return (raizes && raizes.length) ? 'raiz_na_faixa' : 'sem_raiz_na_faixa';
+}
+
+// reversa.py:_identificacao_da_raiz — sem derivadas na vizinhanca, `identificacao()`
+// devolve so' `{nota}` e os tres campos saem null, nunca inventados.
+function identificacaoDaRaiz(ident) {
+  if (!('identificacao' in ident)) {
+    return { identificacao: null, intervalo: null, curvatura: null };
+  }
+  const chaveIntervalo = Object.keys(ident).find((c) => c.startsWith(PREFIXO_DO_INTERVALO));
+  return {
+    identificacao: ident.identificacao,
+    intervalo: chaveIntervalo !== undefined ? [...ident[chaveIntervalo]] : null,
+    curvatura: ident.curvatura_d2M_dx2 ?? null,
+  };
+}
+
+// reversa.py:_posicao_e_distancia + _beta_implicito — a inversao declarada do CAPM
+// sobre a PRIMEIRA raiz do eixo de custo de capital. Publica o CODIGO da posicao
+// (`POSICOES_NA_BANDA`), nunca as palavras que o wrapper Python traduz de volta.
+// `algebra` e `nota_multiplas_raizes` ficam no Python: prosa de auditoria (A3).
+function betaImplicito(saidaEixo, variavel, mercado) {
+  const raizes = saidaEixo[`raizes_${variavel}_%`] || [];
+  if (!raizes.length) {
+    return { valor: null, posicao: 'sem_raiz', distancia: null };
+  }
+  const raizUsada = raizes[0];
+  const beta = (raizUsada - mercado.rf) / mercado.erp;
+  const banda = mercado.beta_observado ?? null;
+  if (banda === null) return { valor: beta, posicao: 'sem_banda', distancia: null, raiz_usada: raizUsada };
+  const [minimo, maximo] = banda;
+  if (beta < minimo) return { valor: beta, posicao: 'abaixo', distancia: minimo - beta, raiz_usada: raizUsada };
+  if (beta > maximo) return { valor: beta, posicao: 'acima', distancia: beta - maximo, raiz_usada: raizUsada };
+  return { valor: beta, posicao: 'dentro', distancia: 0.0, raiz_usada: raizUsada };
+}
+
+// reversa.py:_resolucao — o marcador uniforme `{resolveu, motivo}`, acrescentado AO
+// LADO do que o motor devolveu. As frases sao deste wrapper (nunca copia do texto
+// do motor) e entram no comparador por igualdade exata: sao o que a aba mostra
+// quando o eixo nao fecha.
+function resolucaoDoEixo(nomeEixo, variavel, saida) {
+  const motivo = motivoDoEixo(nomeEixo, variavel, saida);
+  if (motivo === 'cap_indefinido') {
+    return { resolveu: false, motivo: 'CAP implícito indefinido: spread do eixo não é positivo.' };
+  }
+  if (motivo === 'cap_fora_da_faixa') {
+    return { resolveu: false, motivo: 'CAP implícito fora da faixa de anos (1-60).' };
+  }
+  if (motivo === 'cap_na_faixa' || motivo === 'cap_na_faixa_decrescente') {
+    return { resolveu: true, motivo: 'CAP implícito dentro da faixa de anos (1-60).' };
+  }
+  if (motivo === 'raiz_na_faixa') {
+    return { resolveu: true, motivo: `raiz encontrada na faixa de busca de '${variavel}'.` };
+  }
+  return { resolveu: false, motivo: `sem raiz na faixa de busca de '${variavel}'.` };
+}
+
+// reversa.py:leitura_do_eixo — a forma normalizada que a aba le desde a 5F (D2), na
+// MESMA forma e nas MESMAS chaves. Raiz e identificacao pareiam pela POSICAO, e
+// comprimentos diferentes sao erro nomeado (nunca um par inventado).
+function leituraDoEixo(nomeEixo, rota, saida, banda) {
+  const variavel = RESOLVER_POR_EIXO[nomeEixo][rota];
+  const motivo = motivoDoEixo(nomeEixo, variavel, saida);
+  if (nomeEixo === 'cap') {
+    return {
+      premissa: null,
+      unidade: UNIDADE_DO_CAP,
+      unidade_da_curvatura: UNIDADE_DA_CURVATURA,
+      motivo,
+      raizes: [],
+      tangenciais: [],
+      cap_anos: (motivo === 'cap_na_faixa' || motivo === 'cap_na_faixa_decrescente')
+        ? saida.CAP_implicito_anos : null,
+    };
+  }
+  const valores = saida[`raizes_${variavel}_%`] || [];
+  const identificacoes = Object.values(saida.identificacao_por_raiz || {});
+  if (identificacoes.length !== valores.length) {
+    throw new Error(
+      `eixo '${nomeEixo}' da reversa com ${valores.length} raiz(es) em 'raizes_${variavel}_%' e `
+      + `${identificacoes.length} em 'identificacao_por_raiz': a leitura pareia raiz e identificacao `
+      + 'pela posicao, e sem o mesmo comprimento o par seria inventado.');
+  }
+  const leitura = {
+    premissa: variavel,
+    unidade: UNIDADE_DA_RAIZ,
+    unidade_da_curvatura: UNIDADE_DA_CURVATURA,
+    motivo,
+    raizes: valores.map((valor, i) => ({ valor, ...identificacaoDaRaiz(identificacoes[i]) })),
+    tangenciais: (saida[`raizes_tangenciais_${variavel}_%`] || []).map((t) => t['x_%']),
+    cap_anos: null,
+  };
+  if (nomeEixo === EIXO_DO_CUSTO_DE_CAPITAL) {
+    const beta = saida.beta_implicito;
+    leitura.beta = {
+      valor: beta.valor,
+      posicao: beta.posicao,
+      distancia: beta.distancia,
+      banda: banda ? [...banda] : null,
+      unidade: UNIDADE_DO_BETA,
+    };
+  }
+  return leitura;
+}
+
+// reversa.py:_algum_eixo_primario_sem_raiz + LIMITACOES_DA_LEITURA. Uma funcao so',
+// lida pelo teto E pela limitacao — uma segunda copia da condicao poderia divergir.
+function algumEixoPrimarioSemRaiz(eixos) {
+  return EIXOS_PRIMARIOS.some((nome) => nome in eixos && eixos[nome].sugestao === true);
+}
+
+// reversa.py:LIMITACOES_DA_LEITURA — o vocabulario publico das limitacoes da
+// LEITURA da reversa. Exportado porque o comparador da fachada precisa saber
+// QUAIS chaves de `resultados.limitacoes` sao desta camada: a lista publicada la'
+// mistura a limitacao que SUPRIME a reversa (avaliar.py:1446) com estas, e filtrar
+// por um literal escrito na fachada seria uma segunda copia do vocabulario.
+const LIMITACOES_DA_LEITURA = ['iso_nao_calculada'];
+
+function limitacoesDaLeitura(eixos) {
+  return algumEixoPrimarioSemRaiz(eixos) ? [...LIMITACOES_DA_LEITURA] : [];
+}
+
+// reversa.py:teto_do_crescimento_gratuito — o caso-limite RiR_TV -> 0: `tv` forcado
+// para 'gordon', a rentabilidade terminal levada a `RENTABILIDADE_TERMINAL_INFINITA`
+// e `gp` igualado ao `g` do cenario. Devolve o MULTIPLO (nao um preco) pelo mesmo
+// caminho de `precificarCelula` — o mesmo arredondamento do motor, nos mesmos
+// pontos. `leitura` e `diagnosticos` (as MENSAGENS) ficam no Python; as CHAVES de
+// diagnostico vem do espelho que a 4C ja' tem, para que o numero nao ande sozinho.
+function tetoDoCrescimentoGratuito({ rota, premissas, metrica, ndEfetivo, acoes, moeda, rf }) {
+  const variavelTv = `${RESOLVER_POR_EIXO.rentabilidade[rota]}_tv`;
+  const premissasAlteradas = {
+    tv: 'gordon',
+    [variavelTv]: RENTABILIDADE_TERMINAL_INFINITA,
+    gp: premissas.g,
+  };
+  const vetor = { ...premissas, ...premissasAlteradas };
+  const { multiplo } = precificarCelula(rota, vetor, metrica, ndEfetivo, acoes);
+  return {
+    multiplo,
+    premissas_alteradas: premissasAlteradas,
+    diagnosticos_chaves: rota === 'firm'
+      ? diagnosticosFirm(vetor, moeda, rf)
+      : diagnosticosEquity(vetor, moeda, rf),
+  };
+}
+
+// A orquestracao por eixo — o que faltava para a reversa rodar no browser (A1: "o
+// que falta nao e' matematica de raiz, e' a orquestracao por eixo"). Espelha
+// `reversa.reverter` no que a aba le: o vetor central do cenario MENOS a variavel
+// resolvida, a faixa derivada desse vetor, o alvo normalizado, e `{leitura,
+// resolucao}` por eixo. `alvo` chega pronto (a fachada o calcula com
+// `alvoDeMercado`, a mesma conta que a 4B ja' espelha).
+//
+// D5 — a recusa da CLI entra ANTES de montar `f`: `cliRecusa` e' a mesma checagem
+// que a 4C mediu (a CLI recusa o vetor com codigo 2 sem rodar handler nenhum), e o
+// subcomando `rev` tem as DUAS camadas que ela cobre — `--tv required=True` e
+// `--n type=int` (justos.py:1769) mais `avaliar_dominios_cli`. Um eixo recusado
+// publica `resolucao: {resolveu: false}` com motivo proprio e `leitura: null` —
+// nunca uma raiz, e nunca uma leitura com cara de "procurei e nao achei", porque o
+// motor de verdade nao procurou nada.
+const RECUSA_DA_CLI_NA_REVERSA = 'premissa fora do domínio que a CLI do motor aceita: '
+  + 'o eixo não foi resolvido.';
+
+function reverterEixos({ rota, eixos, premissas, alvo, base, metrica, ndEfetivo, acoes,
+  mercado, moeda, rf }) {
+  const saidas = {};
+  const publicados = {};
+  for (const nomeEixo of eixos) {
+    const variavel = RESOLVER_POR_EIXO[nomeEixo][rota];
+    // `reverter` remove a variavel resolvida do vetor: fixada, nao haveria o que
+    // resolver — e `rngs` a le como ausente (`(r or 0.6)`).
+    const vetor = { ...premissas };
+    delete vetor[variavel];
+
+    if (cliRecusa(vetor)) {
+      saidas[nomeEixo] = {};
+      publicados[nomeEixo] = {
+        leitura: null,
+        resolucao: { resolveu: false, motivo: RECUSA_DA_CLI_NA_REVERSA },
+      };
+      continue;
+    }
+
+    const M = alvoNormalizado({ alvo, base, premissas: vetor });
+    const saida = nomeEixo === 'cap'
+      ? capImplicito({ rota, premissas: vetor, M })
+      : revDoEixoPercentual({ rota, variavel, premissas: vetor, M });
+    if (nomeEixo === EIXO_DO_CUSTO_DE_CAPITAL) {
+      saida.beta_implicito = betaImplicito(saida, variavel, mercado);
+    }
+    saidas[nomeEixo] = saida;
+    publicados[nomeEixo] = {
+      leitura: leituraDoEixo(nomeEixo, rota, saida, mercado.beta_observado ?? null),
+      resolucao: resolucaoDoEixo(nomeEixo, variavel, saida),
+    };
+  }
+
+  const resultado = { eixos: publicados, limitacoes: limitacoesDaLeitura(saidas) };
+  if (algumEixoPrimarioSemRaiz(saidas)) {
+    resultado.teto_do_crescimento_gratuito = tetoDoCrescimentoGratuito({
+      rota, premissas, metrica, ndEfetivo, acoes, moeda, rf,
+    });
+  }
+  return resultado;
+}
+
+// Problema `tipo: 'reversa'` da fixture de paridade: o caso minimo inteiro de uma
+// vez (alvo + eixos + limitacoes + teto), contra `reversa.reverter` do lado Python.
+function resolverReversa(item) {
+  const a = item.args;
+  const metrica = a.metrica;
+  const alvo = alvoDeMercado({
+    rota: a.rota, preco: a.preco, acoes: a.acoes, ndEfetivo: a.nd_efetivo, metrica,
+  });
+  const r = reverterEixos({
+    rota: a.rota,
+    eixos: a.eixos,
+    premissas: a.premissas,
+    alvo,
+    base: baseDoAlvo(a.rota, metrica.tipo),
+    metrica,
+    ndEfetivo: a.nd_efetivo,
+    acoes: a.acoes,
+    mercado: a.mercado,
+    moeda: a.moeda,
+    rf: a.mercado ? a.mercado.rf : null,
+  });
+  // `reverter` do Python LEVANTA no primeiro eixo que a CLI recusa (o motor sai com
+  // codigo 2 e `rodar` estoura): do lado Python nao sobra resultado nenhum. Aqui o
+  // espelho segue e recusa eixo a eixo — o que o laboratorio precisa —, e o harness
+  // compara o FATO que os dois lados compartilham: houve recusa da CLI ou nao.
+  const recusaDaCli = Object.values(r.eixos).some((e) => e.leitura === null);
+  if (recusaDaCli) return { id: item.id, recusa_da_cli: true, ...CAMPOS_SOLVER_VAZIOS };
+  return { id: item.id, recusa_da_cli: false, alvo, ...r, ...CAMPOS_SOLVER_VAZIOS };
+}
+
 // ---------------- despacho por item (CLI, item 4 fatia B) ----------------
 // Sem `tipo`: item da fixture de VALOR da 4A (fn/args -> valor) — despachado
 // por `avaliarVetores`, o MESMO caminho de sempre, sem nenhuma linha
@@ -1827,6 +2346,9 @@ function avaliarItem(item) {
   if (item.tipo === 'conservacao') {
     return resolverConservacao(item);
   }
+  if (item.tipo === 'reversa') {
+    return resolverReversa(item);
+  }
   throw new Error(`tipo desconhecido no item de paridade: ${item.tipo}`);
 }
 
@@ -1853,6 +2375,10 @@ const superficiePublica = {
   fatorH, rentabPosDegrau, descontoTransicao, valorTransicionado, precificarDegrau, resolverDegrau,
   LIMIAR_DIVERGENCIA_DE_BASE_PCT, CHAVE_DIVERGENCIA_DE_BASE,
   LIMIAR_CONSERVACAO_CAPITAL, conservacaoCapital, resolverConservacao,
+  RESOLVER_POR_EIXO, EIXO_DO_CUSTO_DE_CAPITAL, EIXOS_PRIMARIOS,
+  faixaDeBusca, alvoNormalizado, baseDoAlvo, capImplicito, betaImplicito,
+  motivoDoEixo, leituraDoEixo, resolucaoDoEixo, limitacoesDaLeitura, LIMITACOES_DA_LEITURA,
+  tetoDoCrescimentoGratuito, reverterEixos, resolverReversa,
   tvCanon, cliRecusa,
   avaliarItem, avaliarItens,
 };
