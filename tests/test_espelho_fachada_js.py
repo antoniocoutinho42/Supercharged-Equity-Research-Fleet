@@ -1107,6 +1107,23 @@ def test_a_limitacao_da_leitura_acende_e_apaga_com_a_edicao_na_mesma_chamada(tmp
     assert editado["reversa"]["teto_do_crescimento_gratuito"]["multiplo"] is not None
 
 
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_o_teto_vivo_publica_a_chave_do_multiplo_como_o_resultados_publica(tmp_path):
+    """Fatia 5I, Task 3: o teto publica a CHAVE do múltiplo que mede, como
+    `resultados.reversa.teto_do_crescimento_gratuito` publica desde a 5F (D2) — é por
+    ela que o relatório rotula o múltiplo pelo catálogo. Sem ela, o teto que APARECE
+    por edição (ele não existe no build) sairia com o número e sem o nome do múltiplo.
+
+    O oráculo é uma entrega cujo Python JÁ publica o teto: a variante sem raiz."""
+    caso, resultados = _caso_e_resultados("reversa_sem_raiz")
+    publicado = resultados["reversa"]["teto_do_crescimento_gratuito"]
+    saida = _fachada(caso, resultados, tmp_path)
+    assert "erro" not in saida, saida.get("erro")
+    vivo = saida["vivo"]["reversa"]["teto_do_crescimento_gratuito"]
+    assert vivo["chave"] == publicado["chave"]
+    assert _erro_relativo(publicado["multiplo"], vivo["multiplo"]) <= TAU
+
+
 # ---------------------------------------------------------------------------
 # Fatia 5I, Task 2 — sensibilidades vivas, teto da alavanca e o rir por cenário
 # ---------------------------------------------------------------------------

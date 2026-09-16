@@ -440,7 +440,11 @@ def _compor(nome_fixture: str) -> str:
 # esses mesmos seletores no código, e uma checagem por substring solta ficaria
 # verde mesmo sem nenhum host de verdade na aba.
 HOST_PONTE = '<div class="painel-grafico" data-painel="ponte"></div>'
-HOST_MATRIZ = '<div class="painel-grafico" data-painel="matriz" data-painel-indice="0"></div>'
+# Fatia 5I, Task 3: o host da matriz ganhou a âncora por onde o laboratório a
+# REDESENHA a cada edição, ao lado do índice pelo qual o bootstrap estático a pareia
+# com a sua spec. Os dois convivem: o mesmo host, dois leitores.
+HOST_MATRIZ = ('<div class="painel-grafico" data-painel="matriz" data-painel-indice="0"'
+               ' data-laboratorio-matriz="0"></div>')
 
 
 def test_aba_valuation_traz_os_dois_paineis_e_embute_o_svg_js():

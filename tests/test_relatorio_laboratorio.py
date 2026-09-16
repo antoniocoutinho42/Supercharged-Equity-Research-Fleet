@@ -271,17 +271,34 @@ def test_um_valor_que_o_catalogo_nao_sabe_nomear_nao_vaza_o_codigo_cru():
 # --------------------------------------------------------------------------
 
 def test_o_que_nao_e_vivo_aparece_rotulado_como_congelado():
-    """§8.4 manda rotular o precomputado. A fixture tem reversa e
-    sensibilidades; a de rota rampa não tem nenhum dos três, e ali o bloco
-    não pode aparecer — um rótulo constante não informaria nada."""
-    painel = _painel(_pagina()[0])
-    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_titulo") in painel
-    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_reversa") in painel
-    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_sensibilidades") in painel
-    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_sotp") not in painel
+    """§8.4 manda rotular o precomputado — e SÓ ele. A fixture tem reversa e
+    sensibilidades, que a fatia 5I tornou vivas: nenhuma das duas pode continuar
+    na lista de congelados. Fica o SOTP (que esta fixture não tem, e por isso o
+    bloco inteiro some), e a de rota rampa continua sem bloco nenhum."""
+    assert 'class="lab-congelado"' not in _painel(_pagina()[0])
+    assert 'class="lab-congelado"' not in _painel(_pagina(FIXTURE_SEM_CONGELADO)[0])
 
-    painel_limpo = _painel(_pagina(FIXTURE_SEM_CONGELADO)[0])
-    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_titulo") not in painel_limpo
+    # Num caso com SOTP o bloco continua, com o único item que sobrou.
+    painel_sotp = _painel(_pagina(FIXTURE_SOTP)[0])
+    assert 'class="lab-congelado"' in painel_sotp
+    assert render.t(DICIONARIO, "valuation.laboratorio_congelado_sotp") in painel_sotp
+
+
+def test_o_nivel_implicito_e_o_unico_congelado_do_que_esta_no_preco():
+    """D6/D11: a nota de congelado que abria "o que está no preço" cobria eixos, teto e
+    limitações — que hoje andam com a edição. Ela desceu para o bloco que continua
+    precomputado, o nível implícito (subcomando do motor sem espelho), e mora dentro
+    dele, ao lado dos números que descreve."""
+    aba = _aba_valuation(_pagina()[0])
+    nota = render.t(DICIONARIO, "valuation.nivel_implicito_congelado")
+    assert aba.count(nota) == 1, "o rótulo de congelado tem de sair uma vez, e no bloco do nível"
+    bloco = aba[aba.index('<div class="reversa-nivel-implicito">'):]
+    bloco = bloco[:bloco.index("</div>", bloco.index(nota))]
+    assert nota in bloco
+    # E a seção não abre mais com nota nenhuma: o primeiro bloco depois do título é um eixo.
+    secao = aba[aba.index('<section class="valuation-o-que-esta-no-preco">'):]
+    titulo = render.t(DICIONARIO, "valuation.o_que_esta_no_preco_titulo")
+    assert secao[secao.index("</h2>", secao.index(titulo)):].startswith('</h2><article class="reversa-eixo"')
 
 
 def test_num_caso_com_sotp_a_manchete_e_rotulada_como_congelada_e_nao_muda():
@@ -306,7 +323,10 @@ def test_num_caso_com_sotp_a_manchete_e_rotulada_como_congelada_e_nao_muda():
     preco = placeholders.formatar(entrega["resultados"]["manchete"]["preco_acao"], "moeda",
                                    "pt-BR", entrega["caso"]["moeda"])
     assert preco in _cabecalho(pagina)
-    assert _cabecalho(pagina) == _cabecalho(sem_laboratorio)
+    # Fatia 5I, Task 3: a ÚNICA diferença entre os dois cabeçalhos é o badge de paridade,
+    # que passou a morar aqui. Os números publicados continuam byte a byte os mesmos.
+    badge = '<div class="lab-badge" data-laboratorio-badge role="status" aria-live="polite"></div>'
+    assert _cabecalho(pagina) == _cabecalho(sem_laboratorio).replace("</section>", badge + "</section>")
 
     aba = _aba_valuation(pagina)
     nota = render.t(DICIONARIO, "valuation.laboratorio_manchete_congelada")
@@ -340,9 +360,16 @@ def test_o_espelho_e_a_fachada_entram_por_leitura_da_integracao():
 def test_sem_o_js_da_integracao_a_pagina_sai_sem_painel():
     """O painel e o motor entram ou não entram juntos: um editor sem a fachada
     seria interface morta. É também o que preserva todo chamador anterior a
-    esta fatia (`render.compor` sem o argumento novo)."""
+    esta fatia (`render.compor` sem o argumento novo).
+
+    Fatia 5I, Task 3: as ÂNCORAS de saída (os eixos da reversa, as linhas das tabelas
+    1D, os hosts das matrizes) continuam na marcação sem laboratório — são atributos
+    inertes, e mantê-las condicionais faria a mesma aba sair com duas marcações. O que
+    não pode existir sem o motor é o PAINEL: a raiz editável, o badge e o payload."""
     pagina, _entrega = _pagina(com_laboratorio=False)
-    assert "data-laboratorio" not in _aba_valuation(pagina)
+    aba = _aba_valuation(pagina)
+    assert "data-laboratorio>" not in aba and "data-laboratorio-badge" not in aba
+    assert "data-laboratorio-entrada" not in aba and "data-laboratorio-cenario" not in aba
     assert _dados_embutidos(pagina) is None
     for nome in ("espelho", "fachada"):
         fonte = builder.ASSETS_DA_INTEGRACAO[nome].read_text(encoding="utf-8")
@@ -479,7 +506,13 @@ def test_todos_os_modulos_da_pagina_coexistem_no_mesmo_contexto():
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
 @pytest.mark.parametrize("formato,papel", [("moeda", "preco"), ("x2", "multiplo"),
-                                           ("pct1", "upside")])
+                                           ("pct1", "upside"),
+                                           # Fatia 5I, Task 3: as unidades que a leitura da reversa
+                                           # declara (`pp`, `anos_fracionarios`, `beta`, `curvatura`)
+                                           # passam a ser formatadas no browser, pela receita do
+                                           # catálogo — a mesma amarra, agora para os números do que
+                                           # está no preço.
+                                           ("pp2", "raiz"), ("num1", "cap"), ("num2", "curvatura")])
 @pytest.mark.parametrize("valor", [0.0, 1.5, -0.1234, 61.9137, 1234567.891, -9876.5])
 def test_o_laboratorio_formata_exatamente_como_o_python(formato, papel, valor, tmp_path):
     """A mesma amarra que `svg.js` tem: a receita de formatação (`{casas,
@@ -517,14 +550,22 @@ def test_o_laboratorio_formata_exatamente_como_o_python(formato, papel, valor, t
 MODULOS_DO_LABORATORIO = [
     ASSETS_DA_INTEGRACAO / "motor_espelho.js",
     ASSETS_DA_INTEGRACAO / "espelho_fachada.js",
+    # Fatia 5I, Task 3: a matriz 2D passa a ser redesenhada a cada edição, e quem a
+    # desenha é o módulo SVG da página — o mesmo que o bootstrap estático usa.
+    ASSETS / "svg.js",
     ASSETS / "laboratorio.js",
 ]
 
 
 class _ArvoreDoPainel(HTMLParser):
-    """`{tag, attrs, filhos}` do PRIMEIRO elemento completo do trecho — o
-    `<section class="laboratorio">` como `render.compor` o emitiu, com os
-    atributos já desescapados (como o browser os entrega ao script)."""
+    """`{tag, attrs, filhos}` do PRIMEIRO elemento completo do trecho — a aba
+    Valuation inteira, embrulhada, como `render.compor` a emitiu e com os
+    atributos já desescapados (como o browser os entrega ao script).
+
+    Fatia 5I, Task 3: era só o `<section class="laboratorio">`. O badge subiu
+    para o cabeçalho e a reversa e as sensibilidades passaram a ser reescritas
+    ao vivo — as três coisas moram FORA do painel, e um harness que montasse só
+    o painel não as enxergaria (nem o `document.querySelector` do bootstrap)."""
 
     VAZIOS = frozenset({"input", "br", "hr", "img", "meta", "link"})
 
@@ -574,7 +615,15 @@ function casa(el, seletor) {
   });
 }
 
-const documento = { createElement: (tag) => elemento({ tag: tag, attrs: {}, filhos: [] }) };
+// O `document` que o laboratorio alcanca por `raiz.ownerDocument` (fatia 5I, Task 3):
+// os blocos vivos que moram FORA do painel -- os eixos da reversa, as tabelas 1D e os
+// hosts das matrizes -- sao procurados por ele, como no browser.
+const documento = {
+  createElement: (tag) => elemento({ tag: tag, attrs: {}, filhos: [] }),
+  createTextNode: (texto) => noDeTexto(texto),
+  querySelectorAll: (seletor) => (casa(raiz, seletor) ? [raiz] : []).concat(raiz.querySelectorAll(seletor)),
+  querySelector: (seletor) => documento.querySelectorAll(seletor)[0] || null,
+};
 const noDeTexto = (texto) => ({ eTexto: true, texto: String(texto), pai: null });
 
 function elemento(no) {
@@ -585,6 +634,9 @@ function elemento(no) {
     pai: null,
     ownerDocument: documento,
     ouvintes: {},
+    // O host de SVG recebe a figura por `innerHTML` (e o modulo SVG devolve string):
+    // o harness a GUARDA, para o teste comparar a figura desenhada com a do build.
+    innerHTML: '',
     disabled: proprio(no.attrs, 'disabled'),
     checked: proprio(no.attrs, 'checked'),
     value: '',
@@ -636,11 +688,35 @@ function elemento(no) {
   return el;
 }
 
-const ctx = vm.createContext({});
+// Temporizador FALSO (D13): `laboratorio.js` agrupa a rajada de `input` com
+// `setTimeout`, e um contexto de `vm` nao tem nenhum. Aqui ele existe, e o teste
+// decide QUANDO a rajada vence (`vencerTemporizadores`) -- e o proprio modulo prova
+// que agrupa, porque `avaliarCaso` e' contada.
+const temporizadores = [];
+const ctx = vm.createContext({
+  setTimeout: (funcao) => { temporizadores.push(funcao); return temporizadores.length; },
+  clearTimeout: (id) => { if (id >= 1) { temporizadores[id - 1] = null; } },
+});
+function vencerTemporizadores() {
+  while (temporizadores.some((f) => f !== null)) {
+    const indice = temporizadores.findIndex((f) => f !== null);
+    const funcao = temporizadores[indice];
+    temporizadores[indice] = null;
+    funcao();
+  }
+}
 for (const caminho of entrada.modulos) {
   vm.runInContext(fs.readFileSync(caminho, 'utf8'), ctx, { filename: caminho });
 }
 const raiz = elemento(entrada.arvore);
+// Quantas vezes o painel pediu a conta a' fachada: uma edicao que redesenhasse a cada
+// tecla passaria despercebida sem este contador.
+let chamadasDaFachada = 0;
+const avaliarDoModulo = ctx.FachadaEspelho.avaliarCaso;
+ctx.FachadaEspelho.avaliarCaso = function (caso) {
+  chamadasDaFachada += 1;
+  return avaliarDoModulo(caso);
+};
 
 // Quem liga o painel é o BOOTSTRAP da própria página (o `<script>` inline de
 // `template.html`), com o JSON embutido que ele mesmo parseia -- nunca uma
@@ -650,17 +726,22 @@ const raiz = elemento(entrada.arvore);
 let recebido = null;
 let casoAntes = null;
 let chamadas = 0;
+let badgeDoBootstrap = null;
 const iniciarDoModulo = ctx.FleetLaboratorio.iniciar;
-ctx.FleetLaboratorio.iniciar = function (raizRecebida, dadosRecebidos) {
+ctx.FleetLaboratorio.iniciar = function (raizRecebida, dadosRecebidos, badgeRecebido) {
   chamadas += 1;
   recebido = dadosRecebidos;
+  badgeDoBootstrap = badgeRecebido === undefined ? null : badgeRecebido;
   casoAntes = JSON.stringify(dadosRecebidos.caso);
-  return iniciarDoModulo(raizRecebida, dadosRecebidos);
+  // Os TRES argumentos, repassados: o badge (fatia 5I) chega por aqui, e um embrulho
+  // que o engolisse deixaria o painel sem badge sem que nenhum teste percebesse.
+  return iniciarDoModulo(raizRecebida, dadosRecebidos, badgeRecebido);
 };
 ctx.document = {
   getElementById: (id) => (id === 'fleet-dados-laboratorio'
     ? { textContent: JSON.stringify(entrada.dados) } : null),
-  querySelector: (seletor) => (casa(raiz, seletor) ? raiz : raiz.querySelector(seletor)),
+  querySelector: (seletor) => documento.querySelector(seletor),
+  querySelectorAll: (seletor) => documento.querySelectorAll(seletor),
 };
 
 function blocoDoCenario(nome) {
@@ -692,6 +773,27 @@ function foto() {
       : lista.filhos.filter((f) => !f.eTexto)
         .map((item) => ({ texto: item.textContent, classe: item.getAttribute('class') }));
   }
+  // Fatia 5I, Task 3: o que a aba mostra FORA do painel e passou a andar com a edicao.
+  // Por eixo, cada campo da leitura na ordem do documento (papel, classe e texto): e'
+  // assim que o teste ve uma raiz se mover E o motivo mudar na mesma chamada.
+  const eixos = {};
+  for (const artigo of documento.querySelectorAll('[data-laboratorio-eixo]')) {
+    eixos[artigo.getAttribute('data-laboratorio-eixo')] = artigo
+      .querySelectorAll('[data-laboratorio-saida]')
+      .map((campo) => ({
+        papel: campo.getAttribute('data-laboratorio-saida'),
+        classe: campo.getAttribute('class'),
+        // Container (a lista de raizes) nao leva texto proprio: os campos de dentro
+        // ja' entram um a um, e o texto agregado esconderia qual deles mudou.
+        texto: campo.querySelectorAll('[data-laboratorio-saida]').length ? null : campo.textContent,
+      }));
+  }
+  const hostDoTeto = documento.querySelector('[data-laboratorio-teto]');
+  const hostDasLimitacoes = documento.querySelector('[data-laboratorio-limitacoes]');
+  const grades = documento.querySelectorAll('[data-laboratorio-grade]').map((secao) => secao
+    .querySelectorAll('[data-laboratorio-linha]')
+    .map((linha) => linha.querySelectorAll('[data-laboratorio-saida]').map((c) => c.textContent)));
+  const matrizes = documento.querySelectorAll('[data-laboratorio-matriz]').map((host) => host.innerHTML);
   return {
     badge: { estado: badge.getAttribute('data-estado'), texto: badge.filhos.length && !badge.filhos[0].eTexto
       ? badge.filhos[0].textContent : badge.textContent, itens: itens },
@@ -702,28 +804,56 @@ function foto() {
     botoes: raiz.querySelectorAll('[data-laboratorio-restaurar]').map((b) => b.disabled),
     saidas: saidas,
     diagnosticos: diagnosticos,
+    eixos: eixos,
+    teto: hostDoTeto === null ? null : hostDoTeto.textContent,
+    limitacoes: hostDasLimitacoes === null ? null : hostDasLimitacoes.textContent,
+    grades: grades,
+    matrizes: matrizes,
+    chamadasDaFachada: chamadasDaFachada,
   };
 }
 
 const fotos = {};
+// A foto ANTES de o painel ligar: a aba como `render.py` a emitiu. E' o oraculo da
+// carga -- o painel tem de reproduzir exatamente isto com o motor do navegador.
+fotos.antes = foto();
 vm.runInContext(entrada.bootstrap, ctx, { filename: 'bootstrap-do-laboratorio' });
 fotos.chamadasDoBootstrap = chamadas;
+vencerTemporizadores();
 fotos.carga = foto();
 for (const passo of entrada.passos) {
-  const bloco = blocoDoCenario(passo.cenario);
   if (passo.acao === 'editar') {
-    const portador = bloco.querySelectorAll('[data-laboratorio-premissa]')
+    const portador = blocoDoCenario(passo.cenario).querySelectorAll('[data-laboratorio-premissa]')
       .find((p) => p.getAttribute('data-laboratorio-premissa') === passo.premissa);
     const campo = portador.querySelector('[data-laboratorio-entrada]');
-    campo.value = passo.valor;
-    campo.disparar('input');
-    campo.disparar('change');
+    for (const valor of (passo.valores === undefined ? [passo.valor] : passo.valores)) {
+      campo.value = valor;
+      campo.disparar('input');
+      campo.disparar('change');
+    }
+    // A rajada de `input` so' vence aqui (D13): a foto e' depois do agrupamento, e
+    // `chamadasDaFachada` diz quantas contas ela custou. Com `semVencer`, a foto e'
+    // ANTES -- e' assim que o teste ve que a rajada nao redesenhou tecla a tecla.
+    if (passo.semVencer !== true) { vencerTemporizadores(); }
+  } else if (passo.acao === 'vencer') {
+    vencerTemporizadores();
   } else {
-    bloco.querySelector('[data-laboratorio-restaurar]').disparar('click');
+    blocoDoCenario(passo.cenario).querySelector('[data-laboratorio-restaurar]').disparar('click');
   }
   fotos[passo.nome] = foto();
 }
+// A matriz que o BOOTSTRAP ESTATICO desenharia, do payload que `render.py` publica
+// para os paineis SVG: a figura viva da carga tem de ser identica a ela.
+fotos.matrizesDoRender = (entrada.matrizesDoRender || []).map((m) => ctx.FleetSVG.matriz(m.grade, {
+  base: m.base, rotuloX: m.rotuloX, rotuloY: m.rotuloY,
+  formato: m.formato, formatoX: m.formatoX, formatoY: m.formatoY,
+}));
 fotos.casoIntacto = recebido !== null && JSON.stringify(recebido.caso) === casoAntes;
+// O badge que o bootstrap passou e' o do CABECALHO -- e uma busca descendente a partir
+// da raiz do painel (o caminho antigo) nao o acha mais.
+fotos.badgeDoBootstrap = badgeDoBootstrap !== null;
+fotos.badgeDentroDoPainel = raiz.querySelector('[data-laboratorio]') !== null
+  && raiz.querySelector('[data-laboratorio]').querySelector('[data-laboratorio-badge]') !== null;
 console.log(JSON.stringify(fotos));
 """
 
@@ -737,7 +867,27 @@ def _bootstrap_do_laboratorio(pagina: str) -> str:
     return blocos[0]
 
 
-def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None,
+def _arvore_da_aba(pagina: str) -> dict:
+    """A aba Valuation inteira, embrulhada num `<div>` — o que o harness monta como
+    documento. O embrulho existe porque a aba não é UM elemento no trecho recortado (o
+    recorte começa no meio da tag de abertura da `<section>` da aba), e porque o painel
+    deixou de ser a raiz: o badge está no cabeçalho, acima dele."""
+    aba = _aba_valuation(pagina)
+    arvore = _ArvoreDoPainel()
+    arvore.feed("<div>" + aba[aba.index(">") + 1:] + "</div>")
+    arvore.close()
+    assert arvore.raiz is not None and arvore.raiz["tag"] == "div"
+    return arvore.raiz
+
+
+def _matrizes_do_render(entrega: dict) -> list:
+    """O payload dos painéis SVG que o bootstrap estático consome — o oráculo da
+    matriz que o laboratório redesenha na carga."""
+    return render._paineis_valuation_para_json(
+        entrega["caso"], entrega["resultados"], CATALOGO, "pt-BR", DICIONARIO)["matrizes"]
+
+
+def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None, entrega: dict | None = None,
                       passos: list | None = None, modulos_extra: list | None = None) -> dict:
     """Roda o painel no node e devolve uma FOTO depois da carga e depois de
     cada passo (`editar` um campo / `restaurar` um cenário): estado e texto do
@@ -747,16 +897,13 @@ def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None,
     `modulos_extra`: arquivos carregados DEPOIS dos três da página, no mesmo
     contexto e antes do bootstrap — é como um teste simula uma fachada de outra
     versão sem tocar nos arquivos da integração."""
-    arvore = _ArvoreDoPainel()
-    arvore.feed(_painel(pagina))
-    arvore.close()
-    assert arvore.raiz is not None and arvore.raiz["attrs"].get("class") == "laboratorio"
     entrada = {
         "modulos": [str(p) for p in MODULOS_DO_LABORATORIO] + [str(p) for p in (modulos_extra or [])],
-        "arvore": arvore.raiz,
+        "arvore": _arvore_da_aba(pagina),
         "dados": dados if dados is not None else _dados_embutidos(pagina),
         "bootstrap": _bootstrap_do_laboratorio(pagina),
         "passos": passos or [],
+        "matrizesDoRender": _matrizes_do_render(entrega) if entrega is not None else [],
     }
     arq = tmp_path / "laboratorio_vivo.json"
     arq.write_text(json.dumps(entrada, ensure_ascii=False), encoding="utf-8")
@@ -1176,3 +1323,245 @@ def test_um_motivo_que_o_payload_nao_rotula_vira_texto_do_dicionario_nunca_o_cod
     itens = fotos["recusado"]["diagnosticos"]["base"]
     assert itens == [_item_de_recusa(render.t(DICIONARIO, "valuation.laboratorio_recusa_desconhecida"))], itens
     assert "nucleo_nao_finito" not in itens[0]["texto"]
+
+
+# --------------------------------------------------------------------------
+# Fatia 5I, Task 3 — o badge no cabeçalho, e a leitura do que está no preço e as
+# sensibilidades VIVAS na aba (§8.4: o diagnóstico anda junto com o número).
+#
+# O oráculo é sempre o Python: a página do caso EDITADO, composta por
+# `render.compor` a partir de um `avaliar()` de verdade sobre aquele vetor. "Algum
+# número que mudou" não bastaria — a tela tem de mostrar o número do motor
+# congelado, e o texto inteiro do campo, com o rótulo do código que o acompanha.
+# --------------------------------------------------------------------------
+
+def _texto_do_no(no: dict) -> str:
+    """O `textContent` de um nó da árvore — a mesma concatenação, sem separador, que
+    o DOM do harness devolve."""
+    if "texto" in no:
+        return no["texto"]
+    return "".join(_texto_do_no(filho) for filho in no["filhos"])
+
+
+def _com_atributo(no: dict, atributo: str) -> list:
+    achados = []
+    for filho in no["filhos"]:
+        if "texto" in filho:
+            continue
+        if atributo in filho["attrs"]:
+            achados.append(filho)
+        achados += _com_atributo(filho, atributo)
+    return achados
+
+
+def _eixos_estaticos(pagina: str) -> dict:
+    """`{eixo: [{papel, classe, texto}]}` da aba como `render.py` a emitiu — a mesma
+    forma que a foto do harness devolve para os eixos vivos."""
+    return {
+        artigo["attrs"]["data-laboratorio-eixo"]: [
+            {"papel": campo["attrs"]["data-laboratorio-saida"], "classe": campo["attrs"].get("class"),
+             # Container (a lista de raízes) não leva texto próprio — ver o harness.
+             "texto": None if _com_atributo(campo, "data-laboratorio-saida") else _texto_do_no(campo)}
+            for campo in _com_atributo(artigo, "data-laboratorio-saida")
+        ]
+        for artigo in _com_atributo(_arvore_da_aba(pagina), "data-laboratorio-eixo")
+    }
+
+
+def _grades_estaticas(pagina: str) -> list:
+    """As células de cada tabela 1D da aba, como `render.py` as emitiu."""
+    return [[[_texto_do_no(celula) for celula in _com_atributo(linha, "data-laboratorio-saida")]
+             for linha in _com_atributo(secao, "data-laboratorio-linha")]
+            for secao in _com_atributo(_arvore_da_aba(pagina), "data-laboratorio-grade")]
+
+
+def _hospedeiro(pagina: str, atributo: str) -> str:
+    (host,) = _com_atributo(_arvore_da_aba(pagina), atributo)
+    return _texto_do_no(host)
+
+
+def _campo_do_eixo(foto: dict, eixo: str, papel: str) -> list:
+    return [campo["texto"] for campo in foto["eixos"][eixo] if campo["papel"] == papel]
+
+
+# A curvatura é a ÚNICA leitura que os dois motores não reproduzem um do outro, e a
+# razão está medida no lote 1 (D4): `curvatura_d2M_dx2` é uma segunda diferença finita
+# dividida por `h²`, e 1 ULP de diferença em `m0` vira 13% no eixo cuja raiz cai em
+# g ≈ 1e-16. Ela saiu do comparador NOMEADAMENTE naquele lote — um badge vermelho num
+# caso legítimo travaria o laboratório inteiro — e continua exibida, porque é leitura e
+# não decisão. Com a leitura VIVA, o número exibido passa a ser o do navegador: as
+# comparações campo a campo abaixo a excluem, e um teste só, logo adiante, prende a
+# exceção pelos dois lados.
+PAPEL_DA_CURVATURA = "curvatura"
+
+
+def _sem_curvatura(eixos: dict) -> dict:
+    return {nome: [campo for campo in campos if campo["papel"] != PAPEL_DA_CURVATURA]
+            for nome, campos in eixos.items()}
+
+
+def test_o_badge_de_paridade_sobe_para_o_cabecalho_da_aba():
+    """A8: dentro da `<section>` do painel, o badge era achado por uma busca
+    descendente a partir da raiz. No cabeçalho, a MESMA busca devolveria `null` e
+    `pintarBadge` sairia no guarda — sem badge, sem erro e com o painel destravado.
+    Ele sai uma vez só, no cabeçalho, e quem o localiza é o bootstrap, por
+    `document`."""
+    pagina, _entrega = _pagina()
+    aba = _aba_valuation(pagina)
+    assert "data-laboratorio-badge" not in _painel(pagina)
+    cabecalho = aba[aba.index('<section class="valuation-cabecalho"'):]
+    assert "data-laboratorio-badge" in cabecalho[:cabecalho.index("</section>")]
+    assert aba.count("data-laboratorio-badge") == 1
+    assert 'document.querySelector("[data-laboratorio-badge]")' in _bootstrap_do_laboratorio(pagina)
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_o_badge_chega_por_parametro_e_a_busca_dentro_do_painel_nao_o_acharia(tmp_path):
+    """A outra metade de A8, medida no node: o bootstrap o encontra por `document` e o
+    passa a `iniciar`; a busca descendente pela raiz do painel não acha nada. E o badge
+    verde continua pintado, agora de fora da raiz."""
+    pagina, _entrega = _pagina()
+    fotos = _laboratorio_vivo(pagina, tmp_path)
+    assert fotos["badgeDoBootstrap"] is True
+    assert fotos["badgeDentroDoPainel"] is False
+    assert fotos["carga"]["badge"]["estado"] == "ok"
+    assert fotos["carga"]["badge"]["texto"] == render.t(DICIONARIO, "valuation.laboratorio_paridade_ok")
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_a_leitura_do_que_esta_no_preco_anda_com_a_edicao(tmp_path):
+    """§8.4 no bloco que era o exemplo do defeito: a raiz do eixo de custo de capital e
+    o MOTIVO de cada eixo se movem na mesma chamada, e com eles a limitação da curva
+    iso e o teto do crescimento gratuito — que só existem enquanto um eixo primário não
+    fecha. Três medidas:
+
+    1. a carga reproduz, campo a campo, a leitura que o Python publicou;
+    2. uma edição que move a raiz (roic) muda o número e mantém o motivo;
+    3. uma edição que fecha os dois eixos primários (wacc) troca o motivo, acende a
+       limitação e faz aparecer o teto — e restaurar desfaz tudo.
+
+    O oráculo de (2) e (3) é a página do caso editado, composta pelo motor de verdade."""
+    pagina, entrega = _pagina()
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "roic", "acao": "editar", "cenario": "base", "premissa": "roic", "valor": "20"},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+        {"nome": "wacc", "acao": "editar", "cenario": "base", "premissa": "wacc", "valor": "14"},
+        {"nome": "restaurado2", "acao": "restaurar", "cenario": "base"},
+    ])
+
+    assert fotos["antes"]["eixos"], "a aba não trouxe eixo nenhum — o teste não discrimina"
+    assert _sem_curvatura(fotos["carga"]["eixos"]) == _sem_curvatura(fotos["antes"]["eixos"])
+    assert fotos["carga"]["teto"] == "" and fotos["carga"]["limitacoes"] == ""
+
+    def _pagina_editada(chave: str, valor: float) -> str:
+        def _mutar(caso: dict) -> None:
+            caso["cenarios"]["base"]["premissas"][chave] = valor
+        return _pagina(FIXTURE, mutar_caso=_mutar)[0]
+
+    com_roic = _pagina_editada("roic", 20.0)
+    assert _sem_curvatura(fotos["roic"]["eixos"]) == _sem_curvatura(_eixos_estaticos(com_roic))
+    assert _campo_do_eixo(fotos["roic"], "custo_capital", "raiz-valor") \
+        != _campo_do_eixo(fotos["carga"], "custo_capital", "raiz-valor"), \
+        "a edição não moveu a raiz — o teste deixou de discriminar"
+    assert _campo_do_eixo(fotos["roic"], "custo_capital", "motivo") \
+        == _campo_do_eixo(fotos["carga"], "custo_capital", "motivo")
+
+    com_wacc = _pagina_editada("wacc", 14.0)
+    assert _sem_curvatura(fotos["wacc"]["eixos"]) == _sem_curvatura(_eixos_estaticos(com_wacc))
+    for eixo in ("crescimento", "rentabilidade"):
+        assert _campo_do_eixo(fotos["wacc"], eixo, "motivo") != _campo_do_eixo(fotos["carga"], eixo, "motivo")
+        assert _campo_do_eixo(fotos["wacc"], eixo, "raiz-valor") == []
+    assert fotos["wacc"]["teto"] == _hospedeiro(com_wacc, "data-laboratorio-teto") != ""
+    assert fotos["wacc"]["limitacoes"] == _hospedeiro(com_wacc, "data-laboratorio-limitacoes") != ""
+    assert CATALOGO["limitacoes"]["iso_nao_calculada"]["rotulo"]["pt-BR"] in fotos["wacc"]["limitacoes"]
+
+    for restaurada in ("restaurado", "restaurado2"):
+        assert fotos[restaurada]["eixos"] == fotos["carga"]["eixos"]
+        assert fotos[restaurada]["teto"] == "" and fotos[restaurada]["limitacoes"] == ""
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_a_curvatura_exibida_na_carga_e_a_do_navegador_e_o_badge_continua_verde(tmp_path):
+    """A consequência, na tela, da exceção que o lote 1 mediu (D4): com a leitura viva,
+    a curvatura que a aba mostra passa a ser a que o motor do navegador calculou. No
+    eixo cuja raiz cai em g ≈ 1e-16 ela difere da publicada — 1 ULP na segunda
+    diferença, amplificado por `h²` —, e é por isso que ela está FORA do comparador: o
+    badge continua verde, porque a divergência é de leitura, não de decisão.
+
+    O teste prende os dois lados: o campo continua na tela depois da carga (a exibição
+    não foi silenciada) e o badge não vira vermelho por causa dele."""
+    pagina, _entrega = _pagina()
+    fotos = _laboratorio_vivo(pagina, tmp_path)
+    curvaturas = {
+        quando: [campo["texto"] for campos in fotos[quando]["eixos"].values() for campo in campos
+                 if campo["papel"] == PAPEL_DA_CURVATURA]
+        for quando in ("antes", "carga")
+    }
+    assert curvaturas["antes"] and len(curvaturas["carga"]) == len(curvaturas["antes"])
+    assert curvaturas["carga"] != curvaturas["antes"], \
+        "a fixture deixou de exercitar o caso que justifica a exceção da curvatura (D4)"
+    assert fotos["carga"]["badge"]["estado"] == "ok"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_as_sensibilidades_andam_com_a_edicao_e_a_matriz_e_redesenhada(tmp_path):
+    """A tabela 1D e a matriz 2D deixam de ser congeladas. Na carga, as duas
+    reproduzem o que o relatório publicou — a matriz, byte a byte contra o que o
+    bootstrap estático desenharia do payload de `render.py`; na edição, as duas passam
+    a mostrar o que o motor publica para o vetor editado."""
+    pagina, entrega = _pagina()
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "roic", "acao": "editar", "cenario": "base", "premissa": "roic", "valor": "20"},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+
+    assert fotos["antes"]["grades"] and fotos["antes"]["grades"][0], "sem tabela 1D o teste não discrimina"
+    assert fotos["carga"]["grades"] == fotos["antes"]["grades"]
+    assert fotos["matrizesDoRender"] and fotos["carga"]["matrizes"] == fotos["matrizesDoRender"]
+
+    def _mutar(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"]["roic"] = 20.0
+
+    editada = _pagina(FIXTURE, mutar_caso=_mutar)[0]
+    assert fotos["roic"]["grades"] == _grades_estaticas(editada)
+    assert fotos["roic"]["grades"] != fotos["carga"]["grades"], "a edição não moveu a tabela 1D"
+    assert fotos["roic"]["matrizes"] != fotos["carga"]["matrizes"], "a edição não redesenhou a matriz"
+    assert fotos["restaurado"]["grades"] == fotos["carga"]["grades"]
+    assert fotos["restaurado"]["matrizes"] == fotos["carga"]["matrizes"]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_a_marca_do_ponto_do_cenario_acompanha_a_premissa_editada(tmp_path):
+    """A marca "(ponto do cenário 'base')" é uma igualdade exata contra a premissa que
+    a grade perturba (a regra que `render.py` aplica no build, e o `svg.js` na
+    célula-base). Editada a premissa para fora dos pontos da grade, a marca some — se
+    ficasse, apontaria o ponto de um vetor que não existe mais."""
+    pagina, entrega = _pagina()
+    marca = render.t(DICIONARIO, "valuation.grade_1d_ponto_do_cenario", valor="", cenario="base").strip()
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "fora", "acao": "editar", "cenario": "base", "premissa": "wacc", "valor": "10.5"},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+    pontos_na_carga = [linha[0] for linha in fotos["carga"]["grades"][0]]
+    assert sum(marca in ponto for ponto in pontos_na_carga) == 1, pontos_na_carga
+    assert not any(marca in linha[0] for linha in fotos["fora"]["grades"][0])
+    assert [linha[0] for linha in fotos["restaurado"]["grades"][0]] == pontos_na_carga
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_a_rajada_de_teclas_custa_um_redesenho_so(tmp_path):
+    """D13: um redesenho custa a reversa inteira (milhares de avaliações de forma
+    fechada por eixo) mais as duas grades, e o ouvinte de `input` dispara a cada TECLA.
+    Quatro teclas, uma conta — e, antes de a rajada vencer, NENHUMA: o agrupamento é
+    real, não uma coincidência de contagem."""
+    pagina, _entrega = _pagina()
+    fotos = _laboratorio_vivo(pagina, tmp_path, passos=[
+        {"nome": "digitando", "acao": "editar", "cenario": "base", "premissa": "roic",
+         "valores": ["2", "20", "20.", "20.5"], "semVencer": True},
+        {"nome": "venceu", "acao": "vencer"},
+    ])
+    assert fotos["carga"]["chamadasDaFachada"] == 1
+    assert fotos["digitando"]["chamadasDaFachada"] == 1, "redesenhou a cada tecla"
+    assert fotos["digitando"]["saidas"] == fotos["carga"]["saidas"]
+    assert fotos["venceu"]["chamadasDaFachada"] == 2
+    assert fotos["venceu"]["saidas"] != fotos["carga"]["saidas"]

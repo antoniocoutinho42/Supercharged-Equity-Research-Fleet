@@ -572,12 +572,14 @@ duas perguntas.
 
 **Valuation** (fatia 5F) — o laboratório econômico da §9, nesta ordem:
 
-1. **cabeçalho**: o preço justo e o upside; a faixa piso–teto de `analise.faixa`, quando
-   declarada (os preços dos cenários que ela nomeia); o múltiplo justo ao lado do de tela
-   pela mesma base e, fora do degrau e da rampa, o par forward — `manchete.multiplo_forward`
-   ao lado de `mercado_tela_forward`, com o período e a fonte da métrica forward, ou
-   "métrica forward não declarada"; a rota e a convenção terminal — do catálogo, nunca de
-   `caso` cru. SOTP mostra só preço e upside;
+1. **cabeçalho**: o preço justo e o upside; com laboratório, o **badge de paridade** (fatia
+   5I), que mora aqui porque o veredicto é sobre tudo o que a página publica — o bootstrap o
+   localiza por `document` e o passa a `FleetLaboratorio.iniciar(raiz, dados, badge)`; a
+   faixa piso–teto de `analise.faixa`, quando declarada (os preços dos cenários que ela
+   nomeia); o múltiplo justo ao lado do de tela pela mesma base e, fora do degrau e da rampa,
+   o par forward — `manchete.multiplo_forward` ao lado de `mercado_tela_forward`, com o
+   período e a fonte da métrica forward, ou "métrica forward não declarada"; a rota e a
+   convenção terminal — do catálogo, nunca de `caso` cru. SOTP mostra só preço e upside;
 2. **como o valor é formado** (`<details>` fechado): cada passo de
    `catalogo.formacao_do_valor.<rota>` cuja premissa o cenário da manchete declara, com o
    rótulo, o número e a função; os múltiplos que o cenário publica; na rampa, `vp_fase1` e
@@ -586,7 +588,17 @@ duas perguntas.
 3. **cenários**: o nome, a âncora (texto do caso que a integração publica, como dado), o
    triângulo (entradas e saída pelos rótulos do catálogo, `rir` por
    `variaveis_do_triangulo`; na rampa, a frase de que não se aplica), o preço e o upside;
-4. o **laboratório**, sem mudança;
+4. o **laboratório**. Desde a fatia 5I ele deixou de ter número congelado ao lado de número
+   vivo: a cada edição, a fachada recalcula também **a leitura de cada eixo da reversa, as
+   tabelas 1D e as matrizes 2D**, e o painel as reescreve na aba (elas moram fora dele, e são
+   alcançadas por `raiz.ownerDocument`). Sobrou congelado o SOTP, na lista do painel, e o
+   nível implícito, rotulado no próprio bloco. Os campos da leitura são DESCRITORES do
+   payload (`reversa.campos`), gerados da mesma declaração que compõe o HTML do build —
+   `laboratorio.js` percorre caminho, aplica a receita da unidade que a leitura declara e
+   escreve; nenhum nome de campo de metodologia mora lá. O redesenho de uma rajada de teclas
+   é agrupado (`setTimeout`), e a **curvatura** exibida ao vivo é a do navegador: ela está
+   fora do comparador desde o lote 1 da 5I (D4 — segunda diferença finita amplificada por
+   `h²`), continua exibida, e não pinta o badge de vermelho;
 5. a **ponte** como waterfall;
 6. o **painel de escolhas metodológicas** (fatia 5G, §8.2), quando a integração publica
    alguma: o alerta de empilhamento acima, com a direção pelo rótulo do dicionário e as
@@ -599,7 +611,7 @@ duas perguntas.
 7. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
    ponto do cenário marcado por igualdade exata — e uma matriz por grade 2D, cujo título
    nomeia o cenário que a grade perturbou;
-8. **o que está no preço**, congelado nas premissas originais: cada eixo de
+8. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
    `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
    `unidade` da leitura, a identificação rotulada, o intervalo e a curvatura, os toques
    tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
@@ -608,9 +620,12 @@ duas perguntas.
    Depois dos eixos — que leem o preço em TAXA — o **nível implícito** (fatia 5H), que o lê
    em NÍVEL: a métrica-base que o preço embute (montante, na escala do caso), o degrau sobre
    a métrica declarada, uma razão por ponto de consenso que o caso declara e a leitura do
-   confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Sem reversa, o rótulo da
-   limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`, `sugestao`, `leitura`,
-   `algebra`) nem código cru chega à aba;
+   confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Ele é o **único bloco
+   congelado** da seção (é o subcomando `nivel` do motor, que nenhum espelho reproduz) e sai
+   rotulado como tal, dentro do próprio bloco; o teto do crescimento gratuito e as limitações
+   da leitura aparecem e somem com a edição, no host que o painel reescreve. Sem reversa, o
+   rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`, `sugestao`,
+   `leitura`, `algebra`) nem código cru chega à aba;
 9. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
    unidade da premissa que ela substituiu, a premissa pelo rótulo do catálogo, o preço que
    resulta e a nota de que é leitura, **jamais fair value**;

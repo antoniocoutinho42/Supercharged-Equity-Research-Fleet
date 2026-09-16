@@ -223,6 +223,270 @@
   }
 
   // ----------------------------------------------------------------------
+  // O QUE ESTA NO PRECO e as SENSIBILIDADES, vivas (fatia 5I, Task 3; secao
+  // 8.4). Ate aqui estes tres blocos eram numero CONGELADO ao lado do painel
+  // editavel -- e a secao 8.4 proibe exatamente isso. Desde o lote 1 a fachada
+  // recalcula a leitura de cada eixo, as duas grades e o teto a cada chamada,
+  // e este arquivo passa a reescrever a tela com o que ela devolve.
+  //
+  // Nenhum nome de campo da leitura mora aqui. O payload traz DESCRITORES
+  // (`dados.reversa.campos`) montados por `render.py` a partir de UMA
+  // declaracao: onde ler (`de`, `lista`), como exibir (`unidade` -- o caminho
+  // da unidade que a propria leitura declara --, `formato` ou `vocabulario`) e
+  // o modelo do dicionario que compoe o texto. Este modulo so' percorre
+  // caminho, formata pela receita e escreve. Uma leitura com um campo novo
+  // chega a tela sem uma linha aqui, e a trava de `tests/test_relatorio_
+  // fronteira.py` continua valendo palavra por palavra.
+  //
+  // Os elementos sao RECRIADOS a cada edicao, nunca so' atualizados: uma raiz
+  // a mais, um CAP que fecha, um teto que aparece -- a lista muda de tamanho,
+  // e um slot fixo esconderia o que passou a existir.
+  // ----------------------------------------------------------------------
+
+  function percorrer(no, caminho) {
+    var atual = no;
+    var indice;
+    for (indice = 0; indice < caminho.length; indice++) {
+      if (atual === null || atual === undefined) { return null; }
+      atual = atual[caminho[indice]];
+    }
+    return atual === undefined ? null : atual;
+  }
+
+  function receitaDe(espec, leitura, dados) {
+    if (espec.formato) { return espec.formato; }
+    return (dados.formatosPorUnidade || {})[percorrer(leitura, espec.unidade)];
+  }
+
+  function rotuloDoCodigo(dados, vocabulario, codigo) {
+    var mapa = (dados.vocabularios || {})[vocabulario] || {};
+    var textos = dados.textos || {};
+    return (Object.prototype.hasOwnProperty.call(mapa, codigo) && mapa[codigo])
+      ? mapa[codigo] : (textos.rotuloDesconhecido || "");
+  }
+
+  // O texto de um marcador do modelo, ou `null` quando o valor nao existe -- e
+  // ai o campo INTEIRO nao sai. `vazio` e a excecao declarada pelo payload: o
+  // texto do dicionario para o valor que pode faltar sem derrubar a linha.
+  function textoDoValor(no, leitura, espec, dados) {
+    var vazio = (dados.textos && dados.textos.semValor) || SEM_VALOR_PADRAO;
+    var bruto = percorrer(no, espec.de);
+    if (espec.juntar !== undefined) {
+      if (!Array.isArray(bruto) || !bruto.length) { return null; }
+      var partes = [];
+      var indice;
+      for (indice = 0; indice < bruto.length; indice++) {
+        partes.push(formatar(bruto[indice], receitaDe(espec, leitura, dados), dados.idioma, vazio));
+      }
+      return partes.join(espec.juntar);
+    }
+    if (bruto === null) { return espec.vazio !== undefined ? espec.vazio : null; }
+    if (espec.vocabulario) { return rotuloDoCodigo(dados, espec.vocabulario, bruto); }
+    return formatar(bruto, receitaDe(espec, leitura, dados), dados.idioma, vazio);
+  }
+
+  function textoDoCampo(no, leitura, campo, dados) {
+    var valores = {};
+    var marcador;
+    for (marcador in campo.valores) {
+      if (Object.prototype.hasOwnProperty.call(campo.valores, marcador)) {
+        var texto = textoDoValor(no, leitura, campo.valores[marcador], dados);
+        if (texto === null) { return null; }
+        valores[marcador] = texto;
+      }
+    }
+    return campo.modelo === undefined ? valores.valor : textoDe(campo.modelo, valores);
+  }
+
+  function elementoDe(documento, tag, classe, papel, texto) {
+    var elemento = documento.createElement(tag);
+    elemento.setAttribute("class", classe);
+    if (papel !== null) { elemento.setAttribute("data-laboratorio-saida", papel); }
+    if (texto !== null) { elemento.textContent = texto; }
+    return elemento;
+  }
+
+  function esvaziar(elemento) {
+    while (elemento.firstChild) { elemento.removeChild(elemento.firstChild); }
+  }
+
+  function itemDaLista(documento, valor, leitura, campo, dados) {
+    var item = elementoDe(documento, campo.item.tag, campo.item.classe, null, null);
+    var escritos = 0;
+    var indice;
+    for (indice = 0; indice < campo.item.campos.length; indice++) {
+      var sub = campo.item.campos[indice];
+      var texto = textoDoCampo(valor, leitura, sub, dados);
+      if (texto === null) { continue; }
+      // O separador que o HTML do build tem entre os pedacos da mesma linha:
+      // sem ele, dois campos vizinhos sairiam colados na tela.
+      if (escritos) { item.appendChild(documento.createTextNode(" ")); }
+      item.appendChild(elementoDe(documento, sub.tag, sub.classe, sub.papel, texto));
+      escritos += 1;
+    }
+    return item;
+  }
+
+  function pintarLeitura(corpo, leitura, dados) {
+    var documento = corpo.ownerDocument;
+    esvaziar(corpo);
+    if (!leitura) { return; }
+    var campos = (dados.reversa && dados.reversa.campos) || [];
+    var indice;
+    for (indice = 0; indice < campos.length; indice++) {
+      var campo = campos[indice];
+      if (campo.lista) {
+        var itens = percorrer(leitura, campo.lista);
+        if (!Array.isArray(itens) || !itens.length) { continue; }
+        var container = elementoDe(documento, campo.tag, campo.classe, campo.papel, null);
+        var posicao;
+        for (posicao = 0; posicao < itens.length; posicao++) {
+          container.appendChild(itemDaLista(documento, itens[posicao], leitura, campo, dados));
+        }
+        corpo.appendChild(container);
+        continue;
+      }
+      var texto = textoDoCampo(leitura, leitura, campo, dados);
+      if (texto === null) { continue; }
+      corpo.appendChild(elementoDe(documento, campo.tag, campo.classe, campo.papel, texto));
+    }
+  }
+
+  // O teto do crescimento gratuito existe SO' enquanto um eixo primario nao
+  // fecha: ele aparece e some com a edicao, e por isso o bloco inteiro nasce e
+  // morre aqui, em vez de ter um slot permanente que ficaria vazio.
+  function pintarTeto(host, teto, dados) {
+    var documento = host.ownerDocument;
+    esvaziar(host);
+    if (!teto || !dados.reversa) { return; }
+    var espec = dados.reversa.teto;
+    var vazio = (dados.textos && dados.textos.semValor) || SEM_VALOR_PADRAO;
+    var bloco = elementoDe(documento, "div", "reversa-teto", null, null);
+    var titulo = documento.createElement("h3");
+    titulo.textContent = espec.rotulo;
+    bloco.appendChild(titulo);
+    bloco.appendChild(elementoDe(documento, "p", "reversa-teto-multiplo", null, textoDe(espec.modelo, {
+      valor: formatar(teto.multiplo, espec.formato, dados.idioma, vazio),
+      multiplo: (dados.rotulosMultiplos || {})[teto.chave] || ""
+    })));
+    bloco.appendChild(elementoDe(documento, "p", "reversa-teto-texto", null, espec.texto));
+    host.appendChild(bloco);
+  }
+
+  function pintarLimitacoes(host, lista, dados) {
+    var documento = host.ownerDocument;
+    esvaziar(host);
+    if (!Array.isArray(lista) || !lista.length) { return; }
+    var container = elementoDe(documento, "ul", "reversa-limitacoes", null, null);
+    var indice;
+    for (indice = 0; indice < lista.length; indice++) {
+      var item = documento.createElement("li");
+      item.textContent = rotuloDoCodigo(dados, "limitacoes", lista[indice]);
+      container.appendChild(item);
+    }
+    host.appendChild(container);
+  }
+
+  function pintarReversa(documento, reversa, dados) {
+    var artigos = documento.querySelectorAll("[data-laboratorio-eixo]");
+    var indice;
+    for (indice = 0; indice < artigos.length; indice++) {
+      var corpo = artigos[indice].querySelector("[data-laboratorio-corpo]");
+      if (!corpo) { continue; }
+      var nome = artigos[indice].getAttribute("data-laboratorio-eixo");
+      var eixo = (reversa && reversa.eixos) ? reversa.eixos[nome] : null;
+      // Eixo que a fachada recusou publica `leitura` nula -- o motor de verdade
+      // nao procurou raiz nenhuma, e o corpo fica vazio em vez de repetir a
+      // leitura anterior, que seria a leitura de OUTRO vetor.
+      pintarLeitura(corpo, eixo ? eixo.leitura : null, dados);
+    }
+    var hostDoTeto = documento.querySelector("[data-laboratorio-teto]");
+    if (hostDoTeto) { pintarTeto(hostDoTeto, reversa ? reversa.teto_do_crescimento_gratuito : null, dados); }
+    var hostDasLimitacoes = documento.querySelector("[data-laboratorio-limitacoes]");
+    if (hostDasLimitacoes) { pintarLimitacoes(hostDasLimitacoes, reversa ? reversa.limitacoes : null, dados); }
+  }
+
+  // As premissas do cenario que as grades perturbam, no caso EDITADO: a marca
+  // do ponto e a celula-base saem da comparacao exata contra elas (a regra que
+  // `render.py` aplica no build e o `svg.js`, no desenho). Sem isto a marca
+  // vermelha continuaria no ponto do vetor ORIGINAL depois da edicao.
+  function premissasDasGrades(caso, espec) {
+    var cenario = (caso.cenarios || {})[espec.cenario];
+    return cenario ? (cenario.premissas || {}) : {};
+  }
+
+  function baseDaMatriz(premissas, grade) {
+    var x = premissas[grade.premissa_x];
+    var y = premissas[grade.premissa_y];
+    if (typeof x !== "number" || !isFinite(x) || typeof y !== "number" || !isFinite(y)) { return null; }
+    return { x: x, y: y };
+  }
+
+  function pintarGrades1D(documento, vivas, dados, premissas) {
+    var espec = dados.sensibilidades;
+    var vazio = (dados.textos && dados.textos.semValor) || SEM_VALOR_PADRAO;
+    var secoes = documento.querySelectorAll("[data-laboratorio-grade]");
+    var indice;
+    for (indice = 0; indice < secoes.length; indice++) {
+      var posicao = Number(secoes[indice].getAttribute("data-laboratorio-grade"));
+      var receita = espec.grades1d[posicao];
+      var grade = vivas ? vivas.grades_1d[posicao] : null;
+      if (!receita) { continue; }
+      var linhas = secoes[indice].querySelectorAll("[data-laboratorio-linha]");
+      var linha;
+      for (linha = 0; linha < linhas.length; linha++) {
+        var celula = grade ? grade.pontos[Number(linhas[linha].getAttribute("data-laboratorio-linha"))] : null;
+        var ponto = celula ? formatar(celula.x, receita.formatoPonto, dados.idioma, vazio) : vazio;
+        if (celula && premissas[grade.premissa] === celula.x) {
+          ponto = textoDe(receita.modeloPonto, { valor: ponto, cenario: espec.cenario });
+        }
+        escreverSaida(linhas[linha], "ponto", ponto);
+        escreverSaida(linhas[linha], "preco",
+          celula ? formatar(celula.valor, receita.formatoValor, dados.idioma, vazio) : vazio);
+        escreverSaida(linhas[linha], "multiplo",
+          celula ? formatar(celula.multiplo, receita.formatoMultiplo, dados.idioma, vazio) : vazio);
+      }
+    }
+  }
+
+  function pintarMatrizes(documento, vivas, dados, premissas) {
+    var espec = dados.sensibilidades;
+    var hosts = documento.querySelectorAll("[data-laboratorio-matriz]");
+    var indice;
+    for (indice = 0; indice < hosts.length; indice++) {
+      var posicao = Number(hosts[indice].getAttribute("data-laboratorio-matriz"));
+      var opcoes = espec.matrizes[posicao];
+      var grade = vivas ? vivas.grades_2d[posicao] : null;
+      if (!opcoes) { continue; }
+      if (!grade || typeof root.FleetSVG === "undefined") {
+        hosts[indice].innerHTML = "";
+        continue;
+      }
+      hosts[indice].innerHTML = root.FleetSVG.matriz(grade, {
+        base: baseDaMatriz(premissas, grade),
+        rotuloX: opcoes.rotuloX,
+        rotuloY: opcoes.rotuloY,
+        formato: opcoes.formato,
+        formatoX: opcoes.formatoX,
+        formatoY: opcoes.formatoY,
+        idioma: dados.idioma
+      });
+    }
+  }
+
+  function pintarSensibilidades(documento, vivo, dados, caso, cegos) {
+    var espec = dados.sensibilidades;
+    if (!espec) { return; }
+    // Cenario cego (campo numerico ilegivel) cega TAMBEM as grades: elas
+    // perturbam o vetor daquele cenario, e mostrar celula calculada com o
+    // valor que o campo deixou de declarar seria numero sem premissa.
+    var vivas = (vivo && vivo.sensibilidades && !cegos[espec.cenario]) ? vivo.sensibilidades : null;
+    var premissas = premissasDasGrades(caso, espec);
+    pintarGrades1D(documento, vivas, dados, premissas);
+    pintarMatrizes(documento, vivas, dados, premissas);
+  }
+
+  // ----------------------------------------------------------------------
   // Diagnosticos do cenario (Task 3; secao 8.4 do desenho: o diagnostico se
   // move junto com o numero). As chaves chegam da FACHADA numa lista so,
   // `diagnosticos_exibidos`, que a integracao monta a partir das formas do
@@ -295,7 +559,7 @@
     }
   }
 
-  function escrever(raiz, vivo, cegos, dados) {
+  function escrever(raiz, vivo, cegos, dados, caso) {
     var idioma = dados.idioma;
     var vazio = (dados.textos && dados.textos.semValor) || SEM_VALOR_PADRAO;
     var rotulos = dados.rotulosMultiplos || {};
@@ -324,12 +588,43 @@
         formatar(registro.vs_preco.upside, formatos.upside, idioma, vazio));
       escreverDiagnosticos(bloco, registro, dados);
     }
+
+    // Fatia 5I, Task 3: os blocos vivos que moram FORA do painel -- a leitura
+    // do que esta no preco e as sensibilidades sao secoes da aba, nao filhas de
+    // `[data-laboratorio]`. O badge chega como parametro porque e' um elemento
+    // so' e o painel inteiro depende dele; estes sao varios e mudam de numero
+    // com a entrega, e saem do documento da propria raiz -- que no browser e' o
+    // `document` que o bootstrap consultou.
+    var documento = raiz.ownerDocument;
+    if (dados.reversa) {
+      pintarReversa(documento, (vivo && !cegos[dados.reversa.cenario]) ? vivo.reversa : null, dados);
+    }
+    pintarSensibilidades(documento, vivo, dados, caso, cegos);
   }
 
   // ----------------------------------------------------------------------
   // Ciclo: colher -> pedir a fachada -> escrever. Uma unica chamada por
   // mudanca: a fachada avalia o caso inteiro, todos os cenarios de uma vez.
   // ----------------------------------------------------------------------
+
+  // D13: desde o lote 1 um redesenho custa a reversa inteira (milhares de
+  // avaliacoes de forma fechada por eixo) mais as duas grades, e o ouvinte de
+  // `input` dispara a cada TECLA -- digitar "12.5" pedia quatro. O agrupador
+  // deixa passar so' a ultima da rajada. E' interface, nao metodologia: o
+  // numero final e' o mesmo.
+  //
+  // Ambiente sem temporizador (um contexto de teste sem `setTimeout`)
+  // redesenha na hora: atrasar nao pode virar NAO redesenhar.
+  var ESPERA_DO_REDESENHO = 120;
+
+  function agrupador(funcao) {
+    if (typeof root.setTimeout !== "function") { return funcao; }
+    var pendente = null;
+    return function () {
+      if (pendente !== null && typeof root.clearTimeout === "function") { root.clearTimeout(pendente); }
+      pendente = root.setTimeout(function () { pendente = null; funcao(); }, ESPERA_DO_REDESENHO);
+    };
+  }
 
   function ligar(raiz, dados) {
     function redesenhar() {
@@ -340,14 +635,18 @@
       } catch (erro) {
         vivo = null;
       }
-      escrever(raiz, vivo, colheita.cegos, dados);
+      escrever(raiz, vivo, colheita.cegos, dados, colheita.caso);
     }
 
+    var comEspera = agrupador(redesenhar);
     var campos = raiz.querySelectorAll("[data-laboratorio-entrada]");
     var indice;
     for (indice = 0; indice < campos.length; indice++) {
       var tipo = campos[indice].getAttribute("data-laboratorio-entrada");
-      campos[indice].addEventListener(tipo === "numero" ? "input" : "change", redesenhar);
+      // So' o campo numerico agrupa: ele dispara a cada TECLA (D13). Escolha e
+      // booleano disparam uma vez por mudanca, e redesenham na hora.
+      campos[indice].addEventListener(tipo === "numero" ? "input" : "change",
+        tipo === "numero" ? comEspera : redesenhar);
     }
 
     var botoes = raiz.querySelectorAll("[data-laboratorio-restaurar]");
@@ -376,17 +675,26 @@
   /**
    * Liga o painel. `raiz`: o elemento `[data-laboratorio]` que `render.py`
    * emitiu. `dados`: o payload embutido ({idioma, caso, resultados, formatos,
-   * rotulosMultiplos, diagnosticos, textos}).
+   * rotulosMultiplos, formatosPorUnidade, vocabularios, reversa,
+   * sensibilidades, diagnosticos, recusas, textos}). `badge`: o elemento
+   * `[data-laboratorio-badge]`, que desde a fatia 5I mora no CABECALHO da aba
+   * -- fora da raiz, porque o veredicto e' sobre a pagina inteira (a manchete,
+   * os eixos, as grades), nao so' sobre os cenarios do painel. Quem o localiza
+   * e' o bootstrap, por `document`; uma busca descendente a partir da raiz
+   * devolveria `null`, e `pintarBadge` sairia no guarda -- sem badge, sem erro
+   * e com o painel destravado.
    *
    * A ordem importa: o badge de paridade e decidido ANTES de qualquer campo
    * ficar editavel. Se a fachada recusar o contrato, ou se algum numero
    * recalculado nao bater com o publicado, o painel inteiro trava e diz por
-   * que -- nunca abre para edicao "mesmo assim".
+   * que -- nunca abre para edicao "mesmo assim". E, travado, a tela FICA com o
+   * que o Python publicou: a reversa e as grades so' sao reescritas depois do
+   * badge verde.
    */
-  function iniciar(raiz, dados) {
+  function iniciar(raiz, dados, badge) {
     var textos = dados.textos || {};
     var vazio = textos.semValor || SEM_VALOR_PADRAO;
-    var alvo = raiz.querySelector("[data-laboratorio-badge]");
+    var alvo = badge || null;
     var comparacao = null;
 
     try {

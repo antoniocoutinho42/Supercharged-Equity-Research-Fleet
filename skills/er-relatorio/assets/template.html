@@ -775,7 +775,11 @@
   if (!dados) { return; }
   var raiz = document.querySelector("[data-laboratorio]");
   if (!raiz || typeof FleetLaboratorio === "undefined") { return; }
-  FleetLaboratorio.iniciar(raiz, dados);
+  // O badge de paridade (fatia 5I) mora no CABECALHO da aba, fora do painel: o
+  // veredicto e' sobre tudo o que a pagina publica. Quem o localiza e' este
+  // bootstrap, por `document`, e o passa adiante -- uma busca descendente a
+  // partir da raiz devolveria `null` e o painel abriria SEM badge.
+  FleetLaboratorio.iniciar(raiz, dados, document.querySelector("[data-laboratorio-badge]"));
 })();
 </script>
 </body>

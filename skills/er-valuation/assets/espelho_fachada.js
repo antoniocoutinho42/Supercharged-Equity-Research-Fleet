@@ -565,6 +565,15 @@
           rf,
         }),
       };
+      // Fatia 5I, Task 3: o teto publica tambem a CHAVE do multiplo que ele mede, como
+      // `resultados.reversa.teto_do_crescimento_gratuito` publica (reversa.py:696) —
+      // `_campo_do_multiplo(rota, metrica_base.tipo)`, o mesmo que `chaveDoMultiplo`
+      // resolve aqui. Sem ela o relatorio nao teria como rotular o multiplo pelo
+      // catalogo quando o teto APARECE por edicao (ele nao existe no build), e L2
+      // ("mesmas chaves do resultados.json") ficaria quebrada nesta ponta.
+      if (vivo.reversa.teto_do_crescimento_gratuito) {
+        vivo.reversa.teto_do_crescimento_gratuito.chave = chave;
+      }
     }
     return vivo;
   }

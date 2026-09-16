@@ -1356,8 +1356,8 @@ def _unidade_publicada(catalogo: dict, caminho: str) -> str:
     return familia[0]
 
 
-def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, idioma: str, dicionario: dict,
-                   moeda: str | None, produto: str) -> str:
+def _grade_1d_html(caso: dict, resultados: dict, grade: dict, indice: int, catalogo: dict, idioma: str,
+                   dicionario: dict, moeda: str | None, produto: str) -> str:
     """D10: uma grade 1D como tabela estática, sem JS (§10: "cinco números numa tabela podem
     comunicar melhor que um gráfico") — o ponto pela unidade da premissa, o preço pela unidade que a
     grade publica e o múltiplo pela do mapa —, com o ponto do cenário que a grade perturbou marcado
@@ -1380,24 +1380,27 @@ def _grade_1d_html(caso: dict, resultados: dict, grade: dict, catalogo: dict, id
                           CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D, produto=produto),
     ]
     linhas = []
-    for ponto in _campo_de_contrato(grade, "pontos", onde):
+    for posicao, ponto in enumerate(_campo_de_contrato(grade, "pontos", onde)):
         x = _campo_de_contrato(ponto, "x", f"{onde}.pontos[*]")
         texto_do_ponto = _formatar_na_unidade(x, catalogo, unidade_do_ponto, idioma, moeda, escala)
         if _numero_exibivel(central) and _numero_exibivel(x) and x == central:
             texto_do_ponto = t(dicionario, "valuation.grade_1d_ponto_do_cenario", valor=texto_do_ponto,
                                cenario=cenario)
         celulas = [
-            texto_do_ponto,
-            _formatar_na_unidade(_campo_de_contrato(ponto, "valor", f"{onde}.pontos[*]"), catalogo,
-                                 grade.get("unidade"), idioma, moeda, escala),
-            _formatar_na_unidade(_campo_de_contrato(ponto, "multiplo", f"{onde}.pontos[*]"), catalogo,
-                                 unidade_do_multiplo, idioma, moeda, escala),
+            ("ponto", texto_do_ponto),
+            ("preco", _formatar_na_unidade(_campo_de_contrato(ponto, "valor", f"{onde}.pontos[*]"), catalogo,
+                                           grade.get("unidade"), idioma, moeda, escala)),
+            ("multiplo", _formatar_na_unidade(_campo_de_contrato(ponto, "multiplo", f"{onde}.pontos[*]"), catalogo,
+                                              unidade_do_multiplo, idioma, moeda, escala)),
         ]
-        linhas.append("<tr>" + "".join(f"<td>{_texto_de_dado_html(celula)}</td>" for celula in celulas) + "</tr>")
+        linhas.append(f'<tr data-laboratorio-linha="{posicao}">' + "".join(
+            f'<td data-laboratorio-saida="{papel}">{_texto_de_dado_html(celula)}</td>'
+            for papel, celula in celulas) + "</tr>")
     titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "grade_1d_titulo", CAMINHO_DOS_PRECOS_DA_GRADE_1D,
                                produto=produto, cenario=cenario, premissa=rotulo)
     cabecalho = "".join(f'<th class="grade-rotulo">{_texto_de_dado_html(coluna)}</th>' for coluna in colunas)
-    return (f'<section class="sensibilidade-1d"><h2>{_texto_de_dado_html(titulo)}</h2>'
+    return (f'<section class="sensibilidade-1d" data-laboratorio-grade="{indice}">'
+            f'<h2>{_texto_de_dado_html(titulo)}</h2>'
             f'<table class="grade-1d"><thead><tr>{cabecalho}</tr></thead>'
             f'<tbody>{"".join(linhas)}</tbody></table></section>')
 
@@ -1409,8 +1412,8 @@ def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: s
     à sua spec (achado 14) — só o `svg.js` o preenche. Nenhuma seção sem grade (S6)."""
     rota = _campo_de_contrato(resultados, "rota", "resultados")
     moeda = caso.get("moeda")
-    blocos = [_grade_1d_html(caso, resultados, grade, catalogo, idioma, dicionario, moeda, produto)
-              for grade in _grades_1d(resultados)]
+    blocos = [_grade_1d_html(caso, resultados, grade, indice, catalogo, idioma, dicionario, moeda, produto)
+              for indice, grade in enumerate(_grades_1d(resultados))]
     for indice, grade in enumerate(_grades_2d(resultados)):
         titulo = _texto_de_dado_html(_rotulo_do_numero(
             resultados, catalogo, dicionario, "matriz_titulo", CAMINHO_DAS_CELULAS_DA_GRADE_2D,
@@ -1421,7 +1424,8 @@ def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: s
         blocos.append(
             f'<section class="painel-svg">'
             f'<h2>{titulo}</h2>'
-            f'<div class="painel-grafico" data-painel="matriz" data-painel-indice="{indice}"></div>'
+            f'<div class="painel-grafico" data-painel="matriz" data-painel-indice="{indice}"'
+            f' data-laboratorio-matriz="{indice}"></div>'
             f'</section>'
         )
     return "".join(blocos)
@@ -1702,11 +1706,15 @@ def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: 
 
 def _congelados_html(resultados: dict, dicionario: dict) -> str:
     """L3/§8.4: o que NÃO é vivo nesta fatia aparece rotulado, nunca omitido —
-    o analista tem de saber que aqueles números não acompanham a edição."""
+    o analista tem de saber que aqueles números não acompanham a edição.
+
+    Fatia 5I, Task 3 (D6): a reversa e as sensibilidades SAÍRAM desta lista — a
+    fachada as recalcula a cada edição desde o lote 1, e um rótulo de congelado
+    sobre número vivo é a mesma mentira que a §8.4 proíbe, ao contrário. Fica o
+    SOTP, que continua precomputado; o `nivel_implicito` (D11), que também
+    continua, é rotulado no PRÓPRIO bloco, não aqui."""
     itens = [
         ("sotp", "valuation.laboratorio_congelado_sotp"),
-        ("reversa", "valuation.laboratorio_congelado_reversa"),
-        ("sensibilidades", "valuation.laboratorio_congelado_sensibilidades"),
     ]
     linhas = "".join(
         f'<li>{html.escape(t(dicionario, chave_texto))}</li>'
@@ -1747,11 +1755,23 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
         f'<section class="laboratorio" data-laboratorio>'
         f'<h2>{html.escape(t(dicionario, "valuation.laboratorio_titulo"))}</h2>'
         f'<p class="lab-nota">{html.escape(t(dicionario, "valuation.laboratorio_nota"))}</p>'
-        f'<div class="lab-badge" data-laboratorio-badge role="status" aria-live="polite"></div>'
         f'{paineis}'
         f'{_congelados_html(resultados, dicionario)}'
         f'</section>'
     )
+
+
+def _badge_do_laboratorio_html() -> str:
+    """O badge de paridade (L4), que a fatia 5I (Task 3, A8) subiu para o CABEÇALHO
+    da aba: é o veredicto sobre a página inteira — o preço da manchete, os eixos da
+    reversa e as grades, não só os cenários do painel —, e ele decide se a edição
+    abre. Emitido por `_valuation_html`, fora de `[data-laboratorio]`; quem o localiza
+    é o bootstrap, por `document`, e o passa a `FleetLaboratorio.iniciar`. Enquanto
+    ele morava dentro da `<section>` do painel, uma busca DESCENDENTE o achava; do
+    cabeçalho, a mesma busca devolveria `null` e `pintarBadge` sairia no guarda — sem
+    badge, sem erro e com o painel destravado. Nasce VAZIO, como nascia: quem escreve
+    o veredicto é o JS, depois de medir."""
+    return '<div class="lab-badge" data-laboratorio-badge role="status" aria-live="polite"></div>'
 
 
 def _diagnosticos_do_catalogo(catalogo: dict, idioma: str) -> dict:
@@ -1771,6 +1791,115 @@ def _diagnosticos_do_catalogo(catalogo: dict, idioma: str) -> dict:
                 f"catálogo de apresentação sem rótulo em '{idioma}' para o diagnóstico '{chave}'.")
         saida[chave] = {"rotulo": rotulo, "severidade": info.get("severidade")}
     return saida
+
+
+def _vocabulario_do_catalogo(catalogo: dict, secao: str, idioma: str) -> dict:
+    """`{código: rótulo}` de uma seção inteira do catálogo (fatia 5I, Task 3) — os
+    vocabulários da leitura da reversa, do mesmo jeito que `_diagnosticos_do_catalogo`
+    publica os diagnósticos: TODOS os códigos, não só os que este `resultados` publicou,
+    porque qualquer edição pode acender qualquer um. Rótulo ausente no idioma é recusa
+    nomeada, e o painel nunca cai no código cru."""
+    saida = {}
+    for codigo in sorted(catalogo.get(secao) or {}):
+        rotulo = (((catalogo[secao][codigo] or {}).get("rotulo") or {}).get(idioma))
+        if not rotulo:
+            raise RotuloDoCatalogoAusente(
+                f"catálogo de apresentação sem rótulo em '{idioma}' para '{codigo}' em '{secao}'.")
+        saida[codigo] = rotulo
+    return saida
+
+
+def _campos_da_leitura_para_json(dicionario: dict) -> list:
+    """`_CAMPOS_DA_LEITURA` com os textos do dicionário JÁ RESOLVIDOS — a mesma
+    declaração que compõe o HTML do build, agora para o painel recompor os mesmos
+    elementos. Só isto viaja: nenhum número, nenhuma unidade decidida aqui."""
+    def _valor(espec: dict) -> dict:
+        saida: dict = {"de": list(espec["de"])}
+        for chave in ("unidade", "vocabulario", "formato", "juntar"):
+            if chave in espec:
+                saida[chave] = espec[chave]
+        if "vazio" in espec:
+            saida["vazio"] = t(dicionario, espec["vazio"])
+        return saida
+
+    def _campo(campo: dict) -> dict:
+        saida = {chave: campo[chave] for chave in ("papel", "tag", "classe")}
+        if "modelo" in campo:
+            saida["modelo"] = t(dicionario, campo["modelo"])
+        if "valores" in campo:
+            saida["valores"] = {marcador: _valor(espec) for marcador, espec in campo["valores"].items()}
+        if "lista" in campo:
+            saida["lista"] = list(campo["lista"])
+            saida["item"] = {"tag": campo["item"]["tag"], "classe": campo["item"]["classe"],
+                             "campos": [_campo(sub) for sub in campo["item"]["campos"]]}
+        return saida
+
+    return [_campo(campo) for campo in _CAMPOS_DA_LEITURA]
+
+
+def _reversa_para_json(caso: dict, catalogo: dict, idioma: str, moeda: str | None,
+                       dicionario: dict) -> dict | None:
+    """O que o painel precisa para reescrever "o que está no preço": o cenário que a
+    reversa lê (o vetor cuja edição a move), os campos da leitura e o bloco do teto do
+    crescimento gratuito (rótulo e texto do catálogo, modelo do dicionário, receita do
+    múltiplo). O teto aparece e some com a edição — é o caso-limite que só existe
+    enquanto um eixo primário não fecha.
+
+    `None` quando o caso não declara reversa: a fachada também não a publica, e não há
+    eixo nenhum na aba para reescrever."""
+    reversa = caso.get("reversa")
+    if not isinstance(reversa, dict):
+        return None
+    declaracao = catalogo.get("teto_do_crescimento_gratuito") or {}
+    rotulo, texto = ((declaracao.get("rotulo") or {}).get(idioma), (declaracao.get("texto") or {}).get(idioma))
+    if not rotulo or not texto:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem o rótulo e o texto em '{idioma}' de 'teto_do_crescimento_gratuito'.")
+    return {
+        "cenario": _campo_de_contrato(reversa, "cenario", "caso.reversa"),
+        "campos": _campos_da_leitura_para_json(dicionario),
+        "teto": {
+            "rotulo": rotulo,
+            "texto": texto,
+            "modelo": t(dicionario, "valuation.reversa_teto_multiplo"),
+            "formato": placeholders.especificacao_de_formato(FORMATO_DO_MULTIPLO_DO_TETO, idioma, moeda),
+        },
+    }
+
+
+def _sensibilidades_para_json(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+                               moeda: str | None, dicionario: dict) -> dict | None:
+    """As receitas e os rótulos com que o painel reescreve as sensibilidades (fatia 5I,
+    Task 3): por grade 1D, o formato de cada coluna e o modelo do ponto do cenário; por
+    grade 2D, as três receitas e os dois rótulos de eixo que `FleetSVG.matriz` recebe —
+    os mesmos de `_matrizes_para_json`, que o bootstrap estático já usa. As grades vão
+    pelo ÍNDICE, o mesmo que a âncora do DOM carrega; os pontos e as células chegam
+    vivos, da fachada, e não viajam aqui.
+
+    `None` quando o caso não declara sensibilidades: sem elas não há o que repintar."""
+    if not caso.get("sensibilidades"):
+        return None
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    escala = resultados.get("escala_monetaria")
+    publicadas = _grades_1d(resultados)
+    grades_1d = []
+    for grade in publicadas:
+        premissa = _campo_de_contrato(grade, "premissa", "resultados.sensibilidades.grades_1d[*]")
+        grades_1d.append({
+            "premissa": premissa,
+            "formatoPonto": _espec_de_formato_com_escala(
+                catalogo, _unidade_da_premissa(catalogo, rota, premissa), idioma, moeda, escala),
+            "formatoValor": _espec_de_formato_com_escala(catalogo, grade.get("unidade"), idioma, moeda, escala),
+            "formatoMultiplo": _espec_de_formato_com_escala(
+                catalogo, _unidade_publicada(catalogo, CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D), idioma, moeda, escala),
+            "modeloPonto": t(dicionario, "valuation.grade_1d_ponto_do_cenario"),
+        })
+    return {
+        "cenario": _cenario_da_grade(caso) if (publicadas or _grades_2d(resultados)) else None,
+        "grades1d": grades_1d,
+        "matrizes": [{chave: matriz[chave] for chave in ("rotuloX", "rotuloY", "formato", "formatoX", "formatoY")}
+                     for matriz in _matrizes_para_json(caso, resultados, catalogo, idioma, moeda)],
+    }
 
 
 def _recusas_do_catalogo(catalogo: dict, idioma: str) -> dict:
@@ -1826,6 +1955,19 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
             "upside": placeholders.especificacao_de_formato("pct1", idioma, moeda),
         },
         "rotulosMultiplos": rotulos_multiplos,
+        # Fatia 5I, Task 3: a receita de cada unidade que o catálogo declara — a leitura
+        # da reversa diz a unidade de cada número que publica (`unidade`,
+        # `unidade_da_curvatura`, `beta.unidade`), e o painel a resolve aqui em vez de
+        # decorar "raiz é ponto percentual".
+        "formatosPorUnidade": {
+            unidade: _espec_de_formato_com_escala(catalogo, unidade, idioma, moeda,
+                                                  resultados.get("escala_monetaria"))
+            for unidade in sorted(catalogo.get("unidades") or {})
+        },
+        "vocabularios": {secao: _vocabulario_do_catalogo(catalogo, secao, idioma)
+                         for secao in VOCABULARIOS_DA_LEITURA},
+        "reversa": _reversa_para_json(caso, catalogo, idioma, moeda, dicionario),
+        "sensibilidades": _sensibilidades_para_json(caso, resultados, catalogo, idioma, moeda, dicionario),
         "diagnosticos": _diagnosticos_do_catalogo(catalogo, idioma),
         "recusas": _recusas_do_catalogo(catalogo, idioma),
         "textos": {
@@ -1838,6 +1980,10 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
             "diagnosticoDesconhecido": t(dicionario, "valuation.laboratorio_diagnostico_desconhecido"),
             "diagnosticosRecusado": t(dicionario, "valuation.laboratorio_diagnosticos_recusado"),
             "recusaDesconhecida": t(dicionario, "valuation.laboratorio_recusa_desconhecida"),
+            # Fatia 5I, Task 3: um código que a fachada acende e o catálogo desta análise
+            # não rotula — a mesma disciplina do diagnóstico sem rótulo, agora para os
+            # vocabulários da leitura.
+            "rotuloDesconhecido": t(dicionario, "valuation.laboratorio_rotulo_desconhecido"),
         },
     }
 
@@ -2185,73 +2331,168 @@ def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, m
     return f'<section class="valuation-cenarios"><h2>{html.escape(titulo)}</h2>{"".join(artigos)}</section>'
 
 
+# --------------------------------------------------------------------------
+# A leitura da reversa, VIVA (fatia 5I, Task 3; §8.4). Até esta fatia a seção "o que
+# está no preço" era o bloco congelado ao lado do laboratório; desde o lote 1 a fachada
+# recalcula `reversa.eixos.<eixo>.leitura` a cada edição, e o que a aba mostra tem de se
+# mover com ela — número vivo com leitura congelada é exatamente o defeito que a §8.4
+# nomeia.
+#
+# A DECLARAÇÃO abaixo é UMA, lida duas vezes: aqui, para compor o HTML do build, e em
+# `_campos_da_leitura_para_json`, para `laboratorio.js` recompor os MESMOS elementos a
+# cada edição. Duas listas — uma no Python, outra no JS — divergiriam no primeiro campo
+# novo, e o sintoma seria um campo que some da tela depois da primeira tecla.
+#
+# Cada campo diz: a tag e a classe do elemento, o `papel` (a âncora `data-laboratorio-
+# saida` por onde o JS o reconhece), o modelo do dicionário que compõe o texto e, por
+# marcador do modelo, ONDE ler (`de`: caminho dentro da leitura ou, numa lista, dentro
+# do item) e COMO exibir: `unidade` (o caminho da unidade que a PRÓPRIA leitura declara
+# — nunca um formato decorado aqui), `formato` fixo, ou `vocabulario` (um código que o
+# catálogo rotula). Valor ausente APAGA o campo, a menos que ele declare `vazio` — é o
+# mesmo `if` que a versão anterior fazia campo a campo, agora escrito uma vez só.
+# --------------------------------------------------------------------------
+
+_CAMPOS_DA_RAIZ: tuple = (
+    {"papel": "raiz-valor", "tag": "span", "classe": "reversa-raiz-valor",
+     "modelo": "valuation.reversa_raiz",
+     "valores": {
+         "valor": {"de": ["valor"], "unidade": ["unidade"]},
+         # A identificação é a única que sobrevive à ausência: sem derivadas na
+         # vizinhança da raiz o motor não classifica, e a frase do dicionário diz isso
+         # — a raiz continua na tela, que é o número que importa.
+         "identificacao": {"de": ["identificacao"], "vocabulario": "identificacoes",
+                           "vazio": "valuation.reversa_identificacao_indisponivel"},
+     }},
+    {"papel": "intervalo", "tag": "span", "classe": "reversa-intervalo",
+     "modelo": "valuation.reversa_intervalo",
+     "valores": {"de": {"de": ["intervalo", 0], "unidade": ["unidade"]},
+                 "ate": {"de": ["intervalo", 1], "unidade": ["unidade"]}}},
+    {"papel": "curvatura", "tag": "span", "classe": "reversa-curvatura",
+     "modelo": "valuation.reversa_curvatura",
+     "valores": {"valor": {"de": ["curvatura"], "unidade": ["unidade_da_curvatura"]}}},
+)
+
+_CAMPOS_DA_LEITURA: tuple = (
+    {"papel": "motivo", "tag": "p", "classe": "reversa-motivo",
+     "valores": {"valor": {"de": ["motivo"], "vocabulario": "motivos_da_leitura"}}},
+    {"papel": "raizes", "tag": "ul", "classe": "reversa-raizes", "lista": ["raizes"],
+     "item": {"tag": "li", "classe": "reversa-raiz", "campos": _CAMPOS_DA_RAIZ}},
+    {"papel": "tangenciais", "tag": "p", "classe": "reversa-tangenciais",
+     "modelo": "valuation.reversa_tangenciais",
+     "valores": {"valores": {"de": ["tangenciais"], "unidade": ["unidade"], "juntar": ", "}}},
+    {"papel": "cap", "tag": "p", "classe": "reversa-cap", "modelo": "valuation.reversa_cap",
+     "valores": {"valor": {"de": ["cap_anos"], "unidade": ["unidade"]}}},
+    {"papel": "beta", "tag": "p", "classe": "reversa-beta", "modelo": "valuation.reversa_beta",
+     "valores": {"valor": {"de": ["beta", "valor"], "unidade": ["beta", "unidade"]}}},
+    {"papel": "beta-posicao", "tag": "p", "classe": "reversa-beta-posicao",
+     "valores": {"valor": {"de": ["beta", "posicao"], "vocabulario": "posicoes_na_banda"}}},
+    {"papel": "banda", "tag": "p", "classe": "reversa-banda", "modelo": "valuation.reversa_beta_banda",
+     "valores": {"minimo": {"de": ["beta", "banda", 0], "unidade": ["beta", "unidade"]},
+                 "maximo": {"de": ["beta", "banda", 1], "unidade": ["beta", "unidade"]},
+                 "distancia": {"de": ["beta", "distancia"], "unidade": ["beta", "unidade"]}}},
+)
+
+# Os vocabulários que a leitura usa por CÓDIGO, e que o payload leva inteiros para o
+# painel (o padrão de `_diagnosticos_do_catalogo`): qualquer edição pode acender
+# qualquer código, e a tela nunca mostra o código cru.
+VOCABULARIOS_DA_LEITURA: tuple = ("motivos_da_leitura", "identificacoes", "posicoes_na_banda", "limitacoes")
+
+# O múltiplo do teto do crescimento gratuito é razão pura, como todo múltiplo da aba.
+FORMATO_DO_MULTIPLO_DO_TETO: str = "x2"
+
+
+def _percorrer(no: Any, caminho: list) -> Any:
+    """O valor em `caminho` (segmentos de dict e índices de lista) dentro de `no`, ou
+    `None` no primeiro passo que não resolve — a mesma travessia que o JS faz sobre a
+    leitura viva. Nunca levanta: um campo ausente é campo que não aparece, não um erro
+    de contrato (o contrato dos eixos já é conferido por `_campo_de_contrato`)."""
+    atual = no
+    for passo in caminho:
+        if isinstance(atual, dict) and isinstance(passo, str):
+            atual = atual.get(passo)
+        elif isinstance(atual, list) and isinstance(passo, int) and -len(atual) <= passo < len(atual):
+            atual = atual[passo]
+        else:
+            return None
+        if atual is None:
+            return None
+    return atual
+
+
+def _texto_do_valor_da_leitura(no: Any, leitura: dict, espec: dict, catalogo: dict, idioma: str,
+                                moeda: str | None, dicionario: dict) -> str | None:
+    """O texto de um marcador do modelo, ou `None` quando o valor não existe (e o campo
+    inteiro não sai). `unidade` é caminho dentro da LEITURA mesmo quando `de` é relativo
+    ao item de uma lista: a unidade é do eixo, não da raiz."""
+    bruto = _percorrer(no, espec["de"])
+    if "juntar" in espec:
+        if not isinstance(bruto, list) or not bruto:
+            return None
+        return espec["juntar"].join(
+            _formatar_na_unidade(valor, catalogo, _percorrer(leitura, espec["unidade"]), idioma, moeda)
+            for valor in bruto)
+    if bruto is None:
+        return t(dicionario, espec["vazio"]) if "vazio" in espec else None
+    if "vocabulario" in espec:
+        return _rotulo_de_secao_do_catalogo(catalogo, espec["vocabulario"], bruto, idioma)
+    if "formato" in espec:
+        return placeholders.formatar(bruto, espec["formato"], idioma, moeda)
+    return _formatar_na_unidade(bruto, catalogo, _percorrer(leitura, espec["unidade"]), idioma, moeda)
+
+
+def _campo_da_leitura_html(no: Any, leitura: dict, campo: dict, catalogo: dict, idioma: str,
+                            moeda: str | None, dicionario: dict) -> str:
+    valores = {}
+    for marcador, espec in campo["valores"].items():
+        texto = _texto_do_valor_da_leitura(no, leitura, espec, catalogo, idioma, moeda, dicionario)
+        if texto is None:
+            return ""
+        valores[marcador] = texto
+    texto = t(dicionario, campo["modelo"], **valores) if "modelo" in campo else valores["valor"]
+    return (f'<{campo["tag"]} class="{campo["classe"]}" data-laboratorio-saida="{campo["papel"]}">'
+            f'{_texto_de_dado_html(texto)}</{campo["tag"]}>')
+
+
+def _corpo_da_leitura_html(leitura: dict, catalogo: dict, idioma: str, moeda: str | None,
+                           dicionario: dict) -> str:
+    """Os campos da leitura na ordem da declaração, cada um só quando tem valor."""
+    partes = []
+    for campo in _CAMPOS_DA_LEITURA:
+        if "lista" in campo:
+            itens = []
+            for item in _percorrer(leitura, campo["lista"]) or []:
+                pedacos = [_campo_da_leitura_html(item, leitura, sub, catalogo, idioma, moeda, dicionario)
+                           for sub in campo["item"]["campos"]]
+                itens.append(f'<li class="{campo["item"]["classe"]}">'
+                             + " ".join(pedaco for pedaco in pedacos if pedaco) + '</li>')
+            if itens:
+                partes.append(f'<{campo["tag"]} class="{campo["classe"]}" '
+                              f'data-laboratorio-saida="{campo["papel"]}">{"".join(itens)}</{campo["tag"]}>')
+            continue
+        partes.append(_campo_da_leitura_html(leitura, leitura, campo, catalogo, idioma, moeda, dicionario))
+    return "".join(partes)
+
+
 def _eixo_da_reversa_html(nome: str, eixo: dict, catalogo: dict, idioma: str, moeda: str | None,
                           dicionario: dict) -> str:
     """Um eixo do que está no preço, pela leitura normalizada que a integração publica ao lado do
     payload do motor (`leitura`, D2): o rótulo do eixo e o do motivo; cada raiz pela `unidade` da
     leitura, com a identificação rotulada, o intervalo e a curvatura (pela `unidade_da_curvatura`); os
     toques tangenciais; o CAP; e, no eixo de custo de capital, o beta implícito com a posição, a banda
-    e a distância. A prosa do motor (`sem_solucao`, `sugestao`) e a álgebra nunca chegam aqui."""
+    e a distância. A prosa do motor (`sem_solucao`, `sugestao`) e a álgebra nunca chegam aqui.
+
+    O corpo vive num container próprio (`data-laboratorio-corpo`) porque o painel o
+    REESCREVE inteiro a cada edição: uma raiz a mais, um CAP que fecha, um beta que sai
+    da banda — a lista de campos muda de tamanho, e só um container que se esvazia
+    sustenta isso sem deixar resto da leitura anterior na tela."""
     onde = f"resultados.reversa.eixos.{nome}"
     leitura = _campo_de_contrato(eixo, "leitura", onde)
-    unidade = _campo_de_contrato(leitura, "unidade", f"{onde}.leitura")
-    linhas = ['<p class="reversa-motivo">'
-              f'{html.escape(_rotulo_de_secao_do_catalogo(catalogo, "motivos_da_leitura", leitura.get("motivo"), idioma))}</p>']
-
-    raizes = []
-    for raiz in leitura.get("raizes") or []:
-        identificacao = raiz.get("identificacao")
-        rotulo_da_identificacao = (
-            _rotulo_de_secao_do_catalogo(catalogo, "identificacoes", identificacao, idioma) if identificacao is not None
-            else t(dicionario, "valuation.reversa_identificacao_indisponivel"))
-        pedacos = [_valor_html("reversa-raiz-valor", t(
-            dicionario, "valuation.reversa_raiz", identificacao=rotulo_da_identificacao,
-            valor=_formatar_na_unidade(raiz.get("valor"), catalogo, unidade, idioma, moeda)))]
-        intervalo = raiz.get("intervalo")
-        if isinstance(intervalo, list) and len(intervalo) == 2:
-            pedacos.append(_valor_html("reversa-intervalo", t(
-                dicionario, "valuation.reversa_intervalo",
-                de=_formatar_na_unidade(intervalo[0], catalogo, unidade, idioma, moeda),
-                ate=_formatar_na_unidade(intervalo[1], catalogo, unidade, idioma, moeda))))
-        if raiz.get("curvatura") is not None:
-            pedacos.append(_valor_html("reversa-curvatura", t(
-                dicionario, "valuation.reversa_curvatura",
-                valor=_formatar_na_unidade(raiz["curvatura"], catalogo, leitura.get("unidade_da_curvatura"), idioma,
-                                           moeda))))
-        raizes.append(f'<li class="reversa-raiz">{" ".join(pedacos)}</li>')
-    if raizes:
-        linhas.append(f'<ul class="reversa-raizes">{"".join(raizes)}</ul>')
-
-    tangenciais = leitura.get("tangenciais") or []
-    if tangenciais:
-        linhas.append('<p class="reversa-tangenciais">' + _texto_de_dado_html(t(
-            dicionario, "valuation.reversa_tangenciais",
-            valores=", ".join(_formatar_na_unidade(valor, catalogo, unidade, idioma, moeda) for valor in tangenciais)))
-            + '</p>')
-    if leitura.get("cap_anos") is not None:
-        linhas.append('<p class="reversa-cap">' + _texto_de_dado_html(t(
-            dicionario, "valuation.reversa_cap",
-            valor=_formatar_na_unidade(leitura["cap_anos"], catalogo, unidade, idioma, moeda))) + '</p>')
-
-    beta = leitura.get("beta")
-    if isinstance(beta, dict):
-        unidade_do_beta = beta.get("unidade")
-        if beta.get("valor") is not None:
-            linhas.append('<p class="reversa-beta">' + _texto_de_dado_html(t(
-                dicionario, "valuation.reversa_beta",
-                valor=_formatar_na_unidade(beta["valor"], catalogo, unidade_do_beta, idioma, moeda))) + '</p>')
-        linhas.append('<p class="reversa-beta-posicao">'
-                      f'{html.escape(_rotulo_de_secao_do_catalogo(catalogo, "posicoes_na_banda", beta.get("posicao"), idioma))}</p>')
-        banda = beta.get("banda")
-        if isinstance(banda, list) and len(banda) == 2 and beta.get("distancia") is not None:
-            linhas.append('<p class="reversa-banda">' + _texto_de_dado_html(t(
-                dicionario, "valuation.reversa_beta_banda",
-                minimo=_formatar_na_unidade(banda[0], catalogo, unidade_do_beta, idioma, moeda),
-                maximo=_formatar_na_unidade(banda[1], catalogo, unidade_do_beta, idioma, moeda),
-                distancia=_formatar_na_unidade(beta["distancia"], catalogo, unidade_do_beta, idioma, moeda))) + '</p>')
-
+    _campo_de_contrato(leitura, "unidade", f"{onde}.leitura")
     titulo = _rotulo_de_secao_do_catalogo(catalogo, "eixos_de_reversa", nome, idioma)
-    return f'<article class="reversa-eixo"><h3>{html.escape(titulo)}</h3>{"".join(linhas)}</article>'
+    return (f'<article class="reversa-eixo" data-laboratorio-eixo="{html.escape(nome)}">'
+            f'<h3>{html.escape(titulo)}</h3>'
+            f'<div class="reversa-eixo-corpo" data-laboratorio-corpo>'
+            f'{_corpo_da_leitura_html(leitura, catalogo, idioma, moeda, dicionario)}</div></article>')
 
 
 def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, dicionario: dict) -> str:
@@ -2264,7 +2505,8 @@ def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, 
             f"catálogo de apresentação sem o rótulo e o texto em '{idioma}' de 'teto_do_crescimento_gratuito'.")
     onde = "resultados.reversa.teto_do_crescimento_gratuito"
     multiplo = t(dicionario, "valuation.reversa_teto_multiplo",
-                 valor=placeholders.formatar(_campo_de_contrato(teto, "multiplo", onde), "x2", idioma),
+                 valor=placeholders.formatar(_campo_de_contrato(teto, "multiplo", onde),
+                                             FORMATO_DO_MULTIPLO_DO_TETO, idioma),
                  multiplo=_rotulo_multiplo(catalogo, _campo_de_contrato(teto, "chave", onde), idioma))
     return (f'<div class="reversa-teto"><h3>{html.escape(rotulo)}</h3>'
             f'<p class="reversa-teto-multiplo">{_texto_de_dado_html(multiplo)}</p>'
@@ -2308,7 +2550,12 @@ def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str |
     """D2/D4: o que o preço embute em NÍVEL — a métrica-base implícita, o degrau contra a
     métrica declarada, as razões contra cada ponto do consenso e o rótulo da leitura do
     confronto temporal. Sem consenso declarado no caso não há razões nem leitura, e a
-    seção sai só com o nível e o degrau."""
+    seção sai só com o nível e o degrau.
+
+    Fatia 5I, Task 3 (D6/D11): este bloco é o ÚNICO da seção que continua congelado — é o
+    subcomando `nivel` do motor, que nenhum espelho reproduz —, e por isso o rótulo de
+    congelado mora aqui, ao lado dos números que ele descreve, e não no topo da seção,
+    onde cobria eixos e teto que hoje se movem."""
     onde = "resultados.reversa.nivel_implicito"
     linhas = [
         _metrica_html(t(dicionario, "valuation.nivel_implicito_metrica_titulo"),
@@ -2333,18 +2580,24 @@ def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str |
             _rotulo_de_secao_do_catalogo(catalogo, "leituras_do_nivel", chave, idioma)) + '</p>')
     return (f'<div class="reversa-nivel-implicito">'
             f'<h3>{html.escape(t(dicionario, "valuation.nivel_implicito_titulo"))}</h3>'
+            f'<p class="reversa-congelado-nota">'
+            f'{html.escape(t(dicionario, "valuation.nivel_implicito_congelado"))}</p>'
             f'{"".join(partes)}</div>')
 
 
 def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
-    """D15, 7: o que está no preço, congelado nas premissas originais (§8.4) — cada eixo da reversa
-    (`_eixo_da_reversa_html`), o teto do crescimento gratuito quando publicado, as limitações publicadas
-    que declaram suprimir a reversa ou a curva iso-valor, e o julgamento do analista com o observável,
-    quando declarados (D12), pela lista de prosa. Sem reversa, só a limitação que a suprime. Sob
-    fronteira de escopo a leitura do preço continua (§14): nada aqui é conclusão de valor."""
+    """D15, 7: o que está no preço — cada eixo da reversa (`_eixo_da_reversa_html`), o teto do
+    crescimento gratuito quando publicado, as limitações publicadas que declaram suprimir a reversa ou
+    a curva iso-valor, e o julgamento do analista com o observável, quando declarados (D12), pela lista
+    de prosa. Sem reversa, só a limitação que a suprime. Sob fronteira de escopo a leitura do preço
+    continua (§14): nada aqui é conclusão de valor.
+
+    Fatia 5I, Task 3 (D6): a nota de congelado que abria a seção SAIU. Os eixos, o teto e as limitações
+    andam com a edição desde o lote 1, e o que continua precomputado — o `nivel_implicito`, subcomando
+    do motor sem espelho (D11) — é rotulado no próprio bloco, onde o número está."""
     caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
     moeda = caso.get("moeda")
-    partes = [f'<p class="reversa-congelado-nota">{html.escape(t(dicionario, "valuation.o_que_esta_no_preco_congelado"))}</p>']
+    partes = []
     reversa = resultados.get(contrato_entrega.BLOCO_DA_REVERSA)
     if isinstance(reversa, dict):
         for nome, eixo in _campo_de_contrato(reversa, "eixos", "resultados.reversa").items():
@@ -2353,15 +2606,24 @@ def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicion
         partes.append(_nivel_implicito_html(
             _campo_de_contrato(reversa, "nivel_implicito", "resultados.reversa"),
             catalogo, idioma, moeda, resultados.get("escala_monetaria"), dicionario))
+        # 5I, Task 3: o teto some e volta com a edição (ele existe só enquanto um eixo
+        # primário não fecha), e por isso mora num container que o painel reescreve.
         teto = reversa.get("teto_do_crescimento_gratuito")
-        if isinstance(teto, dict):
-            partes.append(_teto_do_crescimento_gratuito_html(teto, catalogo, idioma, dicionario))
+        partes.append(
+            '<div class="reversa-teto-host" data-laboratorio-teto>'
+            + (_teto_do_crescimento_gratuito_html(teto, catalogo, idioma, dicionario)
+               if isinstance(teto, dict) else "")
+            + '</div>')
     declaradas = catalogo.get("limitacoes") or {}
     limitacoes = [_rotulo_limitacao(catalogo, chave, idioma) for chave in resultados.get("limitacoes") or []
                   if isinstance(chave, str) and (declaradas.get(chave) or {}).get("afeta") in AFETAS_DO_QUE_ESTA_NO_PRECO]
-    if limitacoes:
-        partes.append('<ul class="reversa-limitacoes">'
-                      + "".join(f"<li>{html.escape(rotulo)}</li>" for rotulo in limitacoes) + '</ul>')
+    # Mesmo container para as limitações: `iso_nao_calculada` é VIVA desde o lote 1 (D12)
+    # — acende quando a edição fecha o eixo primário e apaga quando ele reabre.
+    partes.append(
+        '<div class="reversa-limitacoes-host" data-laboratorio-limitacoes>'
+        + ('<ul class="reversa-limitacoes">'
+           + "".join(f"<li>{html.escape(rotulo)}</li>" for rotulo in limitacoes) + '</ul>' if limitacoes else "")
+        + '</div>')
     if isinstance(analise.get("o_que_esta_no_preco"), dict):
         partes.append(
             '<div class="reversa-julgamento">'
@@ -2679,9 +2941,13 @@ def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, d
 
     laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario, produto)
                    if com_laboratorio else "")
+    # Fatia 5I, Task 3 (A8/§9): o badge de paridade abre a aba, logo abaixo do preço e do
+    # upside — ele é o veredicto sobre TUDO o que a página publica, e não só sobre os
+    # cenários do painel. Sem laboratório não há badge: não há o que medir.
+    badge = _badge_do_laboratorio_html() if com_laboratorio else ""
     return (
         f'{topo}'
-        f'<section class="valuation-cabecalho">{cabecalho}</section>'
+        f'<section class="valuation-cabecalho">{cabecalho}{badge}</section>'
         f'{nota_manchete}'
         f'{_faixa_da_valuation_html(analise, resultados, idioma, moeda, dicionario)}'
         f'<section class="valuation-multiplos">{bloco_multiplos}</section>'
