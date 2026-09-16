@@ -150,13 +150,21 @@ def test_o_painel_traz_os_blocos_na_ordem_do_catalogo():
 def test_cada_premissa_do_cenario_vira_um_campo_editavel():
     """Cobertura, não amostra: TODA premissa que o caso declara aparece no
     painel, e toda premissa que o catálogo conhece vem editável, com o tipo de
-    entrada que o catálogo declara (nunca um widget escolhido aqui)."""
+    entrada que o catálogo declara (nunca um widget escolhido aqui).
+
+    Fatia 5I, Task 4: além das premissas, o painel ganha um campo para a variável do
+    TRIÂNGULO que não é premissa da rota (o `rir`) — sem ele, duas das três
+    configurações da identidade ficariam sem entrada."""
     pagina, entrega = _pagina()
     painel = _painel(pagina)
     premissas = entrega["caso"]["cenarios"]["base"]["premissas"]
     do_catalogo = CATALOGO["premissas"]["firm"]
+    triangulo = entrega["caso"]["cenarios"]["base"]["triangulo"]
+    do_triangulo = {variavel for variavel in triangulo["inputs"] + [triangulo["output"]]
+                    if variavel not in do_catalogo}
 
-    assert set(re.findall(r'data-laboratorio-premissa="([^"]+)"', painel)) == set(premissas)
+    assert do_triangulo, "o triângulo desta fixture só tem premissas — o teste não discrimina"
+    assert set(re.findall(r'data-laboratorio-premissa="([^"]+)"', painel)) == set(premissas) | do_triangulo
     for chave, valor in premissas.items():
         campo = re.search(
             r'data-laboratorio-premissa="' + re.escape(chave) + r'">(.*?)</div>', painel, re.S)
@@ -797,10 +805,36 @@ function foto() {
   return {
     badge: { estado: badge.getAttribute('data-estado'), texto: badge.filhos.length && !badge.filhos[0].eTexto
       ? badge.filhos[0].textContent : badge.textContent, itens: itens },
-    campos: raiz.querySelectorAll('[data-laboratorio-entrada]').map((campo) => ({
-      premissa: campo.closest('[data-laboratorio-premissa]').getAttribute('data-laboratorio-premissa'),
-      disabled: campo.disabled, value: campo.value, invalido: campo.getAttribute('aria-invalid'),
-    })),
+    // Fatia 5I, Task 4: nem todo campo editavel e' de premissa -- o seletor do triangulo
+    // e as linhas do degrau tambem entram aqui, e o portador de cada um diz qual e' qual.
+    campos: raiz.querySelectorAll('[data-laboratorio-entrada]').map((campo) => {
+      const portador = campo.closest('[data-laboratorio-premissa]');
+      const linha = campo.closest('[data-ponte-linha]');
+      const exibido = (portador || linha) === null
+        ? null : (portador || linha).querySelector('[class="lab-original"]');
+      return {
+        premissa: portador === null ? null : portador.getAttribute('data-laboratorio-premissa'),
+        triangulo: campo.getAttribute('data-laboratorio-triangulo'),
+        linhaDaPonte: linha === null ? null : linha.getAttribute('data-ponte-linha'),
+        disabled: campo.disabled, value: campo.value, invalido: campo.getAttribute('aria-invalid'),
+        // O que o botao de restaurar devolve, e o valor original LEGIVEL ao lado do
+        // campo: a secao 8.3 pede que nenhuma simulacao os mova.
+        original: campo.getAttribute('data-laboratorio-original'),
+        originalExibido: exibido === null ? null : exibido.textContent,
+      };
+    }),
+    waterfall: (() => {
+      const host = documento.querySelector('[data-laboratorio-ponte]');
+      return host === null ? null : host.innerHTML;
+    })(),
+    tetos: (() => {
+      const marcas = {};
+      for (const bloco of raiz.querySelectorAll('[data-laboratorio-cenario]')) {
+        const marca = bloco.querySelector('[data-laboratorio-saida="teto-alavanca"]');
+        marcas[bloco.getAttribute('data-laboratorio-cenario')] = marca === null ? null : marca.textContent;
+      }
+      return marcas;
+    })(),
     botoes: raiz.querySelectorAll('[data-laboratorio-restaurar]').map((b) => b.disabled),
     saidas: saidas,
     diagnosticos: diagnosticos,
@@ -835,6 +869,19 @@ for (const passo of entrada.passos) {
     // `chamadasDaFachada` diz quantas contas ela custou. Com `semVencer`, a foto e'
     // ANTES -- e' assim que o teste ve que a rajada nao redesenhou tecla a tecla.
     if (passo.semVencer !== true) { vencerTemporizadores(); }
+  } else if (passo.acao === 'configurar') {
+    // Fatia 5I, Task 4: a troca da configuracao do triangulo, pelo seletor do cenario.
+    const seletor = blocoDoCenario(passo.cenario).querySelector('[data-laboratorio-triangulo]');
+    seletor.value = passo.valor;
+    seletor.disparar('change');
+  } else if (passo.acao === 'degrau') {
+    // A linha da ponte, que mora fora do painel, ao lado do waterfall (D8).
+    const portador = documento.querySelectorAll('[data-ponte-linha]')
+      .find((p) => p.getAttribute('data-ponte-linha') === passo.linha);
+    const campo = portador.querySelector('[data-laboratorio-entrada]');
+    campo.value = passo.valor;
+    campo.disparar('input');
+    if (passo.semVencer !== true) { vencerTemporizadores(); }
   } else if (passo.acao === 'vencer') {
     vencerTemporizadores();
   } else {
@@ -848,6 +895,11 @@ fotos.matrizesDoRender = (entrada.matrizesDoRender || []).map((m) => ctx.FleetSV
   base: m.base, rotuloX: m.rotuloX, rotuloY: m.rotuloY,
   formato: m.formato, formatoX: m.formatoX, formatoY: m.formatoY,
 }));
+// E o waterfall, pelo mesmo caminho: o que o bootstrap estatico desenharia do payload.
+fotos.ponteDoRender = entrada.ponteDoRender === null ? null
+  : ctx.FleetSVG.waterfall(entrada.ponteDoRender.parcelas, {
+    total: entrada.ponteDoRender.total, formato: entrada.ponteDoRender.formato,
+  });
 fotos.casoIntacto = recebido !== null && JSON.stringify(recebido.caso) === casoAntes;
 // O badge que o bootstrap passou e' o do CABECALHO -- e uma busca descendente a partir
 // da raiz do painel (o caminho antigo) nao o acha mais.
@@ -880,11 +932,11 @@ def _arvore_da_aba(pagina: str) -> dict:
     return arvore.raiz
 
 
-def _matrizes_do_render(entrega: dict) -> list:
-    """O payload dos painéis SVG que o bootstrap estático consome — o oráculo da
-    matriz que o laboratório redesenha na carga."""
+def _paineis_do_render(entrega: dict) -> dict:
+    """O payload dos painéis SVG que o bootstrap estático consome — o oráculo da matriz e
+    do waterfall que o laboratório redesenha na carga."""
     return render._paineis_valuation_para_json(
-        entrega["caso"], entrega["resultados"], CATALOGO, "pt-BR", DICIONARIO)["matrizes"]
+        entrega["caso"], entrega["resultados"], CATALOGO, "pt-BR", DICIONARIO)
 
 
 def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None, entrega: dict | None = None,
@@ -903,7 +955,8 @@ def _laboratorio_vivo(pagina: str, tmp_path, *, dados: dict | None = None, entre
         "dados": dados if dados is not None else _dados_embutidos(pagina),
         "bootstrap": _bootstrap_do_laboratorio(pagina),
         "passos": passos or [],
-        "matrizesDoRender": _matrizes_do_render(entrega) if entrega is not None else [],
+        "matrizesDoRender": _paineis_do_render(entrega)["matrizes"] if entrega is not None else [],
+        "ponteDoRender": _paineis_do_render(entrega)["ponte"] if entrega is not None else None,
     }
     arq = tmp_path / "laboratorio_vivo.json"
     arq.write_text(json.dumps(entrada, ensure_ascii=False), encoding="utf-8")
@@ -1024,7 +1077,11 @@ def test_o_badge_verde_libera_a_edicao_e_os_numeros_andam_com_o_motor(tmp_path):
     carga = fotos["carga"]
     assert carga["badge"]["estado"] == "ok", carga["badge"]
     assert carga["badge"]["texto"] == render.t(DICIONARIO, "valuation.laboratorio_paridade_ok")
-    assert carga["campos"] and not any(campo["disabled"] for campo in carga["campos"])
+    # Fatia 5I, Task 4: o único campo que nasce desabilitado é o da variável que o
+    # triângulo DERIVA — ele é visor, não entrada. Todo o resto abre para edição.
+    derivado = entrega["caso"]["cenarios"]["base"]["triangulo"]["output"]
+    assert carga["campos"] and [campo["premissa"] for campo in carga["campos"] if campo["disabled"]] \
+        == [derivado], carga["campos"]
     assert not any(carga["botoes"])
     assert carga["saidas"]["base"] == _saidas_publicadas(entrega["resultados"], moeda)
 
@@ -1565,3 +1622,196 @@ def test_a_rajada_de_teclas_custa_um_redesenho_so(tmp_path):
     assert fotos["digitando"]["saidas"] == fotos["carga"]["saidas"]
     assert fotos["venceu"]["chamadasDaFachada"] == 2
     assert fotos["venceu"]["saidas"] != fotos["carga"]["saidas"]
+
+
+# --------------------------------------------------------------------------
+# Fatia 5I, Task 4 — o triângulo como controle, a ponte editável no degrau, a cadeia
+# de derivação e o rótulo do teto da alavanca.
+#
+# O oráculo continua sendo o Python: a entrega do caso equivalente, composta por
+# `avaliar()` de verdade. O que muda é COMO o analista chega ao vetor editado — pela
+# configuração da identidade e pelo degrau, não só pelo campo da premissa.
+# --------------------------------------------------------------------------
+
+def _campo_da_premissa(foto: dict, premissa: str) -> dict:
+    (campo,) = [c for c in foto["campos"] if c["premissa"] == premissa]
+    return campo
+
+
+def _barras_do_waterfall(svg: str) -> dict:
+    """`{chave: valor}` de cada barra do waterfall, pela âncora semântica que a fatia
+    acrescentou — e `None` para a barra de fechamento, que não é parcela."""
+    barras = {}
+    for atributos in re.findall(r"<rect\b([^>]*)>", svg):
+        valor = re.search(r'data-valor="([^"]*)"', atributos)
+        chave = re.search(r'data-parcela="([^"]*)"', atributos)
+        if valor is None:
+            continue
+        barras[chave.group(1) if chave else None] = float(valor.group(1))
+    return barras
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_trocar_a_configuracao_do_triangulo_move_o_preco_sem_tocar_na_calibracao(tmp_path):
+    """D7/§8.3: a identidade g = RiR × retorno tem dois graus de liberdade, e qual das
+    três variáveis é a saída passa a ser uma ESCOLHA na tela. Trocada a configuração, a
+    variável derivada vira visor (desabilitada, com o número que a integração resolveu) e
+    a que era derivada vira entrada — e editá-la move o preço.
+
+    A calibração original não se move em nenhum momento: o valor original exibido ao lado
+    de cada campo e o que o botão de restaurar devolve continuam os do caso, e restaurar
+    devolve também a configuração declarada."""
+    pagina, entrega = _pagina()
+    premissas = entrega["caso"]["cenarios"]["base"]["premissas"]
+    declarada = entrega["caso"]["cenarios"]["base"]["triangulo"]["output"]
+    # Com o RiR de entrada, a terceira variável é o retorno: 5 / 0,25 = 20 p.p. de ROIC.
+    rir_editado = 0.25
+    roic_derivado = premissas["g"] / rir_editado
+    assert roic_derivado != premissas["roic"], "o vetor derivado é o declarado — não discrimina"
+
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "configurado", "acao": "configurar", "cenario": "base", "valor": "roic"},
+        {"nome": "editado", "acao": "editar", "cenario": "base", "premissa": declarada,
+         "valor": json.dumps(rir_editado)},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+
+    # Na carga, a variável declarada como saída é a derivada: visor, com o valor que a
+    # identidade resolve (g / ROIC), e fora do vetor que o painel colhe.
+    na_carga = _campo_da_premissa(fotos["carga"], declarada)
+    assert na_carga["disabled"] is True
+    assert abs(float(na_carga["value"]) - premissas["g"] / premissas["roic"]) <= 1e-12
+
+    # Trocada a configuração, os papéis se invertem — e só eles.
+    configurado = _campo_da_premissa(fotos["configurado"], "roic")
+    assert configurado["disabled"] is True
+    assert _campo_da_premissa(fotos["configurado"], declarada)["disabled"] is False
+    assert fotos["configurado"]["saidas"] == fotos["carga"]["saidas"], \
+        "a mesma identidade, resolvida ao contrário, tem de dar o mesmo vetor"
+
+    def _mutar(caso: dict) -> None:
+        caso["cenarios"]["base"]["premissas"]["roic"] = roic_derivado
+
+    esperada = _pagina(FIXTURE, mutar_caso=_mutar)[1]
+    assert fotos["editado"]["saidas"]["base"] == _saidas_publicadas(
+        esperada["resultados"], entrega["caso"]["moeda"])
+    assert abs(float(_campo_da_premissa(fotos["editado"], "roic")["value"]) - roic_derivado) <= 1e-9
+
+    # §8.3: nem o original exibido nem o que o restaurar devolve se moveram.
+    for quando in ("configurado", "editado", "restaurado"):
+        campo = _campo_da_premissa(fotos[quando], "roic")
+        assert (campo["original"], campo["originalExibido"]) == (
+            _campo_da_premissa(fotos["carga"], "roic")["original"],
+            _campo_da_premissa(fotos["carga"], "roic")["originalExibido"])
+    seletor = [c for c in fotos["restaurado"]["campos"] if c["triangulo"] == "base"]
+    assert [c["value"] for c in seletor] == [declarada], seletor
+    assert fotos["restaurado"]["saidas"] == fotos["carga"]["saidas"]
+    assert fotos["casoIntacto"] is True
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_editar_o_degrau_move_a_divida_liquida_o_preco_e_o_waterfall(tmp_path):
+    """D8: a ponte vira controle por ANCORAGEM — uma linha de entrada por parcela, ao
+    lado do host, com a chave do catálogo. Editar a dívida bruta move `nd_efetivo`, o
+    preço e a figura na mesma ação; o editor fica fora do SVG, e a barra que se move é
+    endereçada pela chave, nunca pela posição.
+
+    Na carga, o waterfall redesenhado é byte a byte o que o bootstrap estático
+    desenharia do payload de `render.py`."""
+    pagina, entrega = _pagina()
+    linha = entrega["resultados"]["ponte"]["parcelas"][0]["rotulo"]
+    divida = entrega["caso"]["ponte"][linha]
+    editada = divida + 250.0
+
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "degrau", "acao": "degrau", "linha": linha, "valor": json.dumps(editada)},
+    ])
+
+    assert fotos["ponteDoRender"] and fotos["carga"]["waterfall"] == fotos["ponteDoRender"]
+
+    def _mutar(caso: dict) -> None:
+        caso["ponte"][linha] = editada
+
+    esperada = _pagina(FIXTURE, mutar_caso=_mutar)[1]
+    assert fotos["degrau"]["saidas"]["base"] == _saidas_publicadas(
+        esperada["resultados"], entrega["caso"]["moeda"])
+    assert fotos["degrau"]["saidas"]["base"]["preco"] != fotos["carga"]["saidas"]["base"]["preco"]
+
+    barras = _barras_do_waterfall(fotos["degrau"]["waterfall"])
+    assert abs(barras[linha] - editada) <= 1e-9, barras
+    assert abs(barras[None] - esperada["resultados"]["ponte"]["nd_efetivo"]) <= 1e-9, barras
+    assert barras != _barras_do_waterfall(fotos["carga"]["waterfall"])
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_uma_linha_ilegivel_do_degrau_deixa_a_pagina_sem_numero_e_nao_inventa_divida(tmp_path):
+    """Sem uma linha do balanço não existe dívida líquida, e nenhum preço se sustenta: a
+    linha vazia vira `null` no caso editado e a integração a recusa pelo nome. A tela
+    fica sem número — nunca com o preço do vetor anterior, nunca com a linha valendo
+    zero."""
+    pagina, entrega = _pagina()
+    linha = entrega["resultados"]["ponte"]["parcelas"][0]["rotulo"]
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega, passos=[
+        {"nome": "vazia", "acao": "degrau", "linha": linha, "valor": ""},
+    ])
+    vazio = render.t(DICIONARIO, "valuation.laboratorio_sem_valor")
+    assert fotos["vazia"]["saidas"]["base"]["preco"] == vazio
+    campo = [c for c in fotos["vazia"]["campos"] if c["linhaDaPonte"] == linha]
+    assert [c["invalido"] for c in campo] == ["true"], campo
+    assert fotos["vazia"]["waterfall"] == ""
+
+
+def test_a_premissa_sustentada_pelo_ledger_mostra_claim_formula_e_fonte():
+    """D9: a cadeia de derivação é COMPOSIÇÃO do ledger — os registros cujo `usado_em`
+    endereça `cenarios.<cenário>.premissas.<chave>`, com o claim, a fórmula quando o
+    registro a declara e a fonte com o localizador. Premissa sem registro não ganha linha
+    nenhuma: nunca um texto inventado."""
+    ledger = apoio.ledger_vazio()
+    ledger["registros"].append(apoio.registro_do_ledger(
+        "roic-normalizado", "ROIC normalizado de 2025", "Demonstrações financeiras 2025", 12.0,
+        estatuto="calculated", formula="NOPAT dividido pelo capital investido médio",
+        usado_em=["cenarios.base.premissas.roic"]))
+    pagina, entrega = _pagina(ledger=ledger)
+    painel = _painel(pagina)
+
+    def _campo(chave: str) -> str:
+        return re.search(r'data-laboratorio-premissa="' + re.escape(chave) + r'">(.*?)</div>\s*<div',
+                         painel, re.S).group(1)
+
+    derivacao = _campo("roic")
+    assert render.t(DICIONARIO, "valuation.laboratorio_derivacao_titulo") in derivacao
+    assert "ROIC normalizado de 2025" in derivacao
+    assert render.t(DICIONARIO, "valuation.laboratorio_derivacao_formula",
+                    formula="NOPAT dividido pelo capital investido médio") in derivacao
+    assert "Demonstrações financeiras 2025" in derivacao
+
+    # A premissa que o ledger não sustenta (a convenção terminal não é insumo numérico,
+    # e nenhum registro a nomeia) não ganha bloco nenhum.
+    assert "lab-derivacao" not in _campo("tv")
+    # E a linha do degrau também mostra a sua cadeia, pelo caminho `ponte.<linha>`.
+    aba = _aba_valuation(pagina)
+    linha = entrega["resultados"]["ponte"]["parcelas"][0]["rotulo"]
+    bloco = aba[aba.index(f'data-ponte-linha="{linha}"'):]
+    assert "lab-derivacao" in bloco[:bloco.index("</div>\n") if "</div>\n" in bloco else 2000]
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_o_cenario_com_o_teto_da_alavanca_sai_rotulado_como_nao_cenario(tmp_path):
+    """D10/A11: a chave viva (`degrau_alerta`) já existia e o rótulo dela no catálogo diz
+    literalmente "reporte como teto da alavanca, não como cenário" — e o cenário
+    continuava exibido como cenário. Agora o rótulo acende e apaga com a edição, na mesma
+    chamada (§8.4), e o painel lê um booleano e um texto do catálogo: nunca o predicado."""
+    pagina, entrega = _pagina("caso_degrau.json")
+    roe = entrega["caso"]["cenarios"]["base"]["premissas"]["roe"]
+    fotos = _laboratorio_vivo(pagina, tmp_path, passos=[
+        {"nome": "alavancado", "acao": "editar", "cenario": "base", "premissa": "roe", "valor": "40"},
+        {"nome": "restaurado", "acao": "restaurar", "cenario": "base"},
+    ])
+    esperado = render.t(DICIONARIO, "valuation.laboratorio_teto_alavanca",
+                        rotulo=CATALOGO["teto_da_alavanca"]["rotulo"]["pt-BR"],
+                        texto=CATALOGO["teto_da_alavanca"]["texto"]["pt-BR"])
+
+    assert roe < 40.0, "o caso já estaria alavancado — o teste não discrimina"
+    assert fotos["carga"]["tetos"] == {"base": ""}
+    assert fotos["alavancado"]["tetos"] == {"base": esperado}
+    assert fotos["restaurado"]["tetos"] == {"base": ""}

@@ -235,6 +235,10 @@
       "laboratorio_diagnosticos_recusado": "Cenário recusado, sem número publicável: {motivo}.",
       "laboratorio_recusa_desconhecida": "motivo sem rótulo no catálogo de apresentação desta análise",
       "laboratorio_rotulo_desconhecido": "código sem rótulo no catálogo de apresentação desta análise",
+      "laboratorio_derivacao_titulo": "De onde vem este número",
+      "laboratorio_derivacao_formula": "Fórmula: {formula}",
+      "laboratorio_derivacao_fonte": "Fonte: {fonte} — {localizador}",
+      "laboratorio_teto_alavanca": "{rotulo}: {texto}",
       "condicional": {
         "preco_justo_titulo": "Leitura condicional do preço por ação (sem preço-alvo)",
         "upside_titulo": "Leitura condicional do upside sobre o preço de mercado (sem preço-alvo)",

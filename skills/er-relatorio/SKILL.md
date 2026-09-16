@@ -598,8 +598,25 @@ duas perguntas.
    escreve; nenhum nome de campo de metodologia mora lá. O redesenho de uma rajada de teclas
    é agrupado (`setTimeout`), e a **curvatura** exibida ao vivo é a do navegador: ela está
    fora do comparador desde o lote 1 da 5I (D4 — segunda diferença finita amplificada por
-   `h²`), continua exibida, e não pinta o badge de vermelho;
-5. a **ponte** como waterfall;
+   `h²`), continua exibida, e não pinta o badge de vermelho. Cada cenário ganha ainda: o
+   **triângulo como controle** — um seletor com as três configurações de `{inputs, output}`
+   da identidade g = RiR × retorno, derivadas do triângulo que o caso declara, mais o campo
+   da variável que não é premissa da rota (`rir`); a variável de SAÍDA vira visor
+   (desabilitada, com o número que a integração resolveu) e não entra no vetor colhido, e
+   trocar a configuração muda o preço **sem** tocar no valor original de cada campo nem no
+   que o botão de restaurar devolve (§8.3) —; o **rótulo de não-cenário** do teto da
+   alavanca, que acende e apaga com a chave viva do degrau (D10); e, sob cada campo, a
+   **cadeia de derivação** — os registros do ledger cujo `usado_em` endereça
+   `cenarios.<cenário>.premissas.<chave>` (ou `ponte.<linha>`), com o claim, a fórmula que o
+   registro declara e a fonte com o localizador. Premissa sem registro não ganha linha
+   nenhuma;
+5. a **ponte** como waterfall. Com laboratório, uma **linha de entrada por parcela** ao
+   lado do host (fatia 5I, D8), cada uma com a chave do catálogo (`data-ponte-linha`):
+   editar o degrau move `nd_efetivo`, o preço e a figura na mesma ação, e a barra
+   correspondente é endereçada pela chave (`data-parcela`), nunca pela posição. O editor
+   fica FORA do SVG — hit-testing e input flutuante dentro da figura continuam fora de
+   escopo. Linha ilegível vira `null` e a integração a recusa pelo nome: a página fica sem
+   número, nunca com a linha valendo zero;
 6. o **painel de escolhas metodológicas** (fatia 5G, §8.2), quando a integração publica
    alguma: o alerta de empilhamento acima, com a direção pelo rótulo do dicionário e as
    escolhas pelos do catálogo; e cada escolha com o rótulo e o gatilho do catálogo, a

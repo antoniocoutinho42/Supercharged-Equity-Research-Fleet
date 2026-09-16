@@ -162,6 +162,28 @@
     for (indice = 0; indice < bloqueaveis.length; indice++) {
       bloqueaveis[indice].disabled = true;
     }
+    // As linhas da ponte (fatia 5I, Task 4) sao editaveis e moram FORA da raiz: sem
+    // isto, o badge vermelho travaria o painel e deixaria o degrau editavel.
+    var daPonte = linhasDaPonte(raiz.ownerDocument);
+    for (indice = 0; indice < daPonte.length; indice++) {
+      if (daPonte[indice].campo) { daPonte[indice].campo.disabled = true; }
+    }
+  }
+
+  // As linhas do degrau, com a chave do catalogo e o campo de entrada de cada uma. O
+  // seletor sai em DOIS passos (o portador, depois o campo) de proposito: nao ha'
+  // combinador de descendencia aqui, e o portador e' quem carrega a chave.
+  function linhasDaPonte(documento) {
+    var portadores = documento.querySelectorAll("[data-ponte-linha]");
+    var linhas = [];
+    var indice;
+    for (indice = 0; indice < portadores.length; indice++) {
+      linhas.push({
+        chave: portadores[indice].getAttribute("data-ponte-linha"),
+        campo: portadores[indice].querySelector("[data-laboratorio-entrada]")
+      });
+    }
+    return linhas;
   }
 
   // ----------------------------------------------------------------------
@@ -181,7 +203,18 @@
   //
   // Campo numerico vazio ou ilegivel nao vira zero nem volta em silencio ao
   // valor original: marca o campo e cega as saidas DAQUELE cenario.
-  function colher(raiz, base) {
+  // A configuracao do triangulo daquele cenario (fatia 5I, Task 4, D7): o valor da
+  // opcao e' a VARIAVEL DE SAIDA, e o payload traz a configuracao inteira ({inputs,
+  // output}) de cada uma das tres. Este arquivo nao monta configuracao nenhuma nem
+  // conhece o vocabulario da identidade -- ele escolhe uma entre as que chegaram.
+  function configuracaoDoTriangulo(bloco, nomeCenario, dados) {
+    var seletor = bloco.querySelector("[data-laboratorio-triangulo]");
+    if (!seletor) { return null; }
+    var porSaida = (dados.triangulos || {})[nomeCenario] || {};
+    return Object.prototype.hasOwnProperty.call(porSaida, seletor.value) ? porSaida[seletor.value] : null;
+  }
+
+  function colher(raiz, base, dados) {
     var editado = copiaProfunda(base);
     var cegos = {};
     var blocos = raiz.querySelectorAll("[data-laboratorio-cenario]");
@@ -190,12 +223,18 @@
       var nomeCenario = blocos[indice].getAttribute("data-laboratorio-cenario");
       var registro = editado.cenarios ? editado.cenarios[nomeCenario] : null;
       var destino = registro ? registro.premissas : null;
+      var configuracao = configuracaoDoTriangulo(blocos[indice], nomeCenario, dados);
+      if (registro && configuracao) { registro.triangulo = configuracao; }
       var campos = blocos[indice].querySelectorAll("[data-laboratorio-entrada]");
       var posicao;
       for (posicao = 0; posicao < campos.length; posicao++) {
         var campo = campos[posicao];
         var nome = nomeDaPremissa(campo);
         var tipo = campo.getAttribute("data-laboratorio-entrada");
+        // A variavel de SAIDA do triangulo e' derivada, nao entrada: quem a resolve e'
+        // a integracao, pela identidade. Ela nao entra no vetor editado e nunca cega o
+        // cenario por estar vazia -- o campo dela e' visor, nao campo.
+        if (configuracao && nome !== null && nome === configuracao.output) { continue; }
         if (tipo === "booleano") {
           if (destino && nome) { destino[nome] = campo.checked; }
           continue;
@@ -213,6 +252,25 @@
         campo.removeAttribute("aria-invalid");
         if (destino && nome) { destino[nome] = lido; }
       }
+    }
+
+    // O degrau da ponte (D8): cada linha escreve a SUA chave no bloco `ponte` do caso
+    // editado. Quem soma as linhas em `nd_efetivo` e' a integracao -- este arquivo nao
+    // conhece sinal nem ordem. Linha ilegivel vira `null`: a fachada a recusa pelo nome
+    // (`ponte_incompleta`) e a pagina inteira fica sem numero, que e' a verdade -- sem
+    // uma linha do balanco nao existe divida liquida, e nenhum cenario se sustenta.
+    var linhas = linhasDaPonte(raiz.ownerDocument);
+    for (indice = 0; indice < linhas.length; indice++) {
+      var entrada = linhas[indice].campo;
+      if (!entrada || !editado.ponte) { continue; }
+      var lidoDaLinha = Number(entrada.value);
+      if (String(entrada.value).trim() === "" || !isFinite(lidoDaLinha)) {
+        entrada.setAttribute("aria-invalid", "true");
+        editado.ponte[linhas[indice].chave] = null;
+        continue;
+      }
+      entrada.removeAttribute("aria-invalid");
+      editado.ponte[linhas[indice].chave] = lidoDaLinha;
     }
     return { caso: editado, cegos: cegos };
   }
@@ -474,6 +532,57 @@
     }
   }
 
+  // O waterfall redesenhado a cada mudanca de degrau (D8). As parcelas sao as do
+  // payload -- chave, rotulo e sinal, do catalogo -- com o valor que o caso EDITADO
+  // declara; o total e' o `nd_efetivo` que a integracao recompos, nunca a soma feita
+  // aqui. E' a mesma disciplina do bootstrap estatico: este modulo desenha, nao soma.
+  function pintarPonte(documento, vivo, dados, caso) {
+    var espec = dados.ponte;
+    var host = documento.querySelector("[data-laboratorio-ponte]");
+    if (!espec || !host) { return; }
+    if (!vivo || !vivo.ponte || typeof root.FleetSVG === "undefined") {
+      host.innerHTML = "";
+      return;
+    }
+    var daPonte = caso.ponte || {};
+    var parcelas = [];
+    var indice;
+    for (indice = 0; indice < espec.parcelas.length; indice++) {
+      var parcela = espec.parcelas[indice];
+      parcelas.push({
+        chave: parcela.chave,
+        rotulo: parcela.rotulo,
+        sinal: parcela.sinal,
+        valor: daPonte[parcela.chave]
+      });
+    }
+    host.innerHTML = root.FleetSVG.waterfall(parcelas, {
+      total: { rotulo: espec.total.rotulo, valor: vivo.ponte.nd_efetivo },
+      formato: espec.formato
+    });
+  }
+
+  // A variavel que a configuracao declara como SAIDA e' derivada: o campo dela vira
+  // visor -- desabilitado, com o numero que a integracao resolveu. Trocar a
+  // configuracao troca QUAL campo e' o visor, e nada mais: o valor original ao lado de
+  // cada campo nao se move, e o botao de restaurar devolve a calibracao inteira,
+  // configuracao inclusive (secao 8.3).
+  function escreverTriangulo(bloco, triangulo) {
+    var campos = bloco.querySelectorAll("[data-laboratorio-entrada]");
+    var indice;
+    for (indice = 0; indice < campos.length; indice++) {
+      var nome = nomeDaPremissa(campos[indice]);
+      if (nome === null) { continue; }
+      var derivado = !!triangulo && nome === triangulo.variavel;
+      campos[indice].disabled = derivado;
+      if (derivado) {
+        campos[indice].value = (typeof triangulo.valor === "number" && isFinite(triangulo.valor))
+          ? String(triangulo.valor) : "";
+        campos[indice].removeAttribute("aria-invalid");
+      }
+    }
+  }
+
   function pintarSensibilidades(documento, vivo, dados, caso, cegos) {
     var espec = dados.sensibilidades;
     if (!espec) { return; }
@@ -576,6 +685,7 @@
         escreverSaida(bloco, "multiplo", vazio);
         escreverSaida(bloco, "multiplo-rotulo", "");
         escreverSaida(bloco, "upside", vazio);
+        escreverSaida(bloco, "teto-alavanca", "");
         escreverDiagnosticos(bloco, null, dados);
         continue;
       }
@@ -586,6 +696,12 @@
       escreverSaida(bloco, "multiplo-rotulo", rotulos[registro.multiplo.chave] || "");
       escreverSaida(bloco, "upside",
         formatar(registro.vs_preco.upside, formatos.upside, idioma, vazio));
+      // D10: o cenario cujo degrau acende a chave viva sai rotulado como NAO-CENARIO. O
+      // predicado e' da integracao (um booleano no registro); o rotulo e o texto sao do
+      // catalogo, pelo payload. O rotulo acende e apaga com o numero, na mesma chamada.
+      escreverSaida(bloco, "teto-alavanca", registro.teto_da_alavanca
+        ? textoDe((dados.textos || {}).tetoDaAlavanca, dados.tetoDaAlavanca || {}) : "");
+      escreverTriangulo(bloco, registro.triangulo);
       escreverDiagnosticos(bloco, registro, dados);
     }
 
@@ -600,6 +716,7 @@
       pintarReversa(documento, (vivo && !cegos[dados.reversa.cenario]) ? vivo.reversa : null, dados);
     }
     pintarSensibilidades(documento, vivo, dados, caso, cegos);
+    pintarPonte(documento, vivo, dados, caso);
   }
 
   // ----------------------------------------------------------------------
@@ -628,7 +745,7 @@
 
   function ligar(raiz, dados) {
     function redesenhar() {
-      var colheita = colher(raiz, dados.caso);
+      var colheita = colher(raiz, dados.caso, dados);
       var vivo = null;
       try {
         vivo = root.FachadaEspelho.avaliarCaso(colheita.caso);
@@ -639,7 +756,18 @@
     }
 
     var comEspera = agrupador(redesenhar);
-    var campos = raiz.querySelectorAll("[data-laboratorio-entrada]");
+    var campos = [];
+    var doPainel = raiz.querySelectorAll("[data-laboratorio-entrada]");
+    var posicao;
+    // `querySelectorAll` devolve NodeList no browser, nao Array: a lista de ouvintes e'
+    // montada numa lista propria, nunca por `push` no que o DOM devolveu.
+    for (posicao = 0; posicao < doPainel.length; posicao++) { campos.push(doPainel[posicao]); }
+    // As linhas do degrau moram fora da raiz (D8) e sao numericas: entram na mesma
+    // lista de ouvintes, com o mesmo agrupamento por rajada.
+    var linhas = linhasDaPonte(raiz.ownerDocument);
+    for (posicao = 0; posicao < linhas.length; posicao++) {
+      if (linhas[posicao].campo) { campos.push(linhas[posicao].campo); }
+    }
     var indice;
     for (indice = 0; indice < campos.length; indice++) {
       var tipo = campos[indice].getAttribute("data-laboratorio-entrada");

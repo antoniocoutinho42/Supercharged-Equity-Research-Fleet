@@ -211,6 +211,11 @@
       acumulado = acumulado + contribuicao;
       passos.push({
         rotulo: parcelas[i].rotulo,
+        // A CHAVE semantica da linha, quando o chamador a declara (fatia 5I, Task 4):
+        // vira `data-parcela` na barra. Ate aqui o degrau so' era enderecavel por
+        // POSICAO (`data-indice`), e o editor ancorado a ele dependeria da ordem das
+        // parcelas continuar a mesma. Ausente, nada muda: a barra sai como antes.
+        chave: parcelas[i].chave,
         inicio: inicio,
         fim: acumulado,
         valor: contribuicao,
@@ -262,6 +267,8 @@
 
       pedacos.push('<rect class="' + classe + '" data-indice="' + i + '"'
         + (passo.fechamento ? ' data-fechamento="1"' : '')
+        + (passo.chave === undefined || passo.chave === null
+          ? '' : ' data-parcela="' + escapar(String(passo.chave)) + '"')
         + ' data-valor="' + escapar(String(passo.valor)) + '"'
         + ' x="' + coordenada(x0) + '" y="' + coordenada(topoBarra) + '"'
         + ' width="' + coordenada(larguraBarra) + '" height="' + coordenada(alturaBarra) + '"'

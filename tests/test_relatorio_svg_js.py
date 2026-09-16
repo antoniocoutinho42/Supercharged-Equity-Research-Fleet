@@ -312,6 +312,42 @@ def test_cada_barra_carrega_a_contribuicao_com_o_sinal_da_linha():
         assert float(barra.get("data-valor")) == pytest.approx(esperado), parcela["rotulo"]
 
 
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_cada_barra_carrega_a_chave_da_linha_quando_o_chamador_a_declara():
+    """Fatia 5I, Task 4 (D8/A9): o degrau era endereçável só por POSIÇÃO
+    (`data-indice`), e o editor ancorado a ele dependeria de a ordem das parcelas
+    continuar a mesma. Com a chave do catálogo no payload, cada barra carrega a linha de
+    balanço que ela desenha — e a linha de entrada ao lado do host move exatamente essa.
+
+    A barra de fechamento não é parcela e não ganha chave; sem `chave` no payload, o
+    desenho sai como antes (o atributo simplesmente não aparece)."""
+    caso, ponte = _ponte_da_fixture()
+    com_chave = [dict(parcela, chave=parcela["rotulo"]) for parcela in ponte["parcelas"]]
+    svg = _chamar_node("FleetSVG.waterfall(parcelas, opcoes)", parcelas=com_chave,
+                       opcoes={"total": {"rotulo": "total", "valor": ponte["nd_efetivo"]}})
+
+    barras = _retangulos(svg)
+    assert [b.get("data-parcela") for b in barras] == [p["rotulo"] for p in ponte["parcelas"]] + [None]
+    for barra in barras:
+        if barra.get("data-parcela") is None:
+            continue
+        esperado = caso["ponte"][barra.get("data-parcela")] * SINAIS_ESPERADOS_DA_PONTE[barra.get("data-parcela")]
+        assert float(barra.get("data-valor")) == pytest.approx(esperado)
+
+    sem_chave = _retangulos(_waterfall_da_ponte(ponte))
+    assert all(b.get("data-parcela") is None for b in sem_chave)
+
+
+def test_o_payload_da_ponte_leva_a_chave_de_cada_linha_na_ordem_publicada():
+    """A chave que o waterfall recebe é a do CATÁLOGO, publicada por `resultados.ponte`
+    — nunca o rótulo traduzido, que é texto de tela, nem a posição."""
+    entrega_dict, payload = _payload_dos_paineis()
+    publicadas = [parcela["rotulo"] for parcela in entrega_dict["resultados"]["ponte"]["parcelas"]]
+    assert [parcela["chave"] for parcela in payload["ponte"]["parcelas"]] == publicadas
+    assert [parcela["rotulo"] for parcela in payload["ponte"]["parcelas"]] == [
+        CATALOGO["ponte"][chave]["rotulo"]["pt-BR"] for chave in publicadas]
+
+
 # --------------------------------------------------------------------------
 # Matriz da grade 2D REAL da fixture.
 # --------------------------------------------------------------------------
@@ -439,7 +475,9 @@ def _compor(nome_fixture: str) -> str:
 # não por `data-painel=` solto: o bootstrap estático de `template.html` cita
 # esses mesmos seletores no código, e uma checagem por substring solta ficaria
 # verde mesmo sem nenhum host de verdade na aba.
-HOST_PONTE = '<div class="painel-grafico" data-painel="ponte"></div>'
+# Fatia 5I, Task 4: o host da ponte ganhou a âncora por onde o laboratório REDESENHA o
+# waterfall quando uma linha do degrau muda (D8) — o mesmo host, dois leitores.
+HOST_PONTE = '<div class="painel-grafico" data-painel="ponte" data-laboratorio-ponte></div>'
 # Fatia 5I, Task 3: o host da matriz ganhou a âncora por onde o laboratório a
 # REDESENHA a cada edição, ao lado do índice pelo qual o bootstrap estático a pareia
 # com a sua spec. Os dois convivem: o mesmo host, dois leitores.

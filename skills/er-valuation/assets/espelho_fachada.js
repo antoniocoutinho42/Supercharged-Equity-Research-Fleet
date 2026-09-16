@@ -418,16 +418,46 @@
     const blocoConservacao = rota === 'firm' ? (caso.conservacao_de_capital || null) : null;
     const precoDeTela = precoDeTelaDe(caso);
 
+    // Fatia 5I, Task 4 (D7): o triangulo e' IDENTIDADE (g = RiR x retorno), e identidade
+    // se aplica ANTES do preco. O caso declara quais DUAS variaveis sao input e qual e' a
+    // terceira; quando a terceira fecha num numero, e' ELA que entra no vetor — trocar a
+    // configuracao no laboratorio move o preco, que e' o ponto do controle.
+    //
+    // Ate a Task 2 o triangulo era resolvido DEPOIS do laco e publicado ao lado do preco:
+    // com `output: 'rir'` (a configuracao de toda fixture de hoje) isso nao muda numero
+    // nenhum, porque o nucleo nao le `rir` — mas com `output: 'roic'`/'roe'/'g' o preco
+    // ficava o do vetor declarado, e a terceira variavel aparecia na tela sem efeito.
+    // Identidade que nao fecha (`valor` nulo — retorno zero com `rir` de saida, `rir`
+    // ausente com retorno de saida) nao substitui nada: o vetor declarado vale como esta.
+    const triangulos = {};
+    const premissasDoCenario = {};
+    for (const nome of Object.keys(caso.cenarios)) {
+      const declarado = caso.cenarios[nome].triangulo;
+      const premissas = caso.cenarios[nome].premissas;
+      const resolvido = (declarado && rota !== 'rampa')
+        ? M.resolverTriangulo({ rota, premissas, triangulo: declarado })
+        : null;
+      triangulos[nome] = resolvido;
+      premissasDoCenario[nome] = (resolvido !== null && resolvido.valor !== null)
+        ? { ...premissas, [resolvido.variavel]: resolvido.valor }
+        : premissas;
+    }
+
     const cenarios = {};
     for (const nome of Object.keys(caso.cenarios)) {
-      const premissas = caso.cenarios[nome].premissas;
+      const premissas = premissasDoCenario[nome];
+      // O que o cenario ECHOA continua sendo o vetor que o caso declara — a mesma forma
+      // de `resultados.cenarios.<n>.premissas`, e a trava que compara os dois. A terceira
+      // variavel do triangulo, quando ela substitui, sai publicada em `triangulo`
+      // ({variavel, valor, rir}), que e' onde o relatorio a le.
+      const declaradas = caso.cenarios[nome].premissas;
 
       if (rota === 'rampa') {
         const r = M.precificarRampa({ premissas, ndEfetivo, acoes, moeda, rf });
         // Diagnostico da rampa: os avisos presentes, na ordem de AVISOS_RAMPA.
         cenarios[nome] = r.recusado
-          ? cenarioRecusado(premissas, chave, motivoDaRecusa(M, premissas))
-          : cenarioPrecificado(premissas, r.valor.preco_acao, chave, r.multiplo, precoDeTela,
+          ? cenarioRecusado(declaradas, chave, motivoDaRecusa(M, premissas))
+          : cenarioPrecificado(declaradas, r.valor.preco_acao, chave, r.multiplo, precoDeTela,
             r.avisos);
         continue;
       }
@@ -437,7 +467,7 @@
         // combinacao que a metodologia proibe, alcancavel por um `select`.
         if (violaD6(M, premissas)) {
           cenarios[nome] = comDegrau(
-            cenarioRecusado(premissas, 'PVP_com_degrau', RECUSA_DEGRAU_BOOK_SEM_ROE_BOOK), null);
+            cenarioRecusado(declaradas, 'PVP_com_degrau', RECUSA_DEGRAU_BOOK_SEM_ROE_BOOK), null);
           continue;
         }
         const r = M.precificarDegrau({
@@ -452,9 +482,9 @@
         // (perna P/L) e as dos alertas do proprio degrau.
         cenarios[nome] = r.recusado
           ? comDegrau(
-            cenarioRecusado(premissas, 'PVP_com_degrau', motivoDaRecusa(M, premissas)), null)
+            cenarioRecusado(declaradas, 'PVP_com_degrau', motivoDaRecusa(M, premissas)), null)
           : comDegrau(
-            cenarioPrecificado(premissas, r.valor.preco_acao, 'PVP_com_degrau',
+            cenarioPrecificado(declaradas, r.valor.preco_acao, 'PVP_com_degrau',
               r.degrau.com_transicao, precoDeTela,
               diagnosticosDaCelula(M, rota, premissas, moeda, rf)),
             r.degrau.diagnosticos_chaves);
@@ -465,9 +495,9 @@
       // multiplo finito andam juntos (os dois saem do mesmo nucleo).
       const r = M.precificarCelula(rota, premissas, metrica, ndEfetivo, acoes);
       cenarios[nome] = Number.isFinite(r.valor)
-        ? cenarioPrecificado(premissas, r.valor, chave, r.multiplo, precoDeTela,
+        ? cenarioPrecificado(declaradas, r.valor, chave, r.multiplo, precoDeTela,
           diagnosticosDaCelula(M, rota, premissas, moeda, rf))
-        : cenarioRecusado(premissas, chave, motivoDaRecusa(M, premissas));
+        : cenarioRecusado(declaradas, chave, motivoDaRecusa(M, premissas));
       if (blocoConservacao !== null) {
         comConservacao(cenarios[nome], Number.isFinite(r.valor)
           ? M.conservacaoCapital(blocoConservacao.capex_total.valor, blocoConservacao.dwc.valor,
@@ -490,10 +520,9 @@
       // Fatia 5I, Task 2 (D7): o `rir` como NUMERO por cenario — ate aqui ele so'
       // existia na prosa da eco do motor (divida aberta pela 5F, D8). O triangulo e'
       // por cenario (`caso.cenarios.<n>.triangulo`), e a rota rampa nao tem nenhum.
-      const triangulo = caso.cenarios[nome].triangulo;
-      cenarios[nome].triangulo = (triangulo && rota !== 'rampa')
-        ? M.resolverTriangulo({ rota, premissas: caso.cenarios[nome].premissas, triangulo })
-        : null;
+      // Resolvido acima, antes do preco (Task 4): o que a tela mostra e o que o vetor
+      // usou sao o mesmo numero.
+      cenarios[nome].triangulo = triangulos[nome];
     }
 
     const vivo = { cenarios };
@@ -515,7 +544,9 @@
     // comparador confronta, nunca os indices.
     if (caso.sensibilidades) {
       const cenarioDasGrades = caso.sensibilidades.cenario;
-      const premissasDasGrades = caso.cenarios[cenarioDasGrades].premissas;
+      // O vetor do cenario que as grades perturbam e' o EFETIVO (Task 4): se a terceira
+      // variavel do triangulo entrou no preco, ela entra tambem em cada celula.
+      const premissasDasGrades = premissasDoCenario[cenarioDasGrades];
       const comum = { rota, premissas: premissasDasGrades, metrica, ndEfetivo, acoes, moeda, rf };
       vivo.sensibilidades = {
         grades_1d: (caso.sensibilidades.grades_1d || []).map((spec) => {
@@ -547,7 +578,7 @@
     }
 
     if (caso.reversa) {
-      const premissasDaReversa = caso.cenarios[caso.reversa.cenario].premissas;
+      const premissasDaReversa = premissasDoCenario[caso.reversa.cenario];
       const alvo = M.alvoDeMercado({ rota, preco: precoDeTela, acoes, ndEfetivo, metrica });
       vivo.reversa = {
         alvo,

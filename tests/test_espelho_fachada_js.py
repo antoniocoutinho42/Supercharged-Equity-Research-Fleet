@@ -1206,6 +1206,48 @@ def test_o_rir_sai_como_numero_por_cenario_e_o_catalogo_o_rotula(tmp_path):
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
+def test_a_terceira_variavel_do_triangulo_entra_no_vetor_e_move_o_preco(tmp_path):
+    """Fatia 5I, Task 4 (D7): a identidade g = RiR x retorno se aplica ANTES do preço.
+    Com `output: 'rir'` — a configuração de toda fixture — isso não move número nenhum,
+    porque o núcleo não lê `rir`; a prova de que a substituição EXISTE tem de vir de uma
+    configuração em que a terceira variável é uma premissa do núcleo.
+
+    Aqui o triângulo declara `inputs: [g, rir]` e `output: roic`, com `rir = 0,5` e
+    `g = 5` — o vetor efetivo tem ROIC = 10, não o 12 que o caso declara. O oráculo é o
+    motor de verdade sobre um caso com ROIC = 10: o preço vivo tem de ser aquele, e não
+    o publicado. E o que o cenário ECHOA continua sendo o vetor declarado: a terceira
+    variável sai em `triangulo`, que é onde o relatório a lê."""
+    caso, resultados = _caso_e_resultados("caso_minimo_firm.json")
+    declaradas = caso["cenarios"]["base"]["premissas"]
+    rir = 0.5
+    derivado = declaradas["g"] / rir
+    assert derivado != declaradas["roic"], "o vetor derivado é o declarado — o teste não discrimina"
+
+    com_triangulo = json.loads(json.dumps(caso))
+    com_triangulo["cenarios"]["base"]["triangulo"] = {"inputs": ["g", "rir"], "output": "roic"}
+    com_triangulo["cenarios"]["base"]["premissas"]["rir"] = rir
+
+    vivo = _fachada(com_triangulo, resultados, tmp_path)["vivo"]["cenarios"]["base"]
+    assert vivo["triangulo"]["variavel"] == "roic"
+    assert _erro_relativo(derivado, vivo["triangulo"]["valor"]) <= TAU
+    assert vivo["triangulo"]["rir"] == rir
+    # O eco continua sendo o vetor DECLARADO — com o `rir` que o painel colheu e sem o
+    # ROIC derivado, que sai em `triangulo`.
+    assert vivo["premissas"] == com_triangulo["cenarios"]["base"]["premissas"]
+    assert vivo["premissas"]["roic"] == declaradas["roic"]
+
+    def _com_roic_derivado(caso_do_oraculo: dict) -> None:
+        caso_do_oraculo["cenarios"]["base"]["premissas"]["roic"] = derivado
+
+    oraculo = montar_entrega("caso_minimo_firm.json", mutar_caso=_com_roic_derivado)
+    esperado = oraculo["resultados"]["cenarios"]["base"]["valor"]["preco_acao"]
+    publicado = resultados["cenarios"]["base"]["valor"]["preco_acao"]
+    assert _erro_relativo(esperado, vivo["valor"]["preco_acao"]) <= TAU
+    assert _erro_relativo(publicado, vivo["valor"]["preco_acao"]) > TAU, \
+        "a substituição não moveu o preço — o triângulo continuaria decorativo"
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO)
 def test_o_teto_da_alavanca_acende_e_apaga_com_a_edicao_na_mesma_chamada(tmp_path):
     """D10/A11: a chave viva já existia (`degrau_alerta`) e o rótulo dela no catálogo
     diz literalmente "reporte como teto da alavanca, não como cenário" — mas o cenário

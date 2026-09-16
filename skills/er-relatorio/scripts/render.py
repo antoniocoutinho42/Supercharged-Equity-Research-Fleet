@@ -1186,6 +1186,11 @@ def _ponte_para_json(resultados: dict, catalogo: dict, idioma: str, dicionario: 
     return {
         "parcelas": [
             {
+                # Fatia 5I, Task 4 (D8/A9): a CHAVE do catálogo viaja junto do rótulo. O
+                # waterfall desenhava a barra só com `data-indice`, endereçável por
+                # posição; com a chave, a linha de entrada do degrau e a barra que ela
+                # move são a mesma coisa, e o teste não depende da ordem.
+                "chave": _campo_de_contrato(parcela, "rotulo", onde_parcela),
                 "rotulo": _rotulo_linha_da_ponte(
                     catalogo, _campo_de_contrato(parcela, "rotulo", onde_parcela), idioma),
                 "valor": _campo_de_contrato(parcela, "valor", onde_parcela),
@@ -1320,14 +1325,56 @@ def _espec_de_formato_com_escala(catalogo: dict, unidade: Any, idioma: str, moed
     return espec
 
 
-def _ponte_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict, moeda: str | None) -> str:
+def _linha_da_ponte_html(caso: dict, parcela: dict, indice: int, catalogo: dict, idioma: str,
+                         dicionario: dict, moeda: str | None, escala: Any, registros: list) -> str:
+    """Uma linha de entrada da ponte, ancorada ao degrau do waterfall (fatia 5I, Task 4,
+    D8): o rótulo do catálogo, o valor do caso como número editável, o original ao lado
+    e a cadeia de derivação daquela linha (`ponte.<linha>` no `usado_em` do ledger).
+
+    O editor fica FORA do SVG, de propósito: hit-testing e input flutuante dentro da
+    figura custam caro, e o degrau continua sendo o controle visualmente — cada linha
+    carrega a chave do catálogo (`data-ponte-linha`), e é por ela que a barra
+    correspondente é redesenhada."""
+    chave = parcela["rotulo"]
+    valor = (caso.get("ponte") or {}).get(chave)
+    identificador = f"lab-ponte-{indice}"
+    literal = html.escape(json.dumps(valor))
+    original = _texto_de_dado_html(t(
+        dicionario, "valuation.laboratorio_original",
+        valor=_formatar_na_unidade(valor, catalogo, UNIDADE_DOS_MONTANTES_DA_PONTE, idioma, moeda, escala)))
+    return (
+        f'<div class="lab-campo" data-ponte-linha="{html.escape(chave)}">'
+        f'<label for="{identificador}">{_texto_de_dado_html(_rotulo_linha_da_ponte(catalogo, chave, idioma))}</label>'
+        f'<input id="{identificador}" data-laboratorio-entrada="numero" type="number" step="any" '
+        f'value="{literal}" data-laboratorio-original="{literal}">'
+        f'<span class="lab-original">{original}</span>'
+        f'{_derivacao_html(registros, CAMINHO_DA_LINHA_DA_PONTE_NO_LEDGER.format(linha=chave), dicionario)}'
+        f'</div>'
+    )
+
+
+def _ponte_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, moeda: str | None,
+                com_laboratorio: bool = False) -> str:
     """O host VAZIO do waterfall — só o `svg.js` o preenche (bootstrap estático em
-    `template.html`) —, ou nada quando não há ponte (S6)."""
-    if _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda) is None:
+    `template.html`) —, ou nada quando não há ponte (S6). Com laboratório, uma linha de
+    entrada por parcela ao lado do host (D8): editar o degrau move `nd_efetivo`, o preço
+    e a figura na mesma ação."""
+    resultados = entrega["resultados"]
+    ponte = _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda)
+    if ponte is None:
         return ""
     titulo = html.escape(t(dicionario, "valuation.ponte_titulo"))
+    linhas = ""
+    if com_laboratorio:
+        registros = _registros_do_ledger(entrega)
+        linhas = '<div class="lab-ponte">' + "".join(
+            _linha_da_ponte_html(entrega["caso"], parcela, indice, catalogo, idioma, dicionario, moeda,
+                                 resultados.get("escala_monetaria"), registros)
+            for indice, parcela in enumerate(_campo_de_contrato(resultados, "ponte", "resultados")["parcelas"])
+        ) + '</div>'
     return (f'<section class="painel-svg"><h2>{titulo}</h2>'
-            f'<div class="painel-grafico" data-painel="ponte"></div></section>')
+            f'<div class="painel-grafico" data-painel="ponte" data-laboratorio-ponte></div>'
+            f'{linhas}</section>')
 
 
 def _grades_1d(resultados: dict) -> list:
@@ -1460,6 +1507,56 @@ def _sensibilidades_html(caso: dict, resultados: dict, catalogo: dict, idioma: s
 #   cenário que o laboratório recalcula.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# A cadeia de derivação de uma premissa (fatia 5I, Task 4, D9; §9, §6.2). Nada a
+# inventar: é COMPOSIÇÃO. O ledger `ledger/1` já declara, por registro, o `claim`, a
+# `fonte`, a `formula` (opcional) e o `usado_em` (opcional) — e `usado_em` endereça
+# exatamente os caminhos que `catalogo.insumos_do_caso` enumera. Até aqui isso só
+# aparecia como uma linha de texto na tabela do ledger, na aba Evidência; agora a
+# premissa que o analista edita mostra, ali mesmo, o registro que a sustenta.
+#
+# Premissa sem registro não ganha linha nenhuma — nunca um texto inventado, nunca um
+# "sem fonte declarada" que o QC já reprova em outro lugar.
+# --------------------------------------------------------------------------
+
+# Os caminhos que o `usado_em` de um registro endereça, no vocabulário de
+# `catalogo.insumos_do_caso` (`cenarios.*.premissas.*` e `ponte.*`).
+CAMINHO_DA_PREMISSA_NO_LEDGER: str = "cenarios.{cenario}.premissas.{premissa}"
+CAMINHO_DA_LINHA_DA_PONTE_NO_LEDGER: str = "ponte.{linha}"
+
+
+def _registros_do_ledger(entrega: dict) -> list:
+    registros = (entrega.get("ledger") or {}).get("registros")
+    return registros if isinstance(registros, list) else []
+
+
+def _derivacao_html(registros: list, caminho: str, dicionario: dict) -> str:
+    """Os registros do ledger cujo `usado_em` endereça `caminho`, com o claim, a fórmula
+    quando o registro a declara e a fonte com o localizador. `""` quando nenhum registro
+    sustenta o caminho.
+
+    A fórmula sai por PRESENÇA no registro — nunca por nome de estatuto, que é o que a
+    regra de projeto de `tests/test_contrato_ledger.py` proíbe decorar."""
+    sustentam = [registro for registro in registros
+                 if isinstance(registro, dict) and caminho in (registro.get("usado_em") or [])]
+    if not sustentam:
+        return ""
+    itens = []
+    for registro in sustentam:
+        linhas = [_valor_html("lab-derivacao-claim", str(registro.get("claim", "")))]
+        if registro.get("formula"):
+            linhas.append(_valor_html("lab-derivacao-formula", t(
+                dicionario, "valuation.laboratorio_derivacao_formula", formula=str(registro["formula"]))))
+        fonte, localizador = registro.get("fonte") or {}, registro.get("localizador") or {}
+        linhas.append(_valor_html("lab-derivacao-fonte", t(
+            dicionario, "valuation.laboratorio_derivacao_fonte",
+            fonte=str(fonte.get("identidade", "")), localizador=str(localizador.get("valor", "")))))
+        itens.append(f'<li class="lab-derivacao-registro">{"".join(linhas)}</li>')
+    titulo = html.escape(t(dicionario, "valuation.laboratorio_derivacao_titulo"))
+    return (f'<details class="lab-derivacao"><summary>{titulo}</summary>'
+            f'<ul>{"".join(itens)}</ul></details>')
+
+
 def _blocos_do_catalogo(catalogo: dict, idioma: str) -> list:
     """Os blocos econômicos na ORDEM que o catálogo declara (`blocos.<chave>.
     ordem`) — nunca a ordem de iteração do dict, que é dado de arquivo, e
@@ -1568,7 +1665,8 @@ def _widget_editavel(info: dict, valor: Any, identificador: str, idioma: str) ->
 
 def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
                            identificador: str, catalogo: dict, idioma: str,
-                           moeda: str | None, dicionario: dict, escala: Any = None) -> tuple[str, str | None]:
+                           moeda: str | None, dicionario: dict, escala: Any = None,
+                           derivacao: str = "") -> tuple[str, str | None]:
     """Um campo do painel, e o BLOCO econômico em que ele entra (`None` quando
     não é editável). Sem entrada no catálogo — ou com valor fora do tipo de
     entrada declarado — o campo é mostrado como o caso o declara,
@@ -1596,6 +1694,7 @@ def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
             f'<label for="{identificador}">{rotulo}</label>'
             f'<input id="{identificador}" type="text" value="{bruto}" disabled>'
             f'<span class="lab-nota">{nota}</span>'
+            f'{derivacao}'
             f'</div>'
         ), None
     rotulo = html.escape(_rotulo_premissa(catalogo, rota, chave, idioma))
@@ -1607,6 +1706,7 @@ def _campo_do_laboratorio(rota: str, chave: str, valor: Any, info: dict | None,
         f'<label for="{identificador}">{rotulo}</label>'
         f'{widget}'
         f'<span class="lab-original">{original}</span>'
+        f'{derivacao}'
         f'</div>'
     ), info.get("bloco")
 
@@ -1660,16 +1760,86 @@ def _diagnosticos_do_cenario_html(dicionario: dict) -> str:
     )
 
 
-def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: int,
+def _configuracoes_do_triangulo(triangulo: dict) -> list:
+    """As três configurações de `{inputs, output}` da identidade g = RiR × retorno, uma
+    por variável de saída, derivadas do triângulo que o CASO declara (fatia 5I, Task 4,
+    D7) — as três variáveis são as do caso, na ordem em que ele as escreve, e o
+    relatório não conhece o vocabulário da identidade nem inventa uma quarta.
+    `None` quando o cenário não declara triângulo (a rota rampa)."""
+    if not isinstance(triangulo, dict) or "inputs" not in triangulo or "output" not in triangulo:
+        return []
+    variaveis = list(triangulo["inputs"]) + [triangulo["output"]]
+    return [{"inputs": [outra for outra in variaveis if outra != saida], "output": saida}
+            for saida in variaveis]
+
+
+def _triangulo_do_laboratorio_html(rota: str, nome: str, triangulo: dict, indice: int,
+                                   catalogo: dict, idioma: str, dicionario: dict) -> str:
+    """O triângulo como CONTROLE (D7): um seletor com as três configurações e o campo da
+    variável que não é premissa da rota (o `rir`), que passa a ser editável quando a
+    configuração a declara input.
+
+    Trocar a configuração não sobrescreve a calibração original: o valor original de cada
+    premissa continua ao lado do campo, e o botão de restaurar devolve a configuração
+    declarada junto com os números. Quem resolve a identidade é o espelho — este módulo só
+    oferece as três permutações da mesma declaração do caso, com os rótulos do catálogo."""
+    configuracoes = _configuracoes_do_triangulo(triangulo)
+    if not configuracoes:
+        return ""
+    declarada = triangulo["output"]
+    opcoes = "".join(
+        f'<option value="{html.escape(str(config["output"]))}"'
+        f'{" selected" if config["output"] == declarada else ""}>'
+        + _texto_de_dado_html(t(
+            dicionario, "valuation.cenario_triangulo_valor",
+            entradas=", ".join(_rotulo_do_triangulo(catalogo, rota, entrada, idioma)
+                               for entrada in config["inputs"]),
+            saida=_rotulo_do_triangulo(catalogo, rota, config["output"], idioma)))
+        + '</option>'
+        for config in configuracoes
+    )
+    identificador = f"lab-{indice}-triangulo"
+    campos = [
+        f'<div class="lab-campo">'
+        f'<label for="{identificador}">{html.escape(t(dicionario, "valuation.cenario_triangulo"))}</label>'
+        f'<select id="{identificador}" data-laboratorio-entrada="escolha"'
+        f' data-laboratorio-triangulo="{html.escape(nome)}"'
+        f' data-laboratorio-original="{html.escape(str(declarada))}">{opcoes}</select>'
+        f'</div>'
+    ]
+    # A variável do triângulo que NÃO é premissa da rota (hoje o `rir`) não tem campo
+    # entre as premissas, e sem ele duas das três configurações não teriam entrada. Ela
+    # nasce vazia — o caso não a declara em lugar nenhum (dívida da 5F, D8) —, e o painel
+    # a preenche com o valor que a identidade resolve a cada redesenho.
+    for variavel in configuracoes[0]["inputs"] + [configuracoes[0]["output"]]:
+        if variavel in ((catalogo.get("premissas") or {}).get(rota) or {}):
+            continue
+        campo = f"lab-{indice}-{variavel}"
+        campos.append(
+            f'<div class="lab-campo" data-laboratorio-premissa="{html.escape(str(variavel))}">'
+            f'<label for="{campo}">'
+            f'{_texto_de_dado_html(_rotulo_do_triangulo(catalogo, rota, variavel, idioma))}</label>'
+            f'<input id="{campo}" data-laboratorio-entrada="numero" type="number" step="any" '
+            f'value="" data-laboratorio-original="">'
+            f'</div>'
+        )
+    return f'<div class="lab-triangulo">{"".join(campos)}</div>'
+
+
+def _cenario_do_laboratorio_html(rota: str, nome: str, cenario: dict, indice: int,
                                   premissas_catalogo: dict, catalogo: dict, idioma: str,
                                   moeda: str | None, dicionario: dict, rotulos_das_saidas: dict,
-                                  escala: Any = None) -> str:
+                                  escala: Any = None, registros: list | None = None) -> str:
+    premissas = (cenario or {}).get("premissas") or {}
+    registros = registros or []
     campos_por_bloco: dict[str, list] = {}
     travados: list[str] = []
     for posicao, (chave, valor) in enumerate(premissas.items()):
         campo, bloco = _campo_do_laboratorio(
             rota, chave, valor, premissas_catalogo.get(chave), f"lab-{indice}-{posicao}",
-            catalogo, idioma, moeda, dicionario, escala)
+            catalogo, idioma, moeda, dicionario, escala,
+            _derivacao_html(registros, CAMINHO_DA_PREMISSA_NO_LEDGER.format(cenario=nome, premissa=chave),
+                            dicionario))
         if bloco is None:
             travados.append(campo)
         else:
@@ -1697,7 +1867,12 @@ def _cenario_do_laboratorio_html(rota: str, nome: str, premissas: dict, indice: 
         f'<section class="lab-cenario" data-laboratorio-cenario="{html.escape(nome)}">'
         f'<h3>{titulo}</h3>'
         f'{_saidas_do_cenario_html(dicionario, rotulos_das_saidas)}'
+        # D10/A11: o rótulo de NÃO-CENÁRIO. Nasce vazio e o painel o acende quando a
+        # chave viva do degrau (`degrau_alerta`) está na lista daquele vetor — o
+        # laboratório lê um booleano e um rótulo, nunca o predicado.
+        f'<p class="lab-teto-alavanca" data-laboratorio-saida="teto-alavanca" aria-live="polite"></p>'
         f'{_diagnosticos_do_cenario_html(dicionario)}'
+        f'{_triangulo_do_laboratorio_html(rota, nome, (cenario or {}).get("triangulo"), indice, catalogo, idioma, dicionario)}'
         f'<div class="lab-blocos">{"".join(grupos)}</div>'
         f'<p class="lab-acoes"><button type="button" data-laboratorio-restaurar>{restaurar}</button></p>'
         f'</section>'
@@ -1726,7 +1901,7 @@ def _congelados_html(resultados: dict, dicionario: dict) -> str:
     return f'<section class="lab-congelado"><h4>{titulo}</h4><ul>{linhas}</ul></section>'
 
 
-def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
+def _laboratorio_html(entrega: dict, caso: dict, resultados: dict, catalogo: dict, idioma: str,
                        dicionario: dict, produto: str) -> str:
     """O painel inteiro, ou `""` quando não há laboratório possível (rota que
     o catálogo não conhece, ou caso sem cenário)."""
@@ -1745,10 +1920,12 @@ def _laboratorio_html(caso: dict, resultados: dict, catalogo: dict, idioma: str,
                                     CAMINHO_DOS_UPSIDES_POR_CENARIO, produto=produto),
     }
 
+    registros = _registros_do_ledger(entrega)
     paineis = "".join(
         _cenario_do_laboratorio_html(
-            rota, nome, (bloco or {}).get("premissas") or {}, indice, premissas_catalogo,
-            catalogo, idioma, moeda, dicionario, rotulos_das_saidas, resultados.get("escala_monetaria"))
+            rota, nome, bloco, indice, premissas_catalogo,
+            catalogo, idioma, moeda, dicionario, rotulos_das_saidas, resultados.get("escala_monetaria"),
+            registros)
         for indice, (nome, bloco) in enumerate(cenarios.items())
     )
     return (
@@ -1835,6 +2012,18 @@ def _campos_da_leitura_para_json(dicionario: dict) -> list:
         return saida
 
     return [_campo(campo) for campo in _CAMPOS_DA_LEITURA]
+
+
+def _teto_da_alavanca_para_json(catalogo: dict, idioma: str) -> dict:
+    """O rótulo e o texto do teto da alavanca (`catalogo.teto_da_alavanca`, fatia 5I,
+    Task 2), com que o painel marca o cenário como NÃO-CENÁRIO quando a chave viva
+    acende. Ausente no idioma, recusa nomeada — a marca nunca sai sem texto."""
+    declaracao = catalogo.get("teto_da_alavanca") or {}
+    rotulo, texto = ((declaracao.get("rotulo") or {}).get(idioma), (declaracao.get("texto") or {}).get(idioma))
+    if not rotulo or not texto:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem o rótulo e o texto em '{idioma}' de 'teto_da_alavanca'.")
+    return {"rotulo": rotulo, "texto": texto}
 
 
 def _reversa_para_json(caso: dict, catalogo: dict, idioma: str, moeda: str | None,
@@ -1968,6 +2157,21 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
                          for secao in VOCABULARIOS_DA_LEITURA},
         "reversa": _reversa_para_json(caso, catalogo, idioma, moeda, dicionario),
         "sensibilidades": _sensibilidades_para_json(caso, resultados, catalogo, idioma, moeda, dicionario),
+        # Fatia 5I, Task 4: a configuração do triângulo por cenário — `{<saída>: {inputs,
+        # output}}`, as três permutações que o seletor oferece. O painel escolhe pelo
+        # valor da opção e escreve a configuração inteira no caso editado; quem resolve a
+        # identidade é o espelho, e o relatório nunca a aplica (D7/E3).
+        "triangulos": {
+            nome: {config["output"]: config
+                   for config in _configuracoes_do_triangulo((bloco or {}).get("triangulo"))}
+            for nome, bloco in (caso.get("cenarios") or {}).items()
+        },
+        # D10: o rótulo do não-cenário, do catálogo. O painel lê o booleano que a fachada
+        # deriva da chave viva e pinta este texto — nunca avalia o predicado.
+        "tetoDaAlavanca": _teto_da_alavanca_para_json(catalogo, idioma),
+        # D8: as parcelas da ponte (chave, rótulo e sinal) e a receita dos montantes, com
+        # que o painel redesenha o waterfall a cada mudança de degrau.
+        "ponte": _ponte_para_json(resultados, catalogo, idioma, dicionario, moeda),
         "diagnosticos": _diagnosticos_do_catalogo(catalogo, idioma),
         "recusas": _recusas_do_catalogo(catalogo, idioma),
         "textos": {
@@ -1984,6 +2188,8 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
             # não rotula — a mesma disciplina do diagnóstico sem rótulo, agora para os
             # vocabulários da leitura.
             "rotuloDesconhecido": t(dicionario, "valuation.laboratorio_rotulo_desconhecido"),
+            # Fatia 5I, Task 4 (D10): a moldura do rótulo de não-cenário.
+            "tetoDaAlavanca": t(dicionario, "valuation.laboratorio_teto_alavanca"),
         },
     }
 
@@ -2939,7 +3145,7 @@ def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, d
             f'{html.escape(t(dicionario, "valuation.laboratorio_manchete_congelada"))}</p>'
         )
 
-    laboratorio = (_laboratorio_html(caso, resultados, catalogo, idioma, dicionario, produto)
+    laboratorio = (_laboratorio_html(entrega, caso, resultados, catalogo, idioma, dicionario, produto)
                    if com_laboratorio else "")
     # Fatia 5I, Task 3 (A8/§9): o badge de paridade abre a aba, logo abaixo do preço e do
     # upside — ele é o veredicto sobre TUDO o que a página publica, e não só sobre os
@@ -2955,7 +3161,7 @@ def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, d
         f'{_formacao_do_valor_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{laboratorio}'
-        f'{_ponte_html(resultados, catalogo, idioma, dicionario, moeda)}'
+        f'{_ponte_html(entrega, catalogo, idioma, dicionario, moeda, com_laboratorio)}'
         f'{_painel_de_escolhas_html(entrega, catalogo, idioma, dicionario, prosa)}'
         f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario, produto)}'
         f'{_o_que_esta_no_preco_html(entrega, catalogo, idioma, dicionario, prosa)}'
