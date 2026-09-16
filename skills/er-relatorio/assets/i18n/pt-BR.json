@@ -163,6 +163,43 @@
       "reversa_teto_multiplo": "{valor} ({multiplo})",
       "o_que_esta_no_preco_julgamento_titulo": "Julgamento do analista",
       "o_que_esta_no_preco_observavel": "Observável que o testaria",
+      "escolhas_titulo": "Escolhas metodológicas",
+      "escolhas_avancadas_resumo": "Demais escolhas: sem gatilho disparado e sem impacto material",
+      "escolhas_empilhamento": "Escolhas empilhadas na mesma direção dentro do caso-base — {direcao}: {escolhas}. O efeito delas sobre o preço se soma.",
+      "direcoes_do_empilhamento": {
+        "conservadora": "o caso-base vale menos que os ramos alternativos",
+        "otimista": "o caso-base vale mais que os ramos alternativos"
+      },
+      "posicoes_da_escolha": {
+        "central": "no ramo central",
+        "alternativa": "no ramo alternativo"
+      },
+      "escolha_posicao": "Caso-base",
+      "escolha_preco_titulo": "Preço por ação no outro ramo",
+      "escolha_impacto_titulo": "Impacto sobre o preço da manchete",
+      "escolha_gatilho_disparou": "Observável que disparou o gatilho",
+      "retorno_exigido_titulo": "Retorno exigido",
+      "retorno_exigido_resumo": "Que valor resulta ao exigir o retorno declarado",
+      "retorno_exigido_taxa": "Retorno exigido ao ano",
+      "retorno_exigido_premissa": "Premissa substituída",
+      "retorno_exigido_preco_titulo": "Preço por ação ao retorno exigido",
+      "retorno_exigido_nota": "Leitura, jamais fair value: o preço da manchete continua sendo o do cenário da manchete, e este número não é um quarto cenário.",
+      "valor_ponderado_titulo": "Valor ponderado por probabilidade",
+      "valor_ponderado_resumo": "A soma de peso × preço dos cenários, fora da fórmula do valuation",
+      "valor_ponderado_valor_titulo": "Valor ponderado pelos pesos declarados",
+      "valor_ponderado_peso": "{cenario}: {peso}",
+      "valor_ponderado_nota": "Os pesos são julgamento do analista e ficam fora da fórmula: este número nunca substitui bear, base e bull.",
+      "cross_check_titulo": "Cross-check por um segundo método",
+      "cross_check_rota": "Rota do segundo método",
+      "cross_check_preco_titulo": "Preço por ação pelo segundo método",
+      "cross_check_diferenca_titulo": "Diferença contra a manchete",
+      "cross_check_nao_declarado": "A análise não declarou cross-check por um segundo método, nem a razão de não haver um.",
+      "reteste_terminal_titulo": "Re-teste da hipótese terminal",
+      "reteste_terminal_resultado": "Resultado do re-teste",
+      "resultados_do_reteste_terminal": {
+        "mantida": "hipótese terminal mantida",
+        "trocada": "hipótese terminal trocada"
+      },
       "ponte_titulo": "Ponte da dívida líquida",
       "ponte_total": "Dívida líquida efetiva",
       "matriz_titulo": "Sensibilidade no cenário '{cenario}': {y} × {x}",
@@ -203,7 +240,11 @@
         "formacao_valor_fase2_titulo": "Leitura condicional do valor da fase 2 no fim da rampa (sem preço-alvo)",
         "grade_1d_titulo": "Leitura condicional da sensibilidade de um eixo no cenário '{cenario}': {premissa} (sem preço-alvo)",
         "grade_1d_coluna_preco": "Leitura condicional do preço por ação no ponto (sem preço-alvo)",
-        "grade_1d_coluna_multiplo": "Leitura condicional do múltiplo no ponto (sem preço-alvo)"
+        "grade_1d_coluna_multiplo": "Leitura condicional do múltiplo no ponto (sem preço-alvo)",
+        "escolha_preco_titulo": "Leitura condicional do preço por ação no outro ramo (sem preço-alvo)",
+        "retorno_exigido_preco_titulo": "Leitura condicional do preço por ação ao retorno exigido (sem preço-alvo)",
+        "valor_ponderado_valor_titulo": "Leitura condicional do valor ponderado pelos pesos declarados (sem preço-alvo)",
+        "cross_check_preco_titulo": "Leitura condicional do preço por ação pelo segundo método (sem preço-alvo)"
       }
     },
     "evidencia": {

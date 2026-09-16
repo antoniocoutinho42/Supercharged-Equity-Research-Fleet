@@ -1862,6 +1862,23 @@ CAMINHO_DOS_PRECOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.valor
 CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.multiplo"
 CAMINHO_DO_VALOR_DA_FASE_1: str = "cenarios.*.vp_fase1"
 CAMINHO_DO_VALOR_DA_FASE_2: str = "cenarios.*.valor_fase2_no_ano_T"
+# Fatia 5G, Task 4: as quatro conclusões de valor das alternativas — o preço do ramo
+# alternativo de cada escolha metodológica, o do retorno exigido, o valor ponderado por
+# probabilidade e o do cross-check pela rota oposta.
+CAMINHO_DO_PRECO_DA_ALTERNATIVA: str = "escolhas_metodologicas.*.preco_alternativa"
+CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO: str = "retorno_exigido.preco_acao"
+CAMINHO_DO_VALOR_PONDERADO: str = "valor_ponderado.valor"
+CAMINHO_DO_PRECO_DO_CROSS_CHECK: str = "cross_check.preco_acao"
+
+# O `impacto` de uma escolha e a `diferenca_vs_manchete` do cross-check são FRAÇÕES DE
+# COMPARAÇÃO, não conclusão de valor (5G, D1/D4): ficam fora do mapa da integração — e
+# por isso fora de `_unidade_publicada` —, e saem no formato do upside do cabeçalho.
+FORMATO_DA_FRACAO_DE_COMPARACAO: str = "pct1"
+# O peso de um cenário é JULGAMENTO declarado (D3, §8.2: "fora da fórmula"), não insumo
+# nem conclusão: nem o mapa das conclusões de valor nem o dos insumos do caso o cobrem, e
+# nenhuma unidade do catálogo lhe pertence. Sai em pontos percentuais inteiros, que é como
+# o caso o declara e como a integração o exige (somando 100).
+FORMATO_DO_PESO: str = "pp0"
 
 
 def _leitura_condicional(resultados: dict, catalogo: dict, caminho: str) -> bool:
@@ -2266,9 +2283,237 @@ def _o_que_esta_no_preco_html(entrega: dict, catalogo: dict, idioma: str, dicion
             f'<h2>{html.escape(t(dicionario, "valuation.o_que_esta_no_preco_titulo"))}</h2>{"".join(partes)}</section>')
 
 
+# --------------------------------------------------------------------------
+# As alternativas que o wrapper roda (fatia 5G, Task 4): o painel de escolhas
+# metodológicas, entre a ponte e as sensibilidades (§8.2), e — depois do que está no
+# preço — o retorno exigido, o valor ponderado, o cross-check pela rota oposta e o
+# re-teste da hipótese terminal (§9).
+#
+# E3 na tela: todo número sai de `resultados` já calculado, e nenhuma decisão de
+# metodologia mora aqui. QUAL escolha vai ao nível principal é `gatilho_disparou` (o
+# caso declara) ou `material` (a integração decide, pelo limiar dela); o rótulo e o
+# gatilho de cada escolha e a direção do empilhamento vêm do catálogo e do dicionário,
+# nunca como código cru; e o preço alternativo, o do retorno exigido, o valor ponderado
+# e o do cross-check passam por `_rotulo_do_numero` — sob fronteira de escopo, os quatro
+# são leitura condicional.
+# --------------------------------------------------------------------------
+
+def _secao_colapsada_html(classe: str, titulo: str, resumo: str, corpo: str) -> str:
+    """Uma seção que abre fechada, no molde da formação do valor: o título fora do
+    `<details>`, para a aba continuar legível de relance."""
+    return (f'<section class="{classe}"><h2>{html.escape(titulo)}</h2>'
+            f'<details><summary>{html.escape(resumo)}</summary>{corpo}</details></section>')
+
+
+def _metrica_html(rotulo: str, valor: str) -> str:
+    return '<div class="metrica">' + _valor_html("metrica-rotulo", rotulo) + _valor_html("metrica-valor", valor) + '</div>'
+
+
+def _rotulo_e_gatilho_da_escolha(catalogo: dict, chave: Any, idioma: str) -> tuple[str, str]:
+    """O rótulo e o gatilho de uma escolha metodológica, do catálogo (`escolhas_
+    metodologicas`) — as duas coisas que a §8.2 pede na tela e que o relatório nunca
+    escreve. Ausentes, `RotuloDoCatalogoAusente`: o QC já reprovou a entrega
+    (`escolhas_desconhecidas`), e a chave crua nunca chega ao painel."""
+    info = (catalogo.get("escolhas_metodologicas") or {}).get(chave) or {}
+    rotulo = (info.get("rotulo") or {}).get(idioma)
+    gatilho = (info.get("gatilho") or {}).get(idioma)
+    if not rotulo or not gatilho:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem o rótulo e o gatilho em '{idioma}' da escolha metodológica "
+            f"'{chave}' em 'escolhas_metodologicas'.")
+    return rotulo, gatilho
+
+
+def _escolha_html(indice: int, escolha: dict, resultados: dict, catalogo: dict, idioma: str,
+                  moeda: str | None, dicionario: dict, prosa: dict, razoes: dict) -> str:
+    """Uma escolha do painel (§8.2: escolha central | alternativa | impacto | razão
+    econômica): o rótulo e o gatilho do catálogo, a posição do caso-base pelo rótulo do
+    dicionário, o preço do ramo alternativo e o impacto sobre a manchete, a razão do
+    analista (prosa auditada) e o observável que disparou o gatilho, quando declarado."""
+    onde = f"resultados.escolhas_metodologicas.{indice}"
+    chave = _campo_de_contrato(escolha, "chave", onde)
+    rotulo, gatilho = _rotulo_e_gatilho_da_escolha(catalogo, chave, idioma)
+    escala = resultados.get("escala_monetaria")
+    partes = [
+        f'<p class="escolha-gatilho">{html.escape(gatilho)}</p>',
+        _atributo_html(t(dicionario, "valuation.escolha_posicao"),
+                       _valor_html("escolha-posicao", _rotulo_de_vocabulario(
+                           dicionario, "valuation.posicoes_da_escolha",
+                           _campo_de_contrato(escolha, "no_caso_base", onde)))),
+        '<div class="valuation-escolha-numeros">'
+        + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "escolha_preco_titulo",
+                                          CAMINHO_DO_PRECO_DA_ALTERNATIVA),
+                        _formatar_na_unidade(_campo_de_contrato(escolha, "preco_alternativa", onde), catalogo,
+                                             _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DA_ALTERNATIVA),
+                                             idioma, moeda, escala))
+        + _metrica_html(t(dicionario, "valuation.escolha_impacto_titulo"),
+                        placeholders.formatar(_campo_de_contrato(escolha, "impacto", onde),
+                                              FORMATO_DA_FRACAO_DE_COMPARACAO, idioma))
+        + '</div>',
+    ]
+    if chave in razoes:
+        partes.append(f'<p class="escolha-razao">{_texto_de_dado_html(_prosa(prosa, razoes[chave]))}</p>')
+    disparou = escolha.get("gatilho_disparou")
+    if isinstance(disparou, dict):
+        partes.append(_atributo_html(
+            t(dicionario, "valuation.escolha_gatilho_disparou"),
+            _valor_html("escolha-observavel",
+                        str(_campo_de_contrato(disparou, "observavel", f"{onde}.gatilho_disparou")))))
+    return f'<article class="valuation-escolha"><h3>{html.escape(rotulo)}</h3>{"".join(partes)}</article>'
+
+
+def _painel_de_escolhas_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict) -> str:
+    """D1 (§8.2): o painel de escolhas metodológicas, entre a ponte e as sensibilidades.
+
+    O alerta de empilhamento sai acima, com a direção pelo rótulo do dicionário e as
+    escolhas pelos rótulos do catálogo. O painel é DINÂMICO: a escolha cujo gatilho
+    disparou, ou que a integração marcou `material`, fica no nível principal; as demais
+    ficam num `<details>` fechado. Nenhuma escolha publicada, nenhuma seção."""
+    resultados, analise = entrega["resultados"], entrega["analise"]
+    escolhas = resultados.get("escolhas_metodologicas") or []
+    if not escolhas:
+        return ""
+    moeda = (entrega.get("caso") or {}).get("moeda")
+    razoes = {escolha["chave"]: f"analise.escolhas.{indice}.razao"
+              for indice, escolha in enumerate(analise.get("escolhas") or [])
+              if isinstance(escolha, dict) and "chave" in escolha}
+
+    principais, avancadas = [], []
+    for indice, escolha in enumerate(escolhas):
+        bloco = _escolha_html(indice, escolha, resultados, catalogo, idioma, moeda, dicionario, prosa, razoes)
+        no_principal = escolha.get("gatilho_disparou") is not None or escolha.get("material") is True
+        (principais if no_principal else avancadas).append(bloco)
+
+    partes = []
+    empilhamento = resultados.get("empilhamento")
+    if isinstance(empilhamento, dict):
+        partes.append('<p class="escolhas-empilhamento">' + _texto_de_dado_html(t(
+            dicionario, "valuation.escolhas_empilhamento",
+            direcao=_rotulo_de_vocabulario(dicionario, "valuation.direcoes_do_empilhamento",
+                                           empilhamento.get("direcao")),
+            escolhas=", ".join(_rotulo_e_gatilho_da_escolha(catalogo, chave, idioma)[0]
+                               for chave in empilhamento.get("chaves") or []))) + '</p>')
+    partes.extend(principais)
+    if avancadas:
+        partes.append(f'<details><summary>{html.escape(t(dicionario, "valuation.escolhas_avancadas_resumo"))}'
+                      f'</summary>{"".join(avancadas)}</details>')
+    return _secao_html("valuation-escolhas", t(dicionario, "valuation.escolhas_titulo"), "".join(partes))
+
+
+def _retorno_exigido_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
+                          dicionario: dict) -> str:
+    """D2 (§8.2: "que valor resulta se eu exigir retorno de X%?"): a taxa pela unidade da
+    premissa que ela substituiu, a premissa pelo rótulo do catálogo e o preço que resulta —
+    colapsado, e com a nota de que é leitura, jamais fair value. Sem o bloco, nada."""
+    retorno = resultados.get("retorno_exigido")
+    if not isinstance(retorno, dict):
+        return ""
+    onde = "resultados.retorno_exigido"
+    rota = _campo_de_contrato(resultados, "rota", "resultados")
+    premissa = _campo_de_contrato(retorno, "premissa_substituida", onde)
+    corpo = (
+        _atributo_html(t(dicionario, "valuation.retorno_exigido_taxa"),
+                       _valor_html("retorno-exigido-taxa",
+                                   _formatar_na_unidade(_campo_de_contrato(retorno, "taxa", onde), catalogo,
+                                                        _unidade_da_premissa(catalogo, rota, premissa),
+                                                        idioma, moeda)))
+        + _atributo_html(t(dicionario, "valuation.retorno_exigido_premissa"),
+                         _valor_html("retorno-exigido-premissa",
+                                     _rotulo_premissa(catalogo, rota, premissa, idioma)))
+        + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "retorno_exigido_preco_titulo",
+                                          CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO),
+                        _formatar_na_unidade(_campo_de_contrato(retorno, "preco_acao", onde), catalogo,
+                                             _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DO_RETORNO_EXIGIDO),
+                                             idioma, moeda, resultados.get("escala_monetaria")))
+        + f'<p class="retorno-exigido-nota">{html.escape(t(dicionario, "valuation.retorno_exigido_nota"))}</p>'
+    )
+    return _secao_colapsada_html("valuation-retorno-exigido", t(dicionario, "valuation.retorno_exigido_titulo"),
+                                 t(dicionario, "valuation.retorno_exigido_resumo"), corpo)
+
+
+def _valor_ponderado_html(resultados: dict, catalogo: dict, idioma: str, moeda: str | None,
+                          dicionario: dict) -> str:
+    """D3 (§8.2: pesos "fora da fórmula"): a soma de peso × preço que a integração compôs,
+    com cada peso ao lado do seu cenário — colapsado, e com a nota de que o número nunca
+    substitui bear, base e bull. Sem o bloco, nada."""
+    ponderado = resultados.get("valor_ponderado")
+    if not isinstance(ponderado, dict):
+        return ""
+    onde = "resultados.valor_ponderado"
+    pesos = "".join(
+        f'<li class="valor-ponderado-peso">'
+        f'{_texto_de_dado_html(t(dicionario, "valuation.valor_ponderado_peso", cenario=str(nome), peso=placeholders.formatar(peso, FORMATO_DO_PESO, idioma)))}'
+        f'</li>'
+        for nome, peso in _campo_de_contrato(ponderado, "pesos", onde).items())
+    corpo = (
+        _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "valor_ponderado_valor_titulo",
+                                        CAMINHO_DO_VALOR_PONDERADO),
+                      _formatar_na_unidade(_campo_de_contrato(ponderado, "valor", onde), catalogo,
+                                           _unidade_publicada(catalogo, CAMINHO_DO_VALOR_PONDERADO),
+                                           idioma, moeda, resultados.get("escala_monetaria")))
+        + f'<ul class="valor-ponderado-pesos">{pesos}</ul>'
+        + f'<p class="valor-ponderado-nota">{html.escape(t(dicionario, "valuation.valor_ponderado_nota"))}</p>'
+    )
+    return _secao_colapsada_html("valuation-valor-ponderado", t(dicionario, "valuation.valor_ponderado_titulo"),
+                                 t(dicionario, "valuation.valor_ponderado_resumo"), corpo)
+
+
+def _cross_check_html(entrega: dict, catalogo: dict, idioma: str, moeda: str | None, dicionario: dict,
+                      prosa: dict) -> str:
+    """D4 (§8.1): o segundo método. Com o cross-check publicado, a rota oposta pelo rótulo
+    do catálogo, o preço dela e a diferença contra a manchete; sem ele, a razão da ausência
+    que o analista declarou; sem os dois, a frase de que não foi declarado — a seção sai
+    sempre, porque um cross-check que ninguém declarou é informação, não silêncio."""
+    resultados, analise = entrega["resultados"], entrega["analise"]
+    cross_check = resultados.get(contrato_entrega.BLOCO_DO_CROSS_CHECK)
+    ausente = analise.get("cross_check")
+    if isinstance(cross_check, dict):
+        onde = "resultados.cross_check"
+        corpo = (
+            _atributo_html(t(dicionario, "valuation.cross_check_rota"),
+                           _valor_html("cross-check-rota",
+                                       _rotulo_rota(catalogo, _campo_de_contrato(cross_check, "rota", onde), idioma)))
+            + '<div class="valuation-cross-check-numeros">'
+            + _metrica_html(_rotulo_do_numero(resultados, catalogo, dicionario, "cross_check_preco_titulo",
+                                              CAMINHO_DO_PRECO_DO_CROSS_CHECK),
+                            _formatar_na_unidade(_campo_de_contrato(cross_check, "preco_acao", onde), catalogo,
+                                                 _unidade_publicada(catalogo, CAMINHO_DO_PRECO_DO_CROSS_CHECK),
+                                                 idioma, moeda, resultados.get("escala_monetaria")))
+            + _metrica_html(t(dicionario, "valuation.cross_check_diferenca_titulo"),
+                            placeholders.formatar(_campo_de_contrato(cross_check, "diferenca_vs_manchete", onde),
+                                                  FORMATO_DA_FRACAO_DE_COMPARACAO, idioma))
+            + '</div>'
+        )
+    elif isinstance(ausente, dict):
+        corpo = ('<p class="cross-check-ausente">'
+                 f'{_texto_de_dado_html(_prosa(prosa, "analise.cross_check.ausente.razao"))}</p>')
+    else:
+        corpo = ('<p class="cross-check-nao-declarado">'
+                 f'{html.escape(t(dicionario, "valuation.cross_check_nao_declarado"))}</p>')
+    return _secao_html("valuation-cross-check", t(dicionario, "valuation.cross_check_titulo"), corpo)
+
+
+def _reteste_terminal_html(analise: dict, dicionario: dict, prosa: dict) -> str:
+    """D5: o re-teste da hipótese terminal — o resultado pelo rótulo do dicionário
+    (vocabulário de processo, nunca o código cru) e o texto do analista. Sem o bloco, nada."""
+    bloco = analise.get("reteste_terminal")
+    if not isinstance(bloco, dict):
+        return ""
+    corpo = (
+        _atributo_html(t(dicionario, "valuation.reteste_terminal_resultado"),
+                       _valor_html("reteste-terminal-resultado",
+                                   _rotulo_de_vocabulario(dicionario, "valuation.resultados_do_reteste_terminal",
+                                                          bloco.get("resultado"))))
+        + '<p class="reteste-terminal-texto">'
+        f'{_texto_de_dado_html(_prosa(prosa, "analise.reteste_terminal.texto"))}</p>'
+    )
+    return _secao_html("valuation-reteste-terminal", t(dicionario, "valuation.reteste_terminal_titulo"), corpo)
+
+
 def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict, prosa: dict,
                      com_laboratorio: bool = False) -> str:
-    """A aba inteira, na ordem de D15 (ver a seção acima)."""
+    """A aba inteira, na ordem de D15, com as quatro seções que a 5G acrescenta (ver as
+    duas seções acima)."""
     caso, resultados, analise = entrega["caso"], entrega["resultados"], entrega["analise"]
     moeda = caso.get("moeda")
     manchete = resultados["manchete"]
@@ -2339,8 +2584,13 @@ def _valuation_html(entrega: dict, catalogo: dict, idioma: str, dicionario: dict
         f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario)}'
         f'{laboratorio}'
         f'{_ponte_html(resultados, catalogo, idioma, dicionario, moeda)}'
+        f'{_painel_de_escolhas_html(entrega, catalogo, idioma, dicionario, prosa)}'
         f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario)}'
         f'{_o_que_esta_no_preco_html(entrega, catalogo, idioma, dicionario, prosa)}'
+        f'{_retorno_exigido_html(resultados, catalogo, idioma, moeda, dicionario)}'
+        f'{_valor_ponderado_html(resultados, catalogo, idioma, moeda, dicionario)}'
+        f'{_cross_check_html(entrega, catalogo, idioma, moeda, dicionario, prosa)}'
+        f'{_reteste_terminal_html(analise, dicionario, prosa)}'
     )
 
 

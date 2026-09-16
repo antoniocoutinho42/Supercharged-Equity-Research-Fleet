@@ -568,17 +568,37 @@ duas perguntas.
    `variaveis_do_triangulo`; na rampa, a frase de que não se aplica), o preço e o upside;
 4. o **laboratório**, sem mudança;
 5. a **ponte** como waterfall;
-6. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
+6. o **painel de escolhas metodológicas** (fatia 5G, §8.2), quando a integração publica
+   alguma: o alerta de empilhamento acima, com a direção pelo rótulo do dicionário e as
+   escolhas pelos do catálogo; e cada escolha com o rótulo e o gatilho do catálogo, a
+   posição do caso-base (`central`/`alternativa`, rotulada), o preço do outro ramo, o
+   impacto sobre a manchete, a razão do analista (prosa auditável) e o observável que
+   disparou o gatilho. O painel é **dinâmico**: a escolha com gatilho disparado ou com
+   `material` verdadeiro fica no nível principal, e as demais num `<details>` fechado — o
+   limiar é da integração, e o relatório só lê a decisão;
+7. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
    ponto do cenário marcado por igualdade exata — e uma matriz por grade 2D, cujo título
    nomeia o cenário que a grade perturbou;
-7. **o que está no preço**, congelado nas premissas originais: cada eixo de
+8. **o que está no preço**, congelado nas premissas originais: cada eixo de
    `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
    `unidade` da leitura, a identificação rotulada, o intervalo e a curvatura, os toques
    tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
    crescimento gratuito, com o múltiplo e o texto do catálogo; as limitações publicadas da
    reversa e da curva iso; e o julgamento do analista com o observável, quando declarados.
    Sem reversa, o rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`,
-   `sugestao`, `leitura`, `algebra`) nem código cru chega à aba.
+   `sugestao`, `leitura`, `algebra`) nem código cru chega à aba;
+9. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
+   unidade da premissa que ela substituiu, a premissa pelo rótulo do catálogo, o preço que
+   resulta e a nota de que é leitura, **jamais fair value**;
+10. o **valor ponderado por probabilidade**, colapsado e só quando publicado: a soma de
+    peso × preço que a integração compôs, cada peso ao lado do seu cenário, e a nota de que
+    os pesos são julgamento fora da fórmula e o número **nunca substitui bear, base e bull**;
+11. o **cross-check por um segundo método** (§8.1), que sai **sempre**: com o bloco
+    publicado, a rota oposta rotulada, o preço dela e a diferença contra a manchete; sem
+    ele, a razão da ausência que `analise.cross_check.ausente` declara; sem os dois, a frase
+    de que não foi declarado — um cross-check que ninguém declarou é informação, não silêncio;
+12. o **re-teste da hipótese terminal**, quando declarado: o resultado pelo rótulo do
+    dicionário (`mantida`/`trocada`) e o texto do analista.
 
 **A escala dos montantes** (`resultados.escala_monetaria`) entra só onde a unidade do
 catálogo a declara (`unidades.<unidade>.escala_monetaria`): no valor original de uma
@@ -588,10 +608,14 @@ ação. **Sob fronteira de escopo**, todo número que o mapa da integração dec
 de valor sai com o rótulo condicional do dicionário (`valuation.condicional`): o preço e o
 upside do cabeçalho, o múltiplo justo corrente e o forward, os múltiplos e os montantes da
 formação do valor, o título dos cenários e os rótulos de preço e upside de cada um, as três
-saídas de cada cenário do laboratório, o título e as colunas de cada tabela 1D e o título
-da matriz. A decisão é uma só (`render._leitura_condicional`): quem exibe o número diz o
-caminho que lê em `resultados`, e o mapa responde — nenhum nome de campo decide. A reversa
-e o teto do crescimento gratuito ficam fora do mapa e saem como leitura do preço.
+saídas de cada cenário do laboratório, o título e as colunas de cada tabela 1D, o título
+da matriz e — desde a 5G — o preço do ramo alternativo de cada escolha, o do retorno exigido,
+o valor ponderado e o do cross-check. A decisão é uma só (`render._leitura_condicional`): quem
+exibe o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome de campo
+decide. A reversa e o teto do crescimento gratuito ficam fora do mapa e saem como leitura do
+preço; o impacto de uma escolha e a diferença do cross-check também, porque são frações de
+comparação, e saem no formato do upside. O peso de um cenário é julgamento declarado, fora dos
+dois mapas, e sai em pontos percentuais inteiros (`render.FORMATO_DO_PESO`).
 
 **Evidência** (fatia 5E) — a camada de auditabilidade da §9, nesta ordem:
 

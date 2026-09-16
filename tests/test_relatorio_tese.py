@@ -99,8 +99,23 @@ def _tres_cenarios_sob_fronteira(caso: dict) -> None:
     _com_fronteira_de_escopo(caso)
 
 
+def _com_as_alternativas(caso: dict) -> None:
+    """As duas variantes compostas da 5G (`apoio.VARIANTES_DO_CASO`), que são da mesma fixture:
+    as quatro escolhas metodológicas precificadas e as três leituras da §9 (retorno exigido,
+    pesos de probabilidade, cross-check). É a única página que exercita os quatro números novos
+    da aba Valuation — e, portanto, os quatro rótulos condicionais deles."""
+    for nome in ("escolhas", "alternativas"):
+        caso.update(apoio.VARIANTES_DO_CASO[nome][1](caso))
+
+
+def _alternativas_sob_fronteira(caso: dict) -> None:
+    _com_as_alternativas(caso)
+    _com_fronteira_de_escopo(caso)
+
+
 _VARIANTES = {"padrao": None, "tres_cenarios": _tres_cenarios, "fronteira": _com_fronteira_de_escopo,
-              "alias_tv": _alias_legado_de_tv, "tres_cenarios_sob_fronteira": _tres_cenarios_sob_fronteira}
+              "alias_tv": _alias_legado_de_tv, "tres_cenarios_sob_fronteira": _tres_cenarios_sob_fronteira,
+              "alternativas": _com_as_alternativas, "alternativas_sob_fronteira": _alternativas_sob_fronteira}
 
 
 @functools.lru_cache(maxsize=None)
@@ -1444,16 +1459,21 @@ def test_sob_fronteira_nenhum_numero_de_valor_sai_com_rotulo_incondicional_nas_a
         return {chave for chave, modelo in modelos.items() if any(_e_o_rotulo(rotulo, modelo) for rotulo in rotulos)}
 
     # Fatia 5F, Task 5: os montantes da formação do valor só existem na rota rampa, e a página dela entra na
-    # varredura ao lado da de `caso_reversa_firm` — nas duas pontas, fora e sob a fronteira.
+    # varredura ao lado da de `caso_reversa_firm` — nas duas pontas, fora e sob a fronteira. Fatia 5G, Task 4:
+    # o preço do ramo alternativo de uma escolha, o do retorno exigido, o valor ponderado e o do cross-check
+    # só existem com os blocos das alternativas, e a terceira página os traz nas duas pontas.
     fora = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios"),
                                          tmp_path / "fora"))
     fora += _rotulos(_pagina_pelo_builder(_entrega("caso_rampa.json"), tmp_path / "fora_rampa"))
+    fora += _rotulos(_pagina_pelo_builder(_entrega(variante="alternativas"), tmp_path / "fora_alternativas"))
     assert _presentes(fora, incondicionais) == set(incondicionais), "a entrega não exercita todo lugar da varredura"
     assert _presentes(fora, condicionais) == set()
 
     sob = _rotulos(_pagina_pelo_builder(_entrega("caso_reversa_firm.json", variante="tres_cenarios_sob_fronteira"),
                                         tmp_path / "sob"))
     sob += _rotulos(_pagina_pelo_builder(_entrega("caso_rampa.json", variante="fronteira"), tmp_path / "sob_rampa"))
+    sob += _rotulos(_pagina_pelo_builder(_entrega(variante="alternativas_sob_fronteira"),
+                                         tmp_path / "sob_alternativas"))
     assert [rotulo for rotulo in sob
             if any(_e_o_rotulo(rotulo, modelo) for modelo in [*incondicionais.values(), *da_faixa])] == []
     assert _presentes(sob, condicionais) == set(condicionais)

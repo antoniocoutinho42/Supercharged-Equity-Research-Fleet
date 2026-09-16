@@ -38,6 +38,13 @@ import qc  # noqa: E402
 sys.path.insert(0, str(RAIZ / "tests"))
 import relatorio_apoio as apoio  # noqa: E402
 
+# Só para as travas de vocabulário da Task 4: o que a INTEGRAÇÃO pode publicar (a posição do
+# caso-base de uma escolha, a direção do empilhamento) tem de ter rótulo no dicionário do
+# relatório. `relatorio_apoio` já põe `er-valuation/scripts` no path; testes não são a camada do
+# relatório, e a fronteira da E3 (`tests/test_relatorio_fronteira.py`) varre só `scripts/`.
+import avaliar as avaliar_da_integracao  # noqa: E402
+import caso as caso_da_integracao  # noqa: E402
+
 CATALOGO = apoio.CATALOGO
 IDIOMA = "pt-BR"
 # A única fixture com grades de sensibilidade (1D de WACC, 2D de ROIC × g) e reversa declarada.
@@ -49,15 +56,26 @@ SEM_REVERSA = "caso_rampa.json"
 # precificadas, e as três leituras opcionais (retorno exigido, pesos, cross-check).
 ESCOLHAS = "escolhas"
 ALTERNATIVAS = "alternativas"
+# As duas juntas, sobre a mesma fixture: a única entrega que exercita as quatro seções novas
+# da aba de uma vez (e, com elas, os quatro rótulos condicionais).
+TODAS_AS_ALTERNATIVAS = f"{ESCOLHAS}+{ALTERNATIVAS}"
 
 
 @functools.lru_cache(maxsize=None)
 def _entrega_serializada(fonte: str) -> str:
-    """`montar_entrega` cacheado (roda o motor por subprocesso), de uma fixture ou de uma variante
-    composta, como JSON — cada teste recebe a sua cópia."""
-    if fonte in apoio.VARIANTES_DO_CASO:
-        fixture, compor = apoio.VARIANTES_DO_CASO[fonte]
-        entrega_dict = apoio.montar_entrega(fixture, mutar_caso=lambda caso: caso.update(compor(caso)))
+    """`montar_entrega` cacheado (roda o motor por subprocesso), de uma fixture, de uma variante
+    composta ou de VÁRIAS variantes da mesma fixture (nomes separados por `+`, aplicadas na
+    ordem), como JSON — cada teste recebe a sua cópia."""
+    nomes = fonte.split("+")
+    if nomes[0] in apoio.VARIANTES_DO_CASO:
+        fixtures = {apoio.VARIANTES_DO_CASO[nome][0] for nome in nomes}
+        assert len(fixtures) == 1, f"variantes de fixtures diferentes não compõem: {fonte}"
+
+        def _compor(caso: dict) -> None:
+            for nome in nomes:
+                caso.update(apoio.VARIANTES_DO_CASO[nome][1](caso))
+
+        entrega_dict = apoio.montar_entrega(fixtures.pop(), mutar_caso=_compor)
     else:
         entrega_dict = apoio.montar_entrega(fonte)
     return json.dumps(entrega_dict, ensure_ascii=False)
@@ -570,7 +588,8 @@ def _na_unidade(valor, unidade: str, entrega_dict: dict) -> str:
 
 def test_a_aba_valuation_segue_a_ordem_da_secao_9():
     """Cabeçalho (preço e upside, faixa piso–teto, múltiplos, rota) → como o valor é formado → cenários →
-    laboratório → ponte → sensibilidades (a 1D e depois a 2D) → o que está no preço."""
+    laboratório → ponte → sensibilidades (a 1D e depois a 2D) → o que está no preço → cross-check
+    (fatia 5G: a seção sai sempre, e sem os blocos das alternativas nenhuma outra aparece)."""
     entrega_dict = _entrega()
     aba = _aba(_pagina(entrega_dict, com_laboratorio=True), "valuation")
     secoes = _secoes(aba)
@@ -582,7 +601,7 @@ def test_a_aba_valuation_segue_a_ordem_da_secao_9():
         VALUATION["ponte_titulo"],
         VALUATION["grade_1d_titulo"].format(cenario="base", premissa=_rotulo("firm", "wacc")),
         VALUATION["matriz_titulo"].format(cenario="base", y=_rotulo("firm", "g"), x=_rotulo("firm", "roic")),
-        VALUATION["o_que_esta_no_preco_titulo"]]
+        VALUATION["o_que_esta_no_preco_titulo"], VALUATION["cross_check_titulo"]]
     cabecalho = " ".join(_visivel(secao) for secao in secoes[:primeira_com_titulo])
     posicoes = [cabecalho.find(rotulo) for rotulo in (
         VALUATION["preco_justo_titulo"], TESE["papeis_da_faixa"]["piso"], VALUATION["multiplo_justo_titulo"],
@@ -829,3 +848,174 @@ def test_num_sotp_a_premissa_decisiva_de_parte_e_o_vinculo_multi_rota_saem_rotul
     pergunta = _todos(aba, classe="tese-pergunta")[1]
     assert [_visivel(chip) for chip in _todos(pergunta, classe="tese-rotulo")] == [
         _rotulo("rampa", "util"), CATALOGO["blocos"]["custo_capital"]["rotulo"][IDIOMA]]
+
+
+# ==========================================================================
+# Fatia 5G, Task 4: as seções novas da aba — o painel de escolhas entre a ponte e as
+# sensibilidades (§8.2) e, depois do que está no preço, o retorno exigido, o valor ponderado,
+# o cross-check e o re-teste da hipótese terminal (§9).
+# ==========================================================================
+
+_RETESTE_TERMINAL = {"resultado": "trocada",
+                     "texto": "A convergência do retorno ao custo de capital resiste melhor à âncora do setor."}
+
+
+def _rotulo_da_escolha_no_catalogo(chave: str) -> str:
+    return CATALOGO["escolhas_metodologicas"][chave]["rotulo"][IDIOMA]
+
+
+def _metricas_simples(no: dict) -> list:
+    return [(_visivel(_um(metrica, classe="metrica-rotulo")), _visivel(_um(metrica, classe="metrica-valor")))
+            for metrica in _todos(no, classe="metrica")]
+
+
+def _com_as_alternativas() -> dict:
+    """A entrega das duas variantes juntas, com o re-teste terminal declarado — as quatro
+    seções novas de uma vez."""
+    entrega_dict = _entrega(TODAS_AS_ALTERNATIVAS)
+    entrega_dict["analise"]["reteste_terminal"] = copy.deepcopy(_RETESTE_TERMINAL)
+    return entrega_dict
+
+
+def test_a_aba_com_as_alternativas_poe_o_painel_entre_a_ponte_e_as_sensibilidades_e_as_leituras_no_fim():
+    """A ordem da §9: … ponte → ESCOLHAS → sensibilidades → o que está no preço → retorno
+    exigido → valor ponderado → cross-check → re-teste terminal. `caso_minimo_firm` não declara
+    grade, então a 1D e a matriz não entram — o que esta ordem fixa é a vizinhança do painel."""
+    aba = _aba(_pagina(_com_as_alternativas()), "valuation")
+    titulos = [titulo for titulo in (_titulo_da(secao) for secao in _secoes(aba)) if titulo is not None]
+
+    assert titulos == [
+        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["ponte_titulo"],
+        VALUATION["escolhas_titulo"], VALUATION["o_que_esta_no_preco_titulo"],
+        VALUATION["retorno_exigido_titulo"], VALUATION["valor_ponderado_titulo"],
+        VALUATION["cross_check_titulo"], VALUATION["reteste_terminal_titulo"]]
+
+
+def test_o_painel_separa_o_nivel_principal_do_avancado_pelo_gatilho_e_pela_materialidade():
+    """A variante traz as combinações que importam: material sem gatilho (`rentabilidade`),
+    não-material sem gatilho (`crescimento`, a única do avançado) e duas com gatilho declarado.
+    Cada escolha sai com o rótulo e o gatilho do catálogo, a posição do caso-base, o preço do
+    outro ramo, o impacto e a razão do analista."""
+    entrega_dict = _entrega(ESCOLHAS)
+    escolhas = entrega_dict["resultados"]["escolhas_metodologicas"]
+    por_chave = {escolha["chave"]: escolha for escolha in escolhas}
+    assert (por_chave["rentabilidade"]["material"], "gatilho_disparou" in por_chave["rentabilidade"]) == (True, True)
+    assert por_chave["rentabilidade"]["gatilho_disparou"] is None
+    assert (por_chave["crescimento"]["material"], por_chave["crescimento"]["gatilho_disparou"]) == (False, None)
+
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["escolhas_titulo"])
+    avancadas = _todos(_um(secao, tag="details"), classe="valuation-escolha")
+    principais = [artigo for artigo in _todos(secao, classe="valuation-escolha") if artigo not in avancadas]
+    assert [_titulo(artigo) for artigo in avancadas] == [_rotulo_da_escolha_no_catalogo("crescimento")]
+    assert [_titulo(artigo) for artigo in principais] == [
+        _rotulo_da_escolha_no_catalogo(escolha["chave"]) for escolha in escolhas if escolha["chave"] != "crescimento"]
+
+    escolha = por_chave["rentabilidade"]
+    (artigo,) = [a for a in principais if _titulo(a) == _rotulo_da_escolha_no_catalogo("rentabilidade")]
+    assert [_visivel(_um(artigo, classe=classe))
+            for classe in ("escolha-gatilho", "escolha-posicao", "escolha-razao")] == [
+        CATALOGO["escolhas_metodologicas"]["rentabilidade"]["gatilho"][IDIOMA],
+        VALUATION["posicoes_da_escolha"][escolha["no_caso_base"]],
+        entrega_dict["analise"]["escolhas"][0]["razao"]]
+    assert _metricas_simples(artigo) == [
+        (VALUATION["escolha_preco_titulo"], _moeda(entrega_dict, escolha["preco_alternativa"])),
+        (VALUATION["escolha_impacto_titulo"], placeholders.formatar(escolha["impacto"], "pct1", IDIOMA))]
+
+    com_gatilho = por_chave["ano_de_capex_no_par_d_rir"]
+    (artigo_do_gatilho,) = [a for a in principais
+                            if _titulo(a) == _rotulo_da_escolha_no_catalogo(com_gatilho["chave"])]
+    assert _visivel(_um(artigo_do_gatilho, classe="escolha-observavel")) == (
+        com_gatilho["gatilho_disparou"]["observavel"])
+
+
+def test_o_alerta_de_empilhamento_sai_acima_do_painel_com_a_direcao_e_as_escolhas_rotuladas():
+    entrega_dict = _entrega(ESCOLHAS)
+    empilhamento = entrega_dict["resultados"]["empilhamento"]
+    assert len(empilhamento["chaves"]) > 1
+    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["escolhas_titulo"])
+
+    assert _visivel(_um(secao, classe="escolhas-empilhamento")) == VALUATION["escolhas_empilhamento"].format(
+        direcao=VALUATION["direcoes_do_empilhamento"][empilhamento["direcao"]],
+        escolhas=", ".join(_rotulo_da_escolha_no_catalogo(chave) for chave in empilhamento["chaves"]))
+    assert empilhamento["direcao"] not in _visivel(secao), "a direção sai rotulada, nunca como código"
+
+    sem_empilhamento = copy.deepcopy(entrega_dict)
+    sem_empilhamento["resultados"]["empilhamento"] = None
+    vizinha = _secao(_aba(_pagina(sem_empilhamento), "valuation"), VALUATION["escolhas_titulo"])
+    assert _todos(vizinha, classe="escolhas-empilhamento") == []
+
+
+def test_as_tres_leituras_saem_com_os_numeros_publicados_e_com_os_rotulos_que_as_qualificam():
+    """O retorno exigido com a taxa pela unidade da premissa que ela substitui e o rótulo de que
+    não é fair value; o valor ponderado com os pesos e o rótulo de que não substitui bear, base e
+    bull; o cross-check com a rota oposta rotulada, o preço e a diferença; e o re-teste terminal
+    com o resultado rotulado."""
+    entrega_dict = _com_as_alternativas()
+    resultados = entrega_dict["resultados"]
+    retorno, ponderado, cross = (resultados["retorno_exigido"], resultados["valor_ponderado"],
+                                 resultados["cross_check"])
+    aba = _aba(_pagina(entrega_dict), "valuation")
+
+    secao = _secao(aba, VALUATION["retorno_exigido_titulo"])
+    assert [_visivel(_um(secao, classe=classe)) for classe in
+            ("retorno-exigido-taxa", "retorno-exigido-premissa", "retorno-exigido-nota")] == [
+        _na_unidade(retorno["taxa"], CATALOGO["premissas"]["firm"][retorno["premissa_substituida"]]["unidade"],
+                    entrega_dict),
+        _rotulo("firm", retorno["premissa_substituida"]), VALUATION["retorno_exigido_nota"]]
+    assert _metricas_simples(secao) == [
+        (VALUATION["retorno_exigido_preco_titulo"], _moeda(entrega_dict, retorno["preco_acao"]))]
+
+    secao = _secao(aba, VALUATION["valor_ponderado_titulo"])
+    assert _metricas_simples(secao) == [
+        (VALUATION["valor_ponderado_valor_titulo"], _moeda(entrega_dict, ponderado["valor"]))]
+    assert [_visivel(item) for item in _todos(secao, classe="valor-ponderado-peso")] == [
+        VALUATION["valor_ponderado_peso"].format(cenario=nome, peso=placeholders.formatar(peso, "pp0", IDIOMA))
+        for nome, peso in ponderado["pesos"].items()]
+    assert _visivel(_um(secao, classe="valor-ponderado-nota")) == VALUATION["valor_ponderado_nota"]
+
+    secao = _secao(aba, VALUATION["cross_check_titulo"])
+    assert _visivel(_um(secao, classe="cross-check-rota")) == CATALOGO["rotas"][cross["rota"]]["rotulo"][IDIOMA]
+    assert _metricas_simples(secao) == [
+        (VALUATION["cross_check_preco_titulo"], _moeda(entrega_dict, cross["preco_acao"])),
+        (VALUATION["cross_check_diferenca_titulo"],
+         placeholders.formatar(cross["diferenca_vs_manchete"], "pct1", IDIOMA))]
+
+    secao = _secao(aba, VALUATION["reteste_terminal_titulo"])
+    assert [_visivel(_um(secao, classe=classe))
+            for classe in ("reteste-terminal-resultado", "reteste-terminal-texto")] == [
+        VALUATION["resultados_do_reteste_terminal"][_RETESTE_TERMINAL["resultado"]], _RETESTE_TERMINAL["texto"]]
+
+
+def test_sem_os_blocos_nenhuma_secao_nova_aparece_e_o_cross_check_diz_o_que_a_analise_declarou():
+    """Duas leituras do cross-check sem ele publicado: declarado ausente (a razão do analista,
+    prosa auditada) e não declarado (a frase do dicionário). E, sem os blocos, nem painel de
+    escolhas, nem retorno exigido, nem valor ponderado, nem re-teste terminal."""
+    entrega_dict = _entrega()
+    aba = _aba(_pagina(entrega_dict), "valuation")
+    titulos = [_titulo_da(secao) for secao in _secoes(aba)]
+    for chave in ("escolhas_titulo", "retorno_exigido_titulo", "valor_ponderado_titulo", "reteste_terminal_titulo"):
+        assert VALUATION[chave] not in titulos, chave
+    assert _visivel(_um(_secao(aba, VALUATION["cross_check_titulo"]), classe="cross-check-nao-declarado")) == (
+        VALUATION["cross_check_nao_declarado"])
+
+    razao = "A rota oposta não tem vetor coerente nas âncoras observáveis desta companhia."
+    com_ausencia = _entrega()
+    com_ausencia["analise"]["cross_check"] = {"ausente": {"razao": razao}}
+    secao = _secao(_aba(_pagina(com_ausencia), "valuation"), VALUATION["cross_check_titulo"])
+    assert _visivel(_um(secao, classe="cross-check-ausente")) == razao
+    assert _todos(secao, classe="cross-check-nao-declarado") == []
+
+
+@pytest.mark.parametrize("grupo,vocabulario", [
+    pytest.param("posicoes_da_escolha", lambda: set(caso_da_integracao.POSICOES_DA_ESCOLHA),
+                 id="posicoes-da-escolha"),
+    pytest.param("direcoes_do_empilhamento", lambda: set(avaliar_da_integracao.DIRECOES_DO_EMPILHAMENTO),
+                 id="direcoes-do-empilhamento"),
+    pytest.param("resultados_do_reteste_terminal", lambda: set(entrega.RESULTADOS_DO_RETESTE_TERMINAL),
+                 id="resultados-do-reteste-terminal"),
+])
+def test_o_dicionario_rotula_todo_codigo_dos_vocabularios_novos(grupo, vocabulario):
+    """O que a integração pode publicar (a posição do caso-base de uma escolha e a direção do
+    empilhamento) e o que o contrato aceita (o resultado do re-teste) têm rótulo no dicionário —
+    nenhum código cru chega à tela por um vocabulário que cresceu do outro lado."""
+    assert set(VALUATION[grupo]) == vocabulario()
