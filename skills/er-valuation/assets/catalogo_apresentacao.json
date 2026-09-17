@@ -1453,6 +1453,11 @@
     "sotp.materialidade.blended.premissas.*",
     "retorno_exigido.taxa",
     "cross_check.metrica_base.valor",
-    "cross_check.premissas.*"
+    "cross_check.premissas.*",
+    "drivers.*.base",
+    "drivers.*.spot",
+    "drivers.*.elast",
+    "drivers.*.receita_driver",
+    "drivers.*.metrica_base"
   ]
 }

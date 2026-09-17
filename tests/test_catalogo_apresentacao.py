@@ -261,6 +261,10 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
     "os pesos de probabilidade — julgamento do analista sobre os cenários, fora da fórmula do valuation "
     "(§8.2), ecoados ao lado do valor que compõem": (
         "valor_ponderado.pesos.*",),
+    "o registro de drivers exógenos (item 6, D1) — base, spot, gap, elasticidade, efeito e impacto de cada "
+    "driver sobre a métrica-base, e o líquido agregado: diagnóstico precomputado do período-base, que não "
+    "move preço nenhum": (
+        "drivers.**",),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 

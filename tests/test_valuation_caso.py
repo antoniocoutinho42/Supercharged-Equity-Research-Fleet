@@ -1839,3 +1839,54 @@ def test_consenso_fora_da_reversa_e_chave_de_topo_desconhecida():
         validar(c)
     assert "chave de topo desconhecida" in str(erro.value).lower()
     assert "consenso" in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Item 6, Task 1 (D1 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-
+# sintetica.md): 'drivers', o registro de drivers exógenos — nome, base, spot e a
+# elasticidade declarada ou os insumos para derivá-la. Uma recusa por mensagem.
+# --------------------------------------------------------------------------
+
+_DRIVER_DECLARADO = {"nome": "preço do produto", "base": 650.0, "spot": 780.0, "elast": 1.4}
+_DRIVER_DERIVADO = {"nome": "frete", "base": 40.0, "spot": 52.0, "receita_driver": 150.0,
+                    "metrica_base": 1000.0, "sentido": "custo"}
+
+
+def _driver(modelo: dict, **campos) -> dict:
+    """`modelo` com `campos` por cima; um campo com `...` sai do driver."""
+    driver = {**modelo, **campos}
+    return {chave: valor for chave, valor in driver.items() if valor is not ...}
+
+
+def test_drivers_nas_duas_formas_sao_aceitos_em_toda_rota_e_nulos_sao_ausencia():
+    for caso in (_firm(), _equity(), _fixture("caso_rampa.json")):
+        validar(_com(caso, drivers=[dict(_DRIVER_DECLARADO), dict(_DRIVER_DERIVADO)]))
+    validar(_com(_firm(), drivers=[_driver(_DRIVER_DERIVADO, sentido=...), _driver(_DRIVER_DECLARADO, elast=-0.2,
+                                                                               nome="energia")]))
+    validar(_com(_firm(), drivers=None))
+
+
+@pytest.mark.parametrize("drivers,nomeado", [
+    pytest.param({"nome": "frete"}, "'drivers' não é uma lista", id="nao_e_lista"),
+    pytest.param([], "bloco 'drivers' vazio", id="lista_vazia"),
+    pytest.param(["frete"], "drivers.0 não é um objeto", id="entrada_nao_e_objeto"),
+    pytest.param([_driver(_DRIVER_DECLARADO, elasticidade=1.4)], "chave desconhecida em 'drivers.0'",
+                 id="chave_desconhecida"),
+    pytest.param([_driver(_DRIVER_DECLARADO, nome="celulose:BHKP")], "'drivers.0.nome' ausente, vazio ou com ':'",
+                 id="nome_com_o_separador_do_motor"),
+    pytest.param([dict(_DRIVER_DECLARADO), _driver(_DRIVER_DERIVADO, nome=_DRIVER_DECLARADO["nome"])],
+                 "'drivers.1.nome' repetido", id="nome_repetido"),
+    pytest.param([_driver(_DRIVER_DECLARADO, base=0.0)], "'drivers.0.base' inválido", id="base_nao_positiva"),
+    pytest.param([_driver(_DRIVER_DECLARADO, spot=float("inf"))], "'drivers.0.spot' inválido", id="spot_nao_finito"),
+    pytest.param([_driver(_DRIVER_DECLARADO, elast=...)], "'drivers.0' sem elasticidade", id="sem_elasticidade"),
+    pytest.param([_driver(_DRIVER_DECLARADO, receita_driver=150.0)],
+                 "declara a elasticidade ('elast') e os insumos para derivá-la", id="as_duas_formas"),
+    pytest.param([_driver(_DRIVER_DECLARADO, elast="1,4")], "'drivers.0.elast' inválido", id="elast_textual"),
+    pytest.param([_driver(_DRIVER_DERIVADO, metrica_base=0.0)], "'drivers.0.metrica_base' inválido",
+                 id="metrica_base_nao_positiva"),
+    pytest.param([_driver(_DRIVER_DERIVADO, sentido="custos")], "Você quis dizer 'custo'?", id="sentido_fora_do_vocabulario"),
+])
+def test_recusas_dos_drivers_nomeiam_a_regra(drivers, nomeado):
+    with pytest.raises(CasoInvalido) as erro:
+        validar(_com(_firm(), drivers=drivers))
+    assert nomeado in str(erro.value)

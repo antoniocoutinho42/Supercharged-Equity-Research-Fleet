@@ -74,6 +74,10 @@ normaliza saída.
   `sensibilidades` ou `sotp` (limitação declarada desta fatia). Metodologia,
   `m` (eficiência marginal) e as quatro travas obrigatórias:
   `vendor/multiplos-justos/references/aplicacao.md` §8.
+- **Registro de drivers exógenos** — bloco opcional `drivers`: roda o registro do
+  motor (gap, elasticidade declarada ou derivada, impacto `|elasticidade × gap|`, gate
+  por driver e pelo líquido agregado) e o publica íntegro, com a marca do limiar e a do
+  cenário por driver. Precomputado: não move preço nenhum.
 
 ## O que NUNCA faz
 
@@ -258,6 +262,19 @@ uma métrica daquela rota, `ancora` é texto não vazio e `premissas` é um veto
 COMPLETO dela, validado pela mesma regra dos cenários (obrigatórias presentes,
 desconhecidas recusadas, numéricas finitas).
 
+Bloco opcional `drivers`: a lista dos drivers exógenos do período-base (commodity,
+frete, câmbio, tarifa), no formato que o registro de drivers do motor aceita. Cada
+driver declara `nome` (texto não vazio, sem `:` — o separador da especificação do
+motor — e sem repetição), `base` e `spot` (finitos e positivos) e a elasticidade em
+**uma** de duas formas: declarada (`elast`, finita, com sinal — negativa para driver de
+custo) ou derivada (`receita_driver`, a linha da DRE que se move um para um com o
+driver, e `metrica_base`, os dois finitos e positivos, mais `sentido` — `receita`, o
+padrão do motor, ou `custo`, `caso.SENTIDOS_DO_DRIVER`). As duas formas juntas, ou
+nenhuma, são recusadas: o motor usaria uma em silêncio ou aplicaria a elasticidade 1 de
+fábrica. Nenhuma outra chave; lista vazia e nulo são recusa e ausência. Transformar um
+driver acima do limiar em cenário normalizado é decisão do analista — o bloco não muda
+cenário nenhum.
+
 Schema completo, executável: `tests/fixtures/caso_minimo_firm.json` e
 `tests/fixtures/caso_minimo_equity.json`.
 
@@ -347,6 +364,15 @@ convenção que já mora aqui):
   publicado. O preço vem das mesmas funções de precificação, sobre o vetor da rota
   oposta que o caso declara; a diferença é fração de comparação contra a manchete,
   positiva quando o segundo método vale mais.
+- `drivers` — o registro de drivers exógenos, precomputado (§8.4), ou `null`; sempre
+  publicado. É a saída do subcomando `drivers` do motor, **íntegra** — por driver,
+  `gap_%`, `elast` e `elast_fonte`, `efeito_liquido_%`, `impacto_%` e `tratamento`, na
+  ordem do motor (maior impacto primeiro); e o `GATE`, o `GATE_agregado`, a
+  `compensacao` e a `nota` —, com duas marcas por driver: `acima_do_limiar` (o
+  `impacto_%` acima de `avaliar.LIMIAR_DE_IMPACTO_DO_DRIVER_PCT`, os 10% que o motor
+  recebe em `--limiar`) e `vira_cenario` (a leitura do `tratamento`,
+  `avaliar.VIRA_CENARIO_POR_TRATAMENTO`). O relatório lê as marcas e nunca o limiar
+  nem a prosa.
 - `fronteira_de_escopo` — o bloco que o gate validou, ou `null`; sempre
   publicado (ver "Contrato do caso").
 - `limitacoes` — lista de chaves, sempre publicada e possivelmente vazia, das
@@ -431,7 +457,9 @@ materialidade; o topo do SOTP (custos corporativos, participações não
 consolidadas e o desconto de holding, quando declarado); os números do degrau; e,
 de `mercado`, `rf`, `erp` e a banda de beta observado, que alimentam a âncora
 macro do gp e o beta implícito da reversa; e os dois pontos de
-`reversa.consenso`, contra os quais o nível implícito é confrontado. Fica fora a
+`reversa.consenso`, contra os quais o nível implícito é confrontado; e, de cada driver
+exógeno, `base`, `spot` e a elasticidade — declarada, ou a linha exposta e a
+métrica-base de que o motor a deriva. Fica fora a
 configuração de execução
 — os pontos declarados das grades de sensibilidade e o teto de células
 (`limite_de_celulas`) —, e texto nunca é insumo. Todo insumo mapeado é material:

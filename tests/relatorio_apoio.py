@@ -275,6 +275,25 @@ def _alternativas(caso: dict) -> dict:
     return c
 
 
+def _drivers(caso: dict) -> dict:
+    """`caso_minimo_firm` (EBITDA 1.000) com o registro de drivers exógenos declarado (item 6, D1),
+    nas duas formas de elasticidade e nos dois lados do limiar:
+
+    - `preço do produto`, elasticidade DECLARADA de 1,4 e gap de +20% (650 → 780): impacto de 28%,
+      acima do limiar — vira cenário;
+    - `frete`, elasticidade DERIVADA de um driver de CUSTO (linha exposta 150 sobre a métrica-base
+      1.000, sinal negativo) e gap de +30% (40 → 52): impacto de 4,5%, abaixo do limiar.
+
+    É a única variante que exerce os cinco padrões `drivers.*` de `catalogo.insumos_do_caso`."""
+    c = copy.deepcopy(caso)
+    c["drivers"] = [
+        {"nome": "preço do produto", "base": 650.0, "spot": 780.0, "elast": 1.4},
+        {"nome": "frete", "base": 40.0, "spot": 52.0, "receita_driver": 150.0, "metrica_base": 1000.0,
+         "sentido": "custo"},
+    ]
+    return c
+
+
 VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "reversa_sem_raiz": ("caso_minimo_firm.json", _reversa_sem_raiz),
     "consenso": ("caso_minimo_firm.json", _consenso),
@@ -285,6 +304,7 @@ VARIANTES_DO_CASO: dict[str, tuple[str, Callable[[dict], dict]]] = {
     "conservacao_nao_fecha": ("caso_minimo_firm.json", _conservacao_nao_fecha),
     "escolhas": ("caso_minimo_firm.json", _escolhas),
     "alternativas": ("caso_minimo_firm.json", _alternativas),
+    "drivers": ("caso_minimo_firm.json", _drivers),
 }
 
 

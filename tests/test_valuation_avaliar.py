@@ -1035,3 +1035,60 @@ def test_a_convencao_terminal_alternativa_bate_com_o_preco_do_motor_para_ela():
     (publicada,) = avaliar(caso)["escolhas_metodologicas"]
     assert publicada["preco_alternativa"] == pytest.approx(55.31, abs=0.01)
     assert publicada["material"] is True  # -10,66%, acima do limiar
+
+
+# --------------------------------------------------------------------------
+# Item 6, Task 1 (D1 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-
+# sintetica.md): o registro de drivers exógenos. O oráculo é o próprio motor, importado
+# em processo (`justos.registro_drivers`, com bytecode desligado, como em
+# `tests/test_catalogo_apresentacao.py`) — independente da tradução para a CLI que o
+# wrapper faz.
+# --------------------------------------------------------------------------
+
+import avaliar as _avaliar_modulo  # noqa: E402
+from avaliar import LIMIAR_DE_IMPACTO_DO_DRIVER_PCT, _drivers_publicados  # noqa: E402
+
+_bytecode_original = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    sys.path.insert(0, str(RAIZ / "vendor" / "multiplos-justos" / "scripts"))
+    from justos import registro_drivers  # noqa: E402
+finally:
+    sys.dont_write_bytecode = _bytecode_original
+
+MARCAS_DO_DRIVER = ("acima_do_limiar", "vira_cenario")
+
+
+def test_o_registro_de_drivers_e_a_saida_integra_do_motor_e_o_impacto_de_cada_driver_bate():
+    """Tirando as duas marcas, o que sai publicado é o que o motor devolve para os drivers do
+    caso — nas duas formas de elasticidade, a derivada de custo inclusive. Os impactos
+    conferidos à mão: |1,4 × 20%| = 28% e |−150 ÷ 1.000 × 30%| = 4,5%."""
+    caso = caso_da_variante("drivers")
+    publicado = avaliar(caso)["drivers"]
+    oraculo = registro_drivers([dict(driver) for driver in caso["drivers"]],
+                               limiar=LIMIAR_DE_IMPACTO_DO_DRIVER_PCT / 100)
+
+    sem_marcas = [{chave: valor for chave, valor in driver.items() if chave not in MARCAS_DO_DRIVER}
+                  for driver in publicado["drivers"]]
+    assert {**publicado, "drivers": sem_marcas} == oraculo
+    assert {driver["nome"]: driver["impacto_%"] for driver in publicado["drivers"]} == {
+        "preço do produto": 28.0, "frete": 4.5}
+
+
+def test_o_driver_acima_do_limiar_sai_marcado_e_o_abaixo_nao():
+    publicado = {driver["nome"]: driver for driver in avaliar(caso_da_variante("drivers"))["drivers"]["drivers"]}
+    acima, abaixo = publicado["preço do produto"], publicado["frete"]
+    assert (acima["acima_do_limiar"], acima["vira_cenario"], acima["tratamento"]) == (True, True, "CENÁRIO")
+    assert (abaixo["acima_do_limiar"], abaixo["vira_cenario"]) == (False, False)
+
+
+@pytest.mark.parametrize("saida_do_motor,nomeado", [
+    pytest.param({"erro": "driver mal formado: frete"}, "não devolveu o registro dos 1 driver(s)", id="erro_do_motor"),
+    pytest.param({"drivers": [{"nome": "frete", "impacto_%": 4.5, "tratamento": "cenario"}]},
+                 "devolveu o tratamento 'cenario'", id="tratamento_desconhecido"),
+])
+def test_um_registro_que_o_motor_nao_fecha_e_recusa_nomeada(monkeypatch, saida_do_motor, nomeado):
+    monkeypatch.setattr(_avaliar_modulo, "executar", lambda argv: saida_do_motor)
+    with pytest.raises(MotorFalhou) as erro:
+        _drivers_publicados({"drivers": [{"nome": "frete", "base": 40.0, "spot": 52.0, "elast": -0.15}]})
+    assert nomeado in str(erro.value)

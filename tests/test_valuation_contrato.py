@@ -345,6 +345,21 @@ def test_o_painel_e_as_tres_leituras_sao_sempre_publicados(resultados):
     assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
 
 
+def test_o_registro_de_drivers_e_sempre_publicado_e_nulo_sem_o_bloco(resultados):
+    """Item 6, Task 1 (D1): toda fixture sai com `drivers: null` — nenhuma declara o bloco —, e a
+    variante que o declara sai com um registro por driver declarado."""
+    com_bloco = 0
+    for nome, (caso, r) in resultados.items():
+        assert "drivers" in r, nome
+        if "drivers" not in caso:
+            assert r["drivers"] is None, nome
+            continue
+        assert len(r["drivers"]["drivers"]) == len(caso["drivers"]), nome
+        com_bloco += 1
+    assert all(resultados[nome][1]["drivers"] is None for nome in CASOS)
+    assert com_bloco, "nenhuma variante com drivers — trava vacuamente verde"
+
+
 # --------------------------------------------------------------------------
 # Fatia 5H, Task 1 (D1/D2 do plano docs/superpowers/plans/2026-09-15-v4-item5h-leitura-
 # de-preco.md): o nível implícito anda com a reversa — dentro dela, sempre, com as

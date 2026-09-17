@@ -112,10 +112,10 @@ from pathlib import Path
 
 import diagnosticos
 from caso import (
-    ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO, PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SOMA_DOS_PESOS,
+    ALVOS_NAO_PREMISSA_DA_SOBREPOSICAO, PREMISSA_DE_CUSTO_DE_CAPITAL_POR_ROTA, SEPARADOR_DO_DRIVER, SOMA_DOS_PESOS,
     CasoInvalido, _tv_canon, carregar, reversa_indisponivel,
 )
-from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, rodar
+from motor import MotorFalhou, _campo_do_multiplo, _exigir_valor, argv_dos_drivers, executar, rodar
 from ponte import compor
 from reversa import alvo_de_mercado, limitacoes_da_leitura, reverter
 
@@ -1236,6 +1236,57 @@ def _cross_check(caso: dict, manchete: dict, nd_efetivo: float,
     }
 
 
+# --------------------------------------------------------------------------
+# Item 6, Task 1 (D1 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-
+# sintetica.md): o registro de drivers exógenos, precomputado (§8.4 do desenho). A conta
+# — gap, elasticidade derivada, impacto, gate por driver e agregado, compensação e
+# seleção de cenários — é do motor (`justos.registro_drivers`, subcomando `drivers`); o
+# wrapper roda, publica a saída íntegra e dá a cada driver as duas marcas que o relatório
+# lê sem conhecer limiar nem a prosa do motor.
+# --------------------------------------------------------------------------
+
+# O limiar do gate por impacto, em pontos percentuais: o `limiar=0.10` de
+# `registro_drivers`, passado ao motor em `--limiar` e aplicado ao `impacto_%` que ele
+# publica — um número só, nos dois lugares. Constante NOMEADA da integração pela mesma
+# razão de `LIMIAR_DE_ESCOLHA_MATERIAL`: decidir "acima do limiar" é metodologia.
+LIMIAR_DE_IMPACTO_DO_DRIVER_PCT: float = 10.0
+
+# `tratamento` é prosa do motor; a marca `vira_cenario` é a leitura dela. Um tratamento
+# fora destes dois é recusa nomeada, nunca um driver marcado por omissão.
+VIRA_CENARIO_POR_TRATAMENTO: dict[str, bool] = {"CENÁRIO": True, "linha de sensibilidade": False}
+
+
+def _drivers_publicados(caso: dict) -> dict | None:
+    """`resultados.drivers` (D1): a saída do subcomando `drivers` do motor, íntegra, com
+    duas marcas por driver — `acima_do_limiar` (o `impacto_%` publicado acima de
+    `LIMIAR_DE_IMPACTO_DO_DRIVER_PCT`) e `vira_cenario` (o `tratamento` do motor). Sem o
+    bloco no caso, `None`.
+
+    O motor responde a uma especificação malformada com `{"erro": ...}` e código 0; o
+    wrapper exige a lista com um driver por driver declarado, e recusa o resto pelo nome
+    (`MotorFalhou`) em vez de publicar um registro pela metade."""
+    drivers = caso.get("drivers")
+    if drivers is None:
+        return None
+    saida = executar(argv_dos_drivers(drivers, LIMIAR_DE_IMPACTO_DO_DRIVER_PCT, SEPARADOR_DO_DRIVER))
+    registro = saida.get("drivers")
+    if not isinstance(registro, list) or len(registro) != len(drivers):
+        raise MotorFalhou(
+            f"motor não devolveu o registro dos {len(drivers)} driver(s) declarados: {saida!r}. O wrapper "
+            "não publica um registro de drivers pela metade.")
+    publicados = []
+    for driver in registro:
+        impacto = _exigir_valor(driver, "impacto_%")
+        tratamento = driver.get("tratamento")
+        if tratamento not in VIRA_CENARIO_POR_TRATAMENTO:
+            raise MotorFalhou(
+                f"motor devolveu o tratamento {tratamento!r} para o driver {driver.get('nome')!r}, fora de "
+                f"{sorted(VIRA_CENARIO_POR_TRATAMENTO)} — o wrapper não marca um driver por omissão.")
+        publicados.append({**driver, "acima_do_limiar": impacto > LIMIAR_DE_IMPACTO_DO_DRIVER_PCT,
+                           "vira_cenario": VIRA_CENARIO_POR_TRATAMENTO[tratamento]})
+    return {**saida, "drivers": publicados}
+
+
 def avaliar(caso: dict) -> dict:
     """Roda o motor por cenário na rota do caso e monta o conteúdo de `resultados.json`.
 
@@ -1428,6 +1479,10 @@ def avaliar(caso: dict) -> dict:
         caso, resultado["manchete"], nd_efetivo, moeda, rf)
     resultado["valor_ponderado"] = _valor_ponderado(caso, cenarios)
     resultado["cross_check"] = _cross_check(caso, resultado["manchete"], nd_efetivo, moeda, rf)
+
+    # Item 6, Task 1 (D1): o registro de drivers exógenos, SEMPRE publicado — `null` sem o
+    # bloco que o declara.
+    resultado["drivers"] = _drivers_publicados(caso)
 
     # Fatia 5D, Task 1 (D3/D4): o que só a integração sabe sobre o escopo do
     # caso, SEMPRE publicado — um campo de contrato ausente não pode sumir em

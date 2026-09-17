@@ -265,6 +265,32 @@ def argv_para(rota: str, premissas: dict, escala: dict | None,
     return argv
 
 
+def argv_dos_drivers(drivers: list[dict], limiar_pct: float, separador: str) -> list[str]:
+    """Monta `["drivers", "--driver=<spec>", ..., "--limiar", <pp>]` — sem executar nada.
+
+    Item 6, Task 1 (D1). O subcomando `drivers` não recebe flag por campo: cada driver é
+    UMA especificação `NOME:BASE:SPOT:ELAST` (elasticidade declarada) ou
+    `NOME:BASE:SPOT:auto:LINHA:METRICA[:SENTIDO]` (derivada), no formato do `--driver` da
+    CLI do motor. `caso.py` já confirmou a forma de cada driver e que nenhum nome contém
+    o separador (`caso.SEPARADOR_DO_DRIVER`, que quem chama repassa — este módulo não
+    importa `caso.py`); aqui só se traduz. `--driver=<spec>`, e não `--driver <spec>`: com o
+    `=`, um nome que comece por '-' nunca é lido pelo argparse como outra flag. Os
+    números saem por `str()`, que em Python devolve a representação exata do float.
+    `limiar_pct` vai em pontos percentuais, a unidade da flag `--limiar`."""
+    argv = ["drivers"]
+    for driver in drivers:
+        campos = [driver["nome"], str(driver["base"]), str(driver["spot"])]
+        if driver.get("elast") is not None:
+            campos.append(str(driver["elast"]))
+        else:
+            campos += ["auto", str(driver["receita_driver"]), str(driver["metrica_base"])]
+            if driver.get("sentido") is not None:
+                campos.append(driver["sentido"])
+        argv.append(f"--driver={separador.join(campos)}")
+    argv += ["--limiar", str(limiar_pct)]
+    return argv
+
+
 def executar(argv: list[str], timeout: float = 120) -> dict:
     """Roda o motor congelado com `argv` e devolve o JSON parseado da stdout.
 

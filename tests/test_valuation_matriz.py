@@ -319,6 +319,28 @@ def _caso_equity_com_cross_check_firm() -> dict:
     return _com_topo(_equity(), cross_check=_CROSS_CHECK_FIRM)
 
 
+# Item 6, Task 1 (D1): o menor registro de drivers exógenos. O bloco não depende da rota —
+# nenhum preço passa por ele —, e as quatro células confirmam que nenhum dict indexado por
+# rota o toca: as três rotas e o SOTP, a composição que troca a manchete.
+_DRIVERS_MINIMOS = [{"nome": "preço do produto", "base": 650.0, "spot": 780.0, "elast": 1.4}]
+
+
+def _caso_firm_com_drivers() -> dict:
+    return _com_topo(_firm(), drivers=_DRIVERS_MINIMOS)
+
+
+def _caso_equity_com_drivers() -> dict:
+    return _com_topo(_equity(), drivers=_DRIVERS_MINIMOS)
+
+
+def _caso_rampa_com_drivers() -> dict:
+    return _com_topo(_rampa(), drivers=_DRIVERS_MINIMOS)
+
+
+def _caso_firm_com_sotp_e_drivers() -> dict:
+    return _com_topo(_caso_firm_com_sotp(), drivers=_DRIVERS_MINIMOS)
+
+
 def _caso_firm_nopat_com_conservacao() -> dict:
     c = _com_conservacao(_firm())
     c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "fonte": "fixture da matriz"}
@@ -390,9 +412,14 @@ MATRIZ = {
     ("equity", "cross_check_firm"): (_caso_equity_com_cross_check_firm, False),
     # Fatia 5H, Task 1 (D1/D2): o consenso da reversa na rota que não atravessa ponte.
     ("equity", "reversa+consenso"): (_caso_equity_com_reversa_e_consenso, True),
+    # Item 6, Task 1 (D1): o registro de drivers em toda rota e sob SOTP — aceito em todas.
+    ("firm", "drivers"): (_caso_firm_com_drivers, True),
+    ("equity", "drivers"): (_caso_equity_com_drivers, True),
+    ("rampa", "drivers"): (_caso_rampa_com_drivers, True),
+    ("firm", "sotp+drivers"): (_caso_firm_com_sotp_e_drivers, True),
 }
 
-assert len(MATRIZ) == 25, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6), as 2 células de escolhas_metodologicas (5G, D1), as 5 das três leituras (5G, D2/D3/D4) e a do consenso da reversa (5H, D1), exatamente uma vez cada"
+assert len(MATRIZ) == 29, "a matriz tem de cobrir as 3 rotas x 3 blocos, as 3 células degrau x bloco (D7, só na rota equity), as 2 recusas de metrica_forward (5F, D5), as 3 de conservacao_de_capital (5F, D6), as 2 células de escolhas_metodologicas (5G, D1), as 5 das três leituras (5G, D2/D3/D4), a do consenso da reversa (5H, D1) e as 4 dos drivers (item 6, D1), exatamente uma vez cada"
 
 
 def _id(chave: tuple[str, str]) -> str:

@@ -372,6 +372,8 @@ CHAVES_DE_TOPO_PERMITIDAS: frozenset = frozenset({
     # Fatia 5G, Task 2: validados por `_validar_retorno_exigido`,
     # `_validar_pesos_de_probabilidade` e `_validar_cross_check` (mais abaixo).
     "retorno_exigido", "pesos_de_probabilidade", "cross_check",
+    # Item 6, Task 1: validado por `_validar_drivers` (mais abaixo).
+    "drivers",
     # Informativas: sem validador dedicado, consumidas (ticker) ou só
     # repassadas (data_base) legitimamente.
     "ticker", "data_base",
@@ -471,7 +473,7 @@ def validar(caso: Caso) -> None:
     -> degrau -> blocos opcionais 'mercado', 'reversa', 'sensibilidades',
     'sotp', 'fronteira_de_escopo', 'metrica_forward', 'escala_monetaria',
     'conservacao_de_capital', 'escolhas_metodologicas', 'retorno_exigido',
-    'pesos_de_probabilidade' e 'cross_check', só quando
+    'pesos_de_probabilidade', 'cross_check' e 'drivers', só quando
     presentes. As duas recusas de
     'reversa' por limitação (junto de 'degrau', na rota 'rampa') saem do
     registro `LIMITACOES_DE_REVERSA`, nos mesmos pontos de sempre. Não
@@ -556,6 +558,7 @@ def validar(caso: Caso) -> None:
     _validar_retorno_exigido(caso, rota)
     _validar_pesos_de_probabilidade(caso, cenarios)
     _validar_cross_check(caso, rota)
+    _validar_drivers(caso)
 
 
 def _validar_chaves_enderecaveis(no: object, caminho: str = "caso") -> None:
@@ -3434,6 +3437,121 @@ def _validar_cross_check(caso: Caso, rota: str) -> None:
         )
 
     _validar_premissas("cross_check", cross_check.get("premissas"), rota_oposta)
+
+
+# --------------------------------------------------------------------------
+# Item 6, Task 1 (D1 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-
+# sintetica.md): 'drivers', o registro de drivers exógenos da metodologia (§8.4 do
+# desenho: precomputado e exibido rotulado). Cada driver declara `nome`, `base` e
+# `spot` e, para a elasticidade, UMA de duas formas — exatamente as que
+# `justos.registro_drivers` aceita: declarada (`elast`, com sinal: negativa para driver
+# de custo) ou derivada (`receita_driver`, a linha exposta da DRE, e `metrica_base`,
+# mais `sentido` quando o driver é de custo). A conta do gap, do impacto e do gate é do
+# motor; aqui só se confirma que o que foi declarado é declarável.
+# --------------------------------------------------------------------------
+
+# O `sentido` de um driver derivado, o vocabulário do motor (`elasticidade_exposicao`).
+SENTIDOS_DO_DRIVER: frozenset = frozenset({"receita", "custo"})
+
+# O separador de campos do `--driver` da CLI do motor (`NOME:BASE:SPOT[:...]`). Um nome
+# que o contenha partiria a especificação em campos errados — `motor.argv_dos_drivers`
+# monta a especificação com este mesmo separador.
+SEPARADOR_DO_DRIVER: str = ":"
+
+_CAMPOS_DA_ELASTICIDADE_DECLARADA: frozenset = frozenset({"elast"})
+_CAMPOS_DA_ELASTICIDADE_DERIVADA: frozenset = frozenset({"receita_driver", "metrica_base", "sentido"})
+_CHAVES_DO_DRIVER_PERMITIDAS: frozenset = (
+    frozenset({"nome", "base", "spot"}) | _CAMPOS_DA_ELASTICIDADE_DECLARADA | _CAMPOS_DA_ELASTICIDADE_DERIVADA)
+
+
+def _numero_do_driver(prefixo: str, driver: dict, campo: str, positivo: bool) -> None:
+    """Um número do driver é finito — e, fora a elasticidade declarada, positivo: base e
+    spot são níveis do driver (o gap divide por `base`), e a linha exposta e a
+    métrica-base são montantes cujo sinal o `sentido` carrega."""
+    valor = driver.get(campo)
+    if not _numero_valido(valor) or not _finito(valor) or (positivo and valor <= 0):
+        exigencia = "um número finito e positivo" if positivo else "um número finito"
+        raise CasoInvalido(
+            f"'{prefixo}.{campo}' inválido: {valor!r}. Precisa ser {exigencia} — o motor o recebe "
+            "direto na especificação do driver, e um valor fora disso envenena o gap ou a "
+            "elasticidade em silêncio."
+        )
+
+
+def _validar_driver(prefixo: str, driver: Any, vistos: set) -> None:
+    """Valida UMA entrada de 'drivers'. `vistos` acumula os nomes, para a recusa de nome
+    repetido."""
+    if not isinstance(driver, dict):
+        raise CasoInvalido(
+            f"{prefixo} não é um objeto: {driver!r}. Cada driver declara 'nome', 'base', 'spot' e a "
+            "elasticidade — declarada ('elast') ou os insumos para derivá-la ('receita_driver', "
+            "'metrica_base' e, opcional, 'sentido')."
+        )
+    _recusar_chave_desconhecida(driver, _CHAVES_DO_DRIVER_PERMITIDAS, f"'{prefixo}'")
+
+    nome = driver.get("nome")
+    if not isinstance(nome, str) or not nome.strip() or SEPARADOR_DO_DRIVER in nome:
+        raise CasoInvalido(
+            f"'{prefixo}.nome' ausente, vazio ou com '{SEPARADOR_DO_DRIVER}': {nome!r}. O nome identifica o "
+            "driver no registro do motor, e o motor separa os campos de cada driver por "
+            f"'{SEPARADOR_DO_DRIVER}' — um nome com ele partiria a especificação em campos errados."
+        )
+    if nome in vistos:
+        raise CasoInvalido(
+            f"'{prefixo}.nome' repetido: '{nome}'. O motor ordena e seleciona os drivers pelo nome — dois "
+            "drivers com o mesmo nome se sobreporiam no registro, e um deles sumiria do gate."
+        )
+    vistos.add(nome)
+
+    for campo in ("base", "spot"):
+        _numero_do_driver(prefixo, driver, campo, positivo=True)
+
+    declarada = driver.get("elast") is not None
+    derivacao = sorted(campo for campo in _CAMPOS_DA_ELASTICIDADE_DERIVADA if driver.get(campo) is not None)
+    if declarada and derivacao:
+        raise CasoInvalido(
+            f"'{prefixo}' declara a elasticidade ('elast') e os insumos para derivá-la ({', '.join(derivacao)}): "
+            "o motor usaria a declarada e ignoraria os insumos em silêncio. Declare uma das duas formas."
+        )
+    if declarada:
+        _numero_do_driver(prefixo, driver, "elast", positivo=False)
+        return
+    if driver.get("receita_driver") is None or driver.get("metrica_base") is None:
+        raise CasoInvalido(
+            f"'{prefixo}' sem elasticidade: declare 'elast' ou os insumos para derivá-la — 'receita_driver' "
+            "(a linha da DRE que se move um para um com o driver) e 'metrica_base'. Sem nenhum dos dois, o "
+            "motor aplicaria a elasticidade 1 de fábrica, uma escolha que ninguém declarou."
+        )
+    for campo in ("receita_driver", "metrica_base"):
+        _numero_do_driver(prefixo, driver, campo, positivo=True)
+    sentido = driver.get("sentido")
+    if sentido is not None:
+        _exigir_texto(sentido, f"{prefixo}.sentido")
+        if sentido not in SENTIDOS_DO_DRIVER:
+            sugestao = difflib.get_close_matches(sentido, SENTIDOS_DO_DRIVER, n=1)
+            dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
+            raise CasoInvalido(
+                f"'{prefixo}.sentido' fora do vocabulário: '{sentido}'.{dica}O sentido diz se a linha exposta é "
+                "receita ou custo — com 'custo', a alta do driver derruba a métrica-base. Sentidos aceitos: "
+                f"{', '.join(sorted(SENTIDOS_DO_DRIVER))}."
+            )
+
+
+def _validar_drivers(caso: Caso) -> None:
+    """Valida o bloco opcional 'drivers': a lista, cada driver e os nomes. Ausente ou `None`
+    é um caso sem registro de drivers."""
+    drivers = caso.get("drivers")
+    if drivers is None:
+        return
+    _exigir_lista(drivers, "drivers")
+    if not drivers:
+        raise CasoInvalido(
+            "bloco 'drivers' vazio: declare ao menos um driver, ou remova o bloco — uma lista vazia e a "
+            "ausência do bloco dizem a mesma coisa por dois caminhos."
+        )
+    vistos: set = set()
+    for indice, driver in enumerate(drivers):
+        _validar_driver(f"drivers.{indice}", driver, vistos)
 
 
 def carregar(caminho: Path) -> Caso:
