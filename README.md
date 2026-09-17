@@ -1,104 +1,126 @@
-# equity-research-fleet v3
+# equity-research-fleet v4
 
-Plugin de equity research centrado no Analista: **2 agentes, 4 skills, matemática 100% em motor
-determinístico congelado, dados financeiros exclusivamente via OpenBB e entrega em HTML
-interativo de 2 abas**. Desenho completo (fonte de verdade):
-[`docs/desenho-workflow-equity-research-fleet-v3.md`](docs/desenho-workflow-equity-research-fleet-v3.md).
+Plugin de equity research que opera um **analista autônomo e thesis-driven**: descobre as poucas
+perguntas que determinam a tese, pesquisa a evidência onde ela estiver, e converte isso num valuation
+rigoroso, auditável e interativo. A matemática não é dele — vem de uma cópia congelada da metodologia
+`multiplos-justos` v9.31, que o fleet orquestra mas nunca reimplementa.
 
-## Arquitetura
+Desenho completo e **fonte de verdade**:
+[`docs/desenho-arquitetura-v4.md`](docs/desenho-arquitetura-v4.md). Conflito entre este README e
+aquele documento resolve-se por ele.
 
-- **Analista** — o loop principal (não é subagente). Coordena o processo, pesquisa o
-  qualitativo, reconstrói o financeiro histórico, calibra os 16 inputs, opera o engine e assina
-  o conteúdo. Workflow: skill [`er-analise`](skills/er-analise/SKILL.md) (fases F0–F11, modo
-  "somente valuation", P2 por materialidade, memória durável).
-- **Data Manager** — único subagente ([`agents/data-manager.md`](agents/data-manager.md)), dono
-  exclusivo das chamadas OpenBB (exceção única: snapshot de perfil/preço do briefing, F1).
-  Doutrina: skill [`er-dados-openbb`](skills/er-dados-openbb/SKILL.md) (mapa real de endpoints,
-  ledger de proveniência, gaps MATERIAL/NÃO-MATERIAL, validade de preço >24h útil).
-- **Motor** — skill [`er-motor-k3`](skills/er-motor-k3/SKILL.md): cópia congelada da metodologia
-  Justified P/E V2.2.1 (manual de calibração, engine, validador de contrato de inputs e suíte
-  canônica de regressão). Sem workflow standalone — quem orquestra é o fleet.
-- **Relatório** — skill [`er-relatorio-html`](skills/er-relatorio-html/SKILL.md):
-  `build_report.py` (builder determinístico, único caminho de emissão) + template de 2 abas
-  (Valuation interativo com recálculo ao vivo · Análise com Positives/Negatives, gráficos
-  interativos e calibração) + `checar_relatorio.py` (QC pós-emissão). uPlot 1.6.27 (MIT)
-  vendorizado; arquivo final autocontido, zero rede.
+## Os dois produtos
 
-QC por código, não por agente: **SUITE PASS** da regressão canônica antes de qualquer entrega,
-**banner de paridade Python↔JS verde** no HTML (self-test no load; pré-verificação sob node no
-build, com recusa em divergência) e **`checar_relatorio.py` exit 0** (estrutura, log de
-consistência número↔chave, paridade, autocontenção, gráficos, números órfãos).
+- **Análise** — o fluxo completo: perguntas da tese, pesquisa, valuation e relatório de três abas.
+- **Leitura de preço** — a engenharia reversa da metodologia: o que o preço embute, menu de
+  reconciliação, custo de capital implícito e nível implícito, com o escopo declarado. Entrega
+  reduzida à aba Valuation.
 
-## Fluxo (modo completo)
+São produtos, não níveis de esforço. **Na dúvida, Análise.**
 
-Intake → briefing (1 página) → grill-me (modo → hurdle, **sem default** → validação de
-premissas → perguntas específicas) → estudo do método + arquétipo → despacho do DM em background
-→ qualitativa ∥ coleta → financeira histórica → calibração dos 16 inputs × cenários → engine
-(SUITE PASS → value → sensibilidades → congelar → market-implied → hurdle rotulada) → checkpoint
-opcional → HTML de 2 abas → memória durável por código. Detalhe fase a fase em
-[`skills/er-analise/references/fases.md`](skills/er-analise/references/fases.md).
+## As cinco skills e o agente
 
-## Workspace por análise
+| Componente | Papel |
+|---|---|
+| [`er-multiplos-justos`](skills/er-multiplos-justos/SKILL.md) | Índice e manifest de hashes do vendor congelado. Diz o que existe, onde está e quando ler — **nunca parafraseia metodologia**. |
+| [`er-valuation`](skills/er-valuation/SKILL.md) | Wrapper de orquestração: contrato do caso, rotas, cenários, ponte para preço, SOTP, reversa e sensibilidades. Chama o motor; **nunca faz conta de valuation por fora dele**. |
+| [`er-evidencia`](skills/er-evidencia/SKILL.md) | Doutrina de pesquisa e proveniência, agnóstica de fonte. Dona do contrato `ledger/1`, da hierarquia por claim, da reconciliação e da classificação de gaps. |
+| [`er-analise`](skills/er-analise/SKILL.md) | Workflow master: quatro marcos (escopo · perguntas da tese · pesquisa e derivação · valuation e entrega), autonomia por default e as regras invioláveis. |
+| [`er-relatorio`](skills/er-relatorio/SKILL.md) | Builder determinístico e QC. **Único caminho de emissão**: não interpreta prosa, não busca dado e aceita uma única raiz de execução. |
+| [`pesquisa-evidencia`](agents/pesquisa-evidencia.md) | Agente de tipo único, instanciado N vezes em paralelo, um mandato por instância (filings; RI e transcripts; setorial; macro; pares). **Encontra e estrutura evidência — não interpreta nem calibra.** |
+
+A separação é a regra: Pesquisa & Evidência encontra; o Analista interpreta e calibra.
+
+## O vendor congelado
+
+A metodologia vive em [`vendor/multiplos-justos/`](vendor/multiplos-justos/) — cópia **read-only** da
+skill de usuário `multiplos-justos` v9.31, que permanece intocada fora deste repositório. Origem,
+data e sha256 por arquivo em
+[`skills/er-multiplos-justos/manifest_vendor.json`](skills/er-multiplos-justos/manifest_vendor.json).
+
+O pacote fica **fora de `skills/`** por necessidade: ele declara `name: multiplos-justos` no próprio
+`SKILL.md`, e sob `skills/` um loader recursivo registraria uma segunda skill com esse nome,
+colidindo com a do usuário. A invariante — nenhum `SKILL.md` aninhado sob `skills/` — é travada por
+teste.
+
+Evoluir a metodologia é decisão humana explícita: troca-se o pacote inteiro e regenera-se o manifest.
+Alteração local quebra a suíte, por desenho.
+
+## Como uma execução roda
+
+Cada execução é autocontida e **não herda nada** de nenhuma outra: sem memória durável, sem cache
+entre execuções, sem premissa ou conclusão anterior entrando em silêncio.
+
+```bash
+# 1. a raiz da execução
+python skills/er-analise/scripts/execucao.py nova <TICKER> [--produto leitura_de_preco]
+
+# 2. o valuation, pelo wrapper que chama o motor congelado
+python skills/er-valuation/scripts/avaliar.py <raiz>/caso.json --out <raiz>/resultados.json
+
+# 3. a suíte da metodologia, rodada e registrada na raiz
+python skills/er-analise/scripts/execucao.py suite <raiz>
+
+# 4. a entrega: compõe entrega.json e roda o builder
+python skills/er-analise/scripts/execucao.py montar <raiz>
+```
 
 ```
-analises/<TICKER>/
-├── 00_briefing.md · 01_grill_me.md · notas.md
-├── dados/            # domínio do Data Manager (categoria.json + ledger.md + pedidos.md)
-├── qualitativa.md · financeira.md · calibracao.md
-├── case.json         # input do engine
-├── analise.json      # conteúdo da aba 2 (placeholders {{r:...}}/{{c:...}}/{{d:...}})
-├── saida/results.json
-└── relatorio/relatorio_<TICKER>.html
-analises/_memoria/<TICKER>.md   # nota durável, gerada por scripts/memoria.py
+analises/<TICKER>/<AAAA-MM-DD-NNN>/
+├── execucao.json                                 # id, ticker, idioma, produto
+├── evidencia/                                    # fragmentos do ledger; `montar` junta num só
+├── quarentena/                                   # análise anterior fornecida, aberta só no M4
+├── caso.json · resultados.json · analise.json    # partes obrigatórias
+├── dados.json · confronto.json                   # partes opcionais
+├── entrega.json                                  # composto por `montar`, validado por schema
+└── relatorio.html · qc.json · ficha-tecnica.json # o que o builder emite
 ```
 
-## Metodologia — versão e disciplina de sincronização
+O relatório é um **arquivo único autocontido, zero rede**, com três abas: **Tese** (a decisão de
+investimento), **Valuation** (laboratório econômico interativo, com premissas editáveis e diagnóstico
+ao vivo) e **Evidência** (ledger, reconciliações e limitações declaradas).
 
-O motor é **cópia byte a byte** da skill de usuário `justified-pe-valuation` (que permanece
-INTOCADA e continua sendo o caminho para valuation standalone fora do fleet):
+## QC em três níveis
 
-- Metodologia: **Justified P/E V2.2.1 (congelada)** —
-  `formula_version: K3-vF19-2026-08-03 / manual-v2.2.1`
-- sha256 da fórmula-fonte (stored, sem newline final):
-  `ed5163103b73a226d47692ad6a9595416ce38ea2e2e9ea0d217072d4243b5420`
-- Íntegra da cópia (origem, data, contagem observada da suíte e sha256 por arquivo, incluindo o
-  espelho `k3_engine.js` e o uPlot vendorizado):
-  [`skills/er-motor-k3/manifest_copia.json`](skills/er-motor-k3/manifest_copia.json)
+O QC impõe integridade econômica e matemática, não preferência editorial — e roda por código, não por
+agente:
 
-**Disciplina de sincronização:** qualquer evolução futura da metodologia precisa ser replicada
-MANUALMENTE nos dois lugares (skill standalone e esta cópia), por decisão humana. O teste
-`tests/test_motor_k3.py` compara os arquivos copiados com o manifest a cada execução — qualquer
-alteração local quebra a suíte. Nenhuma matemática de valuation é escrita à mão em prosa, Python
-novo ou JS novo (o único motor JS é o `k3_engine.js` copiado e verificado por paridade).
+- **`HARD_FAIL`** — não emite. Paridade Python↔JS divergente, suíte da metodologia falhando, número
+  material sem proveniência, gráfico com dados não rastreáveis, pergunta de tese sem vínculo
+  econômico, fair value por ação como conclusão principal sob fronteira de escopo declarada.
+- **`REQUIRED_DISCLOSURE`** — emite, mas o fato aparece explicitamente na entrega.
+- **`QUALITY_WARNING`** — interno, para revisão.
 
-## Regras invioláveis (Seção 9 do desenho)
+Em HARD FAIL o builder escreve `qc.json` e **nenhum `relatorio.html`**. A paridade entre o motor em
+Python e o espelho em JS é **falha fechada**: divergiu, não emite.
 
-Metodologia congelada · regression gate + paridade + checar antes de qualquer entrega · dados
-financeiros só OpenBB via DM · gaps MATERIAL perguntam, NÃO-MATERIAL degradam com nota (janela
-curta de fundamentals inclusa — gráficos usam a "janela máxima disponível" declarada no próprio
-gráfico) · hurdle sem default e sempre rotulada · market-implied nunca recalibra · grill-me é
-evidência, não fato · `notas.md` por fase · memória por código · sem guardrails, sem auditor,
-sem portfolio fit, sem PDF (carteira → skill `portfolio-construction`, fora do fleet).
-
-## Como rodar os testes
+## Testes
 
 ```bash
 python -m pytest tests/ -q
 ```
 
 ```bash
-python skills/er-motor-k3/scripts/run_regressions.py
+python vendor/multiplos-justos/scripts/justos.py selftest
+python vendor/multiplos-justos/scripts/testes.py --phase model
+python vendor/multiplos-justos/scripts/testes.py --phase cli
 ```
 
-- Dependências de teste: Python 3.12+, `pytest`, `pyyaml`. O engine e os builders são stdlib pura.
-- **Node.js** (opcional, recomendado): com `node` no PATH, o teste de paridade Python↔JS roda de
-  verdade e o `build_report.py` ganha o gate de recusa por divergência no build (sem node, a
-  paridade é verificada pelo self-test do browser no load — banner verde continua obrigatório).
-  No CI (ubuntu + setup-node) a paridade roda sempre.
+A suíte do vendor roda em **duas invocações frescas**: uma invocação única sem `--phase` é recusada de
+propósito pelo próprio script (a fase `cli` abre 20+ subprocessos reais, e somar as duas num
+processo-pai produz falso negativo sob quota agressiva de subprocessos).
+
+- Dependências: Python 3.12+, `pytest`, `pyyaml`. O motor e os builders são stdlib pura.
+- **Node.js** (opcional, recomendado): com `node` no PATH os testes de paridade rodam de verdade e o
+  builder verifica a paridade por caso no build. Sem node, a entrega sai com o REQUIRED DISCLOSURE
+  `paridade_nao_verificada_no_build`. No CI (ubuntu + setup-node) a paridade roda sempre.
 - Windows: os arquivos congelados são protegidos de conversão de EOL por `.gitattributes`.
+
+O golden case real fica **fora do CI**, rodado à mão como aceitação de release: o sintético testa a
+engenharia, o real testa se o fleet produz bom equity research.
 
 ## CI e release
 
-`ci.yml`: pytest (inclui SUITE PASS, paridade e builders) + sanity do manifesto, em todo push/PR.
-`release.yml` (tag `v*`): valida tag == versão do `plugin.json`, empacota ZIP e publica GitHub
-Release com corpo opcional de `docs/releases/<tag>.md`.
+`ci.yml`: suíte da metodologia, paridade Python↔JS, `pytest tests/` e sanity do manifesto, em todo
+push/PR. `release.yml` (tag `v*`): valida tag == versão do `plugin.json`, empacota ZIP e publica
+GitHub Release com corpo opcional de `docs/releases/<tag>.md`.
