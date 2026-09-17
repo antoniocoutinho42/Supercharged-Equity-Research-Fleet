@@ -3077,6 +3077,60 @@ def _reteste_terminal_html(analise: dict, dicionario: dict, prosa: dict) -> str:
     return _secao_html("valuation-reteste-terminal", t(dicionario, "valuation.reteste_terminal_titulo"), corpo)
 
 
+# --------------------------------------------------------------------------
+# Item 6, Task 2 (D1; §8.4): o registro de drivers exógenos, depois das sensibilidades.
+# É precomputado pelo motor no build e sai rotulado como congelado — nenhum espelho o
+# recalcula, e ele não move preço nenhum. A tabela lê as duas marcas que a integração
+# publica por driver (`acima_do_limiar`, `vira_cenario`) e nunca o limiar nem a prosa do
+# motor (`tratamento`, `elast_fonte`, `nota`). Base e spot saem só localizados — a unidade
+# do driver é do caso, e o relatório não a conhece —; gap, impacto e o líquido agregado, em
+# pontos percentuais, como o motor os publica.
+# --------------------------------------------------------------------------
+
+FORMATO_DO_NIVEL_DO_DRIVER: str = "num2"
+FORMATO_DA_ELASTICIDADE_DO_DRIVER: str = "num2"
+FORMATO_DO_PERCENTUAL_DO_DRIVER: str = "pp1"
+
+
+def _drivers_html(resultados: dict, idioma: str, dicionario: dict) -> str:
+    """A seção dos drivers exógenos, ou nada sem o registro publicado."""
+    registro = resultados.get("drivers")
+    if not isinstance(registro, dict):
+        return ""
+    onde = "resultados.drivers"
+
+    def _numero(no: dict, campo: str, formato: str, onde_do_no: str) -> str:
+        return placeholders.formatar(_campo_de_contrato(no, campo, onde_do_no), formato, idioma)
+
+    colunas = [t(dicionario, f"valuation.drivers_coluna_{coluna}") for coluna in (
+        "nome", "base", "spot", "gap", "elasticidade", "impacto", "acima_do_limiar", "tratamento")]
+    linhas = []
+    for indice, driver in enumerate(_campo_de_contrato(registro, "drivers", onde)):
+        onde_do_driver = f"{onde}.drivers.{indice}"
+        acima = _campo_de_contrato(driver, "acima_do_limiar", onde_do_driver) is True
+        cenario = _campo_de_contrato(driver, "vira_cenario", onde_do_driver) is True
+        linhas.append([
+            str(_campo_de_contrato(driver, "nome", onde_do_driver)),
+            _numero(driver, "base", FORMATO_DO_NIVEL_DO_DRIVER, onde_do_driver),
+            _numero(driver, "spot", FORMATO_DO_NIVEL_DO_DRIVER, onde_do_driver),
+            _numero(driver, "gap_%", FORMATO_DO_PERCENTUAL_DO_DRIVER, onde_do_driver),
+            _numero(driver, "elast", FORMATO_DA_ELASTICIDADE_DO_DRIVER, onde_do_driver),
+            _numero(driver, "impacto_%", FORMATO_DO_PERCENTUAL_DO_DRIVER, onde_do_driver),
+            t(dicionario, "valuation.drivers_acima_do_limiar" if acima else "valuation.drivers_abaixo_do_limiar"),
+            t(dicionario, "valuation.drivers_vira_cenario" if cenario else "valuation.drivers_linha_de_sensibilidade"),
+        ])
+    compensacao = _campo_de_contrato(registro, "compensacao", onde)
+    liquido = t(dicionario, "valuation.drivers_liquido",
+                liquido=_numero(compensacao, "efeito_liquido_total_%", FORMATO_DO_PERCENTUAL_DO_DRIVER,
+                                f"{onde}.compensacao"),
+                brutos=_numero(compensacao, "soma_dos_brutos_%", FORMATO_DO_PERCENTUAL_DO_DRIVER,
+                               f"{onde}.compensacao"))
+    corpo = (f'<p class="drivers-congelado-nota">{html.escape(t(dicionario, "valuation.drivers_congelado"))}</p>'
+             + _tabela_html("drivers-tabela", colunas, linhas)
+             + f'<p class="drivers-liquido">{_texto_de_dado_html(liquido)}</p>')
+    return _secao_html("valuation-drivers", t(dicionario, "valuation.drivers_titulo"), corpo)
+
+
 def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, dicionario: dict, prosa: dict,
                      com_laboratorio: bool = False) -> str:
     """A aba inteira, na ordem de D15, com as quatro seções que a 5G acrescenta (ver as
@@ -3168,6 +3222,7 @@ def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, d
         f'{_ponte_html(entrega, catalogo, idioma, dicionario, moeda, com_laboratorio)}'
         f'{_painel_de_escolhas_html(entrega, catalogo, idioma, dicionario, prosa)}'
         f'{_sensibilidades_html(caso, resultados, catalogo, idioma, dicionario, produto)}'
+        f'{_drivers_html(resultados, idioma, dicionario)}'
         f'{_o_que_esta_no_preco_html(entrega, catalogo, idioma, dicionario, prosa)}'
         f'{_retorno_exigido_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{_valor_ponderado_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'

@@ -1183,3 +1183,58 @@ def test_a_faixa_e_preco_alvo_pelo_mapa_da_integracao_e_nunca_pelo_nome_do_campo
 
     assert _do_codigo(_achados(com_faixa), "produto_com_preco_alvo") != []
     assert _do_codigo(_achados(com_faixa, sem_o_padrao), "produto_com_preco_alvo") == []
+
+
+# ==========================================================================
+# Item 6, Task 2 (D1 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-sintetica.md): a seção
+# dos drivers exógenos, depois das sensibilidades, rotulada como congelada. A tabela lê as marcas que a
+# integração publica, e nunca o limiar nem a prosa do motor.
+# ==========================================================================
+
+def _com_drivers_nas_grades() -> dict:
+    """`caso_reversa_firm` — a fixture com as duas grades — com os drivers da variante `drivers` do apoio:
+    a única entrega em que a posição da seção depois das sensibilidades é observável."""
+    drivers = apoio.VARIANTES_DO_CASO["drivers"][1](apoio.carregar_fixture_ou_variante(GRADES))["drivers"]
+    return apoio.montar_entrega(GRADES, mutar_caso=lambda caso: caso.update(drivers=drivers))
+
+
+def test_a_secao_dos_drivers_sai_depois_das_sensibilidades_rotulada_como_congelada_com_as_marcas():
+    entrega_dict = _com_drivers_nas_grades()
+    registro = entrega_dict["resultados"]["drivers"]
+    aba = _aba(_pagina(entrega_dict), "valuation")
+    titulos = [titulo for titulo in (_titulo_da(secao) for secao in _secoes(aba)) if titulo is not None]
+    assert titulos[titulos.index(VALUATION["drivers_titulo"]) - 1:titulos.index(VALUATION["drivers_titulo"]) + 2] == [
+        VALUATION["matriz_titulo"].format(cenario="base", y=_rotulo("firm", "g"), x=_rotulo("firm", "roic")),
+        VALUATION["drivers_titulo"], VALUATION["o_que_esta_no_preco_titulo"]]
+
+    secao = _secao(aba, VALUATION["drivers_titulo"])
+    assert _visivel(_um(secao, classe="drivers-congelado-nota")) == VALUATION["drivers_congelado"]
+    linhas = [[_visivel(celula) for celula in _todos(linha, tag="td")]
+              for linha in _todos(_um(secao, tag="tbody"), tag="tr")]
+    pp = lambda valor: placeholders.formatar(valor, "pp1", IDIOMA)  # noqa: E731
+    num = lambda valor: placeholders.formatar(valor, "num2", IDIOMA)  # noqa: E731
+    assert linhas == [
+        [driver["nome"], num(driver["base"]), num(driver["spot"]), pp(driver["gap_%"]), num(driver["elast"]),
+         pp(driver["impacto_%"]),
+         VALUATION["drivers_acima_do_limiar" if driver["acima_do_limiar"] else "drivers_abaixo_do_limiar"],
+         VALUATION["drivers_vira_cenario" if driver["vira_cenario"] else "drivers_linha_de_sensibilidade"]]
+        for driver in registro["drivers"]]
+    # A variante traz os dois lados do limiar, e a tela os distingue pelas marcas.
+    assert [linha[6:] for linha in linhas] == [
+        [VALUATION["drivers_acima_do_limiar"], VALUATION["drivers_vira_cenario"]],
+        [VALUATION["drivers_abaixo_do_limiar"], VALUATION["drivers_linha_de_sensibilidade"]]]
+    assert _visivel(_um(secao, classe="drivers-liquido")) == VALUATION["drivers_liquido"].format(
+        liquido=pp(registro["compensacao"]["efeito_liquido_total_%"]),
+        brutos=pp(registro["compensacao"]["soma_dos_brutos_%"]))
+    # A prosa do motor não chega à tela: nem a fonte da elasticidade, nem a nota do gate.
+    for driver in registro["drivers"]:
+        assert driver["elast_fonte"] not in _visivel(secao)
+    assert registro["nota"] not in _visivel(secao)
+
+
+def test_sem_o_registro_de_drivers_a_secao_some():
+    entrega_dict = _entrega()
+    assert entrega_dict["resultados"]["drivers"] is None
+    aba = _aba(_pagina(entrega_dict), "valuation")
+    assert VALUATION["drivers_titulo"] not in [_titulo_da(secao) for secao in _secoes(aba)]
+    assert _todos(aba, classe="drivers-congelado-nota") == []

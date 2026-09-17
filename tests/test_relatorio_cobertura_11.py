@@ -3,7 +3,7 @@
 Ver docs/superpowers/plans/2026-09-14-v4-item5e-evidencia.md, D8. A §11 do desenho lista o que o QC
 impõe em três níveis; a seção "Cobertura da §11" do `skills/er-relatorio/SKILL.md` diz, item a item,
 como cada um é garantido: por código de QC, por mecanismo fora do QC (o gate do caso, a CI, o badge
-do laboratório) ou por pendência com dono (`item 6` ou `item 8`) e razão. Uma segunda tabela
+do laboratório) ou por pendência com dono (`item 8`) e razão. Uma segunda tabela
 lista os códigos de QC que servem a outras seções do desenho.
 
 A trava lê as três fontes — o desenho, as duas tabelas e o `qc.py` — e confere que:
@@ -32,7 +32,8 @@ CABECALHO_DA_COBERTURA = ("Nível", "Item da §11", "Códigos de QC", "Fora do Q
 CABECALHO_DOS_DE_FORA = ("Código", "Nível", "Onde o desenho o pede")
 NIVEIS = frozenset({"HARD_FAIL", "REQUIRED_DISCLOSURE", "QUALITY_WARNING"})
 # Fatia 5F, Task 4: as três pendências da 5F viraram códigos de QC, e `5F` saiu dos donos.
-DONOS_PERMITIDOS = frozenset({"item 6", "item 8"})
+# Item 6, Task 2: a paridade por caso no build virou `paridade_divergente`, e `item 6` saiu também.
+DONOS_PERMITIDOS = frozenset({"item 8"})
 SEM_GARANTIA = "—"
 
 _CODIGO_CITADO = re.compile(r"`([a-z_]+)`")

@@ -107,6 +107,7 @@ normaliza saída.
 | `scripts/sotp.py` | Soma o EV das partes de uma SOTP e cruza a ponte única no topo |
 | `scripts/diagnosticos.py` | Classifica mensagem do motor -> chave pública de diagnóstico |
 | `scripts/avaliar.py` | Orquestra cenários × rota e escreve o `resultados.json` |
+| `scripts/paridade.py` | Verifica, por caso, que a fachada do espelho em node reproduz o `resultados` publicado (o comparador do badge); CLI que o builder do relatório chama |
 
 ## Como rodar
 
@@ -512,3 +513,17 @@ correspondente vive em dois harnesses separados —
 — porque são garantias contra fontes Python diferentes (motor × wrapper). A
 conservação de capital (`conservacaoCapital`) é garantia contra o wrapper: o
 harness roda `avaliar.precificar_firm` com as flags do motor.
+
+**Paridade por caso, no build** (item 6). Os harnesses provam o espelho sobre vetores
+escolhidos; o badge do laboratório confere o caso quando o relatório abre. Entre os dois,
+`scripts/paridade.py` confere o caso ANTES da emissão: `verificar(caso, resultados)` roda
+`assets/espelho_fachada.js` em node e compara com o `resultados` pelo mesmo
+`compararComResultados` do badge — cobre o que ele cobre, e a curvatura continua fora. O
+veredito é `{"estado": "ok"}`, `{"estado": "divergente", "divergencias": [...], "erro":
+<texto> | null}` — com `erro` quando a verificação não fecha (a fachada recusou o caso, o
+node saiu com erro, não respondeu ou não devolveu JSON), falha fechada — ou `{"estado":
+"indisponivel"}`, sem node no PATH. Um processo node por chamada. CLI:
+`python skills/er-valuation/scripts/paridade.py` lê `{"caso", "resultados"}` do stdin e
+escreve o veredito no stdout; é por ela que o builder do relatório a chama, e é o
+relatório quem converte o veredito em achado (`paridade_divergente`,
+`paridade_nao_verificada_no_build`).

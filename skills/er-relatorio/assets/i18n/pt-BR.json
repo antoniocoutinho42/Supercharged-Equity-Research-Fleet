@@ -49,7 +49,9 @@
     "eixo_obrigatorio_da_reversa_sem_raiz": "O que está no preço — {rotulo}: o eixo que a metodologia exige não tem solução sob as demais premissas ({motivo_rotulo}). O alvo de mercado é inalcançável neste eixo, e a leitura do que o preço embute sai qualificada.",
     "eixos_de_reversa_desconhecidos": "Eixos da reversa sem declaração no catálogo em '{onde}': resultados.reversa publica os eixos {eixos}, e o catálogo de apresentação não declara, na forma do contrato (eixos_de_reversa), o rótulo em '{idioma}' e a flag 'obrigatorio' de cada um — sem ela nenhum eixo seria obrigatório, e a regra do eixo obrigatório sem raiz falha fechada. A correção é da camada de integração, nunca do relatório.",
     "escolha_sem_razao": "Escolha metodológica sem razão econômica em '{onde}': o valuation precificou a alternativa de {rotulo}, e a Tese não declara, em analise.escolhas, por que o caso-base ficou onde ficou. Nenhuma escolha que a metodologia deixa em aberto recebe default: o painel só sai com escolha, alternativa, impacto e razão.",
-    "escolhas_desconhecidas": "Escolhas metodológicas sem declaração no catálogo em '{onde}': resultados.escolhas_metodologicas publica as escolhas {escolhas}, e o catálogo de apresentação não declara, na forma do contrato (escolhas_metodologicas), o rótulo e o gatilho em '{idioma}' de cada uma — sem eles o painel sairia com o código cru da escolha, e a regra falha fechada. A correção é da camada de integração, nunca do relatório."
+    "escolhas_desconhecidas": "Escolhas metodológicas sem declaração no catálogo em '{onde}': resultados.escolhas_metodologicas publica as escolhas {escolhas}, e o catálogo de apresentação não declara, na forma do contrato (escolhas_metodologicas), o rótulo e o gatilho em '{idioma}' de cada uma — sem eles o painel sairia com o código cru da escolha, e a regra falha fechada. A correção é da camada de integração, nunca do relatório.",
+    "paridade_divergente": "Paridade Python↔JS divergente no build em '{onde}': o espelho do navegador não reproduz o que o Python publicou para este caso — {quantidade} divergência(s): {divergencias}. Nada é emitido: a correção é da camada de integração (o espelho, a fachada ou o wrapper), nunca do relatório.",
+    "paridade_nao_verificada_no_build": "Paridade Python↔JS não verificada no build: a máquina que gerou este relatório não tinha node, e o espelho do navegador não foi confrontado, antes da emissão, com o que o Python publicou. O badge de paridade da aba Valuation confere os números quando o relatório abre."
   },
   "moeda_simbolo": {
     "BRL": "R$"
@@ -151,6 +153,21 @@
       "grade_1d_coluna_preco": "Preço por ação no ponto",
       "grade_1d_coluna_multiplo": "Múltiplo justo no ponto",
       "grade_1d_ponto_do_cenario": "{valor} (ponto do cenário '{cenario}')",
+      "drivers_titulo": "Drivers exógenos do período-base",
+      "drivers_congelado": "Registro congelado nos drivers que o caso declara: precomputado pelo motor no build, não acompanha as edições do laboratório e não move preço nenhum. Um driver acima do limiar pede cenário normalizado ao spot, decisão do analista.",
+      "drivers_coluna_nome": "Driver",
+      "drivers_coluna_base": "Base",
+      "drivers_coluna_spot": "Spot",
+      "drivers_coluna_gap": "Gap do spot sobre a base",
+      "drivers_coluna_elasticidade": "Elasticidade",
+      "drivers_coluna_impacto": "Impacto sobre a métrica-base",
+      "drivers_coluna_acima_do_limiar": "Limiar da metodologia",
+      "drivers_coluna_tratamento": "Tratamento",
+      "drivers_acima_do_limiar": "acima",
+      "drivers_abaixo_do_limiar": "abaixo",
+      "drivers_vira_cenario": "cenário normalizado",
+      "drivers_linha_de_sensibilidade": "linha de sensibilidade",
+      "drivers_liquido": "Efeito líquido agregado dos drivers: {liquido}, sobre a soma dos impactos brutos de {brutos}.",
       "o_que_esta_no_preco_titulo": "O que está no preço",
       "reversa_raiz": "{valor} — {identificacao}",
       "reversa_identificacao_indisponivel": "identificação indisponível (sem derivadas na vizinhança da raiz)",

@@ -86,7 +86,7 @@ Códigos de saída:
 |---|---|---|
 | `0` | QC sem `HARD_FAIL` | `relatorio.html` + `qc.json` + `ficha-tecnica.json` |
 | `2` | QC achou `HARD_FAIL` | só `qc.json` |
-| `1` | uso incorreto, ou `entrega.json` ausente/malformado/fora da raiz/versão incompatível/idioma sem dicionário/`execucao.ticker` divergente de `caso.ticker`, ou o contrato do ledger ilegível ou fora da forma que o relatório lê | nada |
+| `1` | uso incorreto, ou `entrega.json` ausente/malformado/fora da raiz/versão incompatível/idioma sem dicionário/`execucao.ticker` divergente de `caso.ticker`, ou o contrato do ledger ilegível ou fora da forma que o relatório lê, ou a verificação de paridade da integração sem veredito | nada |
 
 A razão de uma recusa código `1` sai em stderr, nomeando o campo (e, para
 chave desconhecida, uma sugestão por `difflib`). Regra inviolável 6: o
@@ -94,6 +94,16 @@ builder aceita uma única raiz de execução — lê só `entrega.json` dela e
 escreve só dentro dela; um `entrega.json` cujo caminho resolvido (symlink
 seguido) sai da raiz é recusado, nunca lido através do link; nenhuma
 escrita de `relatorio.html`/`qc.json` passa através de um symlink.
+
+**Paridade por caso no build** (item 6; §13 e §18.2 do desenho). Antes do QC, o builder
+chama a verificação da integração — `skills/er-valuation/scripts/paridade.py`, pela CLI,
+num subprocesso, uma vez por build — com o `caso` e o `resultados` da entrega. Ela roda a
+fachada do espelho em node e compara pelo mesmo comparador do badge do laboratório, e o
+veredito entra nas duas passadas do QC: `divergente` é o HARD FAIL `paridade_divergente`
+(nada é emitido; uma verificação que não fecha — a fachada recusou o caso, o node saiu
+com erro — também diverge); `indisponivel`, sem node na máquina, é o REQUIRED DISCLOSURE
+`paridade_nao_verificada_no_build`, e o badge confere quando o relatório abre. A
+verificação cobre o que o comparador do badge cobre — a curvatura continua fora dele.
 
 ## O contrato `entrega/1`
 
@@ -442,7 +452,9 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `insumos_do_caso_desconhecidos` | HARD FAIL | o catálogo não publica `insumos_do_caso` na forma do contrato — sem o mapa nenhum insumo seria exigido, e as regras de proveniência falham fechadas |
 | `eixos_de_reversa_desconhecidos` | HARD FAIL | `resultados.reversa` publicada e o catálogo sem `eixos_de_reversa` na forma — `obrigatorio` booleano e rótulo no idioma para cada eixo publicado —: sem a declaração nenhum eixo seria obrigatório, e a regra do eixo obrigatório sem raiz falha fechada |
 | `escolha_sem_razao` | HARD FAIL | uma por chave de `resultados.escolhas_metodologicas` que `analise.escolhas` não declara — com o rótulo da escolha no catálogo; nenhuma escolha que a metodologia deixa em aberto recebe default (§18.3), e o painel da §8.2 só sai com escolha, alternativa, impacto e razão |
+| `paridade_divergente` | HARD FAIL | o veredito da verificação de paridade por caso é `divergente` (ou nenhum dos três estados): a fachada do espelho, em node, não reproduz o que o Python publicou — preço, múltiplo, upside e chaves de diagnóstico de cada cenário, as células das grades e a leitura da reversa —, ou a verificação não fechou; a mensagem cita as primeiras divergências (`qc.DIVERGENCIAS_CITADAS_NA_MENSAGEM`) e quantas são |
 | `escolhas_desconhecidas` | HARD FAIL | `resultados.escolhas_metodologicas` publicado e o catálogo sem `escolhas_metodologicas` na forma — rótulo e gatilho no idioma para cada chave publicada —: sem eles o painel sairia com o código cru, e a regra falha fechada |
+| `paridade_nao_verificada_no_build` | REQUIRED DISCLOSURE | o veredito da verificação de paridade é `indisponivel`: não havia node na máquina do build, e só o badge do laboratório confere a paridade, quando o relatório abre |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
 | `fronteira_de_escopo_declarada` | REQUIRED DISCLOSURE | sob `resultados.fronteira_de_escopo`: a limitação de escopo da §11, com o rótulo que o catálogo dá à classe — o bloco de avisos da Tese nunca diz "nenhum aviso" sob fronteira |
@@ -472,7 +484,7 @@ mesmo quando o builder recusa emitir o HTML.
 
 A §11 do desenho lista o que o QC impõe, em três níveis. A tabela abaixo dá dono a cada item,
 pelo texto do desenho: os códigos de QC que o garantem, o mecanismo fora do QC (o gate do caso, a
-CI, o badge do laboratório) ou a pendência, com o dono (`item 6` ou `item 8`) e a razão. A
+CI, o badge do laboratório) ou a pendência, com o dono (`item 8`) e a razão. A
 trava `tests/test_relatorio_cobertura_11.py` lê a §11, as duas tabelas e o `qc.py`: os itens de
 cada nível são os do desenho, todo código citado existe no `qc.py` com o nível da linha e tem
 mensagem no dicionário, todo código que o `qc.py` constrói aparece numa das duas tabelas, e toda
@@ -480,7 +492,7 @@ pendência tem dono permitido e razão.
 
 | Nível | Item da §11 | Códigos de QC | Fora do QC | Pendência |
 |---|---|---|---|---|
-| HARD FAIL | paridade Python↔JS divergente | — | a CI (`tests/test_paridade_js.py`, `tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`) e o badge do laboratório, que bloqueia a edição quando o motor do navegador não reproduz o que o relatório publicou (5C) | **item 6**: a paridade por caso no build — o builder não roda node, e um caso cuja paridade diverge ainda emite |
+| HARD FAIL | paridade Python↔JS divergente | `paridade_divergente` | a CI (`tests/test_paridade_js.py`, `tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`) e o badge do laboratório, que bloqueia a edição quando o motor do navegador não reproduz o que o relatório publicou (5C) | — |
 | HARD FAIL | `selftest` ou suíte da metodologia falhando | — | a CI (`tests/test_vendor_multiplos_justos.py` roda o `selftest` e as duas fases de `testes.py`) | **item 8**: a suíte por execução — o M4 exige "suíte PASS", e o builder não a roda |
 | HARD FAIL | número material do valuation sem proveniência | `insumo_sem_proveniencia`, `usado_em_fora_dos_insumos`, `insumos_do_caso_desconhecidos`, `referencia_fora_do_ledger`, `numero_sem_proveniencia`, `placeholder_nao_resolvido`, `placeholder_malformado` | — | — |
 | HARD FAIL | gráfico com dados não rastreáveis | `serie_nao_rastreavel`, `formula_invalida`, `serie_de_tamanho_incompativel`, `series_de_datasets_incompativeis`, `overlay_nao_resolvido`, `dataset_sem_proveniencia`, `referencia_fora_do_ledger` | — | — |
@@ -514,6 +526,7 @@ Os códigos de QC que servem a outras seções do desenho:
 | `eixos_de_reversa_desconhecidos` | HARD FAIL | §9: o que está no preço — sem a declaração dos eixos no catálogo, a regra do eixo obrigatório sem raiz falha fechada |
 | `escolha_sem_razao` | HARD FAIL | §8.2 e §18.3: o painel de escolhas metodológicas traz a razão econômica de cada escolha, e nenhuma escolha que a metodologia declara sem default recebe default |
 | `escolhas_desconhecidas` | HARD FAIL | §8.2: o painel de escolhas metodológicas — sem a declaração das escolhas no catálogo, o rótulo e o gatilho de cada uma sairiam como código cru, e a regra falha fechada |
+| `paridade_nao_verificada_no_build` | REQUIRED DISCLOSURE | §13 e §18.2: a paridade verificada por caso no build, com falha fechada — sem node na máquina do build ela não é verificada ali, e a entrega declara que só o badge a confere |
 | `produto_com_preco_alvo` | HARD FAIL | §5: os dois produtos — sob `leitura_de_preco` a entrega lê o que o preço embute e não conclui valor, e a faixa piso–base–teto é preço-alvo de manchete. Mesma regra da fronteira de escopo, com o produto como segundo gatilho |
 
 ## As três abas (`render.py`)
@@ -630,7 +643,13 @@ duas perguntas.
 7. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
    ponto do cenário marcado por igualdade exata — e uma matriz por grade 2D, cujo título
    nomeia o cenário que a grade perturbou;
-8. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
+8. os **drivers exógenos** (item 6, §8.4), só quando `resultados.drivers` é publicado: a
+   tabela do registro do motor — o nome, a base e o spot (só localizados: a unidade é do
+   caso), o gap, a elasticidade, o impacto, a marca do limiar e o tratamento pelas duas
+   marcas que a integração publica (`acima_do_limiar`, `vira_cenario`), nunca pelo limiar
+   nem pela prosa do motor — e o efeito líquido agregado contra a soma dos brutos. É
+   precomputado e sai **rotulado como congelado**;
+9. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
    `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
    `unidade` da leitura, a identificação rotulada e o intervalo (a curvatura, não), os
    toques tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
@@ -645,17 +664,17 @@ duas perguntas.
    da leitura aparecem e somem com a edição, no host que o painel reescreve. Sem reversa, o
    rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`, `sugestao`,
    `leitura`, `algebra`) nem código cru chega à aba;
-9. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
+10. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
    unidade da premissa que ela substituiu, a premissa pelo rótulo do catálogo, o preço que
    resulta e a nota de que é leitura, **jamais fair value**;
-10. o **valor ponderado por probabilidade**, colapsado e só quando publicado: a soma de
+11. o **valor ponderado por probabilidade**, colapsado e só quando publicado: a soma de
     peso × preço que a integração compôs, cada peso ao lado do seu cenário, e a nota de que
     os pesos são julgamento fora da fórmula e o número **nunca substitui bear, base e bull**;
-11. o **cross-check por um segundo método** (§8.1), que sai **sempre**: com o bloco
+12. o **cross-check por um segundo método** (§8.1), que sai **sempre**: com o bloco
     publicado, a rota oposta rotulada, o preço dela e a diferença contra a manchete; sem
     ele, a razão da ausência que `analise.cross_check.ausente` declara; sem os dois, a frase
     de que não foi declarado — um cross-check que ninguém declarou é informação, não silêncio;
-12. o **re-teste da hipótese terminal**, quando declarado: o resultado pelo rótulo do
+13. o **re-teste da hipótese terminal**, quando declarado: o resultado pelo rótulo do
     dicionário (`mantida`/`trocada`) e o texto do analista.
 
 **A escala dos montantes** (`resultados.escala_monetaria`) entra só onde a unidade do
@@ -735,7 +754,7 @@ caminho), nunca um `KeyError` cru.
 | `scripts/placeholders.py` | Resolve `{{...}}`; formata número por idioma (sem `locale`); publica a RECEITA de formatação que o JS aplica; a lista única da prosa auditável (`campos_de_prosa`/`resolver_prosa`), que o QC, o log da Evidência e a aba Tese leem; e o leitor do mapa das conclusões de valor (`conclusoes_de_valor`/`conclusao_de_valor`), que o QC e a tela consultam sob fronteira de escopo; e o do mapa dos insumos do caso (`insumos_do_caso`/`insumo_do_caso`), com o mesmo casador de padrão, que o QC consulta para exigir proveniência |
 | `scripts/qc.py` | Achados estruturados dos três níveis |
 | `scripts/render.py` | Compõe as três abas do HTML a partir de `entrega`/`catalogo`/achados e da ficha técnica que o builder compôs; embute o payload dos exhibits e dos painéis |
-| `scripts/builder.py` | CLI: orquestra, limpa saída anterior, resolve mensagem do dicionário, compõe a ficha técnica da execução (`compor_ficha_tecnica`) e a grava em `ficha-tecnica.json` junto do relatório, decide o exit code |
+| `scripts/builder.py` | CLI: orquestra, limpa saída anterior, chama a verificação de paridade da integração uma vez por build (`_verificar_paridade`), resolve mensagem do dicionário, compõe a ficha técnica da execução (`compor_ficha_tecnica`) e a grava em `ficha-tecnica.json` junto do relatório, decide o exit code |
 
 | Asset | Papel |
 |---|---|

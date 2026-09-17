@@ -96,6 +96,11 @@ escolha sem default recebe default: a que a integração precificou sai com a ra
 econômica do analista, §8.2); o segundo é a falha fechada do molde de
 `eixos_de_reversa_desconhecidos`. O limiar de materialidade das escolhas continua fora
 daqui — é da integração, e o relatório só lê a decisão. Ver `_achados_das_escolhas`.
+
+Item 6, Task 2 (D2): a paridade Python↔JS por caso, no build — `paridade_divergente`
+(HARD FAIL) e `paridade_nao_verificada_no_build` (REQUIRED DISCLOSURE). Quem verifica é a
+integração; o builder a chama e passa o veredito a `avaliar` (`paridade`), e este módulo
+só o converte em achado. Ver `_achado_da_paridade`.
 """
 
 import json
@@ -1808,6 +1813,63 @@ def _achados_das_escolhas(entrega: dict, catalogo: dict, idioma: str) -> list[Ac
             for indice, chave in enumerate(chaves) if chave not in com_razao]
 
 
+# --------------------------------------------------------------------------
+# Item 6, Task 2 (D2 do plano docs/superpowers/plans/2026-09-16-v4-item6-fixture-
+# sintetica.md): o veredito da paridade por caso que a integração devolve ao builder — o
+# contrato entre os dois lados são os três estados, que `tests/test_relatorio_paridade_
+# build.py` prende contra os da integração.
+# --------------------------------------------------------------------------
+
+ESTADO_DA_PARIDADE_OK: str = "ok"
+ESTADO_DA_PARIDADE_DIVERGENTE: str = "divergente"
+ESTADO_DA_PARIDADE_INDISPONIVEL: str = "indisponivel"
+ESTADOS_DA_PARIDADE: tuple[str, ...] = (
+    ESTADO_DA_PARIDADE_OK, ESTADO_DA_PARIDADE_DIVERGENTE, ESTADO_DA_PARIDADE_INDISPONIVEL)
+
+# Quantas divergências a mensagem cita pelo nome; o `quantidade` do achado diz quantas são.
+# Um `resultados` inteiro de outro caso diverge célula a célula, e a lista inteira afogaria a
+# primeira — que já diz onde olhar.
+DIVERGENCIAS_CITADAS_NA_MENSAGEM: int = 3
+
+
+def _descricao_da_divergencia(divergencia) -> str:
+    """Uma divergência do comparador em uma linha: onde (o cenário, o eixo ou a grade, e a
+    chave) e os dois números — como o comparador os publicou, sem formatação de idioma."""
+    item = _objeto(divergencia)
+    return (f"{item.get('cenario')} · {item.get('chave')}: "
+            f"Python {json.dumps(item.get('python'), ensure_ascii=False)}, "
+            f"JS {json.dumps(item.get('js'), ensure_ascii=False)}")
+
+
+def _achado_da_paridade(paridade: dict | None) -> Achado | None:
+    """O achado do veredito da paridade (D2), ou nenhum:
+    - `None` — nenhum veredito, o caso de quem chama `avaliar` fora do builder: nenhum achado;
+    - `ok`: nenhum achado;
+    - `indisponivel` (não havia node na máquina do build): REQUIRED DISCLOSURE
+      `paridade_nao_verificada_no_build` — a entrega emite e diz que só o badge a confere;
+    - qualquer outro estado — `divergente`, ou um veredito fora do contrato —: HARD FAIL
+      `paridade_divergente`, com a razão de a verificação não ter fechado, quando houver,
+      antes das divergências. Falha fechada: nada que não seja `ok` ou `indisponivel`
+      emite em silêncio."""
+    if paridade is None:
+        return None
+    estado = _objeto(paridade).get("estado")
+    if estado == ESTADO_DA_PARIDADE_OK:
+        return None
+    if estado == ESTADO_DA_PARIDADE_INDISPONIVEL:
+        return Achado("REQUIRED_DISCLOSURE", "paridade_nao_verificada_no_build", "resultados", {})
+    descricoes = [_descricao_da_divergencia(item) for item in _lista(_objeto(paridade).get("divergencias"))]
+    erro = _objeto(paridade).get("erro")
+    if isinstance(erro, str) and erro.strip():
+        descricoes.insert(0, erro.strip())
+    if not descricoes:
+        descricoes = [f"veredito sem divergência nomeada: {json.dumps(paridade, ensure_ascii=False)}"]
+    citadas = "; ".join(descricoes[:DIVERGENCIAS_CITADAS_NA_MENSAGEM])
+    return Achado("HARD_FAIL", "paridade_divergente", "resultados", {
+        "quantidade": len(descricoes),
+        "divergencias": citadas + ("; …" if len(descricoes) > DIVERGENCIAS_CITADAS_NA_MENSAGEM else "")})
+
+
 def _achados_da_valuation(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
     """As regras da Task 4 da 5F que leem os blocos da aba Valuation, na ordem da aba: a
     conservação de capital (cenários), as grades de sensibilidade, o painel de escolhas
@@ -1819,10 +1881,15 @@ def _achados_da_valuation(entrega: dict, catalogo: dict, idioma: str) -> list[Ac
             + _achados_eixos_da_reversa(resultados, catalogo, idioma))
 
 
-def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | None = None) -> list[Achado]:
+def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | None = None,
+            paridade: dict | None = None) -> list[Achado]:
     """Roda as regras de QC; devolve os achados em ordem determinística
     (mesma entrada, mesma lista de achados, sempre — nada de relógio, nada
     de ordem de `set`).
+
+    `paridade` (item 6, Task 2, D2): o veredito da paridade por caso que o builder obteve
+    da integração, igual nas duas passadas. `None` (o padrão) é um chamador fora do
+    builder — nenhum achado de paridade. Ver `_achado_da_paridade`.
 
     `contrato_ledger` (fatia 5E, Task 2): o dict do contrato `ledger/1` do
     `er-evidencia`, que `builder.py` lê pela constante dos assets externos. Lido
@@ -1841,6 +1908,10 @@ def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | No
     achado_hash = _achado_hash(entrega)
     if achado_hash is not None:
         achados.append(achado_hash)
+
+    achado_da_paridade = _achado_da_paridade(paridade)
+    if achado_da_paridade is not None:
+        achados.append(achado_da_paridade)
 
     achados.extend(_achados_prosa(entrega, catalogo))
     achados.extend(_achados_exhibits(entrega))

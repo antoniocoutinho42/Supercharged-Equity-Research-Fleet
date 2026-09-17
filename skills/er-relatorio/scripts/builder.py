@@ -9,9 +9,15 @@
   `qc.json` (regra inviolável 2: nenhum `relatorio.html` sai).
 - código 1: uso incorreto, `entrega.json` ausente/malformado/incompatível, o
   contrato do ledger (`ledger/1`, do `er-evidencia`) ilegível ou fora da forma
-  que o relatório lê, ou um asset PRÓPRIO do skill (dicionário/catálogo) sem a
-  chave que o render precisa — nada é escrito; a razão sai em stderr, nomeando o campo/chave,
+  que o relatório lê, um asset PRÓPRIO do skill (dicionário/catálogo) sem a
+  chave que o render precisa, ou a verificação de paridade da integração sem
+  veredito (item 6) — nada é escrito; a razão sai em stderr, nomeando o campo/chave,
   com sugestão quando aplicável.
+
+Paridade por caso (item 6, Task 2): antes do QC, o builder chama a verificação
+da integração uma vez e passa o veredito às duas passadas — `divergente` é o
+HARD FAIL `paridade_divergente`, `indisponivel` (sem node) o REQUIRED DISCLOSURE
+`paridade_nao_verificada_no_build`.
 
 QC roda em DUAS passadas (A8, regra inviolável 2): a primeira, com
 `html=None`, decide se há HARD FAIL nas regras que não dependem do HTML —
@@ -26,13 +32,15 @@ de `skills/er-relatorio/scripts/`, não importa nada de `er-valuation` nem
 do vendor. O único caminho para dentro da camada de integração é a
 constante `ASSETS_DA_INTEGRACAO`, abaixo — o catálogo de apresentação e,
 desde a fatia 5C, o espelho do núcleo e a fachada que o laboratório da aba
-Valuation chama no navegador. `tests/test_relatorio_fronteira.py` trava os dois mecanicamente:
+Valuation chama no navegador; desde o item 6, a CLI da verificação de paridade,
+chamada por subprocesso. `tests/test_relatorio_fronteira.py` trava os dois mecanicamente:
 nenhum import proibido, e nenhum literal de código fora dessa constante
 (ou de docstring) nomeia a integração.
 """
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -62,11 +70,16 @@ RAIZ_DO_REPO = Path(__file__).resolve().parents[3]
 # `er-evidencia` (§3.2 do desenho, "dono do schema do ledger"): o relatório
 # valida a forma do ledger contra ele e decide pelas flags que ele declara, e
 # por isso o lê daqui a cada build — nunca o copia para dentro do skill.
+#
+# Item 6, Task 2 (D2): a verificação da paridade por caso entra pela mesma porta. Ela é da
+# integração — que sabe onde a fachada mora e como rodá-la em node —, e o builder a CHAMA
+# pela CLI dela, num subprocesso: nunca a importa (E3), e nunca sabe de node.
 ASSETS_DA_INTEGRACAO = {
     "catalogo": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json",
     "espelho": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "motor_espelho.js",
     "fachada": RAIZ_DO_REPO / "skills" / "er-valuation" / "assets" / "espelho_fachada.js",
     "contrato_ledger": RAIZ_DO_REPO / "skills" / "er-evidencia" / "assets" / "contrato_ledger.json",
+    "paridade": RAIZ_DO_REPO / "skills" / "er-valuation" / "scripts" / "paridade.py",
 }
 
 
@@ -88,6 +101,45 @@ def _carregar_js_da_integracao() -> dict:
     colados no template, que tem `$marcador` próprio."""
     return {nome: ASSETS_DA_INTEGRACAO[nome].read_text(encoding="utf-8")
             for nome in ("espelho", "fachada")}
+
+
+class ParidadeNaoVerificavel(Exception):
+    """A CLI da verificação de paridade não devolveu um veredito do contrato — saiu com erro,
+    estourou o prazo ou escreveu outra coisa. Código 1: não é o caso que diverge, é a
+    verificação que não rodou, e nada é emitido."""
+
+
+# O prazo da chamada inteira: o da própria verificação (um processo node) com folga para a
+# partida do interpretador.
+TIMEOUT_DA_PARIDADE_SEGUNDOS: float = 180
+
+
+def _verificar_paridade(entrega_dict: dict) -> dict:
+    """O veredito da paridade por caso (item 6, Task 2, D2), pela CLI da integração: uma
+    chamada por build, com o `caso` e o `resultados` da entrega pelo stdin e o veredito
+    (`{"estado": ...}`, um de `qc.ESTADOS_DA_PARIDADE`) no stdout. Este módulo não
+    interpreta o veredito — `qc.avaliar` o converte em achado —; só recusa, com
+    `ParidadeNaoVerificavel`, uma resposta que não é veredito nenhum."""
+    entrada = json.dumps({"caso": entrega_dict["caso"], "resultados": entrega_dict["resultados"]},
+                         ensure_ascii=False)
+    try:
+        processo = subprocess.run(
+            [sys.executable, str(ASSETS_DA_INTEGRACAO["paridade"])], input=entrada,
+            capture_output=True, text=True, encoding="utf-8", timeout=TIMEOUT_DA_PARIDADE_SEGUNDOS)
+    except (OSError, subprocess.TimeoutExpired) as erro:
+        raise ParidadeNaoVerificavel(f"a verificação de paridade não rodou: {erro}.") from erro
+    if processo.returncode != 0:
+        raise ParidadeNaoVerificavel(
+            f"a verificação de paridade saiu com código {processo.returncode}: {processo.stderr.strip()}")
+    try:
+        veredito = json.loads(processo.stdout)
+    except json.JSONDecodeError as erro:
+        raise ParidadeNaoVerificavel(f"a verificação de paridade não devolveu JSON: {erro}.") from erro
+    if not isinstance(veredito, dict) or veredito.get("estado") not in qc.ESTADOS_DA_PARIDADE:
+        raise ParidadeNaoVerificavel(
+            f"a verificação de paridade devolveu {veredito!r}, fora dos estados do contrato "
+            f"({', '.join(qc.ESTADOS_DA_PARIDADE)}).")
+    return veredito
 
 
 def _montar_qc_json(achados: list, dicionario: dict) -> dict:
@@ -270,11 +322,21 @@ def main(argv: list[str] | None = None) -> int:
 
     raiz = Path(args.raiz).resolve()
 
+    # Item 6, Task 2 (D2; §13 e §18.2): a paridade por caso, antes de qualquer passada do QC
+    # — uma chamada por build, e o mesmo veredito nas duas passadas. `divergente` vira o
+    # HARD FAIL `paridade_divergente` (nada é emitido); `indisponivel`, o disclosure
+    # `paridade_nao_verificada_no_build`. Uma verificação que nem devolve veredito é código 1.
+    try:
+        paridade = _verificar_paridade(entrega_dict)
+    except ParidadeNaoVerificavel as erro:
+        print(str(erro), file=sys.stderr)
+        return 1
+
     # Fase 1 (A8, regra inviolável 2): QC sem HTML nenhum -- nada foi
     # renderizado ainda, então `relatorio_nao_autocontido` não pode disparar
     # aqui (qc.avaliar trata html=None como "regra ainda não examinável").
     # Um HARD FAIL desta fase já recusa emitir, sem nunca chamar render.compor.
-    achados = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=None)
+    achados = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=None, paridade=paridade)
     if any(achado.nivel == "HARD_FAIL" for achado in achados):
         qc_json = _montar_qc_json(achados, dicionario)
         try:
@@ -320,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     # demais regras são puras sobre `entrega`/`catalogo` e não podem mudar
     # de resultado entre as duas passadas -- `achados_finais` é sempre
     # `achados` com, no máximo, esse único achado extra ao final.
-    achados_finais = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=pagina)
+    achados_finais = qc.avaliar(entrega_dict, catalogo, contrato_ledger, html=pagina, paridade=paridade)
 
     qc_json = _montar_qc_json(achados_finais, dicionario)
     try:
