@@ -1052,7 +1052,7 @@
     },
     "fraca": {
       "rotulo": {
-        "pt-BR": "Identificação fraca: a função é quase plana e a raiz é ruído com cara de precisão; leia com a curvatura"
+        "pt-BR": "Identificação fraca: a função é quase plana e a raiz é ruído com cara de precisão; não a leia como número preciso"
       }
     }
   },
