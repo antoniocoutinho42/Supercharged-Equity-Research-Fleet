@@ -1817,3 +1817,62 @@ def test_o_cenario_com_o_teto_da_alavanca_sai_rotulado_como_nao_cenario(tmp_path
     assert fotos["carga"]["tetos"] == {"base": ""}
     assert fotos["alavancado"]["tetos"] == {"base": esperado}
     assert fotos["restaurado"]["tetos"] == {"base": ""}
+
+
+@pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
+def test_o_cenario_que_declara_a_variavel_sem_valor_como_entrada_nao_nasce_cego(tmp_path):
+    """Defeito medido no golden case real (item 9, VLID3): a aba abria com a matriz 2D
+    vazia, sem erro nenhum no console.
+
+    A causa não era o desenho: era o campo da variável do triângulo que o CASO não
+    declara (o `rir`). Toda fixture até aqui declarava `output: 'rir'` — o campo nascia
+    como VISOR e era pulado na colheita. O caso real tem um cenário com
+    `inputs: [roic, rir], output: g`: ali o `rir` é ENTRADA, o campo nasce vazio (o caso
+    não traz esse número em lugar nenhum — dívida da 5F, D8) e era lido como premissa
+    obrigatória ausente. O cenário nascia CEGO na primeira colheita, e como ele é o
+    cenário das grades E da reversa, a página inteira era apagada em silêncio: preço,
+    tabela 1D, matriz, os quatro eixos do que está no preço, o teto e as limitações.
+
+    Vazio num campo que o caso não declara quer dizer NÃO DECLARADO, não "não sei": o
+    vetor segue como o caso o declara — que é o vetor com que o motor produziu o
+    `resultados` — e nada cega. Este teste monta a MESMA configuração do caso real e
+    exige a página viva, campo a campo, contra o que o Python publicou."""
+    variavel_sem_valor = "rir"
+
+    def _mutar(caso: dict) -> None:
+        declarado = caso["cenarios"]["base"]["triangulo"]
+        variaveis = list(declarado["inputs"]) + [declarado["output"]]
+        saida = declarado["inputs"][0]
+        caso["cenarios"]["base"]["triangulo"] = {
+            "inputs": [outra for outra in variaveis if outra != saida], "output": saida}
+
+    pagina, entrega = _pagina(FIXTURE, mutar_caso=_mutar)
+    configuracao = entrega["caso"]["cenarios"]["base"]["triangulo"]
+    assert variavel_sem_valor in configuracao["inputs"], \
+        "a variável sem valor declarado não é entrada — o teste não reproduz o caso real"
+    assert variavel_sem_valor not in CATALOGO["premissas"][entrega["resultados"]["rota"]]
+    assert variavel_sem_valor not in entrega["caso"]["cenarios"]["base"]["premissas"]
+
+    fotos = _laboratorio_vivo(pagina, tmp_path, entrega=entrega)
+    carga, antes = fotos["carga"], fotos["antes"]
+
+    # 1. O campo sem valor declarado: vazio, editável e NÃO inválido — nada a declarar.
+    (campo,) = [c for c in carga["campos"] if c["premissa"] == variavel_sem_valor]
+    assert (campo["value"], campo["disabled"], campo["invalido"]) == ("", False, None), campo
+
+    # 2. O cenário continua vivo, com o número que o Python publicou.
+    assert carga["saidas"]["base"] == _saidas_publicadas(entrega["resultados"], entrega["caso"]["moeda"])
+    assert carga["badge"]["estado"] == "ok"
+
+    # 3. E com ele a página: tabela 1D, matriz, eixos, teto e limitações.
+    assert carga["grades"] == antes["grades"]
+    assert fotos["matrizesDoRender"] and carga["matrizes"] == fotos["matrizesDoRender"]
+    assert carga["eixos"] == antes["eixos"]
+    assert (carga["teto"], carga["limitacoes"]) == (antes["teto"], antes["limitacoes"])
+
+    # 4. A variável de SAÍDA da identidade fica como visor — e, sem a terceira variável,
+    # com o valor que o caso declara, que é o que o preço em vigor usou. Apagá-lo deixaria
+    # a tela em branco ao lado de um número calculado com ele.
+    (derivado,) = [c for c in carga["campos"] if c["premissa"] == configuracao["output"]]
+    assert derivado["disabled"] is True
+    assert float(derivado["value"]) == entrega["caso"]["cenarios"]["base"]["premissas"][configuracao["output"]]

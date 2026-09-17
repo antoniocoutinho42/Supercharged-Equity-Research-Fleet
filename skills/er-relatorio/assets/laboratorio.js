@@ -244,7 +244,20 @@
           continue;
         }
         var lido = Number(campo.value);
-        if (String(campo.value).trim() === "" || !isFinite(lido)) {
+        var semTexto = String(campo.value).trim() === "";
+        // Campo que o CASO nao declara (`data-laboratorio-opcional`: a variavel do
+        // triangulo que nao e premissa da rota): vazio nele quer dizer NAO DECLARADO, nao
+        // "nao sei". O vetor segue sem a chave, exatamente como o caso a declara, e o
+        // cenario NAO cega. Cegar aqui apagava a pagina inteira na carga de um caso cuja
+        // configuracao declara essa variavel como ENTRADA — sem numero no cenario, sem
+        // leitura do que esta no preco, sem tabela 1D e sem matriz, e sem erro nenhum.
+        // Valor ILEGIVEL (texto que nao vira numero) continua cegando: ai o analista
+        // declarou algo, e o algo nao fecha.
+        if (semTexto && campo.getAttribute("data-laboratorio-opcional") !== null) {
+          campo.removeAttribute("aria-invalid");
+          continue;
+        }
+        if (semTexto || !isFinite(lido)) {
           campo.setAttribute("aria-invalid", "true");
           cegos[nomeCenario] = true;
           continue;
@@ -576,8 +589,12 @@
       var derivado = !!triangulo && nome === triangulo.variavel;
       campos[indice].disabled = derivado;
       if (derivado) {
-        campos[indice].value = (typeof triangulo.valor === "number" && isFinite(triangulo.valor))
-          ? String(triangulo.valor) : "";
+        // Identidade que NAO fecha (falta a terceira variavel, que o caso nao declara)
+        // deixa o campo como esta: o vetor EM VIGOR e' o declarado, e apagar o numero
+        // deixaria a tela em branco ao lado de um preco calculado com ele.
+        if (typeof triangulo.valor === "number" && isFinite(triangulo.valor)) {
+          campos[indice].value = String(triangulo.valor);
+        }
         campos[indice].removeAttribute("aria-invalid");
       }
     }

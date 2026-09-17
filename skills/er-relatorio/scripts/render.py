@@ -1811,6 +1811,13 @@ def _triangulo_do_laboratorio_html(rota: str, nome: str, triangulo: dict, indice
     # entre as premissas, e sem ele duas das três configurações não teriam entrada. Ela
     # nasce vazia — o caso não a declara em lugar nenhum (dívida da 5F, D8) —, e o painel
     # a preenche com o valor que a identidade resolve a cada redesenho.
+    #
+    # `data-laboratorio-opcional` é o que diz ao painel que o CASO não declara valor para
+    # ela: vazio aqui significa "não declarado", não "não sei". Sem essa marca, um cenário
+    # cuja configuração declara essa variável como ENTRADA (e o caso real tem um:
+    # `inputs: [roic, rir], output: g`) nascia CEGO na primeira colheita — e, quando é o
+    # cenário das grades e da reversa, apagava a leitura do que está no preço, as tabelas
+    # 1D e a matriz da página inteira, sem erro nenhum.
     for variavel in configuracoes[0]["inputs"] + [configuracoes[0]["output"]]:
         if variavel in ((catalogo.get("premissas") or {}).get(rota) or {}):
             continue
@@ -1819,8 +1826,8 @@ def _triangulo_do_laboratorio_html(rota: str, nome: str, triangulo: dict, indice
             f'<div class="lab-campo" data-laboratorio-premissa="{html.escape(str(variavel))}">'
             f'<label for="{campo}">'
             f'{_texto_de_dado_html(_rotulo_do_triangulo(catalogo, rota, variavel, idioma))}</label>'
-            f'<input id="{campo}" data-laboratorio-entrada="numero" type="number" step="any" '
-            f'value="" data-laboratorio-original="">'
+            f'<input id="{campo}" data-laboratorio-entrada="numero" data-laboratorio-opcional '
+            f'type="number" step="any" value="" data-laboratorio-original="">'
             f'</div>'
         )
     return f'<div class="lab-triangulo">{"".join(campos)}</div>'
