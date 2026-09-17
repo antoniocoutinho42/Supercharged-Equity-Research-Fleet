@@ -14,9 +14,8 @@ description: >-
   veredicto, fronteira de escopo e a aba renderizada) e 5E (o ledger
   `ledger/1` do `er-evidencia`, a proveniência dos insumos do caso, o
   consenso e o confronto), com as ondas de correção das revisões finais.
-  NÃO use para o relatório de 2 abas em produção (esse é
-  `er-relatorio-html`, v3); não use para rodar o valuation (`er-valuation`)
-  nem para o workflow da análise (`er-analise`).
+  NÃO use para rodar o valuation (`er-valuation`) nem para o workflow da
+  análise (`er-analise`).
 ---
 
 # er-relatorio — builder determinístico do relatório v4 (três abas)

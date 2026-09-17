@@ -12,8 +12,7 @@ description: >-
   caso ou rodar o valuation (`er-valuation`), validar a entrega ou compor o
   relatório (`er-relatorio`, cujo builder é quem valida o ledger), conduzir a
   análise (`er-analise`) nem como fonte de metodologia
-  (`er-multiplos-justos`); e não use para a coleta OpenBB do fleet v3 em
-  produção (essa é `er-dados-openbb`).
+  (`er-multiplos-justos`).
 ---
 
 # er-evidencia — doutrina de pesquisa e proveniência

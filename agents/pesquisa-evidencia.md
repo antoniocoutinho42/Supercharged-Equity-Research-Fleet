@@ -7,7 +7,7 @@ description: >-
   Encontra e estrutura evidência com proveniência, em registros e lacunas no
   contrato ledger/1 da skill er-evidencia. NÃO use para interpretar, calibrar
   premissa, escolher cenário, montar o caso, escrever tese ou compor
-  relatório; nem para a coleta OpenBB do fleet v3 (essa é o data-manager).
+  relatório.
 disallowedTools: Edit, NotebookEdit
 ---
 

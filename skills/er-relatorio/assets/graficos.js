@@ -20,8 +20,8 @@
  * }
  *
  * Formatacao pt-BR (milhar '.', decimal ',') e SEMPRE por `formatar` deste
- * modulo -- nunca `toLocaleString("en-US")` (o que o adaptador legado,
- * skills/er-relatorio-html/assets/charts.js, fazia). `dicionarioFmt`
+ * modulo -- nunca `toLocaleString("en-US")` (o que o adaptador de graficos
+ * da v3 fazia, removido no item 10). `dicionarioFmt`
  * (parametro de `renderizar`) carrega so PROSA de interface ja traduzida
  * (hoje, a mensagem de "grafico indisponivel") -- os separadores numericos
  * NAO vem dele: `formatar(valor, unidade, idioma)` tem sua PROPRIA tabela

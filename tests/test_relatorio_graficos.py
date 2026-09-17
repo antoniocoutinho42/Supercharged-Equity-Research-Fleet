@@ -27,8 +27,27 @@ import pytest
 RAIZ = Path(__file__).resolve().parent.parent
 SCRIPTS = RAIZ / "skills" / "er-relatorio" / "scripts"
 ASSETS = RAIZ / "skills" / "er-relatorio" / "assets"
-ASSETS_LEGADO = RAIZ / "skills" / "er-relatorio-html" / "assets"
 GRAFICOS_JS = ASSETS / "graficos.js"
+
+# uPlot v1.6.27 (MIT) vendorizado. Até o item 10 estes arquivos eram conferidos
+# byte a byte contra a cópia legada de `skills/er-relatorio-html/assets/`; com a
+# skill legada removida, a âncora vira literal. A garantia é a MESMA — ninguém
+# re-minifica o uPlot nem converte o fim de linha destes arquivos sem reprovar
+# aqui. Trocar de versão é decisão humana explícita: troque o arquivo E o hash.
+#
+# Os três hashes são os do BLOB COMMITADO (`git show HEAD:<path> | sha256sum`),
+# isto é, o que um checkout limpo entrega — não o que estava no disco desta
+# máquina. A diferença é real: com `core.autocrlf=true` no Windows, a `LICENSE`
+# vinha do índice em LF e chegava ao disco em CRLF, com sha256 diferente. O
+# teste antigo não via isso porque comparava duas cópias convertidas do mesmo
+# jeito; um literal tirado do disco passaria aqui e reprovaria na CI (ubuntu,
+# sem conversão). Por isso a `LICENSE` ganhou `-text` no `.gitattributes`, ao
+# lado dos outros dois: agora as três chegam verbatim aos dois sistemas.
+SHA256_UPLOT = {
+    "uPlot.iife.min.js": "18dd3f1a54320f5e28a6655e11b79a5a3a30e329eb0d01b97d0b0b1ceae3ed10",
+    "uPlot.min.css": "df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04",
+    "uPlot.LICENSE": "8f989229699b4fe2f1a0432d0e9edc338a8a911e250e2d1b01ecd770a5f5b1bd",
+}
 
 sys.path.insert(0, str(SCRIPTS))
 import exhibits  # noqa: E402
@@ -88,15 +107,22 @@ EXHIBIT_TABELA = {
 
 
 # --------------------------------------------------------------------------
-# uPlot vendorizado -- byte a byte contra a cópia legada (Global Constraints
-# da 5B; a cópia legada só sai no item 10).
+# uPlot vendorizado -- byte a byte contra o sha256 congelado (Global
+# Constraints da 5B; a cópia legada que servia de âncora saiu no item 10).
 # --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("nome", ["uPlot.iife.min.js", "uPlot.min.css", "uPlot.LICENSE"])
-def test_uplot_vendorizado_e_byte_identico_ao_legado(nome):
-    legado = hashlib.sha256((ASSETS_LEGADO / nome).read_bytes()).hexdigest()
-    novo = hashlib.sha256((ASSETS / nome).read_bytes()).hexdigest()
-    assert novo == legado, f"{nome} diverge da cópia legada"
+@pytest.mark.parametrize("nome", sorted(SHA256_UPLOT))
+def test_uplot_vendorizado_e_byte_identico_ao_congelado(nome):
+    bruto = (ASSETS / nome).read_bytes()
+    # Antes do hash, a causa provável, com o nome dela: um CRLF aqui significa
+    # `-text` ausente ou perdido no .gitattributes, não uPlot adulterado.
+    assert b"\r\n" not in bruto, (
+        f"{nome} está em CRLF -- conversão de EOL. Confira o `-text` deste path "
+        "no .gitattributes; o hash abaixo só reprovaria sem dizer por quê.")
+    atual = hashlib.sha256(bruto).hexdigest()
+    assert atual == SHA256_UPLOT[nome], (
+        f"{nome} diverge do sha256 congelado -- re-minificação ou troca de versão. "
+        "Se a troca for deliberada (versão nova do uPlot), atualize SHA256_UPLOT junto.")
 
 
 # --------------------------------------------------------------------------
