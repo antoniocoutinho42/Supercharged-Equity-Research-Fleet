@@ -45,8 +45,16 @@ jobs:
             echo "path=docs/releases/${GITHUB_REF_NAME}.md" >> "$GITHUB_OUTPUT"
           fi
 
+      # A acao de terceiros falhou com "Error creating asset temp dir" ao publicar a v4.0.0.
+      # A CLI do GitHub ja vem no runner e nao depende de acao externa.
       - name: Publicar release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: equity-research-fleet-${{ github.ref_name }}.zip
-          body_path: ${{ steps.notas.outputs.path }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="equity-research-fleet-${GITHUB_REF_NAME}.zip"
+          NOTAS="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$NOTAS" ]; then
+            gh release create "$GITHUB_REF_NAME" "$ZIP" --title "$GITHUB_REF_NAME" --notes-file "$NOTAS"
+          else
+            gh release create "$GITHUB_REF_NAME" "$ZIP" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
