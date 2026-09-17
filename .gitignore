@@ -4,4 +4,6 @@ __pycache__/
 .superpowers/
 dist/
 analises/
+# Item 6: a fixture sintética versiona raízes de execução de teste com o mesmo nome do workspace.
+!tests/fixtures/analises/
 ~$*
