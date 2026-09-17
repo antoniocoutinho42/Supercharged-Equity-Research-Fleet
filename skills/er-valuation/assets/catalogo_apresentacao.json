@@ -1459,5 +1459,33 @@
     "drivers.*.elast",
     "drivers.*.receita_driver",
     "drivers.*.metrica_base"
-  ]
+  ],
+  "suite_da_metodologia": [
+    {"comando": "justos.py selftest", "argv": ["vendor/multiplos-justos/scripts/justos.py", "selftest"]},
+    {"comando": "testes.py --phase model", "argv": ["vendor/multiplos-justos/scripts/testes.py", "--phase", "model"]},
+    {"comando": "testes.py --phase cli", "argv": ["vendor/multiplos-justos/scripts/testes.py", "--phase", "cli"]}
+  ],
+  "gates": {
+    "gate_0": {"rotulo": {"pt-BR": "Gate 0 — Capital econômico e qualidade dos inputs contábeis"}},
+    "gate_0_5": {"rotulo": {"pt-BR": "Gate 0.5 — Fase da companhia: decide o regime da base, ANTES das premissas"}},
+    "gate_1": {"rotulo": {"pt-BR": "Gate 1 — Convenção terminal: qual hipótese sobre a morte do spread"}},
+    "gate_2": {"rotulo": {"pt-BR": "Gate 2 — Nível: defasagem (o nível que já mudou)"}},
+    "gate_3": {"rotulo": {"pt-BR": "Gate 3 — Nível: degrau disponível e capacidade pré-construída"}}
+  },
+  "linguagem_interna": {
+    "termos": {
+      "pt-BR": ["gate", "gates", "selftest", "dupla entrega", "bifurcação", "quadrante proibido",
+                "guarda anti-empilhamento", "trava", "motor", "framework", "skill", "jurisprudência",
+                "regra travada"]
+    },
+    "padroes": [
+      "\\b[RCDJ]\\d+",
+      "§\\s*\\d",
+      "paper\\s*§",
+      "\\bv\\d+\\.\\d+",
+      "(?<![\\w-])--[a-z][a-z0-9-]*",
+      "\\b[\\w-]+\\.py\\b",
+      "\\b[a-z0-9]+(?:_[a-z0-9]+)+\\b"
+    ]
+  }
 }

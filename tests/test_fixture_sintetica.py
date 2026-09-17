@@ -7,6 +7,10 @@ analista escreveria: o `caso.json` e as partes da entrega (a análise e o ledger
 `resultados` congelado: o teste o compõe pelo motor de verdade (`avaliar()`), monta a raiz num
 diretório temporário e roda o builder pela CLI, com a paridade por caso no build.
 
+Item 8, Task 1 (D2): cada raiz guarda também a decisão do analista sobre os cinco gates, na parte
+`execucao.json`; a suíte da metodologia não é escrita pelo analista — é rodada —, e o teste compõe o
+registro dela com todo comando que o catálogo exige e código de saída 0 (a CI roda a suíte real).
+
 1. `firm_escolha_driver`: rota firm com reversa, uma escolha metodológica que move o preço mais de
    dez por cento (a base do lucro normalizada ao spot da celulose) e um driver exógeno acima do
    limiar (o índice de celulose) — emite;
@@ -39,8 +43,9 @@ from caso import carregar as carregar_caso  # noqa: E402
 
 LEGITIMAS = ("firm_escolha_driver", "sotp_capacidade")
 QUE_DEVE_FALHAR = "sem_proveniencia"
-# O que o analista escreve numa raiz; `dados.json` só quando algum exhibit lê um dataset.
-PARTES_DA_RAIZ = {"caso.json", "analise.json", "ledger.json"}
+# O que o analista escreve numa raiz; `dados.json` só quando algum exhibit lê um dataset. A parte da
+# execução traz só os gates (item 8, D2): o id, o ticker, o idioma e a suíte o teste compõe.
+PARTES_DA_RAIZ = {"caso.json", "analise.json", "ledger.json", "execucao.json"}
 PARTE_OPCIONAL = "dados.json"
 
 IDIOMA = "pt-BR"
@@ -60,7 +65,8 @@ def _compor_entrega(nome: str) -> dict:
     caso = carregar_caso(origem / "caso.json")
     entrega = {
         "versao_contrato": "entrega/1",
-        "execucao": {"id": nome, "ticker": caso["ticker"], "idioma": IDIOMA},
+        "execucao": {"id": nome, "ticker": caso["ticker"], "idioma": IDIOMA, **_json(origem / "execucao.json"),
+                     "suite_da_metodologia": apoio.suite_da_metodologia_que_passou()},
         "caso": caso,
         "resultados": avaliar(caso),
         "analise": _json(origem / "analise.json"),
@@ -176,7 +182,7 @@ def test_a_raiz_que_deve_falhar_so_difere_da_legitima_pelo_registro_que_falta():
     """O que torna a falha discriminante: o caso e a análise são os da raiz 1, e o ledger é o dela
     menos exatamente o registro que sustenta a dívida bruta — a falha é a proveniência, e nada mais."""
     legitima, falha = RAIZES / "firm_escolha_driver", RAIZES / QUE_DEVE_FALHAR
-    for parte in ("caso.json", "analise.json"):
+    for parte in ("caso.json", "analise.json", "execucao.json"):
         assert _json(falha / parte) == _json(legitima / parte), parte
     registros = _json(legitima / "ledger.json")["registros"]
     faltantes = [registro for registro in registros if registro not in _json(falha / "ledger.json")["registros"]]

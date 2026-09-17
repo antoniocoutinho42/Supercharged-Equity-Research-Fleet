@@ -1,0 +1,24 @@
+{
+  "gates": [
+    {
+      "gate": "gate_0",
+      "decisao": "Investimento não despesado de forma material nos dois segmentos: base e taxa de reinvestimento no regime reportado. Base EBITDA por segmento, pela nota de informações por segmento, com a exaustão florestal no d da celulose e a D&A do parque da máquina nova declarada à parte."
+    },
+    {
+      "gate": "gate_0_5",
+      "decisao": "Fase MISTA: payout positivo com o programa de investimento da máquina de papel-cartão declarado. A celulose de mercado segue a base reportada; a máquina nova não tem ano completo de regime e é lida pela capacidade, não pela retenção."
+    },
+    {
+      "gate": "gate_1",
+      "decisao": "Convergência nas duas partes: a renda das linhas existentes se preserva, e o capital novo converge ao custo de capital de cada segmento; nenhuma âncora de saída crível para a convenção do capital investido."
+    },
+    {
+      "gate": "gate_2",
+      "decisao": "Nenhum driver acima do limiar nesta leitura: o nível do preço da celulose no período-base fica tratado na raiz da escolha da base do lucro, e a soma das partes não o registra de novo."
+    },
+    {
+      "gate": "gate_3",
+      "decisao": "Gatilho da capacidade pré-construída disparado na máquina de papel-cartão: parque de capital fixo intensivo e utilização divulgada de 62%, abaixo de 85%, com a plena capacidade no cronograma para o fim de 2029. A leitura de capacidade entra pela rota de rampa, e a soma das partes separa a máquina da celulose de mercado."
+    }
+  ]
+}

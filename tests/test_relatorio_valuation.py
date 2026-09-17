@@ -172,13 +172,41 @@ def test_forma_dos_campos_novos_e_recusa_de_contrato_nomeada(fonte, adulterar, t
         assert trecho in str(erro.value), str(erro.value)
 
 
-def test_o_julgamento_do_que_esta_no_preco_e_opcional_com_a_reversa(tmp_path):
-    """D12 ajustado: com a reversa, a entrega sem o julgamento continua válida no contrato e no QC."""
-    entrega_dict = _entrega()
-    assert "o_que_esta_no_preco" in entrega_dict["analise"], "a Tese padrão o declara quando há reversa"
-    del entrega_dict["analise"]["o_que_esta_no_preco"]
-    _carregar(entrega_dict, tmp_path)
-    assert [a for a in _achados(entrega_dict) if a.nivel == "HARD_FAIL"] == []
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D3 do plano docs/superpowers/plans/2026-09-16-v4-item8-er-analise.md): o que cada
+# produto exige, como recusa de forma. Com a reversa, o julgamento do que está no preço nos dois produtos
+# (o D12 da 5F o deixava opcional); sob `analise`, o re-teste terminal e o cross-check ou a razão da
+# ausência dele. Uma recusa por campo, e o lado de cada produto em que o campo não é exigido.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("produto,campo", [
+    pytest.param(entrega.PRODUTO_PADRAO, "o_que_esta_no_preco", id="julgamento-com-reversa-sob-analise"),
+    pytest.param(entrega.PRODUTO_DA_LEITURA_DE_PRECO, "o_que_esta_no_preco",
+                 id="julgamento-com-reversa-sob-leitura-de-preco"),
+    pytest.param(entrega.PRODUTO_PADRAO, "reteste_terminal", id="reteste-terminal-sob-analise"),
+    pytest.param(entrega.PRODUTO_PADRAO, "cross_check", id="cross-check-ou-ausencia-sob-analise"),
+])
+def test_o_que_cada_produto_exige_e_recusa_de_forma_nomeando_o_campo(produto, campo, tmp_path):
+    entrega_dict = _com_produto(GRADES, produto)
+    assert entrega_dict["resultados"]["reversa"] is not None and entrega_dict["resultados"]["cross_check"] is None
+    _carregar(entrega_dict, tmp_path / "vizinha")
+
+    del entrega_dict["analise"][campo]
+    with pytest.raises(entrega.EntregaInvalida) as erro:
+        _carregar(entrega_dict, tmp_path / "recusa")
+    assert f"campo obrigatório ausente em 'analise': '{campo}'" in str(erro.value), str(erro.value)
+
+
+def test_fora_do_produto_que_os_exige_o_reteste_e_o_cross_check_nao_sao_exigidos(tmp_path):
+    """Sob `leitura_de_preco`, a entrega sem o re-teste e sem o cross-check passa; sob `analise`, com o
+    segundo método publicado, a razão da ausência não é exigida — e declará-la segue recusada."""
+    leitura = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+    del leitura["analise"]["reteste_terminal"], leitura["analise"]["cross_check"]
+    _carregar(leitura, tmp_path / "leitura")
+
+    com_cross_check = _entrega(ALTERNATIVAS)
+    assert com_cross_check["resultados"]["cross_check"] is not None and "cross_check" not in com_cross_check["analise"]
+    _carregar(com_cross_check, tmp_path / "analise")
 
 
 # --------------------------------------------------------------------------
@@ -597,7 +625,8 @@ def _na_unidade(valor, unidade: str, entrega_dict: dict) -> str:
 def test_a_aba_valuation_segue_a_ordem_da_secao_9():
     """Cabeçalho (preço e upside, faixa piso–teto, múltiplos, rota) → como o valor é formado → cenários →
     laboratório → ponte → sensibilidades (a 1D e depois a 2D) → o que está no preço → cross-check
-    (fatia 5G: a seção sai sempre, e sem os blocos das alternativas nenhuma outra aparece)."""
+    (fatia 5G: a seção sai sempre, e sem os blocos das alternativas nenhuma outra aparece) → re-teste
+    terminal, que a Análise exige desde o item 8 (D3)."""
     entrega_dict = _entrega()
     aba = _aba(_pagina(entrega_dict, com_laboratorio=True), "valuation")
     secoes = _secoes(aba)
@@ -609,7 +638,8 @@ def test_a_aba_valuation_segue_a_ordem_da_secao_9():
         VALUATION["ponte_titulo"],
         VALUATION["grade_1d_titulo"].format(cenario="base", premissa=_rotulo("firm", "wacc")),
         VALUATION["matriz_titulo"].format(cenario="base", y=_rotulo("firm", "g"), x=_rotulo("firm", "roic")),
-        VALUATION["o_que_esta_no_preco_titulo"], VALUATION["cross_check_titulo"]]
+        VALUATION["o_que_esta_no_preco_titulo"], VALUATION["cross_check_titulo"],
+        VALUATION["reteste_terminal_titulo"]]
     cabecalho = " ".join(_visivel(secao) for secao in secoes[:primeira_com_titulo])
     posicoes = [cabecalho.find(rotulo) for rotulo in (
         VALUATION["preco_justo_titulo"], TESE["papeis_da_faixa"]["piso"], VALUATION["multiplo_justo_titulo"],
@@ -997,8 +1027,13 @@ def test_as_tres_leituras_saem_com_os_numeros_publicados_e_com_os_rotulos_que_as
 def test_sem_os_blocos_nenhuma_secao_nova_aparece_e_o_cross_check_diz_o_que_a_analise_declarou():
     """Duas leituras do cross-check sem ele publicado: declarado ausente (a razão do analista,
     prosa auditada) e não declarado (a frase do dicionário). E, sem os blocos, nem painel de
-    escolhas, nem retorno exigido, nem valor ponderado, nem re-teste terminal."""
+    escolhas, nem retorno exigido, nem valor ponderado, nem re-teste terminal.
+
+    Desde o item 8 (D3) a Análise exige o re-teste e o cross-check ou a ausência dele, e a Tese
+    padrão os declara; a página sem os dois — a de uma Leitura de preço, onde nenhum é exigido — sai
+    tirando-os da entrega antes do render."""
     entrega_dict = _entrega()
+    del entrega_dict["analise"]["reteste_terminal"], entrega_dict["analise"]["cross_check"]
     aba = _aba(_pagina(entrega_dict), "valuation")
     titulos = [_titulo_da(secao) for secao in _secoes(aba)]
     for chave in ("escolhas_titulo", "retorno_exigido_titulo", "valor_ponderado_titulo", "reteste_terminal_titulo"):

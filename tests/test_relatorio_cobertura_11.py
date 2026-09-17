@@ -2,15 +2,15 @@
 
 Ver docs/superpowers/plans/2026-09-14-v4-item5e-evidencia.md, D8. A §11 do desenho lista o que o QC
 impõe em três níveis; a seção "Cobertura da §11" do `skills/er-relatorio/SKILL.md` diz, item a item,
-como cada um é garantido: por código de QC, por mecanismo fora do QC (o gate do caso, a CI, o badge
-do laboratório) ou por pendência com dono (`item 8`) e razão. Uma segunda tabela
-lista os códigos de QC que servem a outras seções do desenho.
+como cada um é garantido: por código de QC ou por mecanismo fora do QC (o gate do caso, a CI, o badge
+do laboratório, o checklist de revisão do M4 no `er-analise`). Desde o item 8, nenhuma linha fica com
+pendência. Uma segunda tabela lista os códigos de QC que servem a outras seções do desenho.
 
 A trava lê as três fontes — o desenho, as duas tabelas e o `qc.py` — e confere que:
 - os itens de cada nível são os do desenho, com espaço e crase normalizados;
 - todo código citado existe no `qc.py` com o nível da linha e tem mensagem em todo dicionário;
 - todo código que o `qc.py` constrói aparece numa das duas tabelas;
-- toda linha tem ao menos uma garantia, e toda pendência tem dono permitido e razão.
+- toda linha tem ao menos uma garantia, e nenhuma fica com pendência.
 
 Os códigos do `qc.py` saem da AST — toda chamada `Achado(<nível>, <código>, ...)` —, nunca de uma
 lista escrita aqui: um código novo entra na trava no instante em que passa a ser construído.
@@ -33,7 +33,9 @@ CABECALHO_DOS_DE_FORA = ("Código", "Nível", "Onde o desenho o pede")
 NIVEIS = frozenset({"HARD_FAIL", "REQUIRED_DISCLOSURE", "QUALITY_WARNING"})
 # Fatia 5F, Task 4: as três pendências da 5F viraram códigos de QC, e `5F` saiu dos donos.
 # Item 6, Task 2: a paridade por caso no build virou `paridade_divergente`, e `item 6` saiu também.
-DONOS_PERMITIDOS = frozenset({"item 8"})
+# Item 8, Task 1: as pendências do item 8 viraram códigos de QC (a suíte, a linguagem interna e a contagem de
+# premissas) ou o checklist de revisão do M4 (os julgamentos editoriais) — nenhum dono resta.
+DONOS_PERMITIDOS: frozenset = frozenset()
 SEM_GARANTIA = "—"
 
 _CODIGO_CITADO = re.compile(r"`([a-z_]+)`")

@@ -110,7 +110,21 @@ verificação cobre o que o comparador do badge cobre — a curvatura continua f
 ```json
 {
   "versao_contrato": "entrega/1",
-  "execucao": {"id": "2026-09-11-001", "ticker": "SINT3", "idioma": "pt-BR"},
+  "execucao": {
+    "id": "2026-09-11-001", "ticker": "SINT3", "idioma": "pt-BR",
+    "suite_da_metodologia": [
+      {"comando": "justos.py selftest", "codigo_saida": 0},
+      {"comando": "testes.py --phase model", "codigo_saida": 0},
+      {"comando": "testes.py --phase cli", "codigo_saida": 0}
+    ],
+    "gates": [
+      {"gate": "gate_0", "decisao": "Nenhum investimento despesado material; base e reinvestimento no regime reportado."},
+      {"gate": "gate_0_5", "decisao": "Fase DISTRIBUIÇÃO: payout relevante e estável no ciclo."},
+      {"gate": "gate_1", "decisao": "gordon: o spread persiste pela duração do contrato de concessão da rede."},
+      {"gate": "gate_2", "decisao": "Nenhum driver com impacto acima do limiar no período-base."},
+      {"gate": "gate_3", "decisao": "Sem capacidade ociosa nem degrau de capital disponível."}
+    ]
+  },
   "caso": {},
   "resultados": {},
   "analise": {
@@ -119,7 +133,8 @@ verificação cobre o que o comparador do badge cobre — a curvatura continua f
     "veredicto": {"texto": "O preço de tela embute um retorno sobre o capital abaixo do que a companhia sustenta."},
     "consenso": {"registros": ["consenso-ebitda-2026"]},
     "premissas_decisivas": [
-      {"chave": "roic", "derivacao": "Média normalizada do retorno sobre o capital investido no ciclo."}
+      {"chave": "roic", "derivacao": "Média normalizada do retorno sobre o capital investido no ciclo."},
+      {"chave": "wacc", "derivacao": "Custo de capital do setor, confirmado pela revisão tarifária do regulador."}
     ],
     "positives": [
       {"afirmacao": "A expansão da capacidade sustenta o crescimento do volume.",
@@ -158,6 +173,8 @@ verificação cobre o que o comparador do badge cobre — a curvatura continua f
     "o_que_esta_no_preco": {
       "julgamento": "A reconciliação que exige menos violência às âncoras observáveis é a do custo de capital, e não a do crescimento.",
       "observavel": "O custo de capital implícito nos próximos resultados trimestrais."},
+    "cross_check": {"ausente": {"razao": "A rota do acionista não tem vetor coerente sem uma política de dividendos estável."}},
+    "reteste_terminal": {"resultado": "mantida", "texto": "O spread terminal continua sustentado pela duração da concessão."},
     "exhibits": []
   },
   "ledger": {
@@ -185,6 +202,20 @@ verificação cobre o que o comparador do badge cobre — a curvatura continua f
        "estatuto": "reported", "valor": 12.0,
        "justificativa_da_fonte": "A companhia publica o indicador com a mesma definição, por outra via.",
        "contraprova_de": "roic-dfp"},
+      {"id": "wacc-setorial", "claim": "Custo médio ponderado de capital do setor",
+       "fonte": {"identidade": "Consultoria setorial", "classe": "relatorio_setorial"},
+       "localizador": {"tipo": "documento", "valor": "Relatório anual de custo de capital do setor, tabela do custo nominal"},
+       "data_acesso": "2026-08-20", "periodo": "2026", "moeda": null, "unidade": "pp",
+       "estatuto": "reported", "valor": 10.0,
+       "justificativa_da_fonte": "A consultoria mede o custo de capital do setor inteiro, com a mesma metodologia para cada companhia.",
+       "usado_em": ["cenarios.base.premissas.wacc"]},
+      {"id": "wacc-regulador", "claim": "Custo médio ponderado de capital do setor",
+       "fonte": {"identidade": "Regulador setorial", "classe": "regulador"},
+       "localizador": {"tipo": "documento", "valor": "Nota técnica da revisão tarifária, anexo do custo de capital"},
+       "data_acesso": "2026-08-20", "periodo": "2026", "moeda": null, "unidade": "pp",
+       "estatuto": "reported", "valor": 10.0,
+       "justificativa_da_fonte": "O regulador calcula o custo de capital do setor por conta própria, sem passar pelo número da consultoria.",
+       "contraprova_de": "wacc-setorial"},
       {"id": "consenso-ebitda-2026", "claim": "Consenso de EBITDA",
        "fonte": {"identidade": "Provedor de consenso", "classe": "api"},
        "localizador": {"tipo": "endpoint", "valor": "equity.estimates.consensus", "parametros": {"symbol": "SINT3"}},
@@ -215,6 +246,20 @@ precisa ter dicionário em `assets/i18n/<idioma>.json`. `execucao.produto` é
 `analise` como default — o que a §5 manda escolher na dúvida; sem o campo, a
 página é exatamente a de sempre.
 
+**A execução declara o que rodou e o que decidiu** (item 8, D1/D2), nos dois produtos.
+`execucao.suite_da_metodologia` é obrigatória: um objeto por comando da suíte da metodologia
+que a execução rodou, `{"comando", "codigo_saida"}` — o comando como o catálogo o nomeia, e o
+código de saída do processo, inteiro. `execucao.gates` é obrigatória: um objeto por gate,
+`{"gate", "decisao"}` — o gate pelo código que o catálogo publica, e a decisão em texto, que
+é dado da Evidência (a ficha técnica a mostra) e pode citar números. A forma é recusa de
+contrato (`RC=1`): lista, objeto fechado, texto não vazio, código inteiro (booleano não é
+código) e o mesmo gate duas vezes. A cobertura é QC, contra o vocabulário que o catálogo da
+integração publica — `catalogo.suite_da_metodologia` (os comandos exigidos, cada um com o
+`argv` a partir da raiz do repositório) e `catalogo.gates` (os cinco do vendor, com rótulo):
+comando exigido sem registro, ou qualquer código diferente de 0, é o HARD FAIL
+`suite_da_metodologia_nao_passou`; gate sem decisão, ou fora do vocabulário, é o HARD FAIL
+`gates_nao_declarados`. Nenhum comando e nenhum gate mora no relatório.
+
 **Os dois produtos da §5.** Sob `analise`, a entrega é a página de três abas.
 Sob `leitura_de_preco`, ela sai **reduzida à aba Valuation**: uma aba só, sem
 navegação, e a Tese e a Evidência não são compostas. Ali a reversa é
@@ -227,16 +272,22 @@ mecanismo da fronteira de escopo (o produto é o SEGUNDO gatilho de
 exigida** ali e, declarada, é o HARD FAIL `produto_com_preco_alvo` — uma faixa
 de preços é preço-alvo de manchete, e quem decide isso é o mapa das conclusões
 de valor sobre os preços que ela aponta, nunca o nome do campo. Como a rota rampa não admite reversa, um caso
-de rampa só pode ser entregue como `analise`. Exigir de cada produto o que ele
-pede — a Tese sob `analise`, o escopo sob `leitura_de_preco` — é trabalho do
-`er-analise` (item 8), não deste contrato. O `ledger` tem a forma
+de rampa só pode ser entregue como `analise`.
+
+**O que cada produto exige** (item 8, D3), como recusa de forma (`RC=1`): com
+`resultados.reversa` publicada, nos dois produtos, `analise.o_que_esta_no_preco` — a
+leitura do que está no preço fecha com o julgamento do analista; sob `analise`,
+`analise.reteste_terminal` e, sem `resultados.cross_check` publicado,
+`analise.cross_check.ausente` — o segundo método ou a razão de ele não existir, um dos
+dois. Sob `leitura_de_preco` o re-teste e o cross-check não são exigidos. O `ledger` tem a forma
 do contrato `ledger/1` do `er-evidencia`, e `analise.consenso` é obrigatório (ver
 "O ledger, o consenso e o confronto"); `ficha_tecnica` não faz parte do
-contrato — uma entrega que a declare é recusada. Produzir a entrega em produção
-é `er-analise` (item 8); por ora, `tests/relatorio_apoio.py` monta raízes de
-teste rodando `avaliar()` de verdade sobre uma fixture de caso, com uma Tese
-válida, a reversa onde o gate a admite, e o ledger e o consenso derivados do
-mapa dos insumos do caso. No exemplo acima, o teste que o executa troca `caso` e
+contrato — uma entrega que a declare é recusada. Em produção, quem compõe a
+entrega a partir das partes da raiz de execução é o `er-analise`; nos testes,
+`tests/relatorio_apoio.py` monta raízes rodando `avaliar()` de verdade sobre uma
+fixture de caso, com uma Tese válida, a reversa onde o gate a admite, a execução
+com a suíte e os gates do catálogo, e o ledger e o consenso derivados do mapa dos
+insumos do caso. No exemplo acima, o teste que o executa troca `caso` e
 `resultados` pelos de uma fixture e completa o ledger só com os insumos do caso
 real que o exemplo não nomeia.
 
@@ -249,7 +300,7 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 
 | Nível | Chaves | Forma |
 |---|---|---|
-| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo e **sob o produto `analise`**; `visao_nao_consensual`, `mudou_desde_analise_fornecida`, `o_que_esta_no_preco`, `escolhas`, `cross_check` e `reteste_terminal` opcionais | nos dois regimes que não concluem valor, `faixa` declarada passa na forma e é HARD FAIL: `fronteira_com_preco_alvo` sob fronteira, `produto_com_preco_alvo` sob `leitura_de_preco`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
+| `analise` | `conclusao`, `exhibits`, `veredicto`, `consenso`, `premissas_decisivas`, `positives`, `negatives`, `perguntas`, `riscos` obrigatórias; `faixa` obrigatória **fora** da fronteira de escopo e **sob o produto `analise`**; `o_que_esta_no_preco` obrigatório com `resultados.reversa`, nos dois produtos; sob `analise`, `reteste_terminal` obrigatório e `cross_check` obrigatório sem `resultados.cross_check` (item 8, D3); `visao_nao_consensual`, `mudou_desde_analise_fornecida` e `escolhas` opcionais | nos dois regimes que não concluem valor, `faixa` declarada passa na forma e é HARD FAIL: `fronteira_com_preco_alvo` sob fronteira, `produto_com_preco_alvo` sob `leitura_de_preco`; `o_que_esta_no_preco` sem `resultados.reversa` é recusa de forma |
 | `faixa` | `piso`, `base`, `teto` | cada um o NOME de um cenário de `resultados.cenarios` — o número vem de lá, nunca do analista |
 | `veredicto` | `texto` | o preço de tela, a data e a fonte vêm de `caso.preco` |
 | `premissas_decisivas[]` | `chave`, `derivacao` obrigatórias; `parte` | `chave`: premissa da rota no catálogo, declarada no cenário da manchete (QC); com `parte` — o nome de uma parte de `resultados.sotp.partes`, texto não vazio —, premissa da rota da parte, declarada nela (QC), com o número e a contraprova da parte (`sotp.partes.<índice>.premissas.<chave>` no caso) |
@@ -258,10 +309,10 @@ o **conteúdo** — o que depende do catálogo e dos números publicados — é 
 | `riscos[]` | `risco`, `observavel` | |
 | `visao_nao_consensual` | `texto` | |
 | `mudou_desde_analise_fornecida` | `linhas` | de uma a três linhas |
-| `o_que_esta_no_preco` | `julgamento`, `observavel` | opcional, e só com `resultados.reversa` (sem ela, recusa de forma): qual reconciliação exige a menor violência às âncoras observáveis, e o observável que a testaria — os dois textos são prosa auditável, que a Valuation exibe ao fim do que está no preço |
+| `o_que_esta_no_preco` | `julgamento`, `observavel` | só com `resultados.reversa` (sem ela, recusa de forma) e, desde o item 8 (D3), obrigatório com ela, nos dois produtos: qual reconciliação exige a menor violência às âncoras observáveis, e o observável que a testaria — os dois textos são prosa auditável, que a Valuation exibe ao fim do que está no preço |
 | `escolhas[]` | `chave`, `razao` | opcional (fatia 5G), e só com escolhas em `resultados.escolhas_metodologicas`; cada `chave` é uma das publicadas — outra é recusa de forma, com sugestão por `difflib`. Que TODA escolha publicada tenha razão é o HARD FAIL `escolha_sem_razao`. A `razao` é prosa auditável, e o painel da Valuation a exibe ao lado do preço alternativo e do impacto |
-| `cross_check` | `ausente` (`{"razao"}`) | opcional (fatia 5G): a razão de NÃO haver segundo método (§8.1). Declará-lo com `resultados.cross_check` publicado é recusa de forma — o bloco declara a ausência, não comenta o que existe. A `razao` é prosa auditável |
-| `reteste_terminal` | `resultado`, `texto` | opcional (fatia 5G): `resultado` ∈ `mantida`, `trocada` — vocabulário de processo, rotulado pelo dicionário; `texto` é prosa auditável |
+| `cross_check` | `ausente` (`{"razao"}`) | a razão de NÃO haver segundo método (§8.1; fatia 5G). Sob `analise`, sem `resultados.cross_check` publicado, obrigatório (item 8, D3); declará-lo com `resultados.cross_check` publicado é recusa de forma — o bloco declara a ausência, não comenta o que existe. A `razao` é prosa auditável |
+| `reteste_terminal` | `resultado`, `texto` | obrigatório sob `analise` (item 8, D3), opcional sob `leitura_de_preco`: `resultado` ∈ `mantida`, `trocada` — vocabulário de processo, rotulado pelo dicionário; `texto` é prosa auditável |
 
 **O vínculo mora só na pergunta:** `vinculo` (e o `mecanismo` de um Positive ou
 Negative) aponta para premissas da rota (`catalogo.premissas.<rota>`) — num SOTP,
@@ -454,6 +505,8 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `escolha_sem_razao` | HARD FAIL | uma por chave de `resultados.escolhas_metodologicas` que `analise.escolhas` não declara — com o rótulo da escolha no catálogo; nenhuma escolha que a metodologia deixa em aberto recebe default (§18.3), e o painel da §8.2 só sai com escolha, alternativa, impacto e razão |
 | `paridade_divergente` | HARD FAIL | o veredito da verificação de paridade por caso é `divergente` (ou nenhum dos três estados): a fachada do espelho, em node, não reproduz o que o Python publicou — preço, múltiplo, upside e chaves de diagnóstico de cada cenário, as células das grades e a leitura da reversa —, ou a verificação não fechou; a mensagem cita as primeiras divergências (`qc.DIVERGENCIAS_CITADAS_NA_MENSAGEM`) e quantas são |
 | `escolhas_desconhecidas` | HARD FAIL | `resultados.escolhas_metodologicas` publicado e o catálogo sem `escolhas_metodologicas` na forma — rótulo e gatilho no idioma para cada chave publicada —: sem eles o painel sairia com o código cru, e a regra falha fechada |
+| `suite_da_metodologia_nao_passou` | HARD FAIL | um comando de `catalogo.suite_da_metodologia` sem registro em `execucao.suite_da_metodologia`, ou qualquer registro com `codigo_saida` diferente de 0 — um achado só, com os exigidos, os sem registro e os que falharam; com o catálogo sem a lista dos comandos, a regra falha fechada (item 8, D1) |
+| `gates_nao_declarados` | HARD FAIL | um gate de `catalogo.gates` sem decisão em `execucao.gates`, ou um gate declarado fora desse vocabulário — um achado só, com os ausentes pelo rótulo do catálogo; com o catálogo sem os gates, a regra falha fechada (item 8, D2) |
 | `paridade_nao_verificada_no_build` | REQUIRED DISCLOSURE | o veredito da verificação de paridade é `indisponivel`: não havia node na máquina do build, e só o badge do laboratório confere a paridade, quando o relatório abre |
 | `divergencia_de_base_degrau` | REQUIRED DISCLOSURE | a integração publicou, em `degrau.diagnosticos_chaves`, a chave que `catalogo.disclosures.divergencia_de_base_degrau.chave` nomeia — o limiar é da integração, e o relatório não compara limiar nenhum; a mensagem imprime o `divergencia_de_base_%` publicado |
 | `limitacao_metodologica` | REQUIRED DISCLOSURE | cada limitação publicada em `resultados.limitacoes`, com o rótulo do catálogo — hoje, a razão de a Análise sair sem a reversa (`caso_degrau`, rota `rampa`) |
@@ -471,6 +524,8 @@ página — nem na ficha que a Evidência mostra). Regras:
 | `tese_dependente_de_uma_premissa` | QUALITY WARNING | todas as perguntas com o mesmo `vinculo` de um item só |
 | `concentracao_de_fontes` | QUALITY WARNING | uma `fonte.identidade` sustenta mais de `qc.LIMIAR_DE_CONCENTRACAO_DE_FONTES` (metade) dos insumos do caso, quando há ao menos `qc.MINIMO_DE_INSUMOS_PARA_CONCENTRACAO` (quatro) |
 | `sensibilidade_pouco_informativa` | QUALITY WARNING | uma por grade 1D ou 2D cujas células ficam todas dentro de `qc.TOLERANCIA_DE_SENSIBILIDADE_POUCO_INFORMATIVA` (1%, relativa) do preço publicado do cenário que a grade perturba |
+| `linguagem_interna_no_corpo` | QUALITY WARNING | um por campo da prosa auditada (`placeholders.campos_de_prosa`, o que as abas Tese e Valuation exibem) cujo texto resolvido casa a lista de banimento que o catálogo publica (`catalogo.linguagem_interna`: os termos literais do idioma, sem caixa e como palavra inteira, e os padrões de código) — com os trechos encontrados. Os textos do ledger e do confronto são dado da Evidência e ficam fora (item 8, D4) |
+| `contagem_de_premissas_fora_do_usual` | QUALITY WARNING | `analise.premissas_decisivas` com menos de `qc.MINIMO_DE_PREMISSAS_DECISIVAS` (duas) ou mais de `qc.MAXIMO_DE_PREMISSAS_DECISIVAS` (cinco) — constantes editoriais do Fleet, não metodologia (item 8, D4) |
 
 Mensagem de cada achado vem de `assets/i18n/<idioma>.json` (`qc.<codigo>`,
 `params` substituídos) — nunca hardcoded (§16.1); o "porquê" metodológico de
@@ -483,17 +538,18 @@ mesmo quando o builder recusa emitir o HTML.
 ## Cobertura da §11
 
 A §11 do desenho lista o que o QC impõe, em três níveis. A tabela abaixo dá dono a cada item,
-pelo texto do desenho: os códigos de QC que o garantem, o mecanismo fora do QC (o gate do caso, a
-CI, o badge do laboratório) ou a pendência, com o dono (`item 8`) e a razão. A
+pelo texto do desenho: os códigos de QC que o garantem ou o mecanismo fora do QC (o gate do caso, a
+CI, o badge do laboratório, o checklist de revisão do M4 no `er-analise`). Desde o item 8, nenhuma
+linha tem pendência. A
 trava `tests/test_relatorio_cobertura_11.py` lê a §11, as duas tabelas e o `qc.py`: os itens de
 cada nível são os do desenho, todo código citado existe no `qc.py` com o nível da linha e tem
-mensagem no dicionário, todo código que o `qc.py` constrói aparece numa das duas tabelas, e toda
-pendência tem dono permitido e razão.
+mensagem no dicionário, todo código que o `qc.py` constrói aparece numa das duas tabelas, toda
+linha tem garantia e nenhuma fica com pendência.
 
 | Nível | Item da §11 | Códigos de QC | Fora do QC | Pendência |
 |---|---|---|---|---|
 | HARD FAIL | paridade Python↔JS divergente | `paridade_divergente` | a CI (`tests/test_paridade_js.py`, `tests/test_paridade_solver_js.py`, `tests/test_paridade_wrapper_js.py`) e o badge do laboratório, que bloqueia a edição quando o motor do navegador não reproduz o que o relatório publicou (5C) | — |
-| HARD FAIL | `selftest` ou suíte da metodologia falhando | — | a CI (`tests/test_vendor_multiplos_justos.py` roda o `selftest` e as duas fases de `testes.py`) | **item 8**: a suíte por execução — o M4 exige "suíte PASS", e o builder não a roda |
+| HARD FAIL | `selftest` ou suíte da metodologia falhando | `suite_da_metodologia_nao_passou` | a CI (`tests/test_vendor_multiplos_justos.py` roda o `selftest` e as duas fases de `testes.py`) e o `er-analise`, que roda a suíte em cada execução, cada comando numa invocação fresca, e a registra na entrega | — |
 | HARD FAIL | número material do valuation sem proveniência | `insumo_sem_proveniencia`, `usado_em_fora_dos_insumos`, `insumos_do_caso_desconhecidos`, `referencia_fora_do_ledger`, `numero_sem_proveniencia`, `placeholder_nao_resolvido`, `placeholder_malformado` | — | — |
 | HARD FAIL | gráfico com dados não rastreáveis | `serie_nao_rastreavel`, `formula_invalida`, `serie_de_tamanho_incompativel`, `series_de_datasets_incompativeis`, `overlay_nao_resolvido`, `dataset_sem_proveniencia`, `referencia_fora_do_ledger` | — | — |
 | HARD FAIL | inconsistência estrutural que torne o valuation matematicamente inválido | `resultados_nao_correspondem_ao_caso`, `multiplos_com_bases_diferentes`, `unidade_desconhecida`, `formato_incompativel_com_unidade`, `diagnostico_sem_chave`, `degrau_sem_divergencia_de_base`, `faixa_fora_de_ordem`, `premissa_decisiva_fora_do_cenario` | as recusas do gate do caso (`caso.CasoInvalido`, na integração): um caso incoerente nem chega ao motor | — |
@@ -507,14 +563,14 @@ pendência tem dono permitido e razão.
 | REQUIRED DISCLOSURE | gap material que não inviabiliza o valuation | `lacuna_material`, `consenso_indisponivel` | — | — |
 | REQUIRED DISCLOSURE | metodologia especial ou limitação de escopo | `limitacao_metodologica`, `fronteira_de_escopo_declarada`, `divergencia_de_base_degrau` | — | — |
 | REQUIRED DISCLOSURE | input relevante baseado em estimativa em vez de dado observado | `insumo_estimado` | — | — |
-| QUALITY WARNING | exhibit fraco | `serie_curta_sem_nota_janela` | — | **item 8**: o resto é julgamento editorial sobre o exhibit — um gráfico que não responde à pergunta, ou um tipo mal escolhido |
+| QUALITY WARNING | exhibit fraco | `serie_curta_sem_nota_janela` | o checklist de revisão do M4 no `er-analise`: o exhibit que não responde à pergunta, ou de tipo mal escolhido, é julgamento editorial | — |
 | QUALITY WARNING | concentração excessiva de fontes | `concentracao_de_fontes` | — | — |
 | QUALITY WARNING | sensibilidade pouco informativa | `sensibilidade_pouco_informativa` | — | — |
 | QUALITY WARNING | tese muito dependente de uma única premissa | `tese_dependente_de_uma_premissa` | — | — |
-| QUALITY WARNING | pergunta de tese pouco discriminante | — | — | **item 8**: julgamento editorial sobre a pergunta, sem critério mecânico declarado |
-| QUALITY WARNING | Positives/Negatives pouco ligados ao valuation | — | — | **item 8**: julgamento editorial; o mecanismo fora do vocabulário do valuation já é HARD FAIL (o vínculo) |
-| QUALITY WARNING | termos de linguagem interna vazando no corpo | — | — | **item 8**: a lista de banimento é da metodologia e entra pelo catálogo |
-| QUALITY WARNING | contagem de premissas na Conclusão fora do usual | — | — | **item 8**: o "usual" é critério editorial que ninguém declarou ainda |
+| QUALITY WARNING | pergunta de tese pouco discriminante | — | o checklist de revisão do M4 no `er-analise`: julgamento editorial sobre a pergunta, sem critério mecânico | — |
+| QUALITY WARNING | Positives/Negatives pouco ligados ao valuation | — | o checklist de revisão do M4 no `er-analise`: julgamento editorial; o mecanismo fora do vocabulário do valuation já é HARD FAIL (o vínculo) | — |
+| QUALITY WARNING | termos de linguagem interna vazando no corpo | `linguagem_interna_no_corpo` | a lista de banimento é da metodologia e entra pelo catálogo (`catalogo.linguagem_interna`) | — |
+| QUALITY WARNING | contagem de premissas na Conclusão fora do usual | `contagem_de_premissas_fora_do_usual` | — | — |
 
 Os códigos de QC que servem a outras seções do desenho:
 
@@ -527,6 +583,7 @@ Os códigos de QC que servem a outras seções do desenho:
 | `escolha_sem_razao` | HARD FAIL | §8.2 e §18.3: o painel de escolhas metodológicas traz a razão econômica de cada escolha, e nenhuma escolha que a metodologia declara sem default recebe default |
 | `escolhas_desconhecidas` | HARD FAIL | §8.2: o painel de escolhas metodológicas — sem a declaração das escolhas no catálogo, o rótulo e o gatilho de cada uma sairiam como código cru, e a regra falha fechada |
 | `paridade_nao_verificada_no_build` | REQUIRED DISCLOSURE | §13 e §18.2: a paridade verificada por caso no build, com falha fechada — sem node na máquina do build ela não é verificada ali, e a entrega declara que só o badge a confere |
+| `gates_nao_declarados` | HARD FAIL | §5, M3: os cinco gates fechados e declarados antes de qualquer conta; e §9: a ficha técnica da execução traz os gates |
 | `produto_com_preco_alvo` | HARD FAIL | §5: os dois produtos — sob `leitura_de_preco` a entrega lê o que o preço embute e não conclui valor, e a faixa piso–base–teto é preço-alvo de manchete. Mesma regra da fronteira de escopo, com o produto como segundo gatilho |
 
 ## As três abas (`render.py`)
@@ -713,7 +770,9 @@ dois mapas, e sai em pontos percentuais inteiros (`render.FORMATO_DO_PESO`).
    cada divergência com o item, a classificação rotulada, o anterior, o atual e a
    explicação;
 5. **ficha técnica** (`builder.compor_ficha_tecnica`, a mesma que o builder grava
-   em `ficha-tecnica.json`): a execução, a metodologia e o hash do caso, as
+   em `ficha-tecnica.json`): a execução, a metodologia e o hash do caso, os gates
+   declarados — cada um pelo rótulo do catálogo, com a decisão — e os comandos da
+   suíte da metodologia, cada um com o código de saída (item 8, D2), as
    versões dos contratos consumidos, os registros por estatuto e por classe de
    fonte e os achados por nível e código — sem o QUALITY WARNING, que é interno e
    fica no `qc.json` e no arquivo;
@@ -773,8 +832,10 @@ diagnóstico, texto do disclosure de divergência de base e a chave que o
 dispara, o vocabulário de vínculo das perguntas da tese — premissas da rota e
 blocos econômicos —, o rótulo e o bloco suprimido, `afeta`, de cada
 limitação, o mapa das conclusões de valor — quais números de `resultados`,
-em que unidade, são leitura condicional sob fronteira de escopo — e o mapa dos
-insumos do caso — quais números do caso exigem proveniência) vem de
+em que unidade, são leitura condicional sob fronteira de escopo —, o mapa dos
+insumos do caso — quais números do caso exigem proveniência —, os comandos que a
+suíte da metodologia exige, os gates com rótulo e a lista de banimento no corpo — termos
+literais por idioma e padrões de código, desde o item 8) vem de
 `skills/er-valuation/assets/catalogo_apresentacao.json` — lido via
 `ASSETS_DA_INTEGRACAO`, nunca hardcoded aqui. A doutrina de evidência que o QC
 aplica — classes de fonte, estatutos, materialidades, âncoras do consenso e as

@@ -186,6 +186,8 @@ def compor_ficha_tecnica(entrega_dict: dict, catalogo: dict, achados: list) -> d
     entrega em qualquer ordem dos registros do ledger ou dos achados. Compõe:
     - a execução: `id`, `ticker` e `idioma`;
     - de `resultados.origem`: o nome e a versão da metodologia e o `caso_sha256`;
+    - os gates que a execução declarou, cada um com a decisão, e os comandos da suíte da
+      metodologia que ela rodou, cada um com o código de saída (item 8, D2), na ordem declarada;
     - as versões dos contratos consumidos, lidas dos próprios artefatos: a entrega, os
       resultados, o catálogo e o ledger;
     - os registros do ledger por estatuto e por classe de fonte;
@@ -193,10 +195,9 @@ def compor_ficha_tecnica(entrega_dict: dict, catalogo: dict, achados: list) -> d
       também o QUALITY WARNING: a ficha em arquivo é interna, como o `qc.json`, e a
       Evidência a mostra sem ele.
 
-    Gates declarados e comandos executados ficam para o item 8: nenhum produtor os tem, e
-    inventar o formato agora é o que a §12 proíbe. `resultados` e o catálogo são opacos para
-    o relatório: um campo que a ficha lê e não está lá é `render.CampoDeContratoAusente`,
-    nomeado — código 1 no `main`, nunca um `KeyError` cru."""
+    `resultados` e o catálogo são opacos para o relatório: um campo que a ficha lê e não está
+    lá é `render.CampoDeContratoAusente`, nomeado — código 1 no `main`, nunca um `KeyError`
+    cru."""
     execucao, resultados, ledger = entrega_dict["execucao"], entrega_dict["resultados"], entrega_dict["ledger"]
     origem = render._campo_de_contrato(resultados, "origem", "resultados")
     metodologia = render._campo_de_contrato(origem, "metodologia", "resultados.origem")
@@ -208,6 +209,10 @@ def compor_ficha_tecnica(entrega_dict: dict, catalogo: dict, achados: list) -> d
             "versao": render._campo_de_contrato(metodologia, "versao", "resultados.origem.metodologia"),
             "caso_sha256": render._campo_de_contrato(origem, "caso_sha256", "resultados.origem"),
         },
+        contrato_entrega.BLOCO_DOS_GATES: [{"gate": gate["gate"], "decisao": gate["decisao"]}
+                                           for gate in execucao[contrato_entrega.BLOCO_DOS_GATES]],
+        contrato_entrega.BLOCO_DA_SUITE: [{"comando": comando["comando"], "codigo_saida": comando["codigo_saida"]}
+                                          for comando in execucao[contrato_entrega.BLOCO_DA_SUITE]],
         "contratos": {
             "entrega": entrega_dict["versao_contrato"],
             "resultados": resultados["versao_contrato"],

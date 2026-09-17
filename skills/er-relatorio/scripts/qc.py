@@ -101,6 +101,13 @@ Item 6, Task 2 (D2): a paridade Python↔JS por caso, no build — `paridade_div
 (HARD FAIL) e `paridade_nao_verificada_no_build` (REQUIRED DISCLOSURE). Quem verifica é a
 integração; o builder a chama e passa o veredito a `avaliar` (`paridade`), e este módulo
 só o converte em achado. Ver `_achado_da_paridade`.
+
+Item 8, Task 1 (D1, D2, D4): a execução — `suite_da_metodologia_nao_passou` e
+`gates_nao_declarados` (HARD FAIL), contra os comandos e os gates que o catálogo publica (ver
+`_achados_da_execucao`) — e dois QUALITY WARNING: `linguagem_interna_no_corpo`, a lista de
+banimento do catálogo aplicada à prosa auditada (`_achados_linguagem_interna`), e
+`contagem_de_premissas_fora_do_usual`, pelas constantes editoriais
+`MINIMO_DE_PREMISSAS_DECISIVAS` e `MAXIMO_DE_PREMISSAS_DECISIVAS`.
 """
 
 import json
@@ -308,6 +315,59 @@ def _achados_prosa(entrega: dict, catalogo: dict) -> list[Achado]:
             if achado_formato is not None:
                 achados.append(achado_formato)
 
+    return achados
+
+
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D4): a lista de banimento no corpo do relatório. É da metodologia (o vendor a
+# declara: o leitor recebe achados, nunca a infraestrutura do analista), e o catálogo da
+# integração a publica (`catalogo.linguagem_interna`): termos literais por idioma e padrões de
+# código. O QC só a aplica à prosa auditada — a lista de `placeholders.campos_de_prosa`, que é o
+# que as abas Tese e Valuation exibem, já resolvida, porque é o texto resolvido que o leitor lê
+# (um `{{livre:...}}` também vaza). Os textos do ledger e do confronto ficam fora: são dado da
+# aba Evidência, onde a §9 admite a linguagem interna.
+# --------------------------------------------------------------------------
+
+def _lista_de_banimento(catalogo: dict, idioma: str) -> list | None:
+    """Os padrões compilados da lista de banimento — cada termo literal do idioma, sem caixa e
+    como palavra inteira, e cada padrão de código como o catálogo o escreve —, ou `None`, quando o
+    catálogo não a publica na forma."""
+    bloco = _objeto(catalogo.get("linguagem_interna"))
+    termos = _objeto(bloco.get("termos")).get(idioma)
+    padroes = bloco.get("padroes")
+    if not (isinstance(termos, list) and isinstance(padroes, list)
+            and all(isinstance(item, str) and item.strip() for item in termos + padroes)):
+        return None
+    try:
+        return ([re.compile(r"(?<!\w)" + re.escape(" ".join(termo.split())) + r"(?!\w)", re.IGNORECASE)
+                 for termo in termos]
+                + [re.compile(padrao) for padrao in padroes])
+    except re.error:
+        return None
+
+
+def _achados_linguagem_interna(entrega: dict, catalogo: dict) -> list[Achado]:
+    """QUALITY WARNING `linguagem_interna_no_corpo` (§11: "termos de linguagem interna vazando no
+    corpo"; D4): um aviso por campo da prosa auditada cujo texto resolvido — com os espaços
+    normalizados — casa algum termo ou padrão da lista, com os trechos encontrados. Sem a lista no
+    catálogo, a regra não roda: é aviso interno, e a trava de forma da lista mora na integração
+    (`tests/test_catalogo_apresentacao.py`)."""
+    idioma = entrega["execucao"]["idioma"]
+    banimento = _lista_de_banimento(catalogo, idioma)
+    if banimento is None:
+        return []
+    resolvidos, _log = placeholders.resolver_prosa(entrega, idioma)
+    achados: list[Achado] = []
+    for onde, texto in resolvidos.items():
+        normalizado = " ".join(texto.split())
+        trechos: list[str] = []
+        for padrao in banimento:
+            for encontrado in padrao.finditer(normalizado):
+                if encontrado.group(0) not in trechos:
+                    trechos.append(encontrado.group(0))
+        if trechos:
+            achados.append(Achado("QUALITY_WARNING", "linguagem_interna_no_corpo", onde,
+                                  {"trechos": ", ".join(trechos)}))
     return achados
 
 
@@ -1162,6 +1222,24 @@ def _achados_reversa_e_limitacoes(resultados: dict, catalogo: dict, idioma: str,
     return achados + por_limitacao
 
 
+# Item 8, Task 1 (D4; §11, QUALITY WARNING "contagem de premissas na Conclusão fora do usual"):
+# quantas premissas decisivas a Conclusão abre. Constantes EDITORIAIS do Fleet, não metodologia:
+# menos de duas esconde o que sustenta a tese, e mais de cinco dilui as que a derrubam. Moram aqui,
+# nomeadas, como o limiar da concentração de fontes.
+MINIMO_DE_PREMISSAS_DECISIVAS: int = 2
+MAXIMO_DE_PREMISSAS_DECISIVAS: int = 5
+
+
+def _achados_contagem_de_premissas(analise: dict) -> list[Achado]:
+    """`contagem_de_premissas_fora_do_usual` (QUALITY WARNING, D4): a quantidade de
+    `premissas_decisivas` fora de `MINIMO_DE_PREMISSAS_DECISIVAS`–`MAXIMO_DE_PREMISSAS_DECISIVAS`."""
+    quantidade = len(_lista(analise.get("premissas_decisivas")))
+    if MINIMO_DE_PREMISSAS_DECISIVAS <= quantidade <= MAXIMO_DE_PREMISSAS_DECISIVAS:
+        return []
+    return [Achado("QUALITY_WARNING", "contagem_de_premissas_fora_do_usual", "analise.premissas_decisivas", {
+        "quantidade": quantidade, "minimo": MINIMO_DE_PREMISSAS_DECISIVAS, "maximo": MAXIMO_DE_PREMISSAS_DECISIVAS})]
+
+
 def _achados_tese_dependente_de_uma_premissa(analise: dict) -> list[Achado]:
     """`tese_dependente_de_uma_premissa` (QUALITY WARNING, §11): todas as
     perguntas ligadas a um vínculo de um item só — e ao mesmo item."""
@@ -1186,7 +1264,8 @@ def _achados_da_tese(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]
             + _achados_preco_alvo_do_produto(entrega, catalogo, contrato_entrega.produto(entrega))
             + _achados_reversa_e_limitacoes(resultados, catalogo, idioma,
                                             contrato_entrega.produto(entrega))
-            + _achados_tese_dependente_de_uma_premissa(analise))
+            + _achados_tese_dependente_de_uma_premissa(analise)
+            + _achados_contagem_de_premissas(analise))
 
 
 # --------------------------------------------------------------------------
@@ -1870,6 +1949,74 @@ def _achado_da_paridade(paridade: dict | None) -> Achado | None:
         "divergencias": citadas + ("; …" if len(descricoes) > DIVERGENCIAS_CITADAS_NA_MENSAGEM else "")})
 
 
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D1, D2 do plano docs/superpowers/plans/2026-09-16-v4-item8-er-analise.md): a
+# execução. O que ela declarou — os comandos da suíte que rodou e os gates que decidiu — tem
+# forma em `entrega.py`; aqui, a cobertura, contra o vocabulário que o catálogo da integração
+# publica (`catalogo.suite_da_metodologia`, `catalogo.gates`). Nenhum comando e nenhum gate mora
+# neste módulo; sem a declaração do catálogo, as duas regras falham fechadas.
+# --------------------------------------------------------------------------
+
+def _comandos_exigidos(catalogo: dict) -> list[str] | None:
+    """Os comandos que a suíte da metodologia exige, na ordem do catálogo — ou `None`, quando o
+    catálogo não os declara na forma (uma lista não vazia de objetos com `comando` em texto)."""
+    declarados = catalogo.get(contrato_entrega.BLOCO_DA_SUITE)
+    if not isinstance(declarados, list) or not declarados:
+        return None
+    comandos = [_objeto(item).get("comando") for item in declarados]
+    return comandos if all(isinstance(comando, str) and comando.strip() for comando in comandos) else None
+
+
+def _passou(codigo) -> bool:
+    """Código de saída 0 — um inteiro de verdade: `False == 0` em Python, e booleano não é código."""
+    return isinstance(codigo, int) and not isinstance(codigo, bool) and codigo == 0
+
+
+def _achados_suite_da_metodologia(execucao: dict, catalogo: dict) -> list[Achado]:
+    """HARD FAIL `suite_da_metodologia_nao_passou` (§11: "`selftest` ou suíte da metodologia
+    falhando"; §13 e §18.2; D1): um achado só, com o retrato inteiro, quando algum comando que o
+    catálogo exige não tem registro, ou quando algum registro — exigido ou não — tem código de
+    saída diferente de 0. Sem a lista no catálogo nenhum comando seria exigido: a regra falha
+    fechada, e o achado diz que a lista falta."""
+    exigidos = _comandos_exigidos(catalogo)
+    registros = [_objeto(item) for item in _lista(execucao.get(contrato_entrega.BLOCO_DA_SUITE))]
+    rodados = {registro.get("comando") for registro in registros}
+    faltantes = [comando for comando in (exigidos or []) if comando not in rodados]
+    falhos = [f"{registro.get('comando')} ({registro.get('codigo_saida')})"
+              for registro in registros if not _passou(registro.get("codigo_saida"))]
+    if exigidos is not None and not faltantes and not falhos:
+        return []
+    return [Achado("HARD_FAIL", "suite_da_metodologia_nao_passou", f"execucao.{contrato_entrega.BLOCO_DA_SUITE}", {
+        "exigidos": ", ".join(exigidos) if exigidos is not None else _SEM_VALOR,
+        "faltantes": ", ".join(faltantes) or _SEM_VALOR,
+        "falhos": ", ".join(falhos) or _SEM_VALOR,
+    })]
+
+
+def _achados_gates(execucao: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    """HARD FAIL `gates_nao_declarados` (§5, M3: "cinco gates fechados e declarados"; D2): um achado
+    só quando algum gate que o catálogo publica não tem decisão declarada, ou quando um gate
+    declarado está fora desse vocabulário — com os ausentes pelo rótulo do catálogo. Sem os gates
+    no catálogo nenhum seria exigido: a regra falha fechada."""
+    publicados = _objeto(catalogo.get(contrato_entrega.BLOCO_DOS_GATES))
+    declarados = [_objeto(item).get("gate") for item in _lista(execucao.get(contrato_entrega.BLOCO_DOS_GATES))]
+    ausentes = [str(_objeto(_objeto(info).get("rotulo")).get(idioma) or gate)
+                for gate, info in publicados.items() if gate not in declarados]
+    fora = [str(gate) for gate in declarados if gate not in publicados]
+    if publicados and not ausentes and not fora:
+        return []
+    return [Achado("HARD_FAIL", "gates_nao_declarados", f"execucao.{contrato_entrega.BLOCO_DOS_GATES}", {
+        "quantidade": len(publicados),
+        "ausentes": "; ".join(ausentes) or _SEM_VALOR,
+        "fora_do_vocabulario": ", ".join(fora) or _SEM_VALOR,
+    })]
+
+
+def _achados_da_execucao(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
+    execucao = _objeto(entrega.get("execucao"))
+    return _achados_suite_da_metodologia(execucao, catalogo) + _achados_gates(execucao, catalogo, idioma)
+
+
 def _achados_da_valuation(entrega: dict, catalogo: dict, idioma: str) -> list[Achado]:
     """As regras da Task 4 da 5F que leem os blocos da aba Valuation, na ordem da aba: a
     conservação de capital (cenários), as grades de sensibilidade, o painel de escolhas
@@ -1913,7 +2060,10 @@ def avaliar(entrega: dict, catalogo: dict, contrato_ledger: dict, html: str | No
     if achado_da_paridade is not None:
         achados.append(achado_da_paridade)
 
+    achados.extend(_achados_da_execucao(entrega, catalogo, idioma))
+
     achados.extend(_achados_prosa(entrega, catalogo))
+    achados.extend(_achados_linguagem_interna(entrega, catalogo))
     achados.extend(_achados_exhibits(entrega))
 
     resultados = entrega.get("resultados") or {}

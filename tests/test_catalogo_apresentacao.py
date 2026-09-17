@@ -11,6 +11,7 @@ novo sem revisar o catálogo reprova AQUI, na integração — nunca no relatór
 import functools
 import itertools
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -151,6 +152,7 @@ def test_chaves_de_topo_do_catalogo():
         "leituras_do_nivel", "teto_do_crescimento_gratuito", "teto_da_alavanca",
         "escalas_monetarias", "formacao_do_valor",
         "variaveis_do_triangulo", "anos_base_do_capex", "escolhas_metodologicas",
+        "suite_da_metodologia", "gates", "linguagem_interna",
     }
 
 
@@ -944,3 +946,71 @@ def test_disclosure_da_conservacao_de_capital_nomeia_a_chave_da_integracao_sem_l
     assert disclosure["chave"] in CAT["diagnosticos"]
     for idioma in CAT["idiomas"]:
         assert disclosure["texto"].get(idioma, "").strip()
+
+
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D1, D2, D4 do plano docs/superpowers/plans/2026-09-16-v4-item8-er-analise.md): o que
+# a execução roda e declara, e a lista de banimento no corpo do relatório. As três declarações são da
+# metodologia, e as travas as amarram ao vendor: uma versão nova que mude a suíte, os gates ou a lista
+# reprova AQUI, na integração — o `er-analise` e o QC do relatório só as leem.
+# --------------------------------------------------------------------------
+
+VENDOR = RAIZ / "vendor" / "multiplos-justos"
+
+
+def test_a_suite_da_metodologia_do_catalogo_e_a_do_manifest_do_vendor():
+    comandos = CAT["suite_da_metodologia"]
+    do_manifest = [linha for linha in MANIFEST["suite"].values()
+                   if isinstance(linha, str) and linha.startswith("python ")]
+    assert [f"python {' '.join(item['argv'])}" for item in comandos] == do_manifest
+    for item in comandos:
+        assert set(item) == {"comando", "argv"}, sorted(item)
+        assert item["comando"] == " ".join([Path(item["argv"][0]).name, *item["argv"][1:]]), item
+        assert (RAIZ / item["argv"][0]).is_file(), item["argv"][0]
+
+
+def test_os_gates_do_catalogo_sao_os_cinco_do_vendor_na_ordem_com_o_titulo_como_rotulo():
+    texto = (VENDOR / "SKILL.md").read_text(encoding="utf-8")
+    secao = texto.split("\n## Cinco gates antes de qualquer conta\n", 1)[1].split("\n## ", 1)[0]
+    titulos = re.findall(r"^### (Gate (\S+) — .+)$", secao, re.M)
+    assert len(titulos) == 5, titulos
+    assert list(CAT["gates"]) == [f"gate_{numero.replace('.', '_')}" for _titulo, numero in titulos]
+    for (titulo, _numero), info in zip(titulos, CAT["gates"].values()):
+        assert set(info) == {"rotulo"}, sorted(info)
+        assert info["rotulo"]["pt-BR"] == titulo
+    _rotulos_em_todo_idioma("gates")
+
+
+def test_a_lista_de_banimento_cobre_a_do_vendor_e_nao_acende_na_prosa_de_mercado():
+    """Os termos literais e os padrões cobrem cada item da lista do vendor: os termos entre aspas, os
+    códigos de regra e de seção, a versão da metodologia, os enums entre crases, o nome dos gates e cada
+    palavra dos comandos da suíte. E nenhum acende numa frase de mercado com números resolvidos."""
+    bloco = CAT["linguagem_interna"]
+    assert set(bloco) == {"termos", "padroes"}, sorted(bloco)
+    for idioma in CAT["idiomas"]:
+        assert bloco["termos"][idioma] and all(termo.strip() for termo in bloco["termos"][idioma]), idioma
+    termos = {termo.lower() for termo in bloco["termos"]["pt-BR"]}
+    padroes = [re.compile(padrao) for padrao in bloco["padroes"]]
+
+    def _coberto(texto: str) -> bool:
+        return texto.lower() in termos or any(padrao.search(texto) for padrao in padroes)
+
+    aplicacao = (VENDOR / "references" / "aplicacao.md").read_text(encoding="utf-8")
+    lista = " ".join(
+        aplicacao.split("**Lista de banimento no corpo do relatório**", 1)[1].split("Conceitos entram", 1)[0].split())
+    entre_aspas, entre_crases = re.findall(r'"([^"]+)"', lista), re.findall(r"`([^`]+)`", lista)
+    codigos = [f"{letra}1" for letra in re.findall(r"([A-Z§])#", lista)]
+    assert len(entre_aspas) >= 10 and len(entre_crases) == 2 and len(codigos) == 5, (entre_aspas, entre_crases, codigos)
+    # Dos comandos da suíte, o script, o subcomando e a flag — o valor de uma flag não é nome.
+    nomes_de_comando = [nome for item in CAT["suite_da_metodologia"]
+                        for tokens in [item["comando"].split()]
+                        for nome in [tokens[0], *(token for anterior, token in zip(tokens, tokens[1:])
+                                                  if not anterior.startswith("--"))]]
+    exigidos = [*entre_aspas, *entre_crases, *codigos, CAT["metodologia"]["versao"],
+                *(rotulo["rotulo"]["pt-BR"].split()[0] for rotulo in CAT["gates"].values()), *nomes_de_comando]
+    assert [texto for texto in exigidos if not _coberto(texto)] == []
+
+    mercado = ("Valor justo de R$ 61,91 por ação, com EV/EBITDA de 8,5x, retorno sobre o capital de 12,0% "
+               "e crescimento de 5,0% em 2026E, contra o consenso de dezembro.")
+    assert [padrao.pattern for padrao in padroes if padrao.search(mercado)] == []
+    assert [termo for termo in termos if re.search(r"(?<!\w)" + re.escape(termo) + r"(?!\w)", mercado.lower())] == []

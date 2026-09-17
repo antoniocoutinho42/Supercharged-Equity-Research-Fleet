@@ -474,6 +474,20 @@ no caso reprova); nenhum padrão sem folha que o exerça; nenhum caminho casado 
 dois padrões; e toda premissa `entrada: numero` presente nas fixtures cai no
 mapa.
 
+**A execução e o corpo do relatório (`suite_da_metodologia`, `gates`,
+`linguagem_interna`).** Três declarações da metodologia que o `er-analise` e o QC
+do relatório leem sem copiar (item 8). `suite_da_metodologia` é a lista dos
+comandos que toda execução roda, cada um numa invocação fresca: `comando`, o nome
+pelo qual a execução o registra, e `argv`, o script a partir da raiz do
+repositório e os argumentos — os três do manifest do vendor. `gates` são os cinco
+gates que a execução declara antes de qualquer conta, cada um com o rótulo, que é
+o título do gate no `SKILL.md` do vendor. `linguagem_interna` é a lista de
+banimento no corpo do relatório (`references/aplicacao.md` do vendor): `termos`,
+literais por idioma, e `padroes`, expressões regulares dos códigos de regra, de
+seção, de versão, de comando e flag e dos enums do motor. As travas de
+`tests/test_catalogo_apresentacao.py`: os comandos são os do manifest, os gates são
+os títulos do vendor na ordem, e os termos e padrões cobrem a lista do vendor.
+
 ## Escopo desta fatia
 
 Métricas suportadas: rota `firm` aceita `EBITDA` e `NOPAT`; rota `equity`

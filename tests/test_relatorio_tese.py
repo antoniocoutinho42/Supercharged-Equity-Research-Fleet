@@ -803,6 +803,46 @@ def test_todas_as_perguntas_no_mesmo_vinculo_de_um_item_e_quality_warning():
 
 
 # --------------------------------------------------------------------------
+# Item 8, Task 1 (D4): dois QUALITY WARNING mecanizados. A lista de banimento é da metodologia e o
+# catálogo a publica; o QC a aplica à prosa auditada, resolvida — o que a Tese e a Valuation exibem —, e
+# nunca aos textos do ledger, que são dado da aba Evidência. A contagem de premissas decisivas usa as
+# constantes editoriais do Fleet.
+# --------------------------------------------------------------------------
+
+def test_um_termo_da_lista_de_banimento_na_prosa_da_tese_acende_o_aviso_e_na_evidencia_nao():
+    entrega_dict = _entrega()
+    assert _do_codigo(_achados(entrega_dict), "linguagem_interna_no_corpo") == []
+    termos = CATALOGO["linguagem_interna"]["termos"]["pt-BR"]
+    assert {"trava", "motor"} <= set(termos), "a frase do teste usa dois termos da lista do catálogo"
+
+    na_evidencia = copy.deepcopy(entrega_dict)
+    na_evidencia["ledger"]["registros"][0]["justificativa_da_fonte"] = (
+        "Pela trava do motor, esta é a fonte mais próxima do fato.")
+    assert _do_codigo(_achados(na_evidencia), "linguagem_interna_no_corpo") == []
+
+    na_tese = copy.deepcopy(entrega_dict)
+    na_tese["analise"]["veredicto"]["texto"] = "Pela trava do motor, o preço de tela fica abaixo do cenário."
+    # O texto resolvido é o que o leitor lê: um código de regra dentro de `livre:` também vaza.
+    na_tese["analise"]["riscos"][0]["observavel"] = "Decisões do regulador sobre a regra {{livre:J8}}."
+    assert [(a.nivel, a.onde, a.params["trechos"]) for a in _do_codigo(_achados(na_tese), "linguagem_interna_no_corpo")] == [
+        ("QUALITY_WARNING", "analise.veredicto.texto", "trava, motor"),
+        ("QUALITY_WARNING", "analise.riscos.0.observavel", "J8")]
+
+
+@pytest.mark.parametrize("quantidade,acende", [
+    (qc.MINIMO_DE_PREMISSAS_DECISIVAS - 1, True), (qc.MINIMO_DE_PREMISSAS_DECISIVAS, False),
+    (qc.MAXIMO_DE_PREMISSAS_DECISIVAS, False), (qc.MAXIMO_DE_PREMISSAS_DECISIVAS + 1, True),
+])
+def test_premissas_decisivas_fora_da_contagem_usual_acendem_o_aviso(quantidade, acende):
+    assert (qc.MINIMO_DE_PREMISSAS_DECISIVAS, qc.MAXIMO_DE_PREMISSAS_DECISIVAS) == (2, 5)
+    entrega_dict = _entrega()
+    primeira = entrega_dict["analise"]["premissas_decisivas"][0]
+    entrega_dict["analise"]["premissas_decisivas"] = [dict(primeira) for _ in range(quantidade)]
+    achados = _do_codigo(_achados(entrega_dict), "contagem_de_premissas_fora_do_usual")
+    assert [(a.nivel, a.params["quantidade"]) for a in achados] == ([("QUALITY_WARNING", quantidade)] if acende else [])
+
+
+# --------------------------------------------------------------------------
 # Todo campo de texto novo passa pelos placeholders auditáveis: dígito fora de
 # placeholder é `numero_sem_proveniencia` (A7 da 5A) em cada um deles.
 # --------------------------------------------------------------------------
@@ -838,6 +878,10 @@ _CAMPOS_NOVOS_DE_PROSA = [
     # padrão o declara porque a entrega tem a reversa.
     ("o_que_esta_no_preco", "julgamento"),
     ("o_que_esta_no_preco", "observavel"),
+    # Item 8, Task 1 (D3): sob a Análise a Tese padrão declara o re-teste terminal e, sem o
+    # cross-check publicado, a razão da ausência dele — dois textos que a Valuation exibe.
+    ("cross_check", "ausente", "razao"),
+    ("reteste_terminal", "texto"),
 ]
 
 

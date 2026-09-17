@@ -51,7 +51,11 @@
     "escolha_sem_razao": "Escolha metodológica sem razão econômica em '{onde}': o valuation precificou a alternativa de {rotulo}, e a Tese não declara, em analise.escolhas, por que o caso-base ficou onde ficou. Nenhuma escolha que a metodologia deixa em aberto recebe default: o painel só sai com escolha, alternativa, impacto e razão.",
     "escolhas_desconhecidas": "Escolhas metodológicas sem declaração no catálogo em '{onde}': resultados.escolhas_metodologicas publica as escolhas {escolhas}, e o catálogo de apresentação não declara, na forma do contrato (escolhas_metodologicas), o rótulo e o gatilho em '{idioma}' de cada uma — sem eles o painel sairia com o código cru da escolha, e a regra falha fechada. A correção é da camada de integração, nunca do relatório.",
     "paridade_divergente": "Paridade Python↔JS divergente no build em '{onde}': o espelho do navegador não reproduz o que o Python publicou para este caso — {quantidade} divergência(s): {divergencias}. Nada é emitido: a correção é da camada de integração (o espelho, a fachada ou o wrapper), nunca do relatório.",
-    "paridade_nao_verificada_no_build": "Paridade Python↔JS não verificada no build: a máquina que gerou este relatório não tinha node, e o espelho do navegador não foi confrontado, antes da emissão, com o que o Python publicou. O badge de paridade da aba Valuation confere os números quando o relatório abre."
+    "paridade_nao_verificada_no_build": "Paridade Python↔JS não verificada no build: a máquina que gerou este relatório não tinha node, e o espelho do navegador não foi confrontado, antes da emissão, com o que o Python publicou. O badge de paridade da aba Valuation confere os números quando o relatório abre.",
+    "suite_da_metodologia_nao_passou": "Suíte da metodologia sem PASS nesta execução em '{onde}': a entrega só sai com todo comando que o catálogo de apresentação exige ({exigidos}) registrado e com código de saída 0 — sem registro: {faltantes}; com código diferente de 0: {falhos}. Nada é emitido: rode a suíte de novo, cada comando numa invocação fresca, e registre o resultado; com o catálogo sem a lista dos comandos, a regra falha fechada e a correção é da camada de integração.",
+    "gates_nao_declarados": "Gates não declarados em '{onde}': a execução declara a decisão de cada um dos {quantidade} gates que o catálogo de apresentação publica, antes de qualquer conta — sem decisão: {ausentes}; fora do vocabulário do catálogo: {fora_do_vocabulario}. Nada é emitido; com o catálogo sem os gates, a regra falha fechada e a correção é da camada de integração.",
+    "linguagem_interna_no_corpo": "Linguagem interna no corpo em '{onde}': {trechos}. O corpo do relatório fala a língua do mercado — traduza o conceito e deixe o rótulo interno da metodologia de fora; a linguagem interna cabe na aba Evidência.",
+    "contagem_de_premissas_fora_do_usual": "Contagem de premissas decisivas fora do usual em '{onde}': {quantidade} premissa(s), quando a Conclusão abre de {minimo} a {maximo} — poucas escondem o que sustenta a tese, e muitas diluem as que a derrubam."
   },
   "moeda_simbolo": {
     "BRL": "R$"
@@ -376,6 +380,8 @@
       "ficha_tecnica_blocos": {
         "execucao": "Execução",
         "metodologia": "Metodologia e caso",
+        "gates": "Gates declarados",
+        "suite_da_metodologia": "Suíte da metodologia executada",
         "contratos": "Contratos consumidos",
         "registros_por_estatuto": "Registros do ledger por estatuto",
         "registros_por_classe_de_fonte": "Registros do ledger por classe de fonte",
@@ -404,6 +410,7 @@
         "REQUIRED_DISCLOSURE": "REQUIRED DISCLOSURE"
       },
       "ficha_tecnica_contagem": "{codigo}: {quantidade}",
+      "ficha_tecnica_codigo_de_saida": "código de saída {codigo}",
       "ficha_tecnica_nenhum_achado": "nenhum",
       "log_titulo": "Log de resolução de placeholders",
       "log_vazio": "Nenhum placeholder resolvido nesta entrega.",

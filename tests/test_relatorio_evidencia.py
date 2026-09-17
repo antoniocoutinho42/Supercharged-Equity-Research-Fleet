@@ -1287,10 +1287,11 @@ def test_consenso_ausente_sai_so_nos_avisos_com_o_rotulo_da_ancora_e_a_razao_res
 # --- D6: a ficha técnica ------------------------------------------------------
 
 def test_a_ficha_tecnica_compoe_a_execucao_os_contratos_as_contagens_e_os_achados_e_a_evidencia_a_mostra():
-    """D6: a execução; a metodologia e o hash do caso, de `resultados.origem`; as versões lidas dos
+    """D6: a execução; a metodologia e o hash do caso, de `resultados.origem`; os gates declarados e os
+    comandos da suíte da metodologia, com o código de saída (item 8, D2); as versões lidas dos
     próprios artefatos; os registros por estatuto e por classe de fonte e os achados por nível e código,
     em ordem que não depende da ordem do ledger nem da dos achados. A Evidência a mostra com os rótulos
-    do dicionário — sem o QUALITY WARNING, que é interno (§11)."""
+    do dicionário — e cada gate pelo rótulo do catálogo —, sem o QUALITY WARNING, que é interno (§11)."""
     entrega_dict = _entrega()
     _que_sustenta(entrega_dict, "preco.valor")["estatuto"] = ESTATUTO_ESTIMADO
     outra_classe = next(classe for classe in _VOCABULARIOS["classes_de_fonte"] if classe != CLASSE)
@@ -1308,6 +1309,8 @@ def test_a_ficha_tecnica_compoe_a_execucao_os_contratos_as_contagens_e_os_achado
         "metodologia": {"nome": resultados["origem"]["metodologia"]["nome"],
                         "versao": resultados["origem"]["metodologia"]["versao"],
                         "caso_sha256": resultados["origem"]["caso_sha256"]},
+        "gates": entrega_dict["execucao"]["gates"],
+        "suite_da_metodologia": entrega_dict["execucao"]["suite_da_metodologia"],
         "contratos": {"entrega": entrega_dict["versao_contrato"], "resultados": resultados["versao_contrato"],
                       "catalogo": CATALOGO["versao_contrato"], "ledger": entrega_dict["ledger"]["versao_contrato"]},
         "registros_por_estatuto": dict(sorted(Counter(r["estatuto"] for r in registros).items())),
@@ -1329,7 +1332,13 @@ def test_a_ficha_tecnica_compoe_a_execucao_os_contratos_as_contagens_e_os_achado
     assert [(_titulo(grupo), _pares(_um(grupo, tag="table")))
             for grupo in _todos(secao, classe="ficha-tecnica-grupo")] == [
         *[(blocos[bloco], [(campos[bloco][campo], valor) for campo, valor in esperada[bloco].items()])
-          for bloco in ("execucao", "metodologia", "contratos")],
+          for bloco in ("execucao", "metodologia")],
+        (blocos["gates"], [(CATALOGO["gates"][gate["gate"]]["rotulo"]["pt-BR"], gate["decisao"])
+                           for gate in esperada["gates"]]),
+        (blocos["suite_da_metodologia"], [(comando["comando"], render.t(
+            DICIONARIO, "evidencia.ficha_tecnica_codigo_de_saida", codigo=_contagem(comando["codigo_saida"])))
+            for comando in esperada["suite_da_metodologia"]]),
+        (blocos["contratos"], [(campos["contratos"][campo], valor) for campo, valor in esperada["contratos"].items()]),
         (blocos["registros_por_estatuto"], [(_rotulo("estatutos", estatuto), _contagem(quantidade))
                                             for estatuto, quantidade in esperada["registros_por_estatuto"].items()]),
         (blocos["registros_por_classe_de_fonte"], [(_rotulo("classes_de_fonte", classe), _contagem(quantidade))

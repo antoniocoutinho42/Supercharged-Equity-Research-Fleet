@@ -50,6 +50,13 @@ hipótese terminal (`analise.reteste_terminal`) traz o vocabulário de processo
 `mantida`/`trocada` e o texto. Que TODA escolha publicada tenha razão é QC
 (`escolha_sem_razao`), não forma.
 
+O item 8 (D1/D2/D3) acrescenta duas coisas. A execução declara a suíte da metodologia que
+rodou (`execucao.suite_da_metodologia`, um registro por comando com o código de saída) e os
+gates (`execucao.gates`, uma decisão por gate) — a forma aqui, a cobertura no QC, pelo
+vocabulário que o catálogo da integração publica. E cada produto exige o que ele pede: com a
+reversa publicada, `analise.o_que_esta_no_preco`, nos dois; sob `analise`,
+`analise.reteste_terminal` e, sem o cross-check publicado, `analise.cross_check.ausente`.
+
 O ledger (5E, D1) tem a forma do contrato `ledger/1` do `er-evidencia`, que
 `builder.py` lê e entrega a `carregar`: as chaves de cada nível e os
 vocabulários fechados vêm do contrato lido, nunca de uma cópia aqui — e "exige
@@ -129,7 +136,23 @@ PRODUTO_PADRAO: str = "analise"
 PRODUTO_DA_LEITURA_DE_PRECO: str = "leitura_de_preco"
 PRODUTOS: frozenset = frozenset({PRODUTO_PADRAO, PRODUTO_DA_LEITURA_DE_PRECO})
 
-CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma", "produto"})
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D1/D2 do plano docs/superpowers/plans/2026-09-16-v4-item8-er-analise.md):
+# a execução declara o que rodou e o que decidiu antes de qualquer conta. A suíte da
+# metodologia (§13) roda por execução, cada comando numa invocação fresca, e cada comando
+# fica registrado com o código de saída; os cinco gates (§5, M3) ficam declarados, cada
+# um com a decisão. Os dois blocos são obrigatórios nos dois produtos. A FORMA mora aqui;
+# QUAIS comandos a suíte exige e QUAIS são os gates é vocabulário da metodologia, publicado
+# pelo catálogo da integração, e a regra que os confere é QC (`suite_da_metodologia_nao_
+# passou`, `gates_nao_declarados`).
+# --------------------------------------------------------------------------
+
+BLOCO_DA_SUITE: str = "suite_da_metodologia"
+BLOCO_DOS_GATES: str = "gates"
+CHAVES_DE_COMANDO_DA_SUITE: frozenset = frozenset({"comando", "codigo_saida"})
+CHAVES_DE_GATE: frozenset = frozenset({"gate", "decisao"})
+
+CHAVES_DE_EXECUCAO: frozenset = frozenset({"id", "ticker", "idioma", "produto", BLOCO_DA_SUITE, BLOCO_DOS_GATES})
 CHAVES_DE_EXECUCAO_OBRIGATORIAS: frozenset = CHAVES_DE_EXECUCAO - {"produto"}
 
 
@@ -175,8 +198,11 @@ CHAVES_DE_ANALISE: frozenset = frozenset({
     "o_que_esta_no_preco", "escolhas", "cross_check", "reteste_terminal",
 })
 # `faixa` é exigida só fora da fronteira de escopo (`_validar_analise`); as outras
-# são opcionais — `o_que_esta_no_preco` (5F, D12) só cabe com a reversa, e as três da
-# 5G (D1/D4/D5) só cabem com o bloco de `resultados` que cada uma lê.
+# ficam fora da lista porque a exigência delas é condicional — `o_que_esta_no_preco` (5F,
+# D12) só cabe com a reversa e, desde o item 8 (D3), é exigido com ela; `escolhas` e
+# `cross_check` (5G) só cabem com o bloco de `resultados` que cada um lê; e, sob o produto
+# `analise` (item 8, D3), `reteste_terminal` é exigido e `cross_check` também, quando a
+# integração não publica o segundo método.
 CHAVES_DE_ANALISE_OBRIGATORIAS: frozenset = CHAVES_DE_ANALISE - {
     "faixa", "visao_nao_consensual", "mudou_desde_analise_fornecida", "o_que_esta_no_preco",
     "escolhas", "cross_check", "reteste_terminal",
@@ -597,6 +623,31 @@ def _validar_execucao(execucao: Any) -> None:
     if "produto" in execucao:
         _exigir_do_vocabulario(execucao["produto"], PRODUTOS, "execucao.produto")
 
+    # Item 8, D1: um registro por comando rodado. Se a lista cobre o que a suíte exige e se
+    # todo código é 0 é QC — uma lista vazia passa aqui e é reprovada lá, nomeando o que falta.
+    for indice, comando in enumerate(_exigir_lista(execucao[BLOCO_DA_SUITE], f"execucao.{BLOCO_DA_SUITE}")):
+        onde = f"execucao.{BLOCO_DA_SUITE}.{indice}"
+        comando = _objeto_fechado(comando, CHAVES_DE_COMANDO_DA_SUITE, CHAVES_DE_COMANDO_DA_SUITE, onde)
+        _exigir_texto_nao_vazio(comando["comando"], f"{onde}.comando")
+        codigo = comando["codigo_saida"]
+        if not isinstance(codigo, int) or isinstance(codigo, bool):
+            raise EntregaInvalida(
+                f"'{onde}.codigo_saida' tem de ser o código de saída do processo, um inteiro: {codigo!r}.")
+
+    # Item 8, D2: uma decisão por gate. Se os cinco estão lá é QC; o mesmo gate duas vezes é
+    # forma — qual das duas decisões vale seria adivinhação.
+    gates = _exigir_lista(execucao[BLOCO_DOS_GATES], f"execucao.{BLOCO_DOS_GATES}")
+    for indice, gate in enumerate(gates):
+        onde = f"execucao.{BLOCO_DOS_GATES}.{indice}"
+        gate = _objeto_fechado(gate, CHAVES_DE_GATE, CHAVES_DE_GATE, onde)
+        _exigir_texto_nao_vazio(gate["gate"], f"{onde}.gate")
+        _exigir_texto_nao_vazio(gate["decisao"], f"{onde}.decisao")
+    nomes = [gate["gate"] for gate in gates]
+    repetidos = sorted({nome for nome in nomes if nomes.count(nome) > 1})
+    if repetidos:
+        raise EntregaInvalida(
+            f"'execucao.{BLOCO_DOS_GATES}' repete o gate '{repetidos[0]}': cada gate tem uma decisão só.")
+
     if not (_DIR_I18N / f"{idioma}.json").exists():
         disponiveis = sorted(p.stem for p in _DIR_I18N.glob("*.json"))
         raise EntregaInvalida(
@@ -762,7 +813,9 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger,
                 "(§9 do desenho — só o que é material)."
             )
 
-    # 5F, D12: opcional; declarado, lê a reversa — sem ela o julgamento não tem o que ler.
+    # 5F, D12: declarado, lê a reversa — sem ela o julgamento não tem o que ler. Item 8, D3:
+    # com a reversa publicada ele é obrigatório, nos dois produtos — a leitura do que está no
+    # preço fecha com o julgamento comparativo e o observável que o testaria (§9).
     if "o_que_esta_no_preco" in analise:
         onde = "analise.o_que_esta_no_preco"
         if resultados.get(BLOCO_DA_REVERSA) is None:
@@ -775,6 +828,13 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger,
                                 CHAVES_DO_QUE_ESTA_NO_PRECO, onde)
         for campo in sorted(CHAVES_DO_QUE_ESTA_NO_PRECO):
             _exigir_texto_nao_vazio(bloco[campo], f"{onde}.{campo}")
+    elif resultados.get(BLOCO_DA_REVERSA) is not None:
+        raise EntregaInvalida(
+            "campo obrigatório ausente em 'analise': 'o_que_esta_no_preco' — com "
+            f"'resultados.{BLOCO_DA_REVERSA}' publicada, nos dois produtos, a leitura do que está no preço "
+            "fecha com o julgamento do analista (qual reconciliação exige a menor violência às âncoras "
+            "observáveis) e o observável que o testaria."
+        )
 
     # 5G, D1: opcional; declarado, dá razão às escolhas que a integração PRECIFICOU. Sem
     # nenhuma publicada não há a que dar razão, e uma chave fora das publicadas sairia da
@@ -818,14 +878,30 @@ def _validar_analise(analise: Any, resultados: dict, contrato: ContratoDoLedger,
         ausente = _objeto_fechado(bloco["ausente"], CHAVES_DE_CROSS_CHECK_AUSENTE,
                                   CHAVES_DE_CROSS_CHECK_AUSENTE, f"{onde}.ausente")
         _exigir_texto_nao_vazio(ausente["razao"], f"{onde}.ausente.razao")
+    elif produto == PRODUTO_PADRAO and resultados.get(BLOCO_DO_CROSS_CHECK) is None:
+        # Item 8, D3: sob a Análise, um dos dois — o segundo método publicado, ou a razão de ele
+        # não existir. Um cross-check que ninguém declarou é silêncio, e a §8.1 manda declarar.
+        raise EntregaInvalida(
+            "campo obrigatório ausente em 'analise': 'cross_check' — sob o produto "
+            f"'{PRODUTO_PADRAO}', sem 'resultados.{BLOCO_DO_CROSS_CHECK}' publicado, a Tese declara a razão "
+            "de não haver segundo método ('cross_check.ausente')."
+        )
 
     # 5G, D5: o re-teste da hipótese terminal — vocabulário de processo, e o texto em prosa.
+    # Item 8, D3: obrigatório sob a Análise, onde a hipótese terminal é re-testada depois de
+    # derivada a rentabilidade marginal (§9).
     if "reteste_terminal" in analise:
         onde = "analise.reteste_terminal"
         bloco = _objeto_fechado(analise["reteste_terminal"], CHAVES_DE_RETESTE_TERMINAL,
                                 CHAVES_DE_RETESTE_TERMINAL, onde)
         _exigir_do_vocabulario(bloco["resultado"], RESULTADOS_DO_RETESTE_TERMINAL, f"{onde}.resultado")
         _exigir_texto_nao_vazio(bloco["texto"], f"{onde}.texto")
+    elif produto == PRODUTO_PADRAO:
+        raise EntregaInvalida(
+            f"campo obrigatório ausente em 'analise': 'reteste_terminal' — sob o produto '{PRODUTO_PADRAO}', a "
+            "hipótese terminal é re-testada depois de derivada a rentabilidade marginal, e a Tese declara o "
+            "resultado e a razão."
+        )
 
 
 def _validar(entrega: Any, contrato: ContratoDoLedger) -> None:

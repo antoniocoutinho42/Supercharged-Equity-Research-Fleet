@@ -80,5 +80,14 @@
     "julgamento": "A reconciliação que exige menos violência às âncoras é a de uma rampa já concluída na máquina nova, e não a de um custo de capital abaixo da banda observada.",
     "observavel": "A utilização da máquina de papel-cartão nos próximos trimestres."
   },
+  "cross_check": {
+    "ausente": {
+      "razao": "A soma das partes já confronta os dois segmentos entre si, e a rota do acionista não tem vetor coerente sem uma política de dividendos estável, que a companhia não publica."
+    }
+  },
+  "reteste_terminal": {
+    "resultado": "mantida",
+    "texto": "Com a rentabilidade marginal de cada segmento derivada, a convergência do retorno do capital novo ao custo de capital continua a hipótese terminal das duas partes."
+  },
   "exhibits": []
 }

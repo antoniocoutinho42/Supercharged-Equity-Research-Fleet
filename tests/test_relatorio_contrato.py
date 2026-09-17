@@ -32,8 +32,9 @@ import qc  # noqa: E402
 
 sys.path.insert(0, str(RAIZ / "tests"))
 import relatorio_apoio as apoio  # noqa: E402
+from test_relatorio_tese import _aba, _visivel  # noqa: E402
 
-ENV_UTF8 = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
+ENV_UTF8 ={**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
 
 CATALOGO = json.loads(
     (RAIZ / "skills" / "er-valuation" / "assets" / "catalogo_apresentacao.json").read_text(encoding="utf-8"))
@@ -336,7 +337,12 @@ def test_alias_legado_de_tv_emite_com_rotulo_canonico(tmp_path):
     # esta asserção sempre quis: nenhum código interno na TELA.
     # `test_relatorio_laboratorio.py::test_um_valor_que_o_catalogo_nao_sabe_
     # nomear_nao_vaza_o_codigo_cru` cobra a mesma coisa no campo do painel.
-    assert "spread" not in apoio.prosa_da_pagina(html)
+    # Item 8 (D2): a ficha técnica da aba Evidência mostra os gates pelo título que
+    # o vendor lhes dá, e o do Gate 1 fala da "morte do spread" — linguagem interna,
+    # que a §9 admite ali. O alias do caso apareceria onde a convenção terminal é
+    # rotulada: nas abas Tese e Valuation, que são o escopo desta asserção.
+    for nome in ("tese", "valuation"):
+        assert "spread" not in _visivel(_aba(html, nome)), nome
 
 
 # --------------------------------------------------------------------------
@@ -820,6 +826,73 @@ def test_idioma_sem_dicionario_falha(tmp_path):
     assert resultado.returncode == 1, resultado.stdout + resultado.stderr
     assert not (raiz / "qc.json").exists()
     assert "idioma" in resultado.stderr
+
+
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D1, D2 do plano docs/superpowers/plans/2026-09-16-v4-item8-er-analise.md): a execução
+# declara a suíte da metodologia que rodou e os gates que decidiu. A forma é recusa de contrato (código
+# 1); a cobertura, contra os comandos e os gates que o catálogo publica, é HARD FAIL. Nenhum comando e
+# nenhum gate é escrito aqui: saem do catálogo, como no apoio.
+# --------------------------------------------------------------------------
+
+_CODIGOS_DA_EXECUCAO = ("suite_da_metodologia_nao_passou", "gates_nao_declarados")
+
+
+def _achados_da_execucao(entrega_dict: dict, catalogo: dict = CATALOGO) -> list:
+    return [(a.nivel, a.codigo, a.params) for a in qc.avaliar(entrega_dict, catalogo, apoio.CONTRATO_LEDGER)
+            if a.codigo in _CODIGOS_DA_EXECUCAO]
+
+
+def test_um_comando_da_suite_com_codigo_diferente_de_0_ou_sem_registro_reprova():
+    valida = apoio.montar_entrega("caso_minimo_firm.json")
+    assert _achados_da_execucao(valida) == []
+    comandos = [item["comando"] for item in CATALOGO["suite_da_metodologia"]]
+
+    falhou = copy.deepcopy(valida)
+    falhou["execucao"]["suite_da_metodologia"][1]["codigo_saida"] = 1
+    assert _achados_da_execucao(falhou) == [("HARD_FAIL", "suite_da_metodologia_nao_passou", {
+        "exigidos": ", ".join(comandos), "faltantes": "—", "falhos": f"{comandos[1]} (1)"})]
+
+    faltou = copy.deepcopy(valida)
+    del faltou["execucao"]["suite_da_metodologia"][2]
+    assert _achados_da_execucao(faltou) == [("HARD_FAIL", "suite_da_metodologia_nao_passou", {
+        "exigidos": ", ".join(comandos), "faltantes": comandos[2], "falhos": "—"})]
+
+    # Sem a lista no catálogo nenhum comando seria exigido: a regra falha fechada.
+    sem_lista = copy.deepcopy(CATALOGO)
+    del sem_lista["suite_da_metodologia"]
+    assert [codigo for _nivel, codigo, _params in _achados_da_execucao(valida, sem_lista)] == [
+        "suite_da_metodologia_nao_passou"]
+
+
+def test_um_gate_sem_decisao_ou_fora_do_vocabulario_reprova():
+    valida = apoio.montar_entrega("caso_minimo_firm.json")
+    gates = list(CATALOGO["gates"])
+
+    faltou = copy.deepcopy(valida)
+    del faltou["execucao"]["gates"][3]
+    faltou["execucao"]["gates"].append({"gate": "gate_4", "decisao": "Um gate que a metodologia não tem."})
+    assert _achados_da_execucao(faltou) == [("HARD_FAIL", "gates_nao_declarados", {
+        "quantidade": len(gates), "ausentes": CATALOGO["gates"][gates[3]]["rotulo"]["pt-BR"],
+        "fora_do_vocabulario": "gate_4"})]
+
+
+@pytest.mark.parametrize("adulterar,trecho", [
+    pytest.param(lambda e: e["execucao"].pop("gates"), "campo obrigatório ausente em 'execucao': 'gates'",
+                 id="gates-ausentes"),
+    pytest.param(lambda e: e["execucao"]["suite_da_metodologia"][0].update(codigo_saida=False),
+                 "'execucao.suite_da_metodologia.0.codigo_saida' tem de ser o código de saída do processo",
+                 id="codigo-de-saida-booleano"),
+    pytest.param(lambda e: e["execucao"]["gates"].append(dict(e["execucao"]["gates"][0])),
+                 "'execucao.gates' repete o gate", id="gate-repetido"),
+])
+def test_forma_da_suite_e_dos_gates_e_recusa_de_contrato_nomeada(adulterar, trecho, tmp_path):
+    entrega_dict = apoio.montar_entrega("caso_minimo_firm.json")
+    adulterar(entrega_dict)
+    apoio.escrever_raiz(tmp_path / "raiz", entrega_dict)
+    with pytest.raises(entrega.EntregaInvalida) as erro:
+        entrega.carregar(tmp_path / "raiz", apoio.CONTRATO_LEDGER)
+    assert trecho in str(erro.value), str(erro.value)
 
 
 # --------------------------------------------------------------------------

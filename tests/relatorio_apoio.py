@@ -344,25 +344,29 @@ def _tese_padrao(resultados: dict, produto: str | None = None) -> dict:
       caso de cenário único —, e nenhuma faixa sob fronteira de escopo (D3) nem sob o
       produto `leitura_de_preco` (5H, Task 2b): nos dois, uma faixa de preços é
       preço-alvo de manchete;
-    - uma premissa decisiva: a primeira premissa da rota, na ordem do catálogo,
-      que o cenário da manchete declara;
+    - duas premissas decisivas — o mínimo usual do QC (`qc.MINIMO_DE_PREMISSAS_DECISIVAS`,
+      item 8, D4): as primeiras premissas da rota, na ordem do catálogo, que o cenário
+      da manchete declara;
     - todas as perguntas com `sem_exhibit` — um exhibit passado a
       `montar_entrega` fica fora das perguntas, como antes da 5D;
     - uma razão por escolha metodológica publicada (5G, D1), que o HARD FAIL
-      `escolha_sem_razao` exige.
+      `escolha_sem_razao` exige;
+    - sob o produto `analise` (item 8, D3), o re-teste da hipótese terminal e, sem o
+      cross-check publicado, a razão da ausência dele — os dois que a forma exige ali.
     """
     blocos = sorted(CATALOGO["blocos"], key=lambda bloco: CATALOGO["blocos"][bloco]["ordem"])
     earning_power, crescimento, custo_de_capital, duracao = blocos[:4]
     cenario_da_manchete = resultados["manchete"]["cenario"]
     premissas_do_cenario = resultados["cenarios"][cenario_da_manchete]["premissas"]
-    premissa_decisiva = next(chave for chave in CATALOGO["premissas"][resultados["rota"]]
-                             if chave in premissas_do_cenario)
+    premissas_decisivas = [chave for chave in CATALOGO["premissas"][resultados["rota"]]
+                           if chave in premissas_do_cenario][:qc.MINIMO_DE_PREMISSAS_DECISIVAS]
     sem_exhibit = {"razao": "Evidência qualitativa; um gráfico não acrescenta informação."}
 
     tese = {
         "veredicto": {"texto": "O preço de tela fica abaixo do que o cenário da manchete sustenta."},
         "premissas_decisivas": [
-            {"chave": premissa_decisiva, "derivacao": "Calibrada pelo histórico normalizado da companhia."},
+            {"chave": chave, "derivacao": "Calibrada pelo histórico normalizado da companhia."}
+            for chave in premissas_decisivas
         ],
         "positives": [{
             "afirmacao": "A expansão da capacidade sustenta o crescimento do volume.",
@@ -420,7 +424,33 @@ def _tese_padrao(resultados: dict, produto: str | None = None) -> dict:
                           "capital, e não a do crescimento.",
             "observavel": "O custo de capital implícito nos próximos resultados trimestrais.",
         }
+    # Item 8, Task 1 (D3): sob a Análise, a forma exige o re-teste terminal e, sem o segundo método
+    # publicado, a razão da ausência dele. Sob a Leitura de preço nenhum dos dois é exigido.
+    if produto != PRODUTO_DA_LEITURA_DE_PRECO:
+        tese["reteste_terminal"] = {
+            "resultado": "mantida",
+            "texto": "A hipótese terminal continua coerente com a rentabilidade marginal derivada.",
+        }
+        if resultados.get("cross_check") is None:
+            tese["cross_check"] = {"ausente": {
+                "razao": "A rota oposta não tem vetor coerente nas âncoras observáveis desta companhia."}}
     return tese
+
+
+# --------------------------------------------------------------------------
+# Item 8, Task 1 (D1, D2): a execução que a entrega padrão declara — a suíte da metodologia com
+# todo comando que o catálogo exige, cada um com código de saída 0, e a decisão de cada gate que o
+# catálogo publica. Derivadas do catálogo, nunca de uma lista escrita aqui: um comando ou um gate
+# novo se cobre sozinho.
+# --------------------------------------------------------------------------
+
+def suite_da_metodologia_que_passou() -> list[dict]:
+    return [{"comando": item["comando"], "codigo_saida": 0} for item in CATALOGO["suite_da_metodologia"]]
+
+
+def gates_declarados() -> list[dict]:
+    return [{"gate": gate, "decisao": "Decisão do analista, com os observáveis que a sustentam."}
+            for gate in CATALOGO["gates"]]
 
 
 # --------------------------------------------------------------------------
@@ -645,6 +675,8 @@ def montar_entrega(nome_fixture: str, *, id_execucao: str = "2026-09-11-001",
         "id": id_execucao,
         "ticker": ticker or caso.get("ticker") or "TESTE3",
         "idioma": idioma,
+        "suite_da_metodologia": suite_da_metodologia_que_passou(),
+        "gates": gates_declarados(),
     }
     if produto is not None:
         execucao["produto"] = produto

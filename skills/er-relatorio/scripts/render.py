@@ -3271,6 +3271,17 @@ VOCABULARIO_DOS_BLOCOS_DE_CONTAGEM: dict = {
 }
 
 
+def _rotulo_do_gate(catalogo: dict, gate: str, idioma: str) -> str:
+    """Rótulo de um gate (`catalogo.gates.<gate>`, item 8, D2) — o vocabulário é da metodologia,
+    publicado pela integração. O QC já recusa gate fora dele antes de renderizar
+    (`gates_nao_declarados`, HARD FAIL); aqui, defesa em profundidade, nomeada."""
+    rotulo = ((catalogo.get("gates") or {}).get(gate) or {}).get("rotulo", {}).get(idioma)
+    if not rotulo:
+        raise RotuloDoCatalogoAusente(
+            f"catálogo de apresentação sem rótulo em '{idioma}' para o gate '{gate}' em 'gates'.")
+    return rotulo
+
+
 def _rotulo_da_evidencia(dicionario: dict, vocabulario: str, codigo: Any) -> str:
     """O rótulo de um código de vocabulário do ledger ou do confronto, pelo dicionário."""
     return _rotulo_de_vocabulario(dicionario, f"evidencia.{vocabulario}", str(codigo))
@@ -3454,18 +3465,26 @@ def _confronto_html(entrega: dict, dicionario: dict) -> str:
     return _secao_html("evidencia-confronto", t(dicionario, "evidencia.confronto_titulo"), "".join(partes))
 
 
-def _ficha_tecnica_html(ficha: dict | None, idioma: str, dicionario: dict) -> str:
+def _ficha_tecnica_html(ficha: dict | None, idioma: str, dicionario: dict, catalogo: dict) -> str:
     """D7, 5 (D6): a ficha técnica que o builder compôs (`builder.compor_ficha_tecnica`), bloco a
     bloco, sob os rótulos do dicionário — os campos da execução, da metodologia e dos contratos;
-    as contagens de registros, pelo rótulo do vocabulário; os achados por nível, com o código e a
-    quantidade, sem o nível interno (`NIVEL_INTERNO_DO_QC`). Sem ficha — um chamador direto deste
-    módulo, que não passou pelo builder —, a frase do dicionário."""
+    os gates declarados, cada um pelo rótulo do catálogo com a decisão, e os comandos da suíte da
+    metodologia, cada um com o código de saída (item 8, D2); as contagens de registros, pelo
+    rótulo do vocabulário; os achados por nível, com o código e a quantidade, sem o nível interno
+    (`NIVEL_INTERNO_DO_QC`). Sem ficha — um chamador direto deste módulo, que não passou pelo
+    builder —, a frase do dicionário."""
     titulo = t(dicionario, "evidencia.ficha_tecnica_titulo")
     if ficha is None:
         return _secao_html("ficha-tecnica-bloco", titulo, _frase_html(dicionario, "evidencia.ficha_tecnica_vazia"))
     grupos = []
     for bloco, conteudo in ficha.items():
-        if bloco == BLOCO_DOS_ACHADOS_DA_FICHA:
+        if bloco == contrato_entrega.BLOCO_DOS_GATES:
+            pares = [(_rotulo_do_gate(catalogo, item["gate"], idioma), item["decisao"]) for item in conteudo]
+        elif bloco == contrato_entrega.BLOCO_DA_SUITE:
+            pares = [(item["comando"], t(dicionario, "evidencia.ficha_tecnica_codigo_de_saida",
+                                         codigo=_contagem(item["codigo_saida"], idioma)))
+                     for item in conteudo]
+        elif bloco == BLOCO_DOS_ACHADOS_DA_FICHA:
             nenhum = t(dicionario, "evidencia.ficha_tecnica_nenhum_achado")
             pares = [(t(dicionario, f"evidencia.ficha_tecnica_niveis.{nivel}"),
                       "; ".join(t(dicionario, "evidencia.ficha_tecnica_contagem", codigo=codigo,
@@ -3504,7 +3523,7 @@ def _evidencia_html(entrega: dict, catalogo: dict, log: list, log_exhibits: list
             + _ledger_html(entrega, idioma, dicionario)
             + _lacunas_e_limitacoes_html(entrega, catalogo, idioma, dicionario, prosa)
             + _confronto_html(entrega, dicionario)
-            + _ficha_tecnica_html(ficha_tecnica, idioma, dicionario)
+            + _ficha_tecnica_html(ficha_tecnica, idioma, dicionario, catalogo)
             + _metodologia_html(entrega["resultados"], dicionario)
             + _log_html(log, dicionario)
             + _rastreabilidade_exhibits_html(log_exhibits, dicionario))
