@@ -3,16 +3,34 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 
-def test_plugin_json_v3():
+VERSAO = "4.0.0"
+
+def test_plugin_json_v4():
     p = json.loads((RAIZ / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
-    assert p["version"] == "3.0.0"
+    assert p["version"] == VERSAO
     assert p["name"] == "equity-research-fleet"
     assert p["description"].strip()
 
-def test_marketplace_json_v3():
+def test_marketplace_json_v4():
     m = json.loads((RAIZ / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
-    assert m["metadata"]["version"] == "3.0.0"
-    assert m["plugins"][0]["version"] == "3.0.0"
+    assert m["metadata"]["version"] == VERSAO
+    assert m["plugins"][0]["version"] == VERSAO
+
+
+def test_manifestos_nao_descrevem_mais_a_v3():
+    """A versao e a descricao andam juntas.
+
+    Subir o numero e deixar a descricao da v3 (Data Manager, motor K3, OpenBB
+    exclusivo, 2 abas) publica no marketplace um plugin que nao existe mais.
+    """
+    p = json.loads((RAIZ / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    m = json.loads((RAIZ / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+    mortos = ("Data Manager", "K3", "2 abas", "v3")
+    for onde, texto in (("plugin.json", p["description"]),
+                        ("marketplace.json/metadata", m["metadata"]["description"]),
+                        ("marketplace.json/plugins[0]", m["plugins"][0]["description"])):
+        for morto in mortos:
+            assert morto not in texto, f"descricao da v3 em {onde}: {morto!r}"
 
 def test_v2_removida():
     for morto in ["schemas", "scripts/pipeline.py", "scripts/validar.py", "scripts/snapshot.py",
