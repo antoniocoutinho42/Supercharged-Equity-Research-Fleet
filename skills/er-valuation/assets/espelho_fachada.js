@@ -671,7 +671,10 @@
   // 70 de 524 raizes sobre a faixa REAL de roic/roe do vendor. Nenhum espelho fiel
   // evita isso — nao e' folga de tolerancia que falta, e' informacao que o /h**2
   // destruiu. E um badge VERMELHO num caso legitimo trava o laboratorio inteiro.
-  // A curvatura continua EXIBIDA: ela e' leitura, nao decisao.
+  // A curvatura continua PUBLICADA na leitura (leitura, nao decisao), mas desde o
+  // ajuste do lote 2 da 5I o relatorio NAO a pinta: com duas casas, perto do polo,
+  // ela seria o "ruido com cara de precisao" contra o qual o vendor alerta, e quem
+  // carrega a leitura na tela e' a identificacao rotulada.
   const CURVATURA_FORA_DO_COMPARADOR = 'curvatura';
 
   // Igualdade estrutural entre o que o Python publicou e o que o espelho recomputou,

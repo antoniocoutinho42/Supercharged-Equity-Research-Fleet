@@ -531,10 +531,12 @@ def test_teto_do_crescimento_gratuito_bate_com_o_wrapper():
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO)
 def test_a_curvatura_continua_publicada_dos_dois_lados():
-    """D4: a curvatura sai do COMPARADOR, nao da TELA. Um espelho que a omitisse
-    deixaria a aba com um numero a menos ao lado da raiz — e a regra do §8.4 proibe
-    numero vivo com diagnostico ausente. Prende tambem o caso que JUSTIFICA a
-    excecao: sem ele, a excecao nomeada estaria protegendo o que nao precisa."""
+    """D4: a curvatura sai do COMPARADOR — e, desde o ajuste do lote 2 da 5I, tambem da
+    TELA (o relatorio nao a pinta) —, mas continua no CONTRATO: a leitura a publica dos
+    dois lados, nas mesmas chaves do `resultados.json` (L2). Um espelho que a omitisse
+    quebraria o shape sem que o badge percebesse, porque ela esta fora do comparador.
+    Prende tambem o caso que JUSTIFICA a excecao: sem ele, a excecao nomeada estaria
+    protegendo o que nao precisa."""
     probs, py = _py_reversa()
     js = _lado_js()
     publicadas, divergentes = 0, 0

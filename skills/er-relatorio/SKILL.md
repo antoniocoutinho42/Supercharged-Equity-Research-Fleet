@@ -596,9 +596,11 @@ duas perguntas.
    payload (`reversa.campos`), gerados da mesma declaração que compõe o HTML do build —
    `laboratorio.js` percorre caminho, aplica a receita da unidade que a leitura declara e
    escreve; nenhum nome de campo de metodologia mora lá. O redesenho de uma rajada de teclas
-   é agrupado (`setTimeout`), e a **curvatura** exibida ao vivo é a do navegador: ela está
-   fora do comparador desde o lote 1 da 5I (D4 — segunda diferença finita amplificada por
-   `h²`), continua exibida, e não pinta o badge de vermelho. Cada cenário ganha ainda: o
+   é agrupado (`setTimeout`). A **curvatura** da raiz **não é pintada** — nem no HTML do build
+   nem no repaint: perto do polo ela é ruído amplificado por 1/h² (D4, 266,45 no build contra
+   230,93 no navegador para a mesma raiz), e com duas casas seria ruído com cara de
+   precisão. Quem carrega a leitura é a identificação rotulada. Ela continua publicada em
+   `resultados` e na leitura, e fora do comparador. Cada cenário ganha ainda: o
    **triângulo como controle** — um seletor com as três configurações de `{inputs, output}`
    da identidade g = RiR × retorno, derivadas do triângulo que o caso declara, mais o campo
    da variável que não é premissa da rota (`rir`); a variável de SAÍDA vira visor
@@ -630,8 +632,8 @@ duas perguntas.
    nomeia o cenário que a grade perturbou;
 8. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
    `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
-   `unidade` da leitura, a identificação rotulada, o intervalo e a curvatura, os toques
-   tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
+   `unidade` da leitura, a identificação rotulada e o intervalo (a curvatura, não), os
+   toques tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
    crescimento gratuito, com o múltiplo e o texto do catálogo; as limitações publicadas da
    reversa e da curva iso; e o julgamento do analista com o observável, quando declarados.
    Depois dos eixos — que leem o preço em TAXA — o **nível implícito** (fatia 5H), que o lê

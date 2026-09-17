@@ -2145,9 +2145,9 @@ def _laboratorio_para_json(caso: dict, resultados: dict, catalogo: dict, idioma:
         },
         "rotulosMultiplos": rotulos_multiplos,
         # Fatia 5I, Task 3: a receita de cada unidade que o catálogo declara — a leitura
-        # da reversa diz a unidade de cada número que publica (`unidade`,
-        # `unidade_da_curvatura`, `beta.unidade`), e o painel a resolve aqui em vez de
-        # decorar "raiz é ponto percentual".
+        # da reversa diz a unidade de cada número que a aba pinta (`unidade`,
+        # `beta.unidade`), e o painel a resolve aqui em vez de decorar "raiz é ponto
+        # percentual".
         "formatosPorUnidade": {
             unidade: _espec_de_formato_com_escala(catalogo, unidade, idioma, moeda,
                                                   resultados.get("escala_monetaria"))
@@ -2573,9 +2573,12 @@ _CAMPOS_DA_RAIZ: tuple = (
      "modelo": "valuation.reversa_intervalo",
      "valores": {"de": {"de": ["intervalo", 0], "unidade": ["unidade"]},
                  "ate": {"de": ["intervalo", 1], "unidade": ["unidade"]}}},
-    {"papel": "curvatura", "tag": "span", "classe": "reversa-curvatura",
-     "modelo": "valuation.reversa_curvatura",
-     "valores": {"valor": {"de": ["curvatura"], "unidade": ["unidade_da_curvatura"]}}},
+    # A curvatura NÃO é campo da tela (fatia 5I, ajuste do controlador sobre o lote 2). Perto
+    # do polo ela é ruído amplificado por 1/h² — 266,45 no build e 230,93 no navegador para a
+    # mesma raiz, medido na D4 —, e pintá-la com duas casas é exatamente o "ruído com cara de
+    # precisão" contra o qual o vendor alerta. Quem carrega a leitura, estável e com paridade
+    # exata, é a identificação rotulada, logo acima. A curvatura continua publicada em
+    # `resultados` e na leitura, e fora do comparador: só deixa de ser pintada.
 )
 
 _CAMPOS_DA_LEITURA: tuple = (
@@ -2683,9 +2686,10 @@ def _eixo_da_reversa_html(nome: str, eixo: dict, catalogo: dict, idioma: str, mo
                           dicionario: dict) -> str:
     """Um eixo do que está no preço, pela leitura normalizada que a integração publica ao lado do
     payload do motor (`leitura`, D2): o rótulo do eixo e o do motivo; cada raiz pela `unidade` da
-    leitura, com a identificação rotulada, o intervalo e a curvatura (pela `unidade_da_curvatura`); os
-    toques tangenciais; o CAP; e, no eixo de custo de capital, o beta implícito com a posição, a banda
-    e a distância. A prosa do motor (`sem_solucao`, `sugestao`) e a álgebra nunca chegam aqui.
+    leitura, com a identificação rotulada e o intervalo; os toques tangenciais; o CAP; e, no eixo de
+    custo de capital, o beta implícito com a posição, a banda e a distância. A prosa do motor
+    (`sem_solucao`, `sugestao`) e a álgebra nunca chegam aqui — nem o número da curvatura, que a
+    leitura publica e a aba não pinta (ver `_CAMPOS_DA_RAIZ`).
 
     O corpo vive num container próprio (`data-laboratorio-corpo`) porque o painel o
     REESCREVE inteiro a cada edição: uma raiz a mais, um CAP que fecha, um beta que sai

@@ -515,12 +515,11 @@ def test_todos_os_modulos_da_pagina_coexistem_no_mesmo_contexto():
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
 @pytest.mark.parametrize("formato,papel", [("moeda", "preco"), ("x2", "multiplo"),
                                            ("pct1", "upside"),
-                                           # Fatia 5I, Task 3: as unidades que a leitura da reversa
-                                           # declara (`pp`, `anos_fracionarios`, `beta`, `curvatura`)
-                                           # passam a ser formatadas no browser, pela receita do
-                                           # catálogo — a mesma amarra, agora para os números do que
-                                           # está no preço.
-                                           ("pp2", "raiz"), ("num1", "cap"), ("num2", "curvatura")])
+                                           # Fatia 5I, Task 3: as unidades que a aba pinta da leitura
+                                           # da reversa (`pp`, `anos_fracionarios`, `beta`) passam a
+                                           # ser formatadas no browser, pela receita do catálogo — a
+                                           # mesma amarra, agora para os números do que está no preço.
+                                           ("pp2", "raiz"), ("num1", "cap"), ("num2", "beta")])
 @pytest.mark.parametrize("valor", [0.0, 1.5, -0.1234, 61.9137, 1234567.891, -9876.5])
 def test_o_laboratorio_formata_exatamente_como_o_python(formato, papel, valor, tmp_path):
     """A mesma amarra que `svg.js` tem: a receita de formatação (`{casas,
@@ -1441,22 +1440,6 @@ def _campo_do_eixo(foto: dict, eixo: str, papel: str) -> list:
     return [campo["texto"] for campo in foto["eixos"][eixo] if campo["papel"] == papel]
 
 
-# A curvatura é a ÚNICA leitura que os dois motores não reproduzem um do outro, e a
-# razão está medida no lote 1 (D4): `curvatura_d2M_dx2` é uma segunda diferença finita
-# dividida por `h²`, e 1 ULP de diferença em `m0` vira 13% no eixo cuja raiz cai em
-# g ≈ 1e-16. Ela saiu do comparador NOMEADAMENTE naquele lote — um badge vermelho num
-# caso legítimo travaria o laboratório inteiro — e continua exibida, porque é leitura e
-# não decisão. Com a leitura VIVA, o número exibido passa a ser o do navegador: as
-# comparações campo a campo abaixo a excluem, e um teste só, logo adiante, prende a
-# exceção pelos dois lados.
-PAPEL_DA_CURVATURA = "curvatura"
-
-
-def _sem_curvatura(eixos: dict) -> dict:
-    return {nome: [campo for campo in campos if campo["papel"] != PAPEL_DA_CURVATURA]
-            for nome, campos in eixos.items()}
-
-
 def test_o_badge_de_paridade_sobe_para_o_cabecalho_da_aba():
     """A8: dentro da `<section>` do painel, o badge era achado por uma busca
     descendente a partir da raiz. No cabeçalho, a MESMA busca devolveria `null` e
@@ -1507,7 +1490,7 @@ def test_a_leitura_do_que_esta_no_preco_anda_com_a_edicao(tmp_path):
     ])
 
     assert fotos["antes"]["eixos"], "a aba não trouxe eixo nenhum — o teste não discrimina"
-    assert _sem_curvatura(fotos["carga"]["eixos"]) == _sem_curvatura(fotos["antes"]["eixos"])
+    assert fotos["carga"]["eixos"] == fotos["antes"]["eixos"]
     assert fotos["carga"]["teto"] == "" and fotos["carga"]["limitacoes"] == ""
 
     def _pagina_editada(chave: str, valor: float) -> str:
@@ -1516,7 +1499,7 @@ def test_a_leitura_do_que_esta_no_preco_anda_com_a_edicao(tmp_path):
         return _pagina(FIXTURE, mutar_caso=_mutar)[0]
 
     com_roic = _pagina_editada("roic", 20.0)
-    assert _sem_curvatura(fotos["roic"]["eixos"]) == _sem_curvatura(_eixos_estaticos(com_roic))
+    assert fotos["roic"]["eixos"] == _eixos_estaticos(com_roic)
     assert _campo_do_eixo(fotos["roic"], "custo_capital", "raiz-valor") \
         != _campo_do_eixo(fotos["carga"], "custo_capital", "raiz-valor"), \
         "a edição não moveu a raiz — o teste deixou de discriminar"
@@ -1524,7 +1507,7 @@ def test_a_leitura_do_que_esta_no_preco_anda_com_a_edicao(tmp_path):
         == _campo_do_eixo(fotos["carga"], "custo_capital", "motivo")
 
     com_wacc = _pagina_editada("wacc", 14.0)
-    assert _sem_curvatura(fotos["wacc"]["eixos"]) == _sem_curvatura(_eixos_estaticos(com_wacc))
+    assert fotos["wacc"]["eixos"] == _eixos_estaticos(com_wacc)
     for eixo in ("crescimento", "rentabilidade"):
         assert _campo_do_eixo(fotos["wacc"], eixo, "motivo") != _campo_do_eixo(fotos["carga"], eixo, "motivo")
         assert _campo_do_eixo(fotos["wacc"], eixo, "raiz-valor") == []
@@ -1538,26 +1521,45 @@ def test_a_leitura_do_que_esta_no_preco_anda_com_a_edicao(tmp_path):
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)
-def test_a_curvatura_exibida_na_carga_e_a_do_navegador_e_o_badge_continua_verde(tmp_path):
-    """A consequência, na tela, da exceção que o lote 1 mediu (D4): com a leitura viva,
-    a curvatura que a aba mostra passa a ser a que o motor do navegador calculou. No
-    eixo cuja raiz cai em g ≈ 1e-16 ela difere da publicada — 1 ULP na segunda
-    diferença, amplificado por `h²` —, e é por isso que ela está FORA do comparador: o
-    badge continua verde, porque a divergência é de leitura, não de decisão.
+def test_cada_raiz_mostra_a_identificacao_rotulada_e_nunca_o_numero_da_curvatura(tmp_path):
+    """Ajuste do controlador sobre o lote 2 da 5I: a curvatura crua sai da tela. Perto do
+    polo ela é ruído amplificado por 1/h² — 266,45 no build e 230,93 no navegador, para a
+    mesma raiz (D4) —, e pintá-la com duas casas é o "ruído com cara de precisão" contra o
+    qual o vendor alerta. Quem carrega a leitura, estável e com paridade exata, é a
+    identificação rotulada.
 
-    O teste prende os dois lados: o campo continua na tela depois da carga (a exibição
-    não foi silenciada) e o badge não vira vermelho por causa dele."""
-    pagina, _entrega = _pagina()
-    fotos = _laboratorio_vivo(pagina, tmp_path)
-    curvaturas = {
-        quando: [campo["texto"] for campos in fotos[quando]["eixos"].values() for campo in campos
-                 if campo["papel"] == PAPEL_DA_CURVATURA]
-        for quando in ("antes", "carga")
+    Os dois momentos da tela: o HTML do build (`antes`) e o que o painel repinta na carga
+    (`carga`) — que, sem a curvatura, voltam a ser idênticos campo a campo. E a condição que
+    torna o teste discriminante: a leitura publicada TRAZ curvatura; o contrato não mudou, só
+    a tela deixou de pintá-la."""
+    pagina, entrega = _pagina()
+    eixos = entrega["resultados"]["reversa"]["eixos"]
+    formatadas = {
+        placeholders.formatar(raiz["curvatura"],
+                              CATALOGO["unidades"][eixo["leitura"]["unidade_da_curvatura"]]["formato"], "pt-BR")
+        for eixo in eixos.values() for raiz in eixo["leitura"]["raizes"] if raiz.get("curvatura") is not None
     }
-    assert curvaturas["antes"] and len(curvaturas["carga"]) == len(curvaturas["antes"])
-    assert curvaturas["carga"] != curvaturas["antes"], \
-        "a fixture deixou de exercitar o caso que justifica a exceção da curvatura (D4)"
+    assert formatadas, "a leitura publicada não traz curvatura nenhuma — o teste não discrimina"
+
+    fotos = _laboratorio_vivo(pagina, tmp_path)
+    assert fotos["carga"]["eixos"] == fotos["antes"]["eixos"]
     assert fotos["carga"]["badge"]["estado"] == "ok"
+
+    for quando in ("antes", "carga"):
+        for nome, eixo in eixos.items():
+            campos = fotos[quando]["eixos"][nome]
+            assert not [campo for campo in campos if "curvatura" in (campo["classe"] or "")], (quando, nome)
+            textos = [campo["texto"] for campo in campos if campo["texto"] is not None]
+            assert not [texto for texto in textos if any(numero in texto for numero in formatadas)], (quando, nome)
+
+            raizes = eixo["leitura"]["raizes"]
+            linhas = _campo_do_eixo(fotos[quando], nome, "raiz-valor")
+            assert len(linhas) == len(raizes), (quando, nome)
+            for linha, raiz in zip(linhas, raizes):
+                rotulo = (CATALOGO["identificacoes"][raiz["identificacao"]]["rotulo"]["pt-BR"]
+                          if raiz["identificacao"] is not None
+                          else render.t(DICIONARIO, "valuation.reversa_identificacao_indisponivel"))
+                assert rotulo in linha, (quando, nome, linha)
 
 
 @pytest.mark.skipif(SEM_NODE, reason=RAZAO_SEM_NODE)

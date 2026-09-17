@@ -155,7 +155,6 @@
       "reversa_raiz": "{valor} — {identificacao}",
       "reversa_identificacao_indisponivel": "identificação indisponível (sem derivadas na vizinhança da raiz)",
       "reversa_intervalo": "Intervalo compatível com o alvo: {de} a {ate}",
-      "reversa_curvatura": "Curvatura: {valor}",
       "reversa_tangenciais": "Toques tangenciais, sem cruzamento: {valores}",
       "reversa_cap": "{valor} anos",
       "reversa_beta": "Beta implícito: {valor}",

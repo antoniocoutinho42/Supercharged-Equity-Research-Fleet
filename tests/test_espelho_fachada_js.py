@@ -1018,8 +1018,9 @@ def test_a_reversa_viva_reproduz_o_que_o_python_publicou(tmp_path):
             assert viva_raiz["valor"] == pub_raiz["valor"], nome
             assert viva_raiz["intervalo"] == pub_raiz["intervalo"], nome
             assert viva_raiz["identificacao"] == pub_raiz["identificacao"], nome
-            # D4: a curvatura sai do COMPARADOR, não da TELA — publicada dos dois
-            # lados, e nunca `null` onde o Python publicou número.
+            # D4: a curvatura sai do COMPARADOR (e, desde o ajuste do lote 2 da 5I, da
+            # tela), não do CONTRATO — publicada dos dois lados, e nunca `null` onde o
+            # Python publicou número.
             assert ("curvatura" in viva_raiz) and (viva_raiz["curvatura"] is not None), nome
 
     assert saida["comparacao"]["ok"] is True, saida["comparacao"]["divergencias"]
