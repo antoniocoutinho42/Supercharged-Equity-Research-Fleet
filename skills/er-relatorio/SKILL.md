@@ -657,12 +657,23 @@ duas perguntas.
 3. **cenários**: o nome, a âncora (texto do caso que a integração publica, como dado), o
    triângulo (entradas e saída pelos rótulos do catálogo, `rir` por
    `variaveis_do_triangulo`; na rampa, a frase de que não se aplica), o preço e o upside;
-4. o **laboratório**. Desde a fatia 5I ele deixou de ter número congelado ao lado de número
+4. a **decomposição do valor** (v10.1, §11.7 do `aplicacao.md` do vendor), quando algum cenário
+   a publica — os da rota firm (`resultados.cenarios.<nome>.decomposicao_mm`): uma tabela com uma
+   linha por cenário e uma coluna por campo que o catálogo declara (`catalogo.decomposicao_mm.
+   campos` — ativos instalados e valor do crescimento em múltiplo do lucro operacional após
+   imposto, participação do crescimento e peso do terminal), pelo rótulo e pela unidade de lá,
+   e a nota de leitura do catálogo. É precomputada no build e sai **rotulada como congelada**: o
+   laboratório não a reproduz. Os montantes em moeda e a prosa do motor
+   (`identidade_ativos_instalados`, `trava_de_leitura`) ficam em `resultados`. O título passa por
+   `render._rotulo_do_numero`, como o dos cenários: os dois termos em múltiplo somam o múltiplo
+   justo, que o mapa da integração declara conclusão de valor;
+5. o **laboratório**. Desde a fatia 5I ele deixou de ter número congelado ao lado de número
    vivo: a cada edição, a fachada recalcula também **a leitura de cada eixo da reversa, as
    tabelas 1D e as matrizes 2D**, e o painel as reescreve na aba (elas moram fora dele, e são
    alcançadas por `raiz.ownerDocument`). Sobrou congelado o SOTP, na lista do painel, e o
-   nível implícito, rotulado no próprio bloco. Os campos da leitura são DESCRITORES do
-   payload (`reversa.campos`), gerados da mesma declaração que compõe o HTML do build —
+   nível implícito e a decomposição do valor, cada um rotulado no próprio bloco. Os campos da
+   leitura são DESCRITORES do payload (`reversa.campos`), gerados da mesma declaração que
+   compõe o HTML do build —
    `laboratorio.js` percorre caminho, aplica a receita da unidade que a leitura declara e
    escreve; nenhum nome de campo de metodologia mora lá. O redesenho de uma rajada de teclas
    é agrupado (`setTimeout`). A **curvatura** da raiz **não é pintada** — nem no HTML do build
@@ -681,14 +692,14 @@ duas perguntas.
    `cenarios.<cenário>.premissas.<chave>` (ou `ponte.<linha>`), com o claim, a fórmula que o
    registro declara e a fonte com o localizador. Premissa sem registro não ganha linha
    nenhuma;
-5. a **ponte** como waterfall. Com laboratório, uma **linha de entrada por parcela** ao
+6. a **ponte** como waterfall. Com laboratório, uma **linha de entrada por parcela** ao
    lado do host (fatia 5I, D8), cada uma com a chave do catálogo (`data-ponte-linha`):
    editar o degrau move `nd_efetivo`, o preço e a figura na mesma ação, e a barra
    correspondente é endereçada pela chave (`data-parcela`), nunca pela posição. O editor
    fica FORA do SVG — hit-testing e input flutuante dentro da figura continuam fora de
    escopo. Linha ilegível vira `null` e a integração a recusa pelo nome: a página fica sem
    número, nunca com a linha valendo zero;
-6. o **painel de escolhas metodológicas** (fatia 5G, §8.2), quando a integração publica
+7. o **painel de escolhas metodológicas** (fatia 5G, §8.2), quando a integração publica
    alguma: o alerta de empilhamento acima, com a direção pelo rótulo do dicionário e as
    escolhas pelos do catálogo; e cada escolha com o rótulo e o gatilho do catálogo, a
    posição do caso-base (`central`/`alternativa`, rotulada), o preço do outro ramo, o
@@ -696,16 +707,16 @@ duas perguntas.
    disparou o gatilho. O painel é **dinâmico**: a escolha com gatilho disparado ou com
    `material` verdadeiro fica no nível principal, e as demais num `<details>` fechado — o
    limiar é da integração, e o relatório só lê a decisão;
-7. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
+8. as **sensibilidades**: uma tabela por grade 1D — o ponto, o preço e o múltiplo, com o
    ponto do cenário marcado por igualdade exata — e uma matriz por grade 2D, cujo título
    nomeia o cenário que a grade perturbou;
-8. os **drivers exógenos** (item 6, §8.4), só quando `resultados.drivers` é publicado: a
+9. os **drivers exógenos** (item 6, §8.4), só quando `resultados.drivers` é publicado: a
    tabela do registro do motor — o nome, a base e o spot (só localizados: a unidade é do
    caso), o gap, a elasticidade, o impacto, a marca do limiar e o tratamento pelas duas
    marcas que a integração publica (`acima_do_limiar`, `vira_cenario`), nunca pelo limiar
    nem pela prosa do motor — e o efeito líquido agregado contra a soma dos brutos. É
    precomputado e sai **rotulado como congelado**;
-9. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
+10. **o que está no preço** — vivo desde a fatia 5I, exceto o nível implícito: cada eixo de
    `resultados.reversa.eixos` pelo rótulo do catálogo, com o motivo, as raízes pela
    `unidade` da leitura, a identificação rotulada e o intervalo (a curvatura, não), os
    toques tangenciais e o CAP; o beta implícito com a posição, a banda e a distância; o teto do
@@ -714,23 +725,33 @@ duas perguntas.
    Depois dos eixos — que leem o preço em TAXA — o **nível implícito** (fatia 5H), que o lê
    em NÍVEL: a métrica-base que o preço embute (montante, na escala do caso), o degrau sobre
    a métrica declarada, uma razão por ponto de consenso que o caso declara e a leitura do
-   confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Ele é o **único bloco
-   congelado** da seção (é o subcomando `nivel` do motor, que nenhum espelho reproduz) e sai
+   confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Desde a v10.1, quando a
+   integração publica a leitura recalculada (`resultados.reversa.nivel_implicito.recalculado`, rota
+   firm com métrica EBITDA), o bloco traz **as duas leituras**: primeiro a **central** — a
+   métrica que o preço embute com o múltiplo recalculado no nível, o degrau, o encargo de
+   reposição (pela unidade `pp`) e o múltiplo justo no nível implícito (pela unidade `múltiplo`)
+   —, depois a de **múltiplo fixo**, com os títulos de limite superior, e a nota da escada; com
+   `recalculado.sem_solucao`, a frase do dicionário toma o lugar da leitura central, e um bloco
+   recalculado sem o número central nem a recusa do motor é recusa nomeada
+   (`CampoDeContratoAusente`). As razões contra o consenso e a leitura do confronto seguem a de
+   múltiplo fixo, sobre a qual o motor as calcula. Ele é o **único bloco congelado** da seção
+   (é o subcomando `nivel` do motor, que nenhum espelho reproduz) e sai
    rotulado como tal, dentro do próprio bloco; o teto do crescimento gratuito e as limitações
    da leitura aparecem e somem com a edição, no host que o painel reescreve. Sem reversa, o
    rótulo da limitação que a suprime. Nenhuma prosa do motor (`sem_solucao`, `sugestao`,
-   `leitura`, `algebra`) nem código cru chega à aba;
-10. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
+   `leitura`, `algebra`, `leitura_congelada`, `recalculado_nota`, `configuracao_do_triangulo`)
+   nem código cru chega à aba;
+11. o **retorno exigido** (fatia 5G, §8.2), colapsado e só quando publicado: a taxa pela
    unidade da premissa que ela substituiu, a premissa pelo rótulo do catálogo, o preço que
    resulta e a nota de que é leitura, **jamais fair value**;
-11. o **valor ponderado por probabilidade**, colapsado e só quando publicado: a soma de
+12. o **valor ponderado por probabilidade**, colapsado e só quando publicado: a soma de
     peso × preço que a integração compôs, cada peso ao lado do seu cenário, e a nota de que
     os pesos são julgamento fora da fórmula e o número **nunca substitui bear, base e bull**;
-12. o **cross-check por um segundo método** (§8.1), que sai **sempre**: com o bloco
+13. o **cross-check por um segundo método** (§8.1), que sai **sempre**: com o bloco
     publicado, a rota oposta rotulada, o preço dela e a diferença contra a manchete; sem
     ele, a razão da ausência que `analise.cross_check.ausente` declara; sem os dois, a frase
     de que não foi declarado — um cross-check que ninguém declarou é informação, não silêncio;
-13. o **re-teste da hipótese terminal**, quando declarado: o resultado pelo rótulo do
+14. o **re-teste da hipótese terminal**, quando declarado: o resultado pelo rótulo do
     dicionário (`mantida`/`trocada`) e o texto do analista.
 
 **A escala dos montantes** (`resultados.escala_monetaria`) entra só onde a unidade do
@@ -741,8 +762,9 @@ ação. **Sob fronteira de escopo — ou sob o produto `leitura_de_preco`**, os 
 `render._leitura_condicional`, todo número que o mapa da integração declara conclusão
 de valor sai com o rótulo condicional do dicionário (`valuation.condicional`): o preço e o
 upside do cabeçalho, o múltiplo justo corrente e o forward, os múltiplos e os montantes da
-formação do valor, o título dos cenários e os rótulos de preço e upside de cada um, as três
-saídas de cada cenário do laboratório, o título e as colunas de cada tabela 1D, o título
+formação do valor, o título dos cenários e os rótulos de preço e upside de cada um, o título
+da decomposição do valor (v10.1), as três saídas de cada cenário do laboratório, o título e
+as colunas de cada tabela 1D, o título
 da matriz e — desde a 5G — o preço do ramo alternativo de cada escolha, o do retorno exigido,
 o valor ponderado e o do cross-check. A decisão é uma só (`render._leitura_condicional`): quem
 exibe o número diz o caminho que lê em `resultados`, e o mapa responde — nenhum nome de campo
