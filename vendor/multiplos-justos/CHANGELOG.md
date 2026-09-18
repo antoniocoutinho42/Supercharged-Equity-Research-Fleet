@@ -1,5 +1,207 @@
 # CHANGELOG — Múltiplos Justos
 
+## v10 → v10.1 (ago/2026) — "o que a doutrina exigia e o motor não entregava"
+
+Origem: diligência do próprio pacote v10, feita comando a comando contra as obrigações que a v10
+criou. Escopo: **quatro correções, três delas de auto-contradição introduzida na v10**. Nenhuma
+fórmula de valuation alterada, **nenhum anchor movido**; `selftest` verde e as duas fases de
+`testes.py` passaram. A refatoração de `ev_nopat` em partes foi verificada contra a v10 em 596
+casos aleatórios cobrindo as três convenções: **maior divergência 7,1e-15**.
+
+**1. As saídas obrigatórias passam a sair do motor.** A v10 mandou reportar peso do valor terminal,
+valor dos ativos instalados e nível implícito recalculado — e nenhum dos três tinha comando, contra
+a regra do próprio pacote ("nunca calcule na mão"). Agora: `ev_nopat_partes` e `decomposicao_mm` no
+núcleo, o campo `decomposicao_mm` no `ev` (em múltiplos de NOPAT sempre, em moeda com `--ebitda`), e
+`nivel` com o segundo bloco de flags devolvendo a leitura recalculada. `ev_nopat` passou a ser a
+SOMA das partes, de modo que decomposição e múltiplo não podem divergir.
+
+**2. O nível implícito é uma ESCADA, não duas leituras.** A diligência mostrou que existem três
+configurações, não duas: congelada (múltiplo fixo) > vetor travado (só o encargo de reposição
+responde — é o que o motor faz) > rentabilidade também derivada do nível. Num caso medido, **263 /
+244 / 229**. A v10 chamava a segunda de "central" sem dizer que a terceira existia. Agora a ordem é
+declarada como propriedade e a configuração vai à entrega. **Identidade que economiza uma conta:** a
+leitura recalculada contra o preço de tela É o break-even da base de lucro.
+
+**3. O viés de mortalidade atravessa para o playbook.** O paper quantifica desde sempre (**−16% a
+−27% para hazards de 2% a 5% ao ano**, unidirecional) e a palavra não aparecia uma vez sequer no
+`SKILL.md`, no `aplicacao.md` nem no `derivacao.md` — justamente quando a v10 tornou obrigatório
+reportar o peso do terminal, que é o gatilho que o paper pede. Agora: `derivacao.md` §5b, regra em
+`aplicacao.md` §11.7, item 4 da entrega, e **diagnóstico do motor quando o terminal passa de 50%**.
+
+**4. Confronto com o caixa operacional publicado (§11.8, Gate 0).** Todas as cadeias partiam de peças
+montadas pelo analista; nenhuma confrontava contra o caixa que a companhia publica. Declaratório por
+construção — a classificação de juros e IR varia por norma —, entrega o **gap e o que ele contém**.
+Gap > ~10% sem explicação nominada ⟹ a base de lucro é hipótese, e isso sobe para a Conclusão.
+
+**5. Duas camadas no entregável.** Corpo do memo (seções 1, 2, 3, 5, 6, 7, 8) e anexo analítico
+(grades, sensibilidades, break-even, fronteiras). Nada é cortado; muda onde mora. Regra da divisão:
+no corpo o que o leitor precisa para SEGUIR; no anexo o que ele precisa para CRITICAR.
+
+**6. Beta construído sobe para a Conclusão.** Quando o beta não é observado na sessão, a premissa
+fixa (iv) declara isso e carrega a banda em beta — porque nesse caso parte da faixa de valor não vem
+de premissa econômica nenhuma.
+
+**7. Beta bottom-up passa a ser a rota central; regressão da própria ação vira confronto.** A v10
+mandava usar o beta observado e cair em pares só na ausência de série — ordenação invertida frente à
+prática consolidada: regressão de ação individual tem erro-padrão de 0,20 a 0,30 e mede a estrutura
+de capital do passado, enquanto a mediana setorial desalavancada tem erro dividido por √n e é
+realavancada ao D/E de hoje. Procedimento completo (seleção por modelo de negócio, desalavancagem,
+mediana, realavancagem, ponderação por VALOR em multi-segmento) no §2, com o beta de regressão como
+confronto — divergência grande é achado.
+
+**8. Alíquota: convergência à marginal no terminal.** Diferimentos, incentivos com prazo e prejuízo
+acumulado são temporários por natureza. O motor tem `t` ÚNICO para explícito e terminal — limitação
+agora declarada —, e a regra passa a exigir escolha explícita: marginal ajustada no caso-base com a
+efetiva como sensibilidade, ou efetiva com declaração escrita de qual benefício é estrutural.
+Divergência acima de ~5 p.p. sem declaração é premissa silenciosa; no caso de referência, 25% contra
+34% valiam ~7% do valor.
+
+**Deliberadamente FORA, e por quê.** (a) *Elasticidade efetiva por regressão da margem bruta contra o
+preço do driver* — o observável existe e resolveria o input menos ancorado do pacote, mas prescrevê-lo
+sem definir janela, tratamento de defasagem e teste de estabilidade trocaria um número declarado por
+um número com aparência de medido; fica como roadmap com o desenho a fazer. (b) *Faixa de entrada e
+dimensionamento de posição* — o pacote entrega valor e veredicto contra o preço; a decisão de porte é
+de mandato, não de valuation.
+
+## v9.32 → v10 (ago/2026) — "os ativos instalados e as duas pernas do capital"
+
+Origem: rodada KEPL3 (Kepler Weber) revisada pelo dono do pacote, mais uma revisão fria do pacote
+inteiro contra arquétipos que não originaram nenhuma regra (banco, varejo de ciclo negativo,
+siderúrgica, software, concessão, incorporadora, mineradora). Escopo: **doutrinário + três guardas
+no motor**. Nenhuma fórmula de valuation foi alterada, **nenhum anchor se moveu**, `selftest` verde
+e as duas fases de `testes.py` passaram. A lista de escolhas metodológicas nomeadas permanece em
+**onze** — a 8ª foi generalizada, não somada.
+
+**1. Decomposição de Miller-Modigliani como saída obrigatória (§11.7).** `EV(g=0) = NOPAT/W` é
+identidade em `convergencia`/`gordon` e depende SÓ de `d` e da alíquota. O pacote tinha teto
+obrigatório (crescimento gratuito) e nenhum piso. Passa a reportar ativos instalados, valor do
+crescimento e peso do terminal, com a condição de validade declarada. Qualificador de convenção
+espelhado em `derivacao.md` §2 (na `book` com CAP finito a identidade não vale).
+
+**2. Contraprova de caixa do `d` (§2).** O teste de natureza era binário e só decidia se o `d` sai;
+nunca se o NÚMERO mede o custo de repor. Segunda rota independente pela distribuição divulgada do
+capex, limiar de 10% — **e o gap não se lê sozinho**: sob inflação a manutenção verdadeira deve
+exceder a D&A a custo histórico (capex excedeu depreciação em ~16–21% na média de longo prazo), logo
+igualdade nominal valida o `d` com parque novo e denuncia reposição adiada com parque velho.
+Explicitada a insuficiência da conservação (§11.1b), que testa o par e fecha com as duas metades
+erradas.
+
+**3. Delator de contração (§2, camadas do RiR).** Terceira exceção à informatividade do deployment
+observado: `Δreceita ≤ 0` na janela invalida a rota por deployment. **O teste secundário foi
+corrigido antes de entrar:** a versão intuitiva ("sinal de ΔWC diferente do sinal de Δreceita") seria
+falso positivo em TODA companhia de giro negativo; a forma correta compara `ΔWC/Δreceita` com
+`WC/receita` em razão e em sinal.
+
+**4. Decomposição do g muda de domicílio e de gatilho (§5 → §2; cadeia §11.1c).** Era regra de
+cálculo enterrada no capítulo de redação e sem gatilho em nenhum gate. O gatilho deixa de ser
+"quando o RiR é a perna derivada" — que a autoexcluía justamente quando o RiR é input — e passa a
+valer para toda projeção nominal. **Acoplamento novo e inegociável:** o componente de preço não
+consome capital de CRESCIMENTO, mas eleva o custo de REPOSIÇÃO do parque, que pertence ao `d`; sem o
+acoplamento, a inflação do estoque de capital desaparece do modelo.
+
+**5. §11.1b incondicional**, com a ressalva de necessidade sem suficiência.
+
+**6. Série de três pontos para inputs de balanço (§1).** Resultado é fluxo de um período; balanço é
+estoque num ponto do ciclo. Amplitude > ~20% ⟹ o input é hipótese. A **8ª escolha nomeada foi
+generalizada** de "ano de capex de estado estacionário" para "ponto do ciclo dos inputs de capital",
+sem criar uma 12ª.
+
+**7. Sinal do ciclo de caixa (§2 item vi, §8f, Gate 0) — e o motor.** O pacote afirmava em §5 que
+ciclo negativo gera caixa e em §8f que contração sempre libera giro; e `rampa` recusava `wk < 0`.
+Contradição resolvida: a álgebra é a mesma, muda o sinal. O motor passa a aceitar giro negativo
+quando `wk + kappa > 0`, com mensagem específica no caso degenerado.
+
+**8. Guardas de domínio no motor.** `d ≥ 100%` devolvia EV/EBITDA **negativo em silêncio**, violando
+a regra que o próprio pacote enuncia. Três diagnósticos novos (`d ≥ 100%`, `d ≥ ~60%`, alíquota fora
+de 0–100%) e a contraparte doutrinária na fronteira de escopo (§13): cenário com lucro operacional
+após imposto ≤ 0 não tem múltiplo justo.
+
+**9. Nível implícito nas duas leituras, com a condição de validade (§4).** Congelado é limite
+superior **quando a D&A absoluta não escala com o nível**; se o nível vem de volume, as duas
+convergem.
+
+**10. Qualificador do teto do crescimento gratuito (§4, fluxo 3).** O teto é limite superior
+**condicional ao g declarado**. Só com a reversa em g também sem raiz no domínio declarado é lícito
+concluir que nenhuma hipótese de taxa explica o preço — e nunca "o mercado é irracional". Corrigido
+antes de entrar: a formulação sem o qualificador teria ensinado uma inferência falsa.
+
+**11. Break-even das quatro premissas fixas (§4, entrega item 6)** e **decomposição do gap contra o
+preço-alvo do consenso (§4)**.
+
+**12. Beta não mensurável: banda em BETA (≥ ±0,20), não em pontos-base (§2)** — mesma unidade do
+beta implícito da reversa, para que o confronto seja direto.
+
+**13. Gatilho para a trilha consistente de custo de capital (diagnósticos):** deriva de D/V a mercado
+≥ ~10 p.p. ao longo do horizonte ⟹ rodar `apv`. Reformulado antes de entrar: a versão inicial usava
+níveis arbitrários de alavancagem em vez de medir a deriva, que é a coisa que importa.
+
+**14. Camadas de leitura (D1) e a entrega de volta ao caminho obrigatório (D2).** `aplicacao.md`
+passa a declarar NÚCLEO (sempre) e MÓDULOS (abertos pelo gate que os dispara); o §5b vira passo
+numerado do fluxo 2, não ponteiro. Critérios de aceitação (vii) e (viii) nos dois espelhos.
+
+**Deliberadamente FORA (e por quê).** Normalização do CAPITAL ao nível do driver entrou apenas como
+**nota declaratória com gatilho de materialidade** (§7), não como recálculo obrigatório: a direção é
+certa (estoque indexado ao insumo re-baseia com ele; capital fixo não), mas a magnitude é de um a
+dois por cento do capital investido na maioria dos casos, e uma regra correta e imaterial consome
+atenção sem mudar conclusão.
+
+## v9.31 → v9.32 (25/ago/2026) — "marca de estoque"
+
+Origem: três execuções frias independentes de AGRO3 (BrasilAgro), 24/ago/2026, devolvendo
+**R$ 17,07 / R$ 22,40 / R$ 29,63** — 74% de dispersão com os MESMOS fatos, concentrada numa decisão
+que nenhuma das três declarou como escolha: como a marca do estoque de terras entra no valor e o que
+vale o balanço da lavoura que a emprega. Escopo **doutrinário**: nenhuma fórmula de valuation foi
+alterada, nenhum anchor se moveu, `selftest` e as duas fases de release seguem verdes.
+
+**1. §13 deixa de ser órfão.** A fronteira de escopo — a seção que decide se o framework é a
+métrica-manchete ou apenas linguagem de premissas — era citada uma única vez em todo o pacote desde a
+v9.7, de dentro do próprio `aplicacao.md`, e não aparecia em nenhum gate, diagnóstico ou na
+enumeração do bloco "Referências". Passa a ser disparada pelo Gate 0 e listada. §10 (status das
+premissas) também estava fora da enumeração e volta.
+
+**2. Teste da identidade da marca de estoque (§13).** Gatilho ≥ ~20% do valor vindo de marca de
+estoque. Uma identidade única — `Marca = VP(aluguel 1..T) + VP(Marca_T)` — de onde saem fator de
+tempo, apreciação implícita (contra o custo de capital DO ATIVO, não o da companhia) e T derivado do
+giro observado. Silêncio sobre T equivale a adotar a marca como líquida hoje, o ramo mais otimista.
+
+**3. Parede estoque↔fluxo, o lado do ATIVO da parede do §12.** Estoque marcado que é insumo produtivo
+do fluxo admite duas rotas — marca à vista com aluguel imputado × fluxo pleno até T com marca
+descontada. São idênticas se a identidade fechar; quando não fecha, **o gap entre elas MEDE a
+violação**, e é o gap que vai à entrega, não a escolha silenciosa entre as rotas.
+
+**4. Razão R restaurada e generalizada.** A v9.24 trazia em §3 o sub-alerta de recuperação com a
+fórmula (`o TV excede NOPAT/WACC por W/ROIC_book`); revisões posteriores reduziram o texto ao rótulo
+"sub-alerta de RECUPERAÇÃO" e a fórmula sobreviveu apenas no motor e no paper. Volta ao playbook em
+forma geral — `R = marca do estoque ÷ capitalização perpétua do fluxo corrente`, cruzamento exato em
+R = 1 — porque a camada que decide a convenção é a que o analista lê, não a que o motor imprime.
+
+**5. Deságio é operação sobre ATIVO, nunca sobre líquido de passivos.** Percentual aplicado a
+agregado já líquido de dívida desconta a dívida junto: conservadorismo aparente com o sinal
+invertido, e o erro cresce com o deságio.
+
+**6. 11ª escolha metodológica nomeada:** o NÍVEL da marca (avaliação × transação realizada, com a
+dispersão das operações). A ROTA (a)/(b) fica FORA da lista, como invariante de coerência ao lado da
+base monetária. Renumeração em cascata: a base monetária passa a ser citada como "não é 12ª
+bifurcação", e a lista integral do §5b vai a ONZE.
+
+**7. Corolário da base de lucro — vale abaixo do gatilho.** Realização de estoque (ganho de
+alienação, reavaliação, marcação) não ancora nem VALIDA base de FLUXO; usar agregado que some as duas
+como conferência devolve falso positivo justamente quando os componentes se compensam. Se a companhia
+publica a série de fluxo isolada, derivá-la por subtração é proibido.
+
+**8. Critério de aceitação (vi).** Alerta do motor filtrado da saída não conta como alerta lido — o
+sub-alerta de recuperação disparou verbatim numa das três rodadas e foi descartado por filtragem de
+campo do output.
+
+**9. Composição dos efeitos no registro de drivers (§2).** A soma vale para linhas expostas
+DISJUNTAS; drivers que atuam sobre a MESMA linha compõem-se multiplicativamente e entram como driver
+único, já composto na moeda em que a companhia realiza. Correção doutrinária: o motor **não** foi
+alterado.
+
+**10. Novo arquivo `references/manutencao.md`** — manual de adição de conhecimento: três camadas
+obrigatórias, árvore de domicílio, bifurcação × invariante, teste de extrapolação, checklist de
+consistência e os cinco anti-padrões. Citado no bloco "Referências" do corpo.
+
 ## v9.30 → v9.31 (24/ago/2026) — "fechamento semântico / cross-layer"
 
 Origem: diligência independente da v9.30. Escopo **estritamente semântico e cross-layer**: nenhuma

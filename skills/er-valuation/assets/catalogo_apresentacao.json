@@ -2,7 +2,7 @@
   "versao_contrato": "catalogo/1",
   "metodologia": {
     "nome": "multiplos-justos",
-    "versao": "v9.31"
+    "versao": "v10.1"
   },
   "idiomas": [
     "pt-BR"
@@ -665,6 +665,41 @@
       "bloco": "duracao_terminal",
       "rotulo": {
         "pt-BR": "Crescimento zero na convenção book: múltiplo ainda depende do ROIC"
+      }
+    },
+    "firm_dominio_d_100": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Fora do domínio: o encargo de reposição consome todo o EBITDA, e o múltiplo justo não está definido nesta base"
+      }
+    },
+    "firm_dominio_d_overhang": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Encargo de reposição acima de 60% do EBITDA: lucro após imposto fino e múltiplo hipersensível ao encargo"
+      }
+    },
+    "firm_dominio_nopat": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Fora do domínio: lucro operacional após imposto não positivo, cenário sem múltiplo justo"
+      }
+    },
+    "firm_dominio_t": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Alíquota fora de 0 a 100%: regime anômalo que exige justificativa e reconciliação"
+      }
+    },
+    "firm_terminal_dominante": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Mais da metade do valor está no terminal: a sensibilidade ao horizonte e o viés de mortalidade entram na entrega"
       }
     },
     "eq_convencao_book": {
@@ -1404,7 +1439,9 @@
       "sotp.partes.*.EV/EBITDA_fwd",
       "sotp.partes.*.EV/NOPAT_curr",
       "sotp.partes.*.EV/NOPAT_fwd",
-      "sotp.partes.*.EV/EBITDA0"
+      "sotp.partes.*.EV/EBITDA0",
+      "sotp.partes.*.decomposicao_mm.ativos_instalados_x_NOPAT",
+      "sotp.partes.*.decomposicao_mm.valor_do_crescimento_x_NOPAT"
     ],
     "moeda": [
       "cenarios.*.valor.EV",
@@ -1422,7 +1459,9 @@
       "sotp.materialidade.diferenca",
       "sotp.partes.*.EV",
       "sotp.partes.*.vp_fase1",
-      "sotp.partes.*.valor_fase2_no_ano_T"
+      "sotp.partes.*.valor_fase2_no_ano_T",
+      "sotp.partes.*.decomposicao_mm.ativos_instalados",
+      "sotp.partes.*.decomposicao_mm.valor_do_crescimento"
     ]
   },
   "insumos_do_caso": [

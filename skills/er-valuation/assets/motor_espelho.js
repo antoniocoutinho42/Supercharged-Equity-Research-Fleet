@@ -1,6 +1,9 @@
 // Espelho verificado por paridade do nucleo de valor de vendor/multiplos-justos/scripts/justos.py
-// (v9.31) — reproduz ev_nopat/ev_ebitda (linhas 32-72) e pe (linhas 214-271); nenhuma alteracao
+// (v10.1) — reproduz ev_nopat/ev_ebitda (linhas 32-72) e pe (linhas 214-271); nenhuma alteracao
 // pode ser feita neste arquivo sem que o harness de paridade (tests/test_paridade_js.py) a aprove.
+// Referências `justos.py:<linha>` neste arquivo foram escritas contra a v9.31; na v10.1 as linhas
+// deslocam (o núcleo ganhou `ev_nopat_partes` e `decomposicao_mm` no topo): localize pelo nome da
+// função.
 //
 // [item 4, fatia B, task 2] Ganhou o SOLVER do mesmo motor congelado — linhas 272-347
 // (_dedupe_roots 272-279, solve 281-297, solve_full 298-322, identificacao 323-347) — com
@@ -98,8 +101,11 @@ function tvCanon(tv) {
   return Object.prototype.hasOwnProperty.call(TV_CANON, tv) ? TV_CANON[tv] : tv;
 }
 
-// ---------------- nucleo: ev_nopat / ev_ebitda (justos.py linhas 32-72) ----------------
-function evNopat(args) {
+// ---------------- nucleo: ev_nopat_partes / ev_nopat (v10.1) ----------------
+// v10.1: o motor devolve as PARTES e `ev_nopat` e' a soma delas. Com mid_year a ordem e'
+// expl*f + term*f (antes (expl+term)*f) — o espelho segue a ordem nova para a paridade
+// continuar exata. `diag_firm` usa as partes (sem mid_year) para o peso do terminal.
+function evNopatPartes(args) {
   const g = args.g;
   const roic = args.roic;
   const w = args.w;
@@ -113,35 +119,44 @@ function evNopat(args) {
   // n nao-inteiro: Python usa range(1, n+1), que estoura TypeError para n
   // fracionario — nao ha guarda de topo do Python que cubra isso (n<1 nao
   // pega n=7.5). Ver cabecalho: convencao explicita desta revisao, NaN.
-  if (g <= -1 || roic <= 0 || w <= -1 || n < 1 || !Number.isInteger(n)) return NaN;
-
-  const ret = 1 - g / roic;
-  let s = 0;
-  for (let t = 1; t <= n; t++) {
-    s += ret * (1 + g) ** t / (1 + w) ** t;
+  if (g <= -1 || roic <= 0 || w <= -1 || n < 1 || !Number.isInteger(n)) {
+    return { explicito: NaN, terminal: NaN, total: NaN };
   }
-
+  const ret = 1 - g / roic;
+  let expl = 0;
+  for (let t = 1; t <= n; t++) {
+    expl += ret * (1 + g) ** t / (1 + w) ** t;
+  }
+  let term;
   if (tv === 'gordon') {
     // gp null: Python estoura TypeError em `gp <= -1`. Ver cabecalho:
     // convencao explicita desta revisao, NaN.
-    if (roicTv === null || roicTv <= 0 || gp === null || gp <= -1 || gp >= w) return NaN;
-    s += (1 + g) ** (n + 1) * (1 - gp / roicTv) / (w - gp) / (1 + w) ** n;
+    term = (roicTv === null || roicTv <= 0 || gp === null || gp <= -1 || gp >= w)
+      ? NaN
+      : (1 + g) ** (n + 1) * (1 - gp / roicTv) / (w - gp) / (1 + w) ** n;
   } else if (tv === 'convergencia') {
-    if (w <= 0) return NaN;
-    s += (1 + g) ** (n + 1) / (w * (1 + w) ** n);
+    term = w <= 0 ? NaN : (1 + g) ** (n + 1) / (w * (1 + w) ** n);
   } else {
     // book — [v9.28] IC_n por acumulacao coerente com o fluxo descontado: IC_0 = NOPAT_1/ROIC_medio;
     // capital novo entra ao MARGINAL (RiR = g/ROIC). Colapsa no comportamento antigo quando
     // medio = marginal ou g = 0. NAO usar NOPAT_{n+1}/medio — essa forma antiga esta errada
     // quando medio != marginal (o bug que o v9.26 do vendor corrigiu).
     const rb = roicBook !== null ? roicBook : roic;
-    if (rb <= 0) return NaN;
-    const icN = (1 + g) * (1.0 / rb - 1.0 / roic) + (1 + g) ** (n + 1) / roic;
-    if (icN <= 0) return NaN;
-    s += icN / (1 + w) ** n;
+    if (rb <= 0) {
+      term = NaN;
+    } else {
+      const icN = (1 + g) * (1.0 / rb - 1.0 / roic) + (1 + g) ** (n + 1) / roic;
+      term = icN <= 0 ? NaN : icN / (1 + w) ** n;
+    }
   }
+  const f = midYear ? (1 + w) ** 0.5 : 1.0;
+  expl *= f;
+  if (!Number.isNaN(term)) term *= f;
+  return { explicito: expl, terminal: term, total: Number.isNaN(term) ? NaN : expl + term };
+}
 
-  return s * (midYear ? (1 + w) ** 0.5 : 1.0);
+function evNopat(args) {
+  return evNopatPartes(args).total;
 }
 
 function evEbitda(args) {
@@ -881,8 +896,13 @@ function rampaBifasica(args) {
   if (w <= -1 || g2 <= -1) {
     throw new Error('domínio inválido: requer WACC > -100% e g2 > -100%');
   }
-  if (wk < 0 || kappa < 0) {
-    throw new Error('domínio inválido: wk e kappa devem ser >= 0');
+  if (kappa < 0) {
+    throw new Error('domínio inválido: kappa (intensidade de capital fixo) deve ser >= 0');
+  }
+  if (wk < 0 && (wk + kappa) <= 1e-15) {
+    throw new Error('giro negativo com |wk| >= kappa: o capital incremental total é <= 0 e a '
+      + 'intensidade de capital deixa de ser definida — rode as fases pelo bloco padrão '
+      + '(`ev` por fase) em vez da rampa fechada');
   }
   let capacidade = null;
   if (g1 === null) {
@@ -1225,6 +1245,11 @@ const CHAVE = {
   FIRM_NEUTRALIDADE_G0_GORDON: 'firm_neutralidade_g0_gordon',
   FIRM_NEUTRALIDADE_G0_CONVERGENCIA: 'firm_neutralidade_g0_convergencia',
   FIRM_ATENCAO_G0_BOOK: 'firm_atencao_g0_book',
+  FIRM_DOMINIO_D_100: 'firm_dominio_d_100',
+  FIRM_DOMINIO_D_OVERHANG: 'firm_dominio_d_overhang',
+  FIRM_DOMINIO_NOPAT: 'firm_dominio_nopat',
+  FIRM_DOMINIO_T: 'firm_dominio_t',
+  FIRM_TERMINAL_DOMINANTE: 'firm_terminal_dominante',
   EQ_CONVENCAO_BOOK: 'eq_convencao_book',
   EQ_CONFLACAO_SEM_ROE_BOOK: 'eq_conflacao_sem_roe_book',
   EQ_ECO_DERIVA_MEDIO: 'eq_eco_deriva_medio',
@@ -1324,6 +1349,22 @@ function diagnosticosFirm(premissas, moeda, rf) {
   const rfFracao = pct(rf);
 
   const chaves = [];
+  // v10 (diag_firm recebe da=d e tax=t do handler `ev`): as guardas de dominio abrem a lista.
+  const d = nucleo.d;
+  const tax = nucleo.t;
+  if (d !== undefined && d !== null) {
+    if (d >= 1.0) {
+      chaves.push(CHAVE.FIRM_DOMINIO_D_100);
+    } else if (d >= 0.60) {
+      chaves.push(CHAVE.FIRM_DOMINIO_D_OVERHANG);
+    }
+    if (tax !== undefined && tax !== null && d >= 0.0 && d < 1.0 && (1 - d) * (1 - tax) <= 0) {
+      chaves.push(CHAVE.FIRM_DOMINIO_NOPAT);
+    }
+  }
+  if (tax !== undefined && tax !== null && !(tax >= 0.0 && tax <= 1.0)) {
+    chaves.push(CHAVE.FIRM_DOMINIO_T);
+  }
   if (tv === 'book') {
     chaves.push(CHAVE.FIRM_CONVENCAO_BOOK);
     if (roicBook === null) {
@@ -1336,6 +1377,13 @@ function diagnosticosFirm(premissas, moeda, rf) {
     } else if (Math.abs(roicTv - w) < TOL_NEUTRALIDADE) {
       chaves.push(CHAVE.FIRM_NOTA_COLAPSO_GORDON);
     }
+  }
+  // v10.1: peso do terminal pelas partes do motor, sem mid_year (diag_firm chama
+  // ev_nopat_partes sem ele); total NaN ou zero nao dispara, como no motor.
+  const partes = evNopatPartes({ g, roic, w, n, tv, roic_tv: roicTv, gp, roic_book: roicBook });
+  const pesoTv = partes.total ? partes.terminal / partes.total : NaN;
+  if (!Number.isNaN(pesoTv) && pesoTv > 0.50) {
+    chaves.push(CHAVE.FIRM_TERMINAL_DOMINANTE);
   }
   const rir = g / roic;
   chaves.push(CHAVE.FIRM_RIR);
@@ -1385,8 +1433,6 @@ function diagnosticosFirm(premissas, moeda, rf) {
   // da/tax). `ebitda_ic` (o unico input que ramificaria para a mensagem INCOERENCIA em vez do
   // ECO) nunca e' exposto pelo wrapper (decisao da 3A) — por isso so' o ramo ECO existe aqui; o
   // ramo INCOERENCIA nao tem chave em diagnosticos_chaves.json de proposito (inalcancavel).
-  const d = nucleo.d;
-  const tax = nucleo.t;
   if ((1 - d) * (1 - tax) > 0) {
     chaves.push(CHAVE.COERENCIA_ECO_INTENSIDADE_CAPITAL);
   }

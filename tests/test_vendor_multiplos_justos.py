@@ -1,4 +1,4 @@
-"""Congelamento e integridade do vendor `multiplos-justos` v9.31.
+"""Congelamento e integridade do vendor `multiplos-justos` v10.1.
 
 O vendor é read-only por desenho: além do manifest de sha256 verificado aqui, o
 próprio `scripts/testes.py` do pacote faz lint semântico dos docs — editar a
@@ -20,6 +20,7 @@ ARQUIVOS = (
     "SKILL.md",
     "references/aplicacao.md",
     "references/derivacao.md",
+    "references/manutencao.md",
     "references/paper-multiplos-justos-v3.md",
     "scripts/justos.py",
     "scripts/testes.py",
@@ -36,7 +37,7 @@ def _manifest() -> dict:
 
 def test_manifest_declara_a_versao_e_a_raiz():
     man = _manifest()
-    assert man["versao"] == "v9.31"
+    assert man["versao"] == "v10.1"
     assert man["raiz_do_pacote"] == "vendor/multiplos-justos"
 
 
@@ -56,7 +57,7 @@ def test_sha_do_motor_pinado_no_proprio_teste():
     Mesmo idioma de tests/test_motor_k3.py, que fixa o sha da formula no teste.
     """
     assert _manifest()["arquivos"]["scripts/justos.py"] == (
-        "580fb066cb1a548d9d8bb04c15de476f83b6068bf0286170efd96415c446d129"
+        "a6a2e692801f351f9d76ef1bf76e97e3130f30c2551e7c08cc99a6009c1912fe"
     )
 
 
@@ -83,6 +84,33 @@ def test_manifest_cobre_exatamente_os_arquivos_esperados():
     assert set(_manifest()["arquivos"]) == set(ARQUIVOS)
 
 
+def _copias_do_motor():
+    """Todo `justos.py` do repositório, fora de .git, das raízes de execução e de caches."""
+    for raiz, dirs, arquivos in os.walk(RAIZ):
+        dirs[:] = [d for d in dirs if d not in {".git", "analises", "node_modules", "__pycache__"}]
+        if "justos.py" in arquivos:
+            yield (Path(raiz) / "justos.py").resolve()
+
+
+def test_uma_so_copia_do_motor_e_todo_caminho_de_execucao_aponta_para_ela():
+    """Versão única em runtime (migração v10.1): existe UM `justos.py`, e os três caminhos que o
+    executam — o subprocesso do wrapper (`motor.RAIZ_VENDOR`) e os dois geradores de paridade,
+    que o importam no próprio processo — resolvem para ele. Com o sha do manifest conferido
+    acima, nenhuma outra versão do motor é alcançável pelo Fleet."""
+    alvo = (VENDOR / "scripts" / "justos.py").resolve()
+    assert sorted(_copias_do_motor()) == [alvo]
+    sys.path.insert(0, str(RAIZ / "skills" / "er-valuation" / "scripts"))
+    import motor
+    import vetores_paridade
+    import vetores_solver
+    assert (motor.RAIZ_VENDOR / "scripts" / "justos.py").resolve() == alvo
+    assert (vetores_paridade._VENDOR_SCRIPTS / "justos.py").resolve() == alvo
+    assert (vetores_solver._VENDOR_SCRIPTS / "justos.py").resolve() == alvo
+    import justos  # já carregado pelos geradores, com a escrita de bytecode desligada
+    assert Path(justos.__file__).resolve() == alvo
+    assert hasattr(justos, "decomposicao_mm") and hasattr(justos, "nivel_recalculado")
+
+
 def _ambiente() -> dict:
     """Ambiente dos subprocessos do vendor.
 
@@ -106,10 +134,12 @@ def test_selftest_do_motor_reproduz_as_ancoras():
     r = _rodar(str(VENDOR / "scripts" / "justos.py"), "selftest")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "SELFTEST OK" in r.stdout, r.stdout[-2000:]
+    # [v10.1] O próprio motor se identifica: a versão que roda é a do manifest.
+    assert _manifest()["versao"] in r.stdout, r.stdout[-2000:]
 
 
 def test_suite_completa_do_vendor_passa():
-    """[v9.31] A suíte completa vira duas invocações frescas, uma por fase.
+    """[v9.31, mantido na v10.1] A suíte completa vira duas invocações frescas, uma por fase.
 
     `--phase model` roda 'advanced' seguido de 'core' no mesmo processo e termina
     em 'FASE CORE PASSOU.'; `--phase cli` abre os 20+ subprocessos de integração e

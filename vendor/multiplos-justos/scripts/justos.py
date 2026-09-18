@@ -29,6 +29,62 @@ def tv_canon(tv):
     return TV_CANON.get(tv, tv)
 
 # ---------------- núcleo ----------------
+def ev_nopat_partes(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid_year=False):
+    """[v10.1] Mesmo núcleo de `ev_nopat`, devolvendo as PARTES em vez da soma:
+    {'explicito', 'terminal', 'total'} em unidades de NOPAT corrente. `ev_nopat` chama esta
+    função e soma — assim as duas NÃO podem divergir. Existe porque a entrega passou a exigir
+    o peso do valor terminal e o valor dos ativos instalados, e a regra do pacote é não
+    calcular nada à mão."""
+    tv = tv_canon(tv)
+    if g <= -1 or roic <= 0 or w <= -1 or n < 1:
+        return {'explicito': float('nan'), 'terminal': float('nan'), 'total': float('nan')}
+    ret = 1 - g / roic
+    expl = sum(ret * (1 + g) ** t / (1 + w) ** t for t in range(1, n + 1))
+    if tv == 'gordon':
+        if roic_tv is None or roic_tv <= 0 or gp <= -1 or gp >= w:
+            term = float('nan')
+        else:
+            term = (1 + g) ** (n + 1) * (1 - gp / roic_tv) / (w - gp) / (1 + w) ** n
+    elif tv == 'convergencia':
+        term = float('nan') if w <= 0 else (1 + g) ** (n + 1) / (w * (1 + w) ** n)
+    else:
+        rb = roic_book if roic_book is not None else roic
+        if rb <= 0:
+            term = float('nan')
+        else:
+            ic_n = (1 + g) * (1.0 / rb - 1.0 / roic) + (1 + g) ** (n + 1) / roic
+            term = float('nan') if ic_n <= 0 else ic_n / (1 + w) ** n
+    f = (1 + w) ** 0.5 if mid_year else 1.0
+    expl *= f
+    term = term * f if term == term else term
+    return {'explicito': expl, 'terminal': term,
+            'total': (expl + term) if term == term else float('nan')}
+
+
+def decomposicao_mm(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid_year=False):
+    """[v10.1] Decomposição de Miller-Modigliani (1961) em unidades de NOPAT corrente.
+
+    ativos_instalados = valor SEM crescimento nenhum: g = 0 E sem crescimento terminal (gp = 0).
+    Em `convergencia` e em `gordon` isso colapsa exatamente em 1/W (identidade, `derivacao.md` §2);
+    na `book` com CAP finito NÃO colapsa — depende da âncora média, e é por isso que o número sai
+    do motor em vez de sair de uma divisão à mão.
+    Trava de leitura: só é 'ativos instalados' se `d` for encargo de reposição verdadeiro."""
+    partes = ev_nopat_partes(g, roic, w, n, tv=tv, roic_tv=roic_tv, gp=gp,
+                             roic_book=roic_book, mid_year=mid_year)
+    ai = ev_nopat(0.0, roic, w, n, tv=tv, roic_tv=roic_tv, gp=0.0,
+                  roic_book=roic_book, mid_year=mid_year)
+    tot = partes['total']
+    out = {'ativos_instalados_x_NOPAT': ai, 'valor_do_crescimento_x_NOPAT': tot - ai,
+           'participacao_do_crescimento_%': (tot - ai) / tot * 100 if tot else float('nan'),
+           'peso_do_terminal_%': partes['terminal'] / tot * 100 if tot else float('nan'),
+           'identidade_ativos_instalados': ('exata: 1/W (convergencia/gordon com gp=0)'
+                                            if tv_canon(tv) in ('convergencia', 'gordon')
+                                            else 'NÃO é 1/W: a book com CAP finito depende da âncora média'),
+           'trava_de_leitura': ('só é "ativos instalados" se o d for encargo de reposição VERDADEIRO — '
+                                'com d subdimensionado o NOPAT está superestimado e o termo herda o erro')}
+    return out
+
+
 def ev_nopat(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid_year=False):
     """EV/NOPAT current. tv em {'book','convergencia','gordon'} (aliases 'ic'/'spread' aceitos).
     roic_book: ROIC MÉDIO INICIAL/FORWARD do estoque que ancora IC_0 na 'book'. [v9.28] O TV é o IC
@@ -41,32 +97,8 @@ def ev_nopat(g, roic, w, n, tv='book', roic_tv=None, gp=0.0, roic_book=None, mid
     é aproximação de midpoint, não integração contínua de um fluxo uniforme. Multiplica por (1+W)^0.5. DEFAULT False (fim de ano), que é a
     convenção da planilha de referência; a maior parte do sell-side usa mid-year, então
     comparações de NÍVEL com múltiplos de terceiros exigem declarar qual das duas está em uso."""
-    tv = tv_canon(tv)
-    if g <= -1 or roic <= 0 or w <= -1 or n < 1:
-        return float('nan')
-    ret = 1 - g / roic
-    s = sum(ret * (1 + g) ** t / (1 + w) ** t for t in range(1, n + 1))
-    if tv == 'gordon':
-        if roic_tv is None or roic_tv <= 0 or gp <= -1 or gp >= w:
-            return float('nan')
-        s += (1 + g) ** (n + 1) * (1 - gp / roic_tv) / (w - gp) / (1 + w) ** n
-    elif tv == 'convergencia':
-        if w <= 0:
-            return float('nan')
-        s += (1 + g) ** (n + 1) / (w * (1 + w) ** n)
-    else:  # book
-        rb = roic_book if roic_book is not None else roic
-        if rb <= 0:
-            return float('nan')
-        # [v9.28] IC_n por acumulação coerente com o fluxo descontado: IC_0 = NOPAT_1/ROIC_médio;
-        # capital novo entra ao MARGINAL (RiR = g/ROIC). Forma fechada:
-        # IC_n = (1+g)·(1/ROIC_médio − 1/ROIC_marg) + (1+g)^{n+1}/ROIC_marg.
-        # Colapsa exatamente no comportamento anterior quando médio = marginal ou g = 0.
-        ic_n = (1 + g) * (1.0 / rb - 1.0 / roic) + (1 + g) ** (n + 1) / roic
-        if ic_n <= 0:
-            return float('nan')
-        s += ic_n / (1 + w) ** n
-    return s * ((1 + w) ** 0.5 if mid_year else 1.0)
+    return ev_nopat_partes(g, roic, w, n, tv=tv, roic_tv=roic_tv, gp=gp,
+                           roic_book=roic_book, mid_year=mid_year)['total']
 
 def ev_ebitda(g, roic, w, n, d, t, **kw):
     return ev_nopat(g, roic, w, n, **kw) * (1 - d) * (1 - t)
@@ -90,8 +122,12 @@ def rampa_bifasica(receita0, ebitda0, da_parque, wk, w, tax, n, t_rampa, g2, kap
         raise ValueError('composição exige 1 <= t_rampa < n (a fase 2 precisa de >= 1 ano explícito)')
     if w <= -1 or g2 <= -1:
         raise ValueError('domínio inválido: requer WACC > -100% e g2 > -100%')
-    if wk < 0 or kappa < 0:
-        raise ValueError('domínio inválido: wk e kappa devem ser >= 0')
+    if kappa < 0:
+        raise ValueError('domínio inválido: kappa (intensidade de capital fixo) deve ser >= 0')
+    if wk < 0 and (wk + kappa) <= 1e-15:
+        raise ValueError('giro negativo com |wk| >= kappa: o capital incremental total é <= 0 e a '
+                         'intensidade de capital deixa de ser definida — rode as fases pelo bloco padrão '
+                         '(`ev` por fase) em vez da rampa fechada')
     capacidade = None
     if g1 is None:
         if util is None or not (0.0 < util < 1.0):
@@ -510,8 +546,31 @@ def coerencia_vetor(g=None, roic=None, roe=None, w=None, ke=None, kd=None, tax=N
     return dg, resumo
 
 
-def diag_firm(g, roic, w, tv='book', n=10, roic_book=None, roic_tv=None, rf=None, moeda=None, gp=0.0):
+def diag_firm(g, roic, w, tv='book', n=10, roic_book=None, roic_tv=None, rf=None, moeda=None, gp=0.0,
+              da=None, tax=None):
     tv = tv_canon(tv); d = []
+    # --- guarda de domínio do encargo de reposição (v10) ---
+    # A doutrina exigia esta verificação desde a v9.28 ('erro de unidade nunca pode virar
+    # múltiplo aparentemente plausível') e o motor não a emitia: d >= 100% devolvia
+    # EV/EBITDA NEGATIVO em silêncio.
+    if da is not None:
+        if da >= 1.0:
+            d.append("DOMÍNIO [d]: encargo de reposição >= 100% do EBITDA ⟹ lucro operacional após "
+                     "imposto NEGATIVO e múltiplo de EBITDA sem conteúdo econômico (sai com sinal "
+                     "invertido). O múltiplo justo NÃO está definido nesta base: normalize a "
+                     "métrica-base, migre o par (d, RiR) para base caixa, ou troque de arquitetura "
+                     "(fronteira de escopo — valor de ativos, opção real, liquidação).")
+        elif da >= 0.60:
+            d.append(f"DOMÍNIO [d]: encargo de reposição em {da:.1%} do EBITDA — regime de D&A-overhang. "
+                     "O lucro operacional após imposto é fino e o múltiplo fica hipersensível ao d: "
+                     "a conservação de capital (capex + Δgiro = d×EBITDA + RiR×NOPAT) deixa de ser "
+                     "opcional, e a base de lucro precisa ser confrontada com o nível normalizado.")
+        if tax is not None and 0.0 <= da < 1.0 and (1 - da) * (1 - tax) <= 0:
+            d.append("DOMÍNIO [NOPAT]: (1−d)(1−t) <= 0 ⟹ lucro operacional após imposto não positivo. "
+                     "Cenário não representável no framework.")
+    if tax is not None and not (0.0 <= tax <= 1.0):
+        d.append(f"DOMÍNIO [t]: alíquota fora de 0–100% ({tax:.1%}). Regime anômalo — exige "
+                 "justificativa explícita e reconciliação econômica.")
     if tv == 'book':
         d.append("CONVENÇÃO 'book' (ex-'ic') [hipótese, não lei]: renda residual truncada em n — o NOPAT "
                  "INTEIRO colapsa de ROIC×IC para WACC×IC no ano n+1 e o TV é o capital investido. É mais "
@@ -534,6 +593,17 @@ def diag_firm(g, roic, w, tv='book', n=10, roic_book=None, roic_tv=None, rf=None
         elif abs(roic_tv - w) < 5e-4:
             d.append("NOTA: ROIC_TV = WACC ⟹ 'gordon' colapsa em 'convergencia' (TV = NOPAT/W, "
                      "invariante a gp). Crescimento terminal é value-neutral.")
+    try:
+        _p = ev_nopat_partes(g, roic, w, n, tv=tv, roic_tv=roic_tv, gp=gp, roic_book=roic_book)
+        _peso_tv = _p['terminal'] / _p['total'] if _p['total'] else float('nan')
+    except Exception:
+        _peso_tv = float('nan')
+    if _peso_tv == _peso_tv and _peso_tv > 0.50:
+        d.append(f"TERMINAL DOMINANTE: {_peso_tv:.0%} do valor está no valor terminal. Duas "
+                 "consequências obrigatórias na entrega: (i) a sensibilidade ao horizonte de "
+                 "vantagem deixa de ser opcional; (ii) NENHUMA convenção terminal embute hazard "
+                 "de extinção — o viés é unidirecional (terminal SUPERESTIMADO) e da ordem de "
+                 "−16% a −27% para hazards de 2% a 5% a.a. Declare o viés e a direção.")
     rir = g / roic
     d.append(f"RiR = g/ROIC = {rir:.1%} | spread ROIC−WACC = {(roic-w)*100:+.1f} p.p.")
     if rir > 1:
@@ -954,17 +1024,71 @@ def registro_drivers(drivers, limiar=0.10):
             'criterio': 'impacto = |elasticidade x gap|; a luz dispara por driver OU pelo líquido agregado',
             'compensacao': comp, 'nota': nota}
 
+def nivel_recalculado(alvo_valor, metrica_base, da_absoluta, tax, g, roic, w, n,
+                      tv='convergencia', roic_tv=None, gp=0.0, roic_book=None, mid_year=False):
+    """[v10.1] Nível implícito com o MÚLTIPLO RECALCULADO a cada iteração — a leitura CENTRAL.
+
+    A leitura congelada (alvo ÷ múltiplo fixo) é LIMITE SUPERIOR quando a D&A absoluta não escala
+    com o nível: se a métrica sobe, d = D&A/métrica CAI, o múltiplo justo SOBE e o nível exigido
+    pelo preço é MENOR. Aqui a bissecção resolve `múltiplo(d(M)) × M = alvo`.
+    Condição de validade declarada: vale para nível vindo de MARGEM ou PREÇO. Se o nível vier de
+    VOLUME, a D&A escala com as unidades produzidas, d não cai, e as duas leituras convergem.
+    Este número é, por identidade, o BREAK-EVEN da base de lucro contra o alvo informado."""
+    if da_absoluta is None or tax is None or metrica_base <= 0:
+        return None
+    def valor(m):
+        if m <= da_absoluta:
+            return float('-inf')
+        mult = ev_ebitda(g, roic, w, n, da_absoluta / m, tax, tv=tv, roic_tv=roic_tv,
+                         gp=gp, roic_book=roic_book, mid_year=mid_year)
+        return mult * m if mult == mult else float('nan')
+    lo, hi = da_absoluta * 1.0000001, max(metrica_base, alvo_valor) * 50.0
+    if valor(hi) < alvo_valor:
+        return {'sem_solucao': ('alvo acima do valor atingível mesmo com nível 50x a métrica-base '
+                                'ou o alvo — o preço não é explicável por NÍVEL sob este vetor')}
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if valor(mid) < alvo_valor:
+            lo = mid
+        else:
+            hi = mid
+    m = (lo + hi) / 2.0
+    d_impl = da_absoluta / m
+    return {'configuracao_do_triangulo': ('VETOR TRAVADO: g e rentabilidade marginal fixos; apenas o '
+                                         'encargo de reposição d = D&A/métrica responde ao nível. Se a '
+                                         'rentabilidade TAMBÉM for derivada do nível (intensidade de '
+                                         'capital constante), o múltiplo justo sobe mais e o nível '
+                                         'exigido cai ainda mais — as três leituras formam uma escada: '
+                                         'congelada > vetor travado > rentabilidade derivada.'),
+            'metrica_base_implicita_recalculada': round(m, 2),
+            'fator_k_recalculado': round(m / metrica_base, 4),
+            'degrau_implicito_recalculado_%': round((m / metrica_base - 1) * 100, 1),
+            'd_no_nivel_implicito_%': round(d_impl * 100, 2),
+            'multiplo_justo_no_nivel_implicito': round(
+                ev_ebitda(g, roic, w, n, d_impl, tax, tv=tv, roic_tv=roic_tv, gp=gp,
+                          roic_book=roic_book, mid_year=mid_year), 4)}
+
+
 def nivel_implicito(alvo_valor, multiplo_justo, metrica_base, vol=None, preco_base=None,
-                    consenso_t1=None, consenso_t2=None):
+                    consenso_t1=None, consenso_t2=None, recalculado=None):
     """Reversa em degrau: que NÍVEL da métrica-base o preço embute, dadas as taxas.
-    valor = múltiplo x métrica  =>  métrica_implícita = alvo / múltiplo."""
+    valor = múltiplo x métrica  =>  métrica_implícita = alvo / múltiplo (leitura CONGELADA).
+    [v10.1] Com os parâmetros do vetor, devolve TAMBÉM a leitura RECALCULADA, que é a central."""
     if multiplo_justo <= 0:
         return {'erro': 'múltiplo justo não positivo'}
     mi = alvo_valor / multiplo_justo
     out = {'metrica_base_atual': round(metrica_base, 2),
            'metrica_base_implicita': round(mi, 2),
+           'leitura_congelada': ('LIMITE SUPERIOR — o múltiplo foi mantido fixo; com D&A absoluta '
+                                 'fixa, o múltiplo justo sobe quando a métrica sobe e o nível '
+                                 'realmente exigido é MENOR. Rode a leitura recalculada.'),
            'fator_k_implicito': round(mi / metrica_base, 4) if metrica_base else None,
            'degrau_implicito_%': round((mi / metrica_base - 1) * 100, 1) if metrica_base else None}
+    if recalculado:
+        out['recalculado'] = recalculado
+        out['recalculado_nota'] = ('leitura CENTRAL e, por identidade, o BREAK-EVEN da base de '
+                                   'lucro contra o alvo. Vale para nível de margem/preço; se o '
+                                   'nível vem de VOLUME, a D&A escala e as duas leituras convergem.')
     # [v9.15] confronto temporal (aplicacao.md §4): antecipação temporal vs hipótese terminal
     if consenso_t1 or consenso_t2:
         if consenso_t1:
@@ -1598,7 +1722,7 @@ def selftest():
           f"g1 {rp['g1_%']:.4f}% | ROIC2 {rp['roic2_%']:.3f}% | P1/P4 = "
           f"{rp['checks_internos']['P1_fluxo_a_fluxo_max_abs']:.1e}/"
           f"{rp['checks_internos']['P4_receita_T_menos_capacidade']:.1e}")
-    print("SELFTEST OK — anchors enterprise/APV/ponte/rampa preservados; v9.31 fecha semântica/cross-layer sem alterar o núcleo numérico."
+    print("SELFTEST OK — anchors preservados. v10.1: ev_nopat passou a somar PARTES (decomposição de Miller-Modigliani e peso do terminal saem do motor); guardas de domínio e giro negativo da v10 mantidos; núcleo numérico inalterado."
           if ok else "SELFTEST FALHOU — NÃO USE OS RESULTADOS.")
     sys.exit(0 if ok else 1)
 
@@ -1835,10 +1959,16 @@ def main():
                         '(= linha exposta / métrica-base) em vez de arbitrar; acrescente ":custo" '
                         'quando o driver for de CUSTO (frete, energia, insumo) — o sinal inverte.')
     s.add_argument('--limiar', type=float, default=10.0, help='gate em %% (default 10)')
-    s = sub.add_parser('nivel', help='reversa em degrau: nível implícito no preço')
+    s = sub.add_parser('nivel', help='reversa em degrau: nível implícito no preço '
+                       '(congelado = limite superior; recalculado = leitura central, v10.1)')
     rates(s, [('alvo-valor', None), ('multiplo', None), ('metrica-base', None),
               ('vol', None), ('preco-base', None),
-              ('consenso-t1', None), ('consenso-t2', None)])
+              ('consenso-t1', None), ('consenso-t2', None),
+              ('da-absoluta', None), ('tax', None), ('g', None), ('roic', None),
+              ('wacc', None), ('roic-tv', None), ('gp', 0.0), ('roic-book', None)])
+    s.add_argument('--n', type=int, default=10)
+    s.add_argument('--tv', choices=TVS, default=None, help=TVHELP)
+    s.add_argument('--mid-year', action='store_true')
     s = sub.add_parser('iso', help='curva iso-valor (v9.1): grade de pares (g, rentabilidade) '
                        'que reconciliam o mesmo múltiplo-alvo; book em forma fechada (vF8.1), '
                        'convergencia/gordon via bissecção do motor')
@@ -1900,12 +2030,20 @@ def main():
         kw = dict(tv=a.tv, roic_tv=pc(getattr(a, 'roic_tv')), gp=pc(a.gp) or 0.0, roic_book=rb,
                   mid_year=getattr(a, 'mid_year', False))
         mn = ev_nopat(g, roic, w, a.n, **kw); me = mn * (1 - d) * (1 - t)
+        _mm = decomposicao_mm(g, roic, w, a.n, **kw)
         out = {'EV/NOPAT_curr': round(mn, 4), 'EV/NOPAT_fwd': round(mn / (1 + g), 4),
                'EV/EBITDA_curr': round(me, 4), 'EV/EBITDA_fwd': round(me / (1 + g), 4),
+               'decomposicao_mm': {k: (round(v, 4) if isinstance(v, float) else v)
+                                   for k, v in _mm.items()},
                'convencao_temporal': ('midpoint / meio do período' if getattr(a, 'mid_year', False)
                                      else 'fim de ano (default, = planilha de referência)'),
-               'diagnosticos': diag_firm(g, roic, w, tv=a.tv, n=a.n, roic_book=rb, rf=None if getattr(a, 'rf', None) is None else a.rf / 100, moeda=getattr(a, 'moeda', None), gp=pc(a.gp) or 0.0,
+               'diagnosticos': diag_firm(g, roic, w, tv=a.tv, n=a.n, roic_book=rb, da=d, tax=t, rf=None if getattr(a, 'rf', None) is None else a.rf / 100, moeda=getattr(a, 'moeda', None), gp=pc(a.gp) or 0.0,
                                          roic_tv=pc(getattr(a, 'roic_tv'))), 'tv': a.tv}
+        if getattr(a, 'ebitda', None) is not None:
+            nopat0 = a.ebitda * (1 - d) * (1 - t)
+            out['decomposicao_mm']['NOPAT_base'] = round(nopat0, 4)
+            out['decomposicao_mm']['ativos_instalados'] = round(_mm['ativos_instalados_x_NOPAT'] * nopat0, 2)
+            out['decomposicao_mm']['valor_do_crescimento'] = round(_mm['valor_do_crescimento_x_NOPAT'] * nopat0, 2)
         # [v9.11] gate de coerência do vetor — inputs opcionais (padrão retrofit)
         dg_c, res_c = coerencia_vetor(g=g, roic=roic, roe=pc(getattr(a, 'roe', None)), w=w,
                                       ke=pc(getattr(a, 'ke', None)), kd=pc(getattr(a, 'kd', None)),
@@ -1976,6 +2114,11 @@ def main():
                                        politica_tv=getattr(a, 'politica_tv', 'continua'),
                                        gp=pc(a.gp) or 0.0,
                                        rf=None if getattr(a, 'rf', None) is None else a.rf / 100, moeda=a.moeda), 'tv': a.tv}
+        if getattr(a, 'ebitda', None) is not None:
+            nopat0 = a.ebitda * (1 - d) * (1 - t)
+            out['decomposicao_mm']['NOPAT_base'] = round(nopat0, 4)
+            out['decomposicao_mm']['ativos_instalados'] = round(_mm['ativos_instalados_x_NOPAT'] * nopat0, 2)
+            out['decomposicao_mm']['valor_do_crescimento'] = round(_mm['valor_do_crescimento_x_NOPAT'] * nopat0, 2)
         # [v9.11] gate de coerência do vetor — inputs opcionais (padrão retrofit)
         dg_c, res_c = coerencia_vetor(g=g, roic=pc(getattr(a, 'roic', None)), roe=roe,
                                       w=pc(getattr(a, 'wacc', None)), ke=ke,
@@ -2524,9 +2667,18 @@ def main():
         jprint(registro_drivers(ds, limiar=a.limiar / 100.0))
 
     elif a.cmd == 'nivel':
+        _rec = None
+        if a.da_absoluta is not None and a.tv is not None and a.g is not None \
+                and a.roic is not None and a.wacc is not None and a.tax is not None:
+            _rec = nivel_recalculado(a.alvo_valor, a.metrica_base, a.da_absoluta, pc(a.tax),
+                                     pc(a.g), pc(a.roic), pc(a.wacc), a.n, tv=a.tv,
+                                     roic_tv=pc(getattr(a, 'roic_tv', None)), gp=pc(a.gp) or 0.0,
+                                     roic_book=pc(getattr(a, 'roic_book', None)),
+                                     mid_year=getattr(a, 'mid_year', False))
         jprint(nivel_implicito(a.alvo_valor, a.multiplo, a.metrica_base,
                                vol=a.vol, preco_base=a.preco_base,
-                               consenso_t1=a.consenso_t1, consenso_t2=a.consenso_t2))
+                               consenso_t1=a.consenso_t1, consenso_t2=a.consenso_t2,
+                               recalculado=_rec))
 
     elif a.cmd == 'degrau':
         eqside = a.roe is not None

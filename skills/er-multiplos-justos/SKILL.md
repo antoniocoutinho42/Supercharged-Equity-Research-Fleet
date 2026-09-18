@@ -6,7 +6,7 @@ description: USE QUANDO precisar da metodologia canônica de valuation do fleet 
 # er-multiplos-justos — índice do vendor congelado
 
 Este arquivo **não contém metodologia**. A metodologia canônica é a skill `multiplos-justos`
-v9.31, copiada byte a byte. Ela vive em `vendor/multiplos-justos/` na raiz do repositório, **fora
+v10.1, copiada byte a byte. Ela vive em `vendor/multiplos-justos/` na raiz do repositório, **fora
 de `skills/`**: o pacote declara `name: multiplos-justos` no próprio frontmatter do `SKILL.md` e,
 se ficasse sob `skills/`, estaria sujeito a ser descoberto como skill, colidindo com a skill
 standalone do usuário. A cópia é verificada por sha256 em `manifest_vendor.json`. Regra do desenho
@@ -21,6 +21,7 @@ mal. Leia o arquivo do vendor.
 | `vendor/multiplos-justos/references/aplicacao.md` | Playbook de empresa real: pesquisa, regras travadas de derivação de premissas, convenção terminal, grade de cenários e reversa, degrau e capacidade, financeiras, memória de cálculo, multi-segmento, jurisprudência | **Na íntegra**, antes de valuation de companhia real. O próprio pacote exige |
 | `vendor/multiplos-justos/references/derivacao.md` | Matemática e provas: convenções de valor terminal, APV e recursão, teorema da classificação, ponte de releveraging | Quando a teoria for questionada, ou houver degrau ou mudança de estrutura de capital |
 | `vendor/multiplos-justos/references/paper-multiplos-justos-v3.md` | Fundamentação: proposições com estatuto epistemológico declarado, protocolo de validação, condições de falseamento, caso trabalhado | Ao defender por escrito uma escolha de convenção |
+| `vendor/multiplos-justos/references/manutencao.md` | Manual de adição de conhecimento ao pacote: camadas, domicílio, bifurcação × invariante, checklist | Ao propor mudança na metodologia |
 | `vendor/multiplos-justos/scripts/justos.py` | O motor. Saída JSON, stdlib pura | Toda conta de valuation passa por aqui |
 | `vendor/multiplos-justos/scripts/testes.py` | Suíte independente: property tests, reconciliações, boundaries, lint de portabilidade e lint semântico dos docs | Antes de entregar; e sempre que um resultado parecer estranho |
 | `vendor/multiplos-justos/CHANGELOG.md` | Linhagem das versões e a origem de cada regra | Ao investigar por que uma regra existe |
@@ -40,7 +41,7 @@ novo (regra inviolável 1 do desenho v4).
 
 ## Integridade da cópia
 
-`manifest_vendor.json` registra versão, origem e o sha256 de cada um dos 7 arquivos.
+`manifest_vendor.json` registra versão, origem e o sha256 de cada um dos 8 arquivos.
 `tests/test_vendor_multiplos_justos.py` confronta manifest e disco **nos dois sentidos** — arquivo
 alterado e arquivo a mais reprovam igualmente — e roda a suíte do vendor.
 

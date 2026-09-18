@@ -267,6 +267,13 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
     "driver sobre a métrica-base, e o líquido agregado: diagnóstico precomputado do período-base, que não "
     "move preço nenhum": (
         "drivers.**",),
+    "a participação do crescimento e o peso do terminal na decomposição de Miller-Modigliani de cada "
+    "parte firm de SOTP (v10.1) — partição do valor em fração, não valor": (
+        "sotp.partes.*.decomposicao_mm.participacao_do_crescimento_%",
+        "sotp.partes.*.decomposicao_mm.peso_do_terminal_%"),
+    "a base de NOPAT da decomposição de cada parte firm de SOTP (v10.1) — lucro operacional após "
+    "imposto: métrica, não valor": (
+        "sotp.partes.*.decomposicao_mm.NOPAT_base",),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 

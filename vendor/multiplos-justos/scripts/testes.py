@@ -11,7 +11,7 @@ Uso de release: rode em DUAS invocações frescas:
 Cada comando sai com código 0 se sua fase passar. A separação evita que ambientes com quota de
 subprocessos produzam falso negativo depois de dezenas de execuções reais do CLI.
 """
-import sys, itertools, os
+import sys, itertools, os, re
 
 # [v9.9] A suíte imprime ≡ ↑ ↓ e acentos. Em locale não-UTF-8 (cp1252, Windows PT-BR) isso
 # estoura em UnicodeEncodeError assim que a saída é redirecionada — falha de codec, não de
@@ -2096,6 +2096,8 @@ def rec_v927_consistencia_cross_layer():
     paper = txt('references/paper-multiplos-justos-v3.md')
     aplic = txt('references/aplicacao.md')
     skill = txt('SKILL.md')
+    _n = lambda t: re.sub(r'\s+', ' ', t)          # [v9.32] tolerante a quebra de linha
+    skill_n, aplic_n = _n(skill), _n(aplic)
     motor = txt('scripts/justos.py')
     assinaturas = {
         'derivacao': ('IC_n = IC_0 +' in deriv and 'ROIC_marginal' in deriv and 'TV_desc = IC_n/' in deriv),
@@ -2124,8 +2126,47 @@ def rec_v927_consistencia_cross_layer():
               lit not in deriv and lit not in paper and lit not in skill and lit not in aplic)
     for campo in ('crescimento:', 'depreciacao:', 'clean_surplus:', 'book:'):
         check(f'v9.27 memória técnica: campo {campo}', campo in aplic)
-    check('v9.27 base monetária = invariante, não 11ª escolha',
-          'invariante obrigatório' in skill.lower() and '11ª escolha nomeada' not in skill)
+    check('v9.32 base monetária = invariante, renumerada para 12ª',
+          'invariante obrigatório' in skill.lower()
+          and 'não uma 12ª escolha metodológica' in skill
+          and 'não uma 11ª escolha metodológica' not in skill)
+    # --- v9.32: marca de estoque (J16) ---
+    check('v9.32 gatilho da marca de estoque no corpo (Gate 0)',
+          '**Marca de estoque.**' in skill_n and 'VP(aluguel 1..T)' in skill_n
+          and '`aplicacao.md` §13' in skill_n)
+    check('v9.32 §13 deixa de ser órfão: citado pelo corpo e na enumeração',
+          '§13' in skill_n and 'fronteira de escopo e marca de estoque §13' in skill_n.lower())
+    check('v9.32 §10 de volta à enumeração de referências',
+          'status das premissas §10' in skill_n)
+    check('v9.32 regra da identidade no playbook',
+          'Marca = VP(aluguel que o estoque comanda' in aplic_n
+          and 'Fator de tempo' in aplic_n and 'Apreciação implícita' in aplic_n)
+    check('v9.32 parede estoque↔fluxo com as duas rotas e o gap',
+          'Parede estoque↔fluxo' in aplic_n and 'marca à vista + aluguel imputado' in aplic_n
+          and 'o gap entre as rotas MEDE a violação' in aplic_n
+          and 'Lado do ativo:' in aplic_n)
+    check('v9.32 razão R generalizada (restaura a fórmula perdida do §3)',
+          'Razão R' in aplic_n and 'capitalização perpétua do fluxo corrente' in aplic_n
+          and 'cruzamento é exato em R = 1' in aplic_n)
+    check('v9.32 deságio é operação sobre ativo',
+          'Deságio é operação sobre ATIVO, nunca sobre líquido de passivos' in aplic)
+    check('v9.32 corolário: realização de estoque não valida base de fluxo',
+          'NUNCA ancora nem VALIDA uma base de FLUXO' in aplic_n
+          and 'derivação por subtração é proibida' in aplic_n)
+    check('v9.32 11ª escolha nomeada = nível da marca; rota é invariante',
+          '11ª escolha metodológica nomeada' in aplic_n
+          and 'ROTA (a)/(b) fica FORA da lista' in aplic_n
+          and 'ONZE escolhas metodológicas' in skill_n)
+    check('v9.32 composição multiplicativa no registro de drivers',
+          'linearização quebra na MESMA linha exposta' in aplic_n
+          and 'soma dos impactos percentuais' in aplic_n)
+    check('v9.32 critério de aceitação (vi) nos dois espelhos',
+          'não conta como rodada' in skill and 'não conta como rodada' in aplic)
+    check('v9.32 campo marca_de_estoque na memória técnica', 'marca_de_estoque:' in aplic)
+    check('v9.32 jurisprudência J16 registrada', 'J16 (AGRO3' in aplic)
+    check('v9.32 manual de manutenção existe e é citado',
+          os.path.exists(os.path.join(root, 'references/manutencao.md'))
+          and '`references/manutencao.md`' in skill)
     check('v9.27 paper distingue múltiplo forward e corrente nas raízes',
           'base corrente' in paper and 'duas raízes' in paper and 'base forward' in paper)
     check('v9.28 Fisher: terminal-only não é chamado de equivalente',
