@@ -663,7 +663,9 @@ duas perguntas.
    campos` — ativos instalados e valor do crescimento em múltiplo do lucro operacional após
    imposto, participação do crescimento e peso do terminal), pelo rótulo e pela unidade de lá,
    e a nota de leitura do catálogo. É precomputada no build e sai **rotulada como congelada**: o
-   laboratório não a reproduz. Os montantes em moeda e a prosa do motor
+   laboratório não a reproduz. Com `resultados.sotp` publicado, a frase do dicionário diz, antes da
+   tabela, que ela decompõe o vetor de cada cenário, e não as partes. Os montantes em moeda e a
+   prosa do motor
    (`identidade_ativos_instalados`, `trava_de_leitura`) ficam em `resultados`. O título passa por
    `render._rotulo_do_numero`, como o dos cenários: os dois termos em múltiplo somam o múltiplo
    justo, que o mapa da integração declara conclusão de valor;
@@ -727,14 +729,21 @@ duas perguntas.
    a métrica declarada, uma razão por ponto de consenso que o caso declara e a leitura do
    confronto temporal pelo RÓTULO do catálogo (`leituras_do_nivel`). Desde a v10.1, quando a
    integração publica a leitura recalculada (`resultados.reversa.nivel_implicito.recalculado`, rota
-   firm com métrica EBITDA), o bloco traz **as duas leituras**: primeiro a **central** — a
-   métrica que o preço embute com o múltiplo recalculado no nível, o degrau, o encargo de
-   reposição (pela unidade `pp`) e o múltiplo justo no nível implícito (pela unidade `múltiplo`)
-   —, depois a de **múltiplo fixo**, com os títulos de limite superior, e a nota da escada; com
-   `recalculado.sem_solucao`, a frase do dicionário toma o lugar da leitura central, e um bloco
-   recalculado sem o número central nem a recusa do motor é recusa nomeada
-   (`CampoDeContratoAusente`). As razões contra o consenso e a leitura do confronto seguem a de
-   múltiplo fixo, sobre a qual o motor as calcula. Ele é o **único bloco congelado** da seção
+   firm com métrica EBITDA), o bloco traz **as duas leituras**, na ordem da escada: primeiro a
+   **central** — a métrica que o preço embute com o múltiplo recalculado no nível, o degrau, o
+   encargo de reposição (pela unidade `pp`) e o múltiplo justo no nível implícito (pela unidade
+   `múltiplo`) —; depois a de **múltiplo fixo**, rotulada como a que exagera o degrau nos dois
+   sentidos (o limite superior quando o preço pede nível acima do declarado, o inferior quando pede
+   abaixo); depois as razões contra o consenso e a leitura do confronto, que o motor calcula sobre a
+   de múltiplo fixo e que a tela diz serem dela (títulos próprios e a moldura
+   `valuation.nivel_implicito_leitura_fixo` em volta do rótulo do catálogo); e, por último, a nota
+   de leitura do catálogo (`catalogo.nivel_implicito.nota`: a configuração da central, o múltiplo
+   fixo que exagera o degrau, a terceira leitura da escada que o relatório não calcula, a condição
+   de validade e o ponto de equilíbrio), lida com falha fechada — um catálogo sem ela é
+   `CampoDeContratoAusente`. Com `recalculado.sem_solucao`, a frase do dicionário toma o lugar da
+   leitura central, e um bloco recalculado sem o número central nem a recusa do motor é recusa
+   nomeada (`CampoDeContratoAusente`). Sem `recalculado`, o bloco é exatamente o de antes da v10.1.
+   Ele é o **único bloco congelado** da seção
    (é o subcomando `nivel` do motor, que nenhum espelho reproduz) e sai
    rotulado como tal, dentro do próprio bloco; o teto do crescimento gratuito e as limitações
    da leitura aparecem e somem com a edição, no host que o painel reescreve. Sem reversa, o
