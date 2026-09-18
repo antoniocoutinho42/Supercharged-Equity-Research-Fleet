@@ -4,15 +4,15 @@
     "name": "Antonio Coutinho"
   },
   "metadata": {
-    "description": "Equity Research Fleet v6: Analista-chefe + pesquisa recursiva + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre.",
-    "version": "6.0.0"
+    "description": "Equity Research Fleet v6.1: Analista-chefe com teste de entendido e gates de research (instrumentos materiais, resiliência financeira) + pesquisa recursiva por hipóteses + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre + anexo financeiro histórico.",
+    "version": "6.1.0"
   },
   "plugins": [
     {
       "name": "equity-research-fleet",
       "source": "./",
-      "description": "Equity Research Fleet v6: Analista-chefe + pesquisa recursiva + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre.",
-      "version": "6.0.0",
+      "description": "Equity Research Fleet v6.1: Analista-chefe com teste de entendido e gates de research (instrumentos materiais, resiliência financeira) + pesquisa recursiva por hipóteses + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre + anexo financeiro histórico.",
+      "version": "6.1.0",
       "author": {
         "name": "Antonio Coutinho"
       }

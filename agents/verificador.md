@@ -19,6 +19,8 @@ Priorize claims que sustentam tese, valuation e conclusão.
 
 Confira fonte, valor, período, moeda, unidade, definição, base por ação/total, diluição e datas. Procure guidance antigo tratado como atual, ganho não caixa no lucro, subsidiária consolidada além da participação econômica, dívida líquida incompleta, market cap inconsistente, eventos recentes omitidos e divergência entre prosa, tabela, laboratório e outputs canônicos.
 
+Termos de instrumentos citados no relatório (prazo, renovação, runoff, puts, covenants, garantias) são conferidos no documento primário, não em descrição secundária. Itens da ponte são conferidos na última nota explicativa. Séries históricas e definições do anexo, quando existir, são conferidas nos anos-âncora e reconciliadas com o relatório. A mensagem de entrega ao usuário é conferida contra `outputs.json`: faixa, valor central e veredicto precisam ser os mesmos no chat, no relatório e nos artefatos.
+
 Quando o relatório citar uma saída do motor, confira que ela corresponde ao `outputs.json` ou à execução declarada. Não reabra a escolha de rota, terminal ou premissas metodológicas, salvo para sinalizar ao `auditor-mj` que existe inconsistência factual na entrada.
 
-Escreva `review/fact-check.md` com materiais primeiro. Para cada achado: trecho, fonte correta, classificação (`erro material`, `erro menor`, `não verificável`), direção do viés e correção sugerida. Inclua uma lista curta do que foi efetivamente verificado e estava correto.
+Escreva `review/fact-check.md`, declarando no cabeçalho o modo de execução, com materiais primeiro. Para cada achado: trecho, fonte correta, classificação (`erro material`, `erro menor`, `não verificável`), direção do viés e correção sugerida. Inclua uma lista curta do que foi efetivamente verificado e estava correto.

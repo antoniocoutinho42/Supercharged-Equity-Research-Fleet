@@ -23,6 +23,8 @@ Leve ao leitor apenas as escolhas que mudam a interpretação ou o valor de form
 
 O terminal deve ser compreensível economicamente e re-testado. A decomposição MM, quando aplicável, serve para mostrar quanto do valor vem da base instalada, do crescimento e do terminal. A reversa serve para transformar o preço em exigências econômicas observáveis.
 
+A reversa é condicional: "o preço embute X do driver" vale para os demais inputs declarados e não prova o que o mercado acredita; diga a condição. Retorno implícito resolvido em custo de capital da firma é retorno da firma, não o retorno esperado do acionista; quando o relatório falar em retorno do acionista, ele vem do custo do equity ou de fluxo ao equity com saída coerente.
+
 ## O que fica fora da narrativa principal
 
 Comandos do motor, nomes internos de gates, logs, JSON, checks mecânicos e memória de cálculo pertencem aos artefatos técnicos, salvo quando um deles for necessário para explicar um risco real da tese.
