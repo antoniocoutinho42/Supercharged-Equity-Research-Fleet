@@ -2,7 +2,7 @@
   "versao_contrato": "catalogo/1",
   "metodologia": {
     "nome": "multiplos-justos",
-    "versao": "v9.31"
+    "versao": "v10.1"
   },
   "idiomas": [
     "pt-BR"
@@ -667,6 +667,41 @@
         "pt-BR": "Crescimento zero na convenção book: múltiplo ainda depende do ROIC"
       }
     },
+    "firm_dominio_d_100": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Fora do domínio: o encargo de reposição consome todo o EBITDA, e o múltiplo justo não está definido nesta base"
+      }
+    },
+    "firm_dominio_d_overhang": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Encargo de reposição acima de 60% do EBITDA: lucro após imposto fino e múltiplo hipersensível ao encargo"
+      }
+    },
+    "firm_dominio_nopat": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Fora do domínio: lucro operacional após imposto não positivo, cenário sem múltiplo justo"
+      }
+    },
+    "firm_dominio_t": {
+      "severidade": "alerta",
+      "bloco": "earning_power",
+      "rotulo": {
+        "pt-BR": "Alíquota fora de 0 a 100%: regime anômalo que exige justificativa e reconciliação"
+      }
+    },
+    "firm_terminal_dominante": {
+      "severidade": "alerta",
+      "bloco": "duracao_terminal",
+      "rotulo": {
+        "pt-BR": "Mais da metade do valor está no terminal: a sensibilidade ao horizonte e o viés de mortalidade entram na entrega"
+      }
+    },
     "eq_convencao_book": {
       "severidade": "nota",
       "bloco": "duracao_terminal",
@@ -1100,7 +1135,7 @@
       "pt-BR": "Teto do crescimento gratuito"
     },
     "texto": {
-      "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. Nenhuma hipótese de crescimento pago chega a este múltiplo; a distância entre ele e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
+      "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. O teto vale para o crescimento declarado — um crescimento maior o desloca para cima —, e só quando nenhuma taxa de crescimento dentro dos limites declarados reproduz o preço é lícito dizer que nenhuma hipótese de taxa o explica; então a explicação está no nível da métrica-base, em valor que fica fora do fluxo de caixa ou no denominador, nunca em irracionalidade do mercado. A distância entre o teto e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
     }
   },
   "teto_da_alavanca": {
@@ -1285,6 +1320,11 @@
         "pt-BR": "Capex do ano corrente"
       }
     },
+    "media_serie_tres_pontos": {
+      "rotulo": {
+        "pt-BR": "Média da série de três pontos"
+      }
+    },
     "guidance_longo_prazo": {
       "rotulo": {
         "pt-BR": "Capex do guidance de longo prazo"
@@ -1350,10 +1390,10 @@
     },
     "ano_de_capex_no_par_d_rir": {
       "rotulo": {
-        "pt-BR": "Ano de capex de estado estacionário no par depreciação x reinvestimento: corrente ou guidance de longo prazo"
+        "pt-BR": "Ponto do ciclo dos inputs de capital (capex, giro e base de ativos): corrente, média da série de três pontos ou guidance de longo prazo"
       },
       "gatilho": {
-        "pt-BR": "O capex corrente diverge do capex de estado estacionário que o guidance de longo prazo indica."
+        "pt-BR": "Os inputs de capital do ano corrente divergem da média da série de três pontos ou do estado estacionário que o guidance de longo prazo indica."
       }
     },
     "fronteira_de_consolidacao": {
@@ -1371,6 +1411,50 @@
       "gatilho": {
         "pt-BR": "A companhia tem capacidade pré-construída ociosa, com utilização observável ou receita por ativo confrontável contra pares a plena carga."
       }
+    },
+    "nivel_da_marca_de_estoque": {
+      "rotulo": {
+        "pt-BR": "Nível da marca de estoque: marca de avaliação ou de transação realizada"
+      },
+      "gatilho": {
+        "pt-BR": "Mais de cerca de 20% do valor vem de marca de estoque — laudo, NAV, cap rate, valor de reposição, banco de terras, estoque pronto ou carteira marcada."
+      }
+    }
+  },
+  "decomposicao_mm": {
+    "nota": {
+      "pt-BR": "Ativos instalados é o valor sem crescimento nenhum; o valor do crescimento é o restante. A leitura só vale se o encargo de reposição medir a reposição de verdade: com o encargo subdimensionado, o lucro está superestimado e os ativos instalados herdam o erro. Nas convenções de convergência e gordon os ativos instalados são exatamente um sobre o custo de capital na convenção de fluxo no fim do ano — com a de meio de período, vezes o fator dela —; na convenção book dependem do retorno médio do capital existente."
+    },
+    "campos": {
+      "ativos_instalados_x_NOPAT": {
+        "rotulo": {
+          "pt-BR": "Ativos instalados, em múltiplo do lucro operacional após imposto"
+        },
+        "unidade": "múltiplo"
+      },
+      "valor_do_crescimento_x_NOPAT": {
+        "rotulo": {
+          "pt-BR": "Valor do crescimento, em múltiplo do lucro operacional após imposto"
+        },
+        "unidade": "múltiplo"
+      },
+      "participacao_do_crescimento_%": {
+        "rotulo": {
+          "pt-BR": "Participação do crescimento no valor"
+        },
+        "unidade": "pp"
+      },
+      "peso_do_terminal_%": {
+        "rotulo": {
+          "pt-BR": "Peso do valor terminal"
+        },
+        "unidade": "pp"
+      }
+    }
+  },
+  "nivel_implicito": {
+    "nota": {
+      "pt-BR": "A leitura central mantém fixos o crescimento e o retorno do capital novo, e só o encargo de reposição — a depreciação, fixa em moeda, como fração da métrica — responde ao nível. Manter também o múltiplo fixo exagera o degrau nos dois sentidos: dá o limite superior quando o preço pede nível acima do declarado, e o inferior quando pede abaixo. A escada tem ainda uma terceira leitura, que este relatório não calcula: com o retorno do capital novo também derivado do nível (intensidade de capital constante), o degrau exigido encolhe ainda mais. As leituras valem para nível que vem de margem ou de preço; se ele vem de volume, a depreciação acompanha o nível e as leituras convergem. A leitura central é também o ponto de equilíbrio da base de lucro contra o preço."
     }
   },
   "conclusoes_de_valor": {
@@ -1398,13 +1482,17 @@
       "cenarios.*.degrau.multiplo",
       "cenarios.*.degrau.multiplo_x_rentab",
       "cenarios.*.degrau.com_transicao",
+      "cenarios.*.decomposicao_mm.ativos_instalados_x_NOPAT",
+      "cenarios.*.decomposicao_mm.valor_do_crescimento_x_NOPAT",
       "sensibilidades.grades_1d.*.pontos.*.multiplo",
       "sensibilidades.grades_2d.*.celulas.*.*.multiplo",
       "sotp.partes.*.EV/EBITDA_curr",
       "sotp.partes.*.EV/EBITDA_fwd",
       "sotp.partes.*.EV/NOPAT_curr",
       "sotp.partes.*.EV/NOPAT_fwd",
-      "sotp.partes.*.EV/EBITDA0"
+      "sotp.partes.*.EV/EBITDA0",
+      "sotp.partes.*.decomposicao_mm.ativos_instalados_x_NOPAT",
+      "sotp.partes.*.decomposicao_mm.valor_do_crescimento_x_NOPAT"
     ],
     "moeda": [
       "cenarios.*.valor.EV",
@@ -1412,6 +1500,8 @@
       "cenarios.*.sem_degrau.valor.Equity",
       "cenarios.*.vp_fase1",
       "cenarios.*.valor_fase2_no_ano_T",
+      "cenarios.*.decomposicao_mm.ativos_instalados",
+      "cenarios.*.decomposicao_mm.valor_do_crescimento",
       "sotp.ev_das_partes",
       "sotp.ev_total",
       "sotp.equity",
@@ -1422,7 +1512,9 @@
       "sotp.materialidade.diferenca",
       "sotp.partes.*.EV",
       "sotp.partes.*.vp_fase1",
-      "sotp.partes.*.valor_fase2_no_ano_T"
+      "sotp.partes.*.valor_fase2_no_ano_T",
+      "sotp.partes.*.decomposicao_mm.ativos_instalados",
+      "sotp.partes.*.decomposicao_mm.valor_do_crescimento"
     ]
   },
   "insumos_do_caso": [

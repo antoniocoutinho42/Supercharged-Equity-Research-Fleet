@@ -110,6 +110,32 @@ def test_montar_junta_os_fragmentos_de_evidencia_e_recusa_id_repetido(tmp_path):
         assert trecho in str(erro.value), str(erro.value)
 
 
+def test_montar_recusa_resultados_de_outra_versao_da_metodologia_nomeando_as_duas_e_o_remedio(tmp_path):
+    """Versão única do lado dos resultados (migração v10.1, onda da revisão final, M13): um
+    `resultados.json` produzido por outra versão da metodologia que a do catálogo desta instalação não
+    entra na entrega — nem os números, nem os rótulos casariam. `montar` recusa antes de compor, nomeando
+    as duas versões e o remédio (rodar o `avaliar.py` de novo sobre o caso), e nada sai: sem
+    `entrega.json` e sem relatório. A vizinha com a versão do catálogo passa da checagem (e para adiante,
+    no ledger que esta raiz mínima não tem)."""
+    raiz = execucao.nova("SINT3", base=tmp_path / "analises", hoje=HOJE)
+    versao_do_catalogo = apoio.CATALOGO["metodologia"]["versao"]
+    for parte in ("caso.json", "analise.json"):
+        _escrever(raiz / parte, {})
+
+    _escrever(raiz / "resultados.json", {"origem": {"metodologia": {"nome": "multiplos-justos", "versao": "v9.31"}}})
+    with pytest.raises(execucao.ExecucaoInvalida) as erro:
+        execucao.montar(raiz)
+    for trecho in ("'v9.31'", f"'{versao_do_catalogo}'", "avaliar.py"):
+        assert trecho in str(erro.value), str(erro.value)
+    assert not (raiz / "entrega.json").exists() and not (raiz / "relatorio.html").exists()
+    assert execucao.main(["montar", str(raiz)]) == 1
+
+    _escrever(raiz / "resultados.json",
+              {"origem": {"metodologia": {"nome": "multiplos-justos", "versao": versao_do_catalogo}}})
+    with pytest.raises(execucao.ExecucaoInvalida, match="não tem fragmento nenhum"):
+        execucao.compor_entrega(raiz)
+
+
 def test_montar_sobre_as_partes_da_raiz_sintetica_gera_a_entrega_que_o_builder_emite(tmp_path):
     """O percurso do M4 sobre a raiz 1 da fixture sintética: o caso e a análise do analista, os resultados
     do `er-valuation`, o ledger chegando em dois fragmentos de mandato, os gates declarados na execução e a

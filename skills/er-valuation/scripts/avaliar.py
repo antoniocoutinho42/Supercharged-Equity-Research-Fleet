@@ -885,7 +885,7 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
     upside = valor["preco_acao"] / preco_valor - 1
     diagnosticos_lista = saida_motor["diagnosticos"]
 
-    return {
+    registro = {
         "ancora": cenario["ancora"],
         "triangulo": cenario["triangulo"],
         "premissas": cenario["premissas"],
@@ -903,6 +903,31 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
         "coerencia_vetor": saida_motor["coerencia_vetor"],
         "convencao_temporal": saida_motor["convencao_temporal"],
     }
+    # Migração v10.1, Task 2: a decomposição de Miller-Modigliani (ativos instalados e valor
+    # do crescimento, §11.7 do `aplicacao.md`) é o bloco do motor, íntegro, como
+    # `coerencia_vetor` — nenhuma conta aqui, nem nos montantes em moeda, que o motor só
+    # emite quando recebe o EBITDA. Chave EXIGIDA: o `ev` da v10.1 sempre a devolve, e a
+    # ausência é motor errado, que tem de estourar alto em vez de publicar um cenário sem ela.
+    if rota == "firm":
+        registro["decomposicao_mm"] = _exigir_decomposicao(saida_motor)
+    return registro
+
+
+def _exigir_decomposicao(saida_motor: dict) -> dict:
+    """O bloco `decomposicao_mm` de uma saída do `ev`, recusado com `MotorFalhou` quando falta ou não
+    é um objeto — a mesma disciplina de `_exigir_valor`: a mensagem nomeia o bloco e ecoa os
+    diagnósticos do motor, nunca um `KeyError` cru. O `ev` da v10.1 sempre o devolve; a ausência é
+    motor de outra versão ou saída truncada, e um cenário da rota firm nunca sai publicado sem ele."""
+    bloco = saida_motor.get("decomposicao_mm")
+    if not isinstance(bloco, dict):
+        detalhe = "\n".join(f"- {d}" for d in saida_motor.get("diagnosticos") or []) or "(nenhum)"
+        raise MotorFalhou(
+            f"motor devolveu a saída do `ev` sem o bloco 'decomposicao_mm' (recebido: {bloco!r}): o `ev` "
+            "da metodologia vendorizada sempre o devolve, e um cenário da rota firm não é publicado sem "
+            "ele — confira a versão do motor em vendor/multiplos-justos contra o manifest.\n"
+            f"diagnósticos do motor:\n{detalhe}"
+        )
+    return bloco
 
 
 # Chaves do motor PROMOVIDAS para dentro do shape do wrapper (`valor`/

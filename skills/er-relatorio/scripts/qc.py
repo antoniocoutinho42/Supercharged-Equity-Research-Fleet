@@ -846,7 +846,7 @@ BLOCO_DA_REVERSA: str = contrato_entrega.BLOCO_DA_REVERSA
 
 # O bloco de `resultados` com as escolhas metodológicas que a integração precificou
 # (5G, D1) — o mesmo nome de contrato que a forma lê para exigir que uma razão
-# declarada tenha escolha publicada. QUAIS são as dez e o que dispara cada uma é
+# declarada tenha escolha publicada. QUAIS são as onze e o que dispara cada uma é
 # metodologia, e vem do catálogo; daqui só a presença.
 BLOCO_DAS_ESCOLHAS: str = contrato_entrega.BLOCO_DAS_ESCOLHAS
 

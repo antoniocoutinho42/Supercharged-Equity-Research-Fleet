@@ -1161,6 +1161,23 @@ def _campo_de_contrato(objeto: dict, campo: str, onde: str) -> Any:
     return objeto[campo]
 
 
+def _nota_do_catalogo(catalogo: dict, secao: str, idioma: str) -> str:
+    """A nota de leitura que o catálogo publica para uma seção da Valuation (`catalogo.<secao>.nota.<idioma>`,
+    migração v10.1: a decomposição do valor e o nível implícito) — texto de metodologia que o relatório exibe
+    e nunca escreve. Lida pelo contrato, com falha fechada: seção, nota ou idioma ausentes são
+    `CampoDeContratoAusente` nomeado, e texto vazio também — o bloco nunca sai sem a condição de leitura
+    que o acompanha."""
+    onde = f"catalogo.{secao}.nota"
+    nota = _campo_de_contrato(
+        _campo_de_contrato(_campo_de_contrato(catalogo, secao, "catalogo"), "nota", f"catalogo.{secao}"),
+        idioma, onde)
+    if not isinstance(nota, str) or not nota.strip():
+        raise CampoDeContratoAusente(
+            f"campo vazio em '{onde}': '{idioma}' — a Valuation não desenha o bloco sem a condição de leitura "
+            "que o acompanha.")
+    return nota
+
+
 def _grades_2d(resultados: dict) -> list:
     sensibilidades = resultados.get("sensibilidades")
     if not isinstance(sensibilidades, dict):
@@ -2233,6 +2250,10 @@ CAMINHO_DOS_PRECOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.valor
 CAMINHO_DOS_MULTIPLOS_DA_GRADE_1D: str = "sensibilidades.grades_1d.*.pontos.*.multiplo"
 CAMINHO_DO_VALOR_DA_FASE_1: str = "cenarios.*.vp_fase1"
 CAMINHO_DO_VALOR_DA_FASE_2: str = "cenarios.*.valor_fase2_no_ano_T"
+# Migração v10.1, Task 3: o número que decide a leitura condicional do título da decomposição de
+# Miller-Modigliani — os ativos instalados em múltiplo do NOPAT, que com o valor do crescimento somam
+# o múltiplo justo e que o mapa da integração declara conclusão de valor.
+CAMINHO_DA_DECOMPOSICAO_MM: str = "cenarios.*.decomposicao_mm.ativos_instalados_x_NOPAT"
 # Fatia 5G, Task 4: as quatro conclusões de valor das alternativas — o preço do ramo
 # alternativo de cada escolha metodológica, o do retorno exigido, o valor ponderado por
 # probabilidade e o do cross-check pela rota oposta.
@@ -2354,7 +2375,8 @@ def _multiplos_html(resultados: dict, catalogo: dict, idioma: str, dicionario: d
 # --------------------------------------------------------------------------
 # Aba Valuation na ordem da §9 (fatia 5F, Task 5, D15): cabeçalho — preço e upside, a faixa
 # piso–teto, os múltiplos corrente e forward, a rota e a convenção — → como o valor é formado →
-# cenários → laboratório → ponte → sensibilidades → o que está no preço. Todo número sai de
+# cenários → a decomposição do valor (v10.1, rota firm) → laboratório → ponte → sensibilidades → o
+# que está no preço. Todo número sai de
 # `resultados` formatado pela unidade que o contrato declara; todo texto de metodologia sai do
 # catálogo; toda conclusão de valor nova sai por `_rotulo_do_numero`; nenhum código cru e nenhuma
 # prosa do motor chega à aba.
@@ -2542,6 +2564,55 @@ def _cenarios_da_valuation_html(resultados: dict, catalogo: dict, idioma: str, m
     titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "cenarios_titulo",
                                CAMINHO_DOS_PRECOS_POR_CENARIO, produto=produto)
     return f'<section class="valuation-cenarios"><h2>{html.escape(titulo)}</h2>{"".join(artigos)}</section>'
+
+
+# --------------------------------------------------------------------------
+# Migração v10.1, Task 3 (Q1 do grill de 17/09): a decomposição de Miller-Modigliani de cada cenário
+# que a publica, logo depois dos cenários. Precomputada no build, como o nível implícito: o laboratório
+# não a reproduz, e a seção diz isso. Os campos, os rótulos, as unidades e a nota de leitura vêm do
+# catálogo (`decomposicao_mm`); a prosa do motor (`identidade_ativos_instalados`, `trava_de_leitura`)
+# fica em `resultados`.
+# --------------------------------------------------------------------------
+
+def _decomposicao_mm_html(resultados: dict, catalogo: dict, idioma: str, dicionario: dict, produto: str) -> str:
+    """v10.1 (§11.7 do `aplicacao.md`): a decomposição de Miller-Modigliani de cada cenário que a
+    publica, pelos campos, rótulos e unidades do catálogo — nunca pelos nomes crus do motor, nunca
+    pela prosa dele. Precomputada: o laboratório não a reproduz, e o bloco diz isso. Sem cenário
+    com o bloco (rotas equity e rampa), a seção não existe.
+
+    Os ativos instalados e o valor do crescimento somam o múltiplo justo, que o mapa da integração
+    declara conclusão de valor: o título passa por `_rotulo_do_numero`, como o dos cenários, e sob
+    fronteira de escopo ou sob `leitura_de_preco` sai na forma condicional.
+
+    Onda da revisão final (M12): com a soma das partes publicada, a tabela continua sendo a dos
+    cenários — o vetor de cada um, não as partes —, e a frase do dicionário diz isso antes dela."""
+    publicados = [(nome, cenario["decomposicao_mm"])
+                  for nome, cenario in _campo_de_contrato(resultados, "cenarios", "resultados").items()
+                  if isinstance(cenario.get("decomposicao_mm"), dict)]
+    if not publicados:
+        return ""
+    secao = _campo_de_contrato(catalogo, "decomposicao_mm", "catalogo")
+    campos = _campo_de_contrato(secao, "campos", "catalogo.decomposicao_mm")
+    nota = _nota_do_catalogo(catalogo, "decomposicao_mm", idioma)
+    nota_do_sotp = (f'<p class="decomposicao-mm-sotp">{html.escape(t(dicionario, "valuation.decomposicao_mm_sotp"))}</p>'
+                    if resultados.get("sotp") else "")
+    colunas = [t(dicionario, "valuation.decomposicao_mm_cenario")] + [
+        _rotulo_de_secao_do_catalogo(secao, "campos", campo, idioma) for campo in campos]
+    linhas = []
+    for nome, bloco in publicados:
+        onde = f"resultados.cenarios.{nome}.decomposicao_mm"
+        linhas.append([str(nome)] + [
+            _formatar_na_unidade(_campo_de_contrato(bloco, campo, onde), catalogo,
+                                 info.get("unidade") if isinstance(info, dict) else None, idioma, None)
+            for campo, info in campos.items()])
+    titulo = _rotulo_do_numero(resultados, catalogo, dicionario, "decomposicao_mm_titulo",
+                               CAMINHO_DA_DECOMPOSICAO_MM, produto=produto)
+    return ('<section class="valuation-decomposicao-mm">'
+            f'<h2>{html.escape(titulo)}</h2>'
+            f'<p class="reversa-congelado-nota">{html.escape(t(dicionario, "valuation.decomposicao_mm_congelado"))}</p>'
+            + nota_do_sotp
+            + _tabela_html("decomposicao-mm", colunas, linhas)
+            + f'<p class="decomposicao-mm-nota">{html.escape(nota)}</p></section>')
 
 
 # --------------------------------------------------------------------------
@@ -2741,6 +2812,12 @@ def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, 
 # pontos percentuais, como o motor o publica; cada razão contra o consenso é uma
 # comparação entre dois níveis, e sai como múltiplo. A leitura sai pelo RÓTULO do catálogo
 # (`leituras_do_nivel`) — nunca a chave, nunca a prosa do motor, que fica em `resultados`.
+#
+# Migração v10.1, Task 3 (Q2 do grill de 17/09): na rota firm com métrica EBITDA a integração
+# publica também a leitura RECALCULADA (`nivel_implicito.recalculado`), e o bloco mostra as duas —
+# primeiro a central, depois a de múltiplo fixo, que exagera o degrau nos dois sentidos (o limite
+# superior quando o preço pede nível acima do declarado, o inferior quando pede abaixo). Nenhum dos
+# números novos é conclusão de valor, pela mesma razão: é a reversa.
 # --------------------------------------------------------------------------
 
 # O degrau implícito já vem em pontos percentuais do motor (`degrau_implicito_%`: -10.3 é
@@ -2748,6 +2825,11 @@ def _teto_do_crescimento_gratuito_html(teto: dict, catalogo: dict, idioma: str, 
 FORMATO_DO_DEGRAU_IMPLICITO: str = "pp1"
 # A razão entre a métrica implícita e um ponto do consenso: quantas vezes um é o outro.
 FORMATO_DA_RAZAO_CONTRA_O_CONSENSO: str = "x2"
+# v10.1: as duas grandezas novas da leitura central, pelas unidades do catálogo — o encargo de
+# reposição no nível implícito, que o motor publica em pontos percentuais (`d_no_nivel_implicito_%`),
+# e o múltiplo justo refeito naquele nível.
+UNIDADE_DO_ENCARGO_NO_NIVEL: str = "pp"
+UNIDADE_DO_MULTIPLO_NO_NIVEL: str = "múltiplo"
 # Os pontos do consenso que a integração pode publicar, na ordem temporal.
 PONTOS_DO_CONSENSO: tuple = ("t1", "t2")
 
@@ -2762,6 +2844,37 @@ def _banner_do_produto_html(dicionario: dict) -> str:
             '</section>')
 
 
+def _leitura_central_do_nivel_html(recalculado: Any, catalogo: dict, idioma: str, moeda: str | None,
+                                   escala: Any, dicionario: dict) -> str:
+    """Migração v10.1, Task 3 (Q2): a leitura CENTRAL do nível implícito — a métrica-base que o preço
+    embute com o múltiplo recalculado no nível (montante, na escala do caso, como a de múltiplo fixo),
+    o degrau, o encargo de reposição e o múltiplo justo naquele nível, pelas unidades do catálogo.
+    Quando o motor recusa a leitura (`sem_solucao`: nenhum nível explica o preço sob o vetor), a frase
+    do dicionário vai no lugar das quatro linhas — a prosa do motor, nunca. Um bloco sem o número
+    central e sem a recusa é contrato quebrado, e sai como recusa nomeada (`_campo_de_contrato`):
+    nunca como a frase de que nenhum nível explica o preço."""
+    onde = "resultados.reversa.nivel_implicito.recalculado"
+    if (isinstance(recalculado, dict) and "metrica_base_implicita_recalculada" not in recalculado
+            and "sem_solucao" in recalculado):
+        return ('<p class="nivel-implicito-sem-solucao">'
+                f'{html.escape(t(dicionario, "valuation.nivel_implicito_central_sem_solucao"))}</p>')
+    linhas = [
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_central_metrica_titulo"),
+                      _formatar_na_unidade(_campo_de_contrato(recalculado, "metrica_base_implicita_recalculada", onde),
+                                           catalogo, UNIDADE_DOS_MONTANTES_DA_PONTE, idioma, moeda, escala)),
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_central_degrau_titulo"),
+                      placeholders.formatar(_campo_de_contrato(recalculado, "degrau_implicito_recalculado_%", onde),
+                                            FORMATO_DO_DEGRAU_IMPLICITO, idioma)),
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_central_d_titulo"),
+                      _formatar_na_unidade(_campo_de_contrato(recalculado, "d_no_nivel_implicito_%", onde),
+                                           catalogo, UNIDADE_DO_ENCARGO_NO_NIVEL, idioma, moeda)),
+        _metrica_html(t(dicionario, "valuation.nivel_implicito_central_multiplo_titulo"),
+                      _formatar_na_unidade(_campo_de_contrato(recalculado, "multiplo_justo_no_nivel_implicito", onde),
+                                           catalogo, UNIDADE_DO_MULTIPLO_NO_NIVEL, idioma, moeda)),
+    ]
+    return f'<div class="nivel-implicito-numeros nivel-implicito-central">{"".join(linhas)}</div>'
+
+
 def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str | None,
                           escala: Any, dicionario: dict) -> str:
     """D2/D4: o que o preço embute em NÍVEL — a métrica-base implícita, o degrau contra a
@@ -2772,13 +2885,32 @@ def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str |
     Fatia 5I, Task 3 (D6/D11): este bloco é o ÚNICO da seção que continua congelado — é o
     subcomando `nivel` do motor, que nenhum espelho reproduz —, e por isso o rótulo de
     congelado mora aqui, ao lado dos números que ele descreve, e não no topo da seção,
-    onde cobria eixos e teto que hoje se movem."""
+    onde cobria eixos e teto que hoje se movem.
+
+    Migração v10.1 (Task 3 e a onda da revisão final, I2): com a leitura recalculada publicada
+    (`recalculado`), o bloco segue a escada, nesta ordem — a leitura CENTRAL
+    (`_leitura_central_do_nivel_html`); a de múltiplo fixo, os mesmos dois números de antes com os
+    títulos da leitura que exagera o degrau nos dois sentidos; as razões contra o consenso e a leitura
+    do confronto, que o motor calcula sobre a de múltiplo fixo e que a tela diz serem dela (os títulos
+    `_fixo` e a moldura `valuation.nivel_implicito_leitura_fixo` em volta do rótulo do catálogo); e, por
+    último, a nota de leitura do catálogo (`catalogo.nivel_implicito.nota`), lida com falha fechada.
+    Sem `recalculado`, exatamente o bloco de antes da v10.1."""
     onde = "resultados.reversa.nivel_implicito"
+    recalculado = nivel.get("recalculado")
+    com_leitura_central = recalculado is not None
+    if com_leitura_central:
+        titulo_da_metrica, titulo_do_degrau = ("valuation.nivel_implicito_limite_metrica_titulo",
+                                               "valuation.nivel_implicito_limite_degrau_titulo")
+        sufixo_do_titulo_da_razao = "_fixo"
+    else:
+        titulo_da_metrica, titulo_do_degrau = ("valuation.nivel_implicito_metrica_titulo",
+                                               "valuation.nivel_implicito_degrau_titulo")
+        sufixo_do_titulo_da_razao = ""
     linhas = [
-        _metrica_html(t(dicionario, "valuation.nivel_implicito_metrica_titulo"),
+        _metrica_html(t(dicionario, titulo_da_metrica),
                       _formatar_na_unidade(_campo_de_contrato(nivel, "metrica_base_implicita", onde), catalogo,
                                            UNIDADE_DOS_MONTANTES_DA_PONTE, idioma, moeda, escala)),
-        _metrica_html(t(dicionario, "valuation.nivel_implicito_degrau_titulo"),
+        _metrica_html(t(dicionario, titulo_do_degrau),
                       placeholders.formatar(_campo_de_contrato(nivel, "degrau_implicito_%", onde),
                                             FORMATO_DO_DEGRAU_IMPLICITO, idioma)),
     ]
@@ -2787,14 +2919,22 @@ def _nivel_implicito_html(nivel: dict, catalogo: dict, idioma: str, moeda: str |
         if razao is None:
             continue
         linhas.append(_metrica_html(
-            t(dicionario, f"valuation.nivel_implicito_razao_{ponto}_titulo"),
+            t(dicionario, f"valuation.nivel_implicito_razao_{ponto}{sufixo_do_titulo_da_razao}_titulo"),
             placeholders.formatar(razao, FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, idioma)))
 
-    partes = [f'<div class="nivel-implicito-numeros">{"".join(linhas)}</div>']
+    partes = []
+    if com_leitura_central:
+        partes.append(_leitura_central_do_nivel_html(recalculado, catalogo, idioma, moeda, escala, dicionario))
+    partes.append(f'<div class="nivel-implicito-numeros">{"".join(linhas)}</div>')
     chave = nivel.get("leitura_chave")
     if chave is not None:
-        partes.append('<p class="nivel-implicito-leitura">' + _texto_de_dado_html(
-            _rotulo_de_secao_do_catalogo(catalogo, "leituras_do_nivel", chave, idioma)) + '</p>')
+        rotulo_da_leitura = _rotulo_de_secao_do_catalogo(catalogo, "leituras_do_nivel", chave, idioma)
+        if com_leitura_central:
+            rotulo_da_leitura = t(dicionario, "valuation.nivel_implicito_leitura_fixo", rotulo=rotulo_da_leitura)
+        partes.append('<p class="nivel-implicito-leitura">' + _texto_de_dado_html(rotulo_da_leitura) + '</p>')
+    if com_leitura_central:
+        partes.append('<p class="nivel-implicito-nota">'
+                      f'{html.escape(_nota_do_catalogo(catalogo, "nivel_implicito", idioma))}</p>')
     return (f'<div class="reversa-nivel-implicito">'
             f'<h3>{html.escape(t(dicionario, "valuation.nivel_implicito_titulo"))}</h3>'
             f'<p class="reversa-congelado-nota">'
@@ -3225,6 +3365,7 @@ def _valuation_html(entrega: dict, catalogo: dict, achados: list, idioma: str, d
         f'<section class="valuation-rota">{bloco_rota}</section>'
         f'{_formacao_do_valor_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
         f'{_cenarios_da_valuation_html(resultados, catalogo, idioma, moeda, dicionario, produto)}'
+        f'{_decomposicao_mm_html(resultados, catalogo, idioma, dicionario, produto)}'
         f'{laboratorio}'
         f'{_ponte_html(entrega, catalogo, idioma, dicionario, moeda, com_laboratorio)}'
         f'{_painel_de_escolhas_html(entrega, catalogo, idioma, dicionario, prosa)}'

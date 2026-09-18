@@ -591,16 +591,16 @@ TESE = DICIONARIO["interface"]["tese"]
 SEM_NODE = shutil.which("node") is None
 
 
-def _pagina(entrega_dict: dict, com_laboratorio: bool = False) -> str:
+def _pagina(entrega_dict: dict, com_laboratorio: bool = False, catalogo: dict = CATALOGO) -> str:
     """O HTML pelo caminho que o builder percorre depois de uma primeira passada de QC sem HARD FAIL — com
     o laboratório quando pedido (os dois JS da integração, lidos de `builder.ASSETS_DA_INTEGRACAO`)."""
-    achados = _achados(entrega_dict)
+    achados = _achados(entrega_dict, catalogo)
     assert not [a for a in achados if a.nivel == "HARD_FAIL"], achados
     _prosa, log = placeholders.resolver_prosa(entrega_dict, IDIOMA)
     resolvidos, log_exhibits = exhibits_mod.resolver(entrega_dict)
     js = ({nome: builder.ASSETS_DA_INTEGRACAO[nome].read_text(encoding="utf-8") for nome in ("espelho", "fachada")}
           if com_laboratorio else None)
-    return render.compor(entrega_dict, CATALOGO, achados, log, IDIOMA, resolvidos, log_exhibits, js)
+    return render.compor(entrega_dict, catalogo, achados, log, IDIOMA, resolvidos, log_exhibits, js)
 
 
 def _titulo_da(secao: dict) -> str | None:
@@ -624,9 +624,9 @@ def _na_unidade(valor, unidade: str, entrega_dict: dict) -> str:
 
 def test_a_aba_valuation_segue_a_ordem_da_secao_9():
     """Cabeçalho (preço e upside, faixa piso–teto, múltiplos, rota) → como o valor é formado → cenários →
-    laboratório → ponte → sensibilidades (a 1D e depois a 2D) → o que está no preço → cross-check
-    (fatia 5G: a seção sai sempre, e sem os blocos das alternativas nenhuma outra aparece) → re-teste
-    terminal, que a Análise exige desde o item 8 (D3)."""
+    a decomposição do valor (v10.1, na rota firm) → laboratório → ponte → sensibilidades (a 1D e depois
+    a 2D) → o que está no preço → cross-check (fatia 5G: a seção sai sempre, e sem os blocos das
+    alternativas nenhuma outra aparece) → re-teste terminal, que a Análise exige desde o item 8 (D3)."""
     entrega_dict = _entrega()
     aba = _aba(_pagina(entrega_dict, com_laboratorio=True), "valuation")
     secoes = _secoes(aba)
@@ -634,8 +634,8 @@ def test_a_aba_valuation_segue_a_ordem_da_secao_9():
     primeira_com_titulo = next(indice for indice, titulo in enumerate(titulos) if titulo is not None)
 
     assert [titulo for titulo in titulos if titulo is not None] == [
-        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["laboratorio_titulo"],
-        VALUATION["ponte_titulo"],
+        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["decomposicao_mm_titulo"],
+        VALUATION["laboratorio_titulo"], VALUATION["ponte_titulo"],
         VALUATION["grade_1d_titulo"].format(cenario="base", premissa=_rotulo("firm", "wacc")),
         VALUATION["matriz_titulo"].format(cenario="base", y=_rotulo("firm", "g"), x=_rotulo("firm", "roic")),
         VALUATION["o_que_esta_no_preco_titulo"], VALUATION["cross_check_titulo"],
@@ -923,8 +923,8 @@ def test_a_aba_com_as_alternativas_poe_o_painel_entre_a_ponte_e_as_sensibilidade
     titulos = [titulo for titulo in (_titulo_da(secao) for secao in _secoes(aba)) if titulo is not None]
 
     assert titulos == [
-        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["ponte_titulo"],
-        VALUATION["escolhas_titulo"], VALUATION["o_que_esta_no_preco_titulo"],
+        VALUATION["formacao_titulo"], VALUATION["cenarios_titulo"], VALUATION["decomposicao_mm_titulo"],
+        VALUATION["ponte_titulo"], VALUATION["escolhas_titulo"], VALUATION["o_que_esta_no_preco_titulo"],
         VALUATION["retorno_exigido_titulo"], VALUATION["valor_ponderado_titulo"],
         VALUATION["cross_check_titulo"], VALUATION["reteste_terminal_titulo"]]
 
@@ -1113,46 +1113,170 @@ def test_a_mensagem_da_regra_nomeia_o_produto_e_a_linha_da_11_continua_uma_so():
     assert "{" not in mensagem
 
 
+def _bloco_do_nivel(entrega_dict: dict, catalogo: dict = CATALOGO) -> dict:
+    return _um(_secao(_aba(_pagina(entrega_dict, catalogo=catalogo), "valuation"), VALUATION["o_que_esta_no_preco_titulo"]),
+               classe="reversa-nivel-implicito")
+
+
+def _pares_do_nivel(bloco: dict) -> list:
+    return list(zip([_visivel(el) for el in _todos(bloco, classe="metrica-rotulo")],
+                    [_visivel(el) for el in _todos(bloco, classe="metrica-valor")]))
+
+
+def _partes_do_nivel(bloco: dict) -> list:
+    """As partes do bloco, na ordem em que o leitor as encontra: a classe que distingue cada filho direto
+    (a última — a leitura central é `nivel-implicito-numeros nivel-implicito-central`), o título fora."""
+    return [filho["attrs"].get("class", "").split()[-1] for filho in bloco["filhos"]
+            if "tag" in filho and filho["tag"] != "h3"]
+
+
+# Migração v10.1, Task 3 (Q2), e a onda da revisão final (I2): as linhas da leitura central, na ordem; as duas
+# de múltiplo fixo, que exagera o degrau nos dois sentidos; e os títulos de antes da v10.1, que o bloco sem
+# a leitura recalculada mantém.
+_TITULOS_DA_LEITURA_CENTRAL = ("nivel_implicito_central_metrica_titulo", "nivel_implicito_central_degrau_titulo",
+                               "nivel_implicito_central_d_titulo", "nivel_implicito_central_multiplo_titulo")
+_TITULOS_DO_MULTIPLO_FIXO = ("nivel_implicito_limite_metrica_titulo", "nivel_implicito_limite_degrau_titulo")
+_TITULOS_DE_ANTES = ("nivel_implicito_metrica_titulo", "nivel_implicito_degrau_titulo")
+NOTA_DO_NIVEL = CATALOGO["nivel_implicito"]["nota"][IDIOMA]
+
+
+def _leitura_de_multiplo_fixo(entrega_dict: dict, titulos: tuple) -> list:
+    nivel = entrega_dict["resultados"]["reversa"]["nivel_implicito"]
+    return [(VALUATION[titulos[0]], _moeda(entrega_dict, nivel["metrica_base_implicita"])),
+            (VALUATION[titulos[1]],
+             placeholders.formatar(nivel["degrau_implicito_%"], render.FORMATO_DO_DEGRAU_IMPLICITO, IDIOMA))]
+
+
+def _razoes_contra_o_consenso(entrega_dict: dict, sufixo_do_titulo: str) -> list:
+    """Uma razão por ponto do consenso, pelo título `nivel_implicito_razao_<ponto><sufixo>_titulo`: `_fixo` com a
+    leitura recalculada publicada (as razões são do motor sobre a leitura de múltiplo fixo, e a tela diz isso),
+    vazio sem ela (o título de antes)."""
+    nivel = entrega_dict["resultados"]["reversa"]["nivel_implicito"]
+    return [(VALUATION[f"nivel_implicito_razao_{ponto}{sufixo_do_titulo}_titulo"],
+             placeholders.formatar(nivel[f"razao_vs_consenso_{ponto}"], render.FORMATO_DA_RAZAO_CONTRA_O_CONSENSO,
+                                   IDIOMA))
+            for ponto in ("t1", "t2")]
+
+
 def test_o_nivel_implicito_entra_no_que_esta_no_preco_com_o_rotulo_do_catalogo():
     """D2: a métrica implícita como montante, o degrau em pontos percentuais, uma razão por
     ponto de consenso declarado e a leitura pelo RÓTULO do catálogo — nunca a chave, nunca a
-    prosa do motor, que continua publicada em `resultados` e não chega à tela."""
+    prosa do motor, que continua publicada em `resultados` e não chega à tela.
+
+    Migração v10.1 (Task 3 e a onda da revisão final, I2): a variante é firm/EBITDA, e o bloco segue
+    a escada — a leitura CENTRAL (a métrica, o degrau, o encargo de reposição pela unidade `pp` e o
+    múltiplo justo pela unidade `múltiplo`, no nível implícito); a de múltiplo fixo, que exagera o
+    degrau; as razões contra o consenso e a leitura do confronto, que o motor calcula sobre a de
+    múltiplo fixo e que a tela diz serem dela; e, por último, a nota de leitura do catálogo."""
     entrega_dict = _entrega(CONSENSO)
     nivel = entrega_dict["resultados"]["reversa"]["nivel_implicito"]
-    secao = _secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["o_que_esta_no_preco_titulo"])
-    bloco = _um(secao, classe="reversa-nivel-implicito")
+    recalculado = nivel["recalculado"]
+    bloco = _bloco_do_nivel(entrega_dict)
 
     assert _titulo_da(bloco) == VALUATION["nivel_implicito_titulo"]
-    assert list(zip([_visivel(el) for el in _todos(bloco, classe="metrica-rotulo")],
-                    [_visivel(el) for el in _todos(bloco, classe="metrica-valor")])) == [
-        (VALUATION["nivel_implicito_metrica_titulo"], _moeda(entrega_dict, nivel["metrica_base_implicita"])),
-        (VALUATION["nivel_implicito_degrau_titulo"],
-         placeholders.formatar(nivel["degrau_implicito_%"], render.FORMATO_DO_DEGRAU_IMPLICITO, IDIOMA)),
-        (VALUATION["nivel_implicito_razao_t1_titulo"],
-         placeholders.formatar(nivel["razao_vs_consenso_t1"], render.FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, IDIOMA)),
-        (VALUATION["nivel_implicito_razao_t2_titulo"],
-         placeholders.formatar(nivel["razao_vs_consenso_t2"], render.FORMATO_DA_RAZAO_CONTRA_O_CONSENSO, IDIOMA)),
+    assert _pares_do_nivel(bloco) == [
+        (VALUATION["nivel_implicito_central_metrica_titulo"],
+         _moeda(entrega_dict, recalculado["metrica_base_implicita_recalculada"])),
+        (VALUATION["nivel_implicito_central_degrau_titulo"],
+         placeholders.formatar(recalculado["degrau_implicito_recalculado_%"], render.FORMATO_DO_DEGRAU_IMPLICITO,
+                               IDIOMA)),
+        (VALUATION["nivel_implicito_central_d_titulo"],
+         _na_unidade(recalculado["d_no_nivel_implicito_%"], "pp", entrega_dict)),
+        (VALUATION["nivel_implicito_central_multiplo_titulo"],
+         _na_unidade(recalculado["multiplo_justo_no_nivel_implicito"], "múltiplo", entrega_dict)),
+        *_leitura_de_multiplo_fixo(entrega_dict, _TITULOS_DO_MULTIPLO_FIXO),
+        *_razoes_contra_o_consenso(entrega_dict, "_fixo"),
     ]
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-central", "nivel-implicito-numeros",
+                                       "nivel-implicito-leitura", "nivel-implicito-nota"]
 
     chave = nivel["leitura_chave"]
     assert chave == "antecipacao_temporal", "a variante tem de exercer uma leitura de verdade"
-    assert _visivel(_um(bloco, classe="nivel-implicito-leitura")) == (
-        CATALOGO["leituras_do_nivel"][chave]["rotulo"][IDIOMA])
+    assert _visivel(_um(bloco, classe="nivel-implicito-leitura")) == VALUATION["nivel_implicito_leitura_fixo"].format(
+        rotulo=CATALOGO["leituras_do_nivel"][chave]["rotulo"][IDIOMA])
+    assert _visivel(_um(bloco, classe="nivel-implicito-nota")) == NOTA_DO_NIVEL
     texto_da_aba = _visivel(_aba(_pagina(entrega_dict), "valuation"))
     assert chave not in texto_da_aba
-    assert nivel["leitura"][:40] not in texto_da_aba
+    for prosa in (nivel["leitura"], nivel["leitura_congelada"], nivel["recalculado_nota"],
+                  recalculado["configuracao_do_triangulo"]):
+        assert prosa[:40] not in texto_da_aba, prosa
 
 
 def test_sem_consenso_o_nivel_sai_so_com_o_degrau_e_sem_leitura():
     """A fixture sem `reversa.consenso`: nenhuma razão, nenhuma leitura — e o bloco continua,
-    porque o degrau que o preço embute não depende de haver consenso."""
+    porque o degrau que o preço embute não depende de haver consenso. É firm/EBITDA: as duas
+    leituras do nível, a central e a de múltiplo fixo, e a nota do catálogo, que fecha o bloco."""
     entrega_dict = _entrega()
     assert entrega_dict["resultados"]["reversa"]["nivel_implicito"]["leitura_chave"] is None
-    bloco = _um(_secao(_aba(_pagina(entrega_dict), "valuation"), VALUATION["o_que_esta_no_preco_titulo"]),
-                classe="reversa-nivel-implicito")
+    bloco = _bloco_do_nivel(entrega_dict)
     assert [_visivel(el) for el in _todos(bloco, classe="metrica-rotulo")] == [
-        VALUATION["nivel_implicito_metrica_titulo"], VALUATION["nivel_implicito_degrau_titulo"]]
+        VALUATION[titulo] for titulo in (*_TITULOS_DA_LEITURA_CENTRAL, *_TITULOS_DO_MULTIPLO_FIXO)]
     assert _todos(bloco, classe="nivel-implicito-leitura") == []
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-central", "nivel-implicito-numeros",
+                                       "nivel-implicito-nota"]
+
+
+# O que o `nivel` da v10.1 escreve quando nenhum nível explica o preço (`nivel_recalculado`).
+_SEM_SOLUCAO_DO_MOTOR = ("alvo acima do valor atingível mesmo com nível 50x a métrica-base ou o alvo — o preço "
+                         "não é explicável por NÍVEL sob este vetor")
+
+
+def test_sem_solucao_na_leitura_central_a_frase_do_dicionario_toma_o_lugar_dos_numeros_centrais():
+    """O motor recusa a leitura central com `sem_solucao` (prosa): no lugar das quatro linhas, a frase
+    do dicionário, antes das duas de múltiplo fixo — que continuam, rotuladas como a leitura que exagera
+    o degrau —, e a prosa do motor fica em `resultados`. A nota do catálogo continua fechando o bloco. Um
+    bloco recalculado sem o número central NEM a recusa do motor é contrato quebrado, e a recusa é
+    nomeada: a tela nunca diria "nenhum nível explica o preço" porque um campo mudou de nome."""
+    entrega_dict = _entrega()
+    nivel = entrega_dict["resultados"]["reversa"]["nivel_implicito"]
+    nivel["recalculado"] = {"sem_solucao": _SEM_SOLUCAO_DO_MOTOR}
+    bloco = _bloco_do_nivel(entrega_dict)
+
+    assert _visivel(_um(bloco, classe="nivel-implicito-sem-solucao")) == VALUATION["nivel_implicito_central_sem_solucao"]
+    assert _pares_do_nivel(bloco) == _leitura_de_multiplo_fixo(entrega_dict, _TITULOS_DO_MULTIPLO_FIXO)
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-sem-solucao",
+                                       "nivel-implicito-numeros", "nivel-implicito-nota"]
+    assert _SEM_SOLUCAO_DO_MOTOR[:40] not in _visivel(bloco)
+
+    nivel["recalculado"] = {"configuracao_do_triangulo": "VETOR TRAVADO: g e rentabilidade marginal fixos"}
+    with pytest.raises(render.CampoDeContratoAusente, match="metrica_base_implicita_recalculada"):
+        _pagina(entrega_dict)
+
+
+def test_sem_a_leitura_recalculada_o_nivel_sai_como_antes():
+    """Sem `recalculado` o bloco é o de antes da v10.1, sem tirar nem pôr: a métrica e o degrau com os
+    títulos de sempre, as razões com os títulos de sempre, a leitura do confronto pelo rótulo do
+    catálogo, sem moldura — e nenhuma leitura central, frase de recusa ou nota. Duas entregas: a rota
+    equity, onde a integração não publica a leitura recalculada, e a variante com consenso sem ela, a
+    única que exerce as razões e a leitura nesse ramo."""
+    equity = _entrega("caso_minimo_equity.json")
+    assert "recalculado" not in equity["resultados"]["reversa"]["nivel_implicito"]
+    bloco = _bloco_do_nivel(equity)
+    assert _pares_do_nivel(bloco) == _leitura_de_multiplo_fixo(equity, _TITULOS_DE_ANTES)
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-numeros"]
+
+    com_consenso = _entrega(CONSENSO)
+    nivel = com_consenso["resultados"]["reversa"]["nivel_implicito"]
+    del nivel["recalculado"], nivel["recalculado_nota"]
+    bloco = _bloco_do_nivel(com_consenso)
+    assert _pares_do_nivel(bloco) == [*_leitura_de_multiplo_fixo(com_consenso, _TITULOS_DE_ANTES),
+                                      *_razoes_contra_o_consenso(com_consenso, "")]
+    assert _visivel(_um(bloco, classe="nivel-implicito-leitura")) == (
+        CATALOGO["leituras_do_nivel"][nivel["leitura_chave"]]["rotulo"][IDIOMA])
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-numeros", "nivel-implicito-leitura"]
+
+
+def test_a_nota_do_nivel_vem_do_catalogo_e_sem_ela_a_leitura_recalculada_e_recusa_nomeada():
+    """A nota de leitura é texto de metodologia: mora no catálogo (`nivel_implicito.nota`), e o relatório a
+    lê pelo contrato, com falha fechada — um catálogo sem ela, com a leitura recalculada publicada, é
+    `CampoDeContratoAusente` nomeado, nunca um bloco que sai sem a condição de leitura. Sem a leitura
+    recalculada a nota não é lida, e o mesmo catálogo desenha o bloco de antes."""
+    sem_a_nota = copy.deepcopy(CATALOGO)
+    del sem_a_nota["nivel_implicito"]
+    with pytest.raises(render.CampoDeContratoAusente, match="nivel_implicito"):
+        _pagina(_entrega(), catalogo=sem_a_nota)
+    bloco = _bloco_do_nivel(_entrega("caso_minimo_equity.json"), catalogo=sem_a_nota)
+    assert _partes_do_nivel(bloco) == ["reversa-congelado-nota", "nivel-implicito-numeros"]
 
 
 def test_toda_aba_declarada_por_produto_tem_rotulo_e_todo_produto_tem_abas():
@@ -1273,3 +1397,90 @@ def test_sem_o_registro_de_drivers_a_secao_some():
     aba = _aba(_pagina(entrega_dict), "valuation")
     assert VALUATION["drivers_titulo"] not in [_titulo_da(secao) for secao in _secoes(aba)]
     assert _todos(aba, classe="drivers-congelado-nota") == []
+
+
+# ==========================================================================
+# Migração v10.1, Task 3 (Q1 do grill de 17/09; plano docs/superpowers/plans/2026-09-17-vendor-multiplos-
+# justos-v10-1.md): a decomposição de Miller-Modigliani de cada cenário da rota firm, logo depois dos
+# cenários, congelada. Os campos, os rótulos, as unidades e a nota vêm do catálogo; os números, de
+# `resultados.cenarios.<nome>.decomposicao_mm`; a prosa do motor fica lá. As duas leituras do nível
+# implícito estão com os testes do nível, acima.
+# ==========================================================================
+
+CAMPOS_DA_DECOMPOSICAO = CATALOGO["decomposicao_mm"]["campos"]
+
+
+def _decomposicao_na_aba(aba: dict) -> dict:
+    return _um(aba, classe="valuation-decomposicao-mm")
+
+
+def test_a_decomposicao_do_valor_tem_uma_linha_por_cenario_com_cada_campo_pela_unidade_do_catalogo():
+    """Dois cenários da rota firm (a variante das alternativas: base e bull): uma linha por cenário, na
+    ordem publicada; no cabeçalho, o rótulo de cada campo do catálogo; em cada célula, o número publicado
+    formatado pela unidade que o catálogo declara para o campo. O bloco se diz congelado, a nota de
+    leitura é a do catálogo, e a prosa do motor não chega à tela."""
+    entrega_dict = _entrega(ALTERNATIVAS)
+    cenarios = entrega_dict["resultados"]["cenarios"]
+    assert list(cenarios) == ["base", "bull"]
+    aba = _aba(_pagina(entrega_dict), "valuation")
+    secao = _decomposicao_na_aba(aba)
+
+    assert _titulo_da(secao) == VALUATION["decomposicao_mm_titulo"]
+    assert _visivel(_um(secao, classe="reversa-congelado-nota")) == VALUATION["decomposicao_mm_congelado"]
+    assert [_visivel(celula) for celula in _todos(_um(secao, tag="thead"), tag="th")] == [
+        VALUATION["decomposicao_mm_cenario"], *(info["rotulo"][IDIOMA] for info in CAMPOS_DA_DECOMPOSICAO.values())]
+    assert [[_visivel(celula) for celula in _todos(linha, tag="td")]
+            for linha in _todos(_um(secao, tag="tbody"), tag="tr")] == [
+        [nome, *(_na_unidade(cenario["decomposicao_mm"][campo], info["unidade"], entrega_dict)
+                 for campo, info in CAMPOS_DA_DECOMPOSICAO.items())]
+        for nome, cenario in cenarios.items()]
+    assert _visivel(_um(secao, classe="decomposicao-mm-nota")) == CATALOGO["decomposicao_mm"]["nota"][IDIOMA]
+
+    texto_da_aba = _visivel(aba)
+    for cenario in cenarios.values():
+        for prosa in ("identidade_ativos_instalados", "trava_de_leitura"):
+            assert cenario["decomposicao_mm"][prosa][:30] not in texto_da_aba, prosa
+
+
+def test_num_sotp_a_decomposicao_diz_que_decompoe_o_vetor_de_cada_cenario_e_nao_as_partes():
+    """Com a soma das partes publicada, a tabela continua sendo a dos cenários — o vetor consolidado de
+    cada um —, e a seção diz isso antes da tabela, pela frase do dicionário: quem lê a manchete do SOTP
+    não confunde a decomposição de um cenário com a das partes. Fora do SOTP, a frase não existe."""
+    entrega_dict = _entrega(SOTP_SAFRA)
+    assert entrega_dict["resultados"]["sotp"], "a fixture tem de publicar a soma das partes"
+    secao = _decomposicao_na_aba(_aba(_pagina(entrega_dict), "valuation"))
+    assert _visivel(_um(secao, classe="decomposicao-mm-sotp")) == VALUATION["decomposicao_mm_sotp"]
+    classes = [el["attrs"].get("class", "").split() for el in _elementos(secao)]
+    assert (next(i for i, c in enumerate(classes) if "decomposicao-mm-sotp" in c)
+            < next(i for i, c in enumerate(classes) if "decomposicao-mm" in c)), "a frase vem antes da tabela"
+
+    fora_do_sotp = _decomposicao_na_aba(_aba(_pagina(_entrega()), "valuation"))
+    assert _todos(fora_do_sotp, classe="decomposicao-mm-sotp") == []
+
+
+def test_numa_entrega_sem_cenario_da_rota_firm_a_decomposicao_nao_existe():
+    entrega_dict = _entrega("caso_minimo_equity.json")
+    assert [cenario for cenario in entrega_dict["resultados"]["cenarios"].values() if "decomposicao_mm" in cenario] == []
+    aba = _aba(_pagina(entrega_dict), "valuation")
+    assert _todos(aba, classe="valuation-decomposicao-mm") == []
+    assert VALUATION["decomposicao_mm_titulo"] not in [_titulo_da(secao) for secao in _secoes(aba)]
+
+
+def test_sob_a_leitura_de_preco_o_titulo_da_decomposicao_e_leitura_condicional_pelo_mapa_da_integracao():
+    """Os ativos instalados e o valor do crescimento somam o múltiplo justo: o mapa da integração os
+    declara conclusão de valor, e sob o produto que só lê o preço o título sai na forma condicional —
+    pelo mesmo mecanismo do título dos cenários (`_rotulo_do_numero`). Quem decide é o mapa, nunca o
+    nome do campo: tirando dele o padrão dos ativos instalados, o título volta ao de sempre. Fora do
+    produto, o de sempre. (A fronteira de escopo, o outro gatilho, fica com as varreduras de
+    `tests/test_relatorio_tese.py`, que percorrem toda chave de `valuation.condicional`.)"""
+    leitura = _com_produto(GRADES, entrega.PRODUTO_DA_LEITURA_DE_PRECO)
+
+    def _titulo_sob(catalogo: dict) -> str:
+        return _titulo_da(_decomposicao_na_aba(_aba(_pagina(leitura, catalogo=catalogo), "valuation")))
+
+    assert _titulo_sob(CATALOGO) == VALUATION["condicional"]["decomposicao_mm_titulo"]
+    sem_o_padrao = copy.deepcopy(CATALOGO)
+    sem_o_padrao["conclusoes_de_valor"]["múltiplo"].remove("cenarios.*.decomposicao_mm.ativos_instalados_x_NOPAT")
+    assert _titulo_sob(sem_o_padrao) == VALUATION["decomposicao_mm_titulo"]
+    assert _titulo_da(_decomposicao_na_aba(_aba(_pagina(_entrega()), "valuation"))) == (
+        VALUATION["decomposicao_mm_titulo"])

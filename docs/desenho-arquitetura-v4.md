@@ -1,7 +1,8 @@
 # Equity Research Fleet v4.0.0 — Desenho da Arquitetura
 
 Data: 2026-08-21 · Origem: `/grill-me` de redesenho (23 decisões + 2 emendas, registradas na Seção 15)
-Base factual: plugin `equity-research-fleet` v3.0.0 e skill `multiplos-justos` v9.31, lidos na íntegra.
+Base factual: plugin `equity-research-fleet` v3.0.0 e skill `multiplos-justos` v9.31, lidos na íntegra;
+vendor atualizado para a v10.1 em 2026-09-17 (plugin 4.1.0).
 Uso: **fonte de verdade** deste trabalho. Conflito entre este documento e qualquer outro resolve-se por
 este documento.
 
@@ -15,7 +16,7 @@ as poucas perguntas que determinam a tese, pesquisa livremente a melhor evidênc
 entende quanto a companhia pode crescer, se o moat sustenta esse crescimento e qual o retorno do
 capital incremental — e converte tudo num valuation rigoroso, auditável e interativo.
 
-A metodologia de valuation passa a ser a skill **`multiplos-justos` v9.31**, tratada como fonte
+A metodologia de valuation passa a ser a skill **`multiplos-justos` v10.1**, tratada como fonte
 canônica congelada. O motor K3 / Justified P/E é removido integralmente.
 
 ## 1. Princípios da v4
@@ -58,7 +59,7 @@ canônica congelada. O motor K3 / Justified P/E é removido integralmente.
 **Entra:**
 
 - Vendor congelado em `vendor/multiplos-justos/`, na raiz do repositório (cópia read-only da skill
-  v9.31), com a skill `er-multiplos-justos` guardando índice e manifest de hashes. **O pacote fica
+  v10.1), com a skill `er-multiplos-justos` guardando índice e manifest de hashes. **O pacote fica
   fora de `skills/` por necessidade**: ele traz o próprio `SKILL.md` declarando
   `name: multiplos-justos`, e sob `skills/` um loader que varra recursivamente registraria uma
   segunda skill com esse nome, colidindo com a skill standalone do usuário. Invariante travada por
@@ -86,7 +87,7 @@ marketplace-first com fallback de ZIP.
 ### 3.1 Camadas
 
 ```
-vendor congelado (multiplos-justos v9.31, read-only, hash + suíte)
+vendor congelado (multiplos-justos v10.1, read-only, hash + suíte)
    └─> er-valuation      (wrapper: contrato do caso, rotas, cenários, ponte, reversa, sensibilidades)
          └─> er-analise  (processo, julgamento, autonomia)
                └─> er-relatorio (builder de 3 abas + QC de 3 níveis)
@@ -137,7 +138,7 @@ Identidade central `g = RiR × ROIC` ⟹ `FCFF = NOPAT × (1 − g/ROIC)`; ponte
 | **2** — nível: defasagem | Registro de drivers com elasticidade **derivada e com sinal**; gate dispara por `\|elasticidade × gap\|`, não por gap |
 | **3** — nível: degrau e capacidade | Capacidade ociosa de balanço (entra como rentabilidade × h) e capacidade pré-construída em rampa (RiR por componente) |
 
-**Dez escolhas metodológicas nomeadas** com o custo de cada uma, e a guarda de coerência interna: o
+**Onze escolhas metodológicas nomeadas** com o custo de cada uma, e a guarda de coerência interna: o
 caso-base usa a escolha central de todas; o produto dos extremos conservadores **é** o bear.
 
 ### 4.2 O que o wrapper faz — e o que ele nunca faz
@@ -278,8 +279,9 @@ São eixos **separados**. Combinação de escolha metodológica não vira cenár
   razão econômica, e alerta quando várias são empilhadas na mesma direção dentro do caso-base. O painel
   é **dinâmico**: a escolha aparece no nível principal quando o gatilho dela disparou (fronteira de
   consolidação com minoritários acima do limiar; leitura de capacidade com o Gate 3 disparado; caixa/E
-  em híbrida financeira; ano de capex quando `d` econômico ≠ contábil); as demais ficam em avançado.
-  Nenhuma dogmatização de "as dez" na interface.
+  em híbrida financeira; ponto do ciclo dos inputs de capital quando os do ano corrente divergem da média
+  da série de três pontos ou do estado estacionário do guidance); as demais ficam em avançado.
+  Nenhuma dogmatização de "as onze" na interface.
 - **Retorno exigido (hurdle)**: preservado, redefinido como reversa — "que valor resulta se eu exigir
   retorno de X%?". Rotulado, secundário, jamais chamado de fair value nem tratado como quarto cenário.
 
@@ -297,7 +299,8 @@ raízes, métricas de identificação), sensibilidades 1D e 2D, e os **predicado
 diagnósticos** — a prosa longa vem de dicionário estático gerado no build.
 
 **Precomputado em Python e exibido rotulado** ("congelado nas premissas X"): `iso`, `apv`, `ponte`,
-`drivers`, `normaliza`, `tabela`.
+`drivers`, `normaliza`, `tabela`, `nivel` (nas duas leituras da v10.1: múltiplo fixo e recalculado) e a
+decomposição de Miller-Modigliani de cada cenário.
 
 **Regra inegociável:** o diagnóstico se move junto com o número. Não existe número interativo com
 diagnóstico congelado. Alterar um input para uma combinação economicamente incoerente muda o alerta na
@@ -326,13 +329,14 @@ bull nem Negative no bear.
 **Aba Valuation — laboratório econômico interativo.** Cabeçalho de resultado (valor/ação base, faixa
 bear–bull, upside contra o preço com data e fonte, múltiplo justo × múltiplo de tela corrente e
 forward, rota e convenção terminal em uma linha, badge de paridade) → quadro "como o valor é formado",
-colapsável → cenários → **premissas agrupadas por bloco econômico**, cada uma com a cadeia de derivação
+colapsável → cenários, com a decomposição do valor em ativos instalados e crescimento → **premissas
+agrupadas por bloco econômico**, cada uma com a cadeia de derivação
 inline, original × editado, reset e diagnóstico ao vivo: *earning power e base* (métrica, valor, regime
 contábil, `d`, `t`) · *crescimento e reinvestimento* (o triângulo) · *custo de capital* (WACC/Ke com rf,
 beta, ERP) · *duração e terminal* (CAP, convenção, rentabilidade terminal, gp, política de caixa) → **a
 ponte como waterfall**, com dívida, caixa, outros ajustes, minoritários e ações diluídas **editáveis no
 próprio degrau** → painel de escolhas metodológicas → sensibilidades → o que está no preço (reversa por
-eixo, custo de capital implícito sempre, beta implícito contra a banda observada, curva iso quando
+eixo, nível implícito nas duas leituras, custo de capital implícito sempre, beta implícito contra a banda observada, curva iso quando
 houver dois vetores, e o julgamento comparativo de qual reconciliação exige menos violência às âncoras)
 → retorno exigido e valor ponderado por probabilidade, colapsados → cross-check por segundo método e
 re-teste da hipótese terminal.
@@ -515,7 +519,7 @@ Nenhum motor de valuation novo é construído sem metodologia canônica e suíte
 Cada item termina verificável. O legado só sai no fim.
 
 1. **Este documento** aprovado no repositório.
-2. **Vendor congelado**: copiar a skill v9.31, gerar manifest de hashes, ligar `selftest` + `testes.py`
+2. **Vendor congelado**: copiar a skill v9.31 (v10.1 desde 2026-09-17), gerar manifest de hashes, ligar `selftest` + `testes.py`
    ao CI, escrever `er-multiplos-justos` como índice sem paráfrase.
 3. **`er-valuation`**: contrato do caso, rotas, cenários, ponte para preço, SOTP, reversa,
    sensibilidades — com testes.

@@ -64,6 +64,26 @@
     "prefixo": "ATENÇÃO: g = 0 NÃO torna o múltiplo invariante a ROIC"
   },
   {
+    "chave": "firm_dominio_d_100",
+    "prefixo": "DOMÍNIO [d]: encargo de reposição >= 100% do EBITDA"
+  },
+  {
+    "chave": "firm_dominio_d_overhang",
+    "prefixo": "DOMÍNIO [d]: encargo de reposição em "
+  },
+  {
+    "chave": "firm_dominio_nopat",
+    "prefixo": "DOMÍNIO [NOPAT]:"
+  },
+  {
+    "chave": "firm_dominio_t",
+    "prefixo": "DOMÍNIO [t]:"
+  },
+  {
+    "chave": "firm_terminal_dominante",
+    "prefixo": "TERMINAL DOMINANTE: "
+  },
+  {
     "chave": "eq_convencao_book",
     "prefixo": "CONVENÇÃO 'book' (ex-'ic') [hipótese, não lei]: renda residual truncada —"
   },

@@ -6,7 +6,7 @@ description: "Framework de múltiplos justos (justified multiples) — o múltip
 # Múltiplos Justos — o múltiplo como output de um DCF
 
 Sob premissas estáveis o DCF colapsa numa fórmula fechada de poucas variáveis, e o múltiplo justo
-sai delas. Derivado e provado na planilha do usuário (checks algébricos = 0). **Versão v9.31.** Histórico completo de versões e a proveniência de cada regra: `CHANGELOG.md`.
+sai delas. Derivado e provado na planilha do usuário (checks algébricos = 0). **Versão v10.1.** Histórico completo de versões e a proveniência de cada regra: `CHANGELOG.md`.
 
 **Acionamento:** só com `/multiplos-justos`, "rodar múltiplos justos" ou "rodar o framework". Não
 infira intenção. Sem o comando, responda normalmente e ofereça a skill em uma linha.
@@ -53,6 +53,17 @@ avisam, nunca bloqueiam nem convertem), com detalhe operacional em `aplicacao.md
   `reconstruído` / `proxy` / `nao_confiavel`. `nao_confiavel` ⟹ `book` fora do cenário-base
   (vira sensibilidade identificada); sem classificação ⟹ a entrega declara "qualidade do book:
   NÃO AVALIADA" — `reportado` não significa confiável.
+- **Marca de estoque.** ≥ ~20% do valor vindo de MARCA DE ESTOQUE (laudo, NAV, cap rate, valor de
+  reposição, landbank, estoque pronto, carteira marcada) ⟹ a marca é HIPÓTESE, não dado, e obedece a
+  `Marca = VP(aluguel 1..T) + VP(Marca_T)`. Saídas obrigatórias: **fator de tempo**
+  `VP(Marca_T)/Marca`; **apreciação implícita** (custo de capital DO ATIVO − yield corrente) contra a
+  série observada, janela longa E recente; **T** derivado do giro observado do estoque — silêncio ⟹
+  marca líquida hoje, o ramo mais otimista. Estoque que é INSUMO do fluxo ⟹ duas rotas (marca à vista
+  com aluguel cobrado × fluxo pleno até T com marca descontada) e o **GAP entre elas reportado**,
+  porque é ele que mede a violação. Reporte também `R = marca ÷ capitalização do fluxo corrente`
+  (generalização do sub-alerta de recuperação). Nível da marca = **11ª escolha nomeada**; rota
+  (a)/(b) = invariante de coerência. Regra completa em `aplicacao.md` §13, que este gate torna
+  obrigatória.
 - **Fronteira EV/EBITDA** (obrigatória quando a base é EBITDA): IFRS-16 e coerência com o EV,
   PPA/depletion no d, SBC, reportado vs ajustado, alíquota normalizada, fronteira de
   consolidação — checklist completo na `aplicacao.md` §1. Não declarado = "não avaliado", nunca
@@ -61,11 +72,34 @@ avisam, nunca bloqueiam nem convertem), com detalhe operacional em `aplicacao.md
   comprar outro ativo igual?"* Se SIM — royalty, catálogo musical, carteira de patentes, licença
   exaurível —, a D&A é o capex de reposição com outro nome: o `d` é economicamente REAL e não sai
   do cálculo. Se NÃO (PPA de aquisição), é não-caixa sem ativo a repor e infla o `d`. Confundir os
-  dois **inverte o sinal do ajuste**; regra completa em `aplicacao.md` §2. Depois da natureza, a
+  dois **inverte o sinal do ajuste**; regra completa em `aplicacao.md` §2. **Respondida a natureza,
+  falta a MAGNITUDE, e ela exige uma segunda medição:** capex de MANUTENÇÃO declarado (sustentação +
+  adequação a normas + reposição, pelas rubricas que a companhia divulga) ÷ EBITDA, mais amortização
+  de arrendamento quando o EBITDA for pós-IFRS-16. **O gap entre as duas rotas vai à entrega, e não
+  se lê sozinho:** sob inflação a manutenção verdadeira DEVE exceder a D&A a custo histórico
+  (evidência de mercado: capex excedeu depreciação em ~16–21% na média de longo prazo), logo
+  D&A ≈ manutenção em termos nominais só valida o `d` quando o parque é NOVO — com parque velho é
+  sinal de reposição adiada, e cruza com a guarda de moeda do `d` (`aplicacao.md` §2). Gap > 10% sem
+  essa leitura ⟹ o `d` é hipótese de construção, não medição. Depois da natureza e da magnitude, a
+  **composição**: em projeção nominal, capital FIXO só é cobrado pela expansão de VOLUME — planta não
+  cresce porque o preço do produto subiu; o componente de PREÇO paga apenas GIRO, perna a perna e com
+  o SINAL do ciclo de caixa. Cobrar intensidade MÉDIA de capital sobre o `g` inteiro superestima o
+  custo de crescer (`aplicacao.md` §2, cadeia em §11.1c). **Acoplamento inegociável:** o componente de
+  preço não consome capital de CRESCIMENTO, mas eleva o custo de REPOSIÇÃO do parque — que pertence ao
+  `d`. Declarar um e esquecer o outro faz a inflação do estoque de capital desaparecer do modelo. E a
   **conservação**: d e RiR são duas metades do mesmo capital
   (capex_total + ΔWC = d×EBITDA + RiR×NOPAT); d econômico ≠ contábil obriga re-derivar o RiR na
   mesma base, e D&A > capex (fim de ciclo) obriga migrar o PAR inteiro para base caixa — regra e
-  quadrantes proibidos em `aplicacao.md` §2, verificação em §11.1b.
+  quadrantes proibidos em `aplicacao.md` §2, verificação em §11.1b (obrigatória em toda valuation
+  real, e NECESSÁRIA mas não suficiente: ela testa o par, e mover capital de `d` para `RiR` a mantém
+  fechada com as duas metades erradas).
+- **Sinal do ciclo de caixa, antes de qualquer leitura do reinvestimento.** Com giro POSITIVO,
+  crescer consome capital e encolher o libera. Com giro NEGATIVO — fornecedor e adiantamento
+  financiando o cliente (varejo alimentar, marketplace, aérea, assinatura pré-paga, float de
+  seguro) — o sinal INVERTE: crescer é parcialmente autofinanciado, o componente de giro do
+  reinvestimento é negativo, e ENCOLHER consome caixa. O delator de RiR > 100% perde poder nesse
+  regime e o teste migra para o componente FIXO isolado. Verifique o sinal antes de nomear
+  qualquer bloco (`aplicacao.md` §2 e §8f).
 - **Coerência do vetor.** O motor recebe (g, ROIC, W, d, t, D/E) como parâmetros LIVRES,
   mas na planilha de referência eles são OUTPUTS acoplados por identidades. Montar cenário
   perturbando um driver que veio da reversa — o uso normal — pode produzir vetor que nenhuma
@@ -84,14 +118,23 @@ avisam, nunca bloqueiam nem convertem), com detalhe operacional em `aplicacao.md
   ficar calado não; flag `--roic-ue` executável no `ev`.
   **Este gate não deriva drivers de demonstrações**: a cadeia DRE/BP/FC → drivers segue fora do
   motor por decisão de projeto. A skill aplica o framework; não substitui o modelo do analista.
-- **Base monetária — invariante obrigatório de coerência, não uma 11ª escolha metodológica.**
+- **Base monetária — invariante obrigatório de coerência, não uma 12ª escolha metodológica.**
   Nominal ou real, declarada uma vez e ecoada na entrega; g, custo de capital e rentabilidade na
-  MESMA base, sempre. As **dez escolhas metodológicas** continuam sendo bifurcações econômicas; a
+  MESMA base, sempre. As **onze escolhas metodológicas** continuam sendo bifurcações econômicas; a
   base monetária é uma convenção de consistência que não deve mudar o valor quando todos os inputs
   forem convertidos de forma coerente. Escolha operacional central: nominal — o confronto é contra
   o preço de mercado, que é nominal. Até existir trava de motor, a verificação de mesma base é
   manual e declarada. Regra completa e decomposição do g por componente em `aplicacao.md`
   ("Base nominal vs real" e "RiR por componente").
+- **Confronto com o caixa operacional PUBLICADO.** Todas as cadeias partem de EBITDA, D&A, capex e
+  giro — peças montadas pelo analista. Antes de aceitá-las, confronte a soma contra o caixa líquido
+  gerado nas atividades operacionais que a companhia publica: `EBITDA − ΔWC − juros pagos − IR pago`
+  contra a linha do fluxo de caixa, com os itens não-caixa do EBITDA ajustado devolvidos. **Não é
+  identidade** — a classificação de juros e IR entre operacional e financiamento varia por norma e
+  por companhia —, é confronto declaratório: reporte o gap e o que ele contém. Razão econômica: é o
+  teste de qualidade de lucro mais barato que existe, e sem ele lucro sustentado por capitalização
+  agressiva, provisões ou receita não realizada atravessa todos os demais gates sem sintoma. Cadeia
+  em `aplicacao.md` §11.8.
 - **Clean surplus.** SE o usuário fornecer balanço e DRE projetados: verifique ano a ano
   PL_t = PL_{t−1} + LL_t − Div_t. Diferença ≠ 0 é "fluxo não explicado", declarado com magnitude; o
   usuário decide — corrigir ou prosseguir com a ressalva na entrega. Nunca corrija em silêncio. Sem
@@ -252,7 +295,7 @@ aborta se divergir.
 python scripts/justos.py selftest                     # 1x por sessão (anchors, incl. APV vF8)
 python scripts/testes.py --phase model                # release 1/2: propriedades, reconciliações, boundaries, reversas e consistência documental
 python scripts/testes.py --phase cli                  # release 2/2: 20+ execuções reais do CLI; rode em NOVA invocação/processo
-python scripts/justos.py ev  --g 5 --roic 8.5 --wacc 7 --n 10 --da 15 --tax 15 --tv gordon --roic-tv 20 --gp 3 [--ebitda 100 --nd -20 --acoes 50] [--mid-year] [--roic-book X, obrigatório em `book` com marginal ≠ médio] [--roic-ue X — validação por unit economics §11.2] [--capex-total X --dwc Y — conservação §11.1b executável]
+python scripts/justos.py ev  --g 5 --roic 8.5 --wacc 7 --n 10 --da 15 --tax 15 --tv gordon --roic-tv 20 --gp 3 [--ebitda 100 --nd -20 --acoes 50]   # devolve `decomposicao_mm` (ativos instalados, valor do crescimento, peso do terminal) [--mid-year] [--roic-book X, obrigatório em `book` com marginal ≠ médio] [--roic-ue X — validação por unit economics §11.2] [--capex-total X --dwc Y — conservação §11.1b executável]
 python scripts/justos.py rampa --receita0 265 --ebitda0 26.8 --da-parque 6.8 --wk 19.1 --util 65 --t-rampa 5 --g2 8 --kappa 17.9364 --wacc 11.9 --tax 35 --n 10 --tv convergencia [--g1 X em vez de --util; negativo = colheita] [--nd -104.6 --acoes 30.46]   # composição bifásica §8f: rampa (forma fechada α/β, autovalidada fluxo a fluxo) + expansão costurada como TV; ecoa d re-basado, RiR por fase, travas e delator
 python scripts/justos.py pe  --g 11 --roe 44.83 --ke 22 --n 10 --gde 53.85 --nde 46.15 --tv book [--ni 26.25] [--politica-tv continua|encerra]   # decomposição operacional × efeito-caixa; politica-tv só afeta gordon com caixa
 python scripts/justos.py rev --alvo 27 --resolver wacc|roic|g|gp|cap --g 5 --roic 8.5 --n 10 --tv gordon --roic-tv 20 --gp 3 [--tol 1] [--alvo-base corrente|forward] [--mid-year] [--rir-externo]   # lado FIRM (base ebitda|nopat)
@@ -263,7 +306,7 @@ python scripts/justos.py tabela ev --wacc 7 --da 15 --tax 15 --n 10 --centro-roi
 python scripts/justos.py drivers --driver "ouro:4050:4550:auto:730.95:446.43" --driver "frete:100:130:auto:80:446.43:custo"   # ":custo" inverte o sinal
 python scripts/justos.py normaliza --ebitda-base 446 --da 130 --preco-base 5.00 --preco-novo 6.26 --rev-driver 731 --tax 18.5 --tv book [--limiar 10] [--g 5 --roic 15 --wacc 11 --nd 512 --acoes 104]
 python scripts/justos.py degrau --indice-atual 19.3 --indice-alvo 16,14,13,11 --m 100 --anos 4 --perfil-transicao rampa --roe 20 --ke 20 --g 12 --n 10 --tv gordon --roe-tv 20 --gp 6.5 [--roe-book X | --roic-book X, obrigatório de fato com --tv book] [--vpa 29.11 --fx 5.115] [--alvo-pvp 1.25]
-python scripts/justos.py nivel --alvo-valor 5824 --multiplo 5.60 --metrica-base 931 [--vol 146.2 --preco-base 5.00]
+python scripts/justos.py nivel --alvo-valor 5824 --multiplo 5.60 --metrica-base 931 [--vol 146.2 --preco-base 5.00] [--da-absoluta 130 --tax 18.5 --g 5 --roic 15 --wacc 11 --n 10 --tv convergencia]   # com o segundo bloco devolve a leitura RECALCULADA (central) além da congelada (teto), e ela É o break-even da base de lucro
 python scripts/justos.py iso pe --alvo 5.73 --ke 22 --n 10 --gde 53.85 --nde 46.15 --tv book --transicao nenhuma [--rent-book 28] --g-min 8 --g-max 16 --pontos 5   # curva iso-valor; --transicao OBRIGATÓRIA (nenhuma = regime único declarado); --rent-book separa marginal×médio no TV da book (sem ela o motor avisa)
 python scripts/justos.py iso pe --alvo 36.4 --ke 16 --n 12 --gde 30 --nde 20 --tv book --transicao ponte --pt-n1 5 --pt-ke1 22 --pt-gde1 80 --pt-nde1 60 --pt-kd 11 --pt-tax 30 --pt-g1 12 --pt-roe1 10.85 [--pt-roe1-book X]   # evento de estrutura datado: inversão bifásica FECHADA, condicionada à convenção de rebase NI2_1=NI1_next·(ROE2/ROE1)·razão (book, sem fade) — remove f1, ponte e TV e resolve ROE2 em forma fechada; não interpretar ROE2* como identificação estrutural pura do marginal
 python scripts/justos.py ponte --n1 5 --ke1 22 --ke2 16 --gde1 80 --nde1 60 --gde2 30 --nde2 20 --kd 11 --tax 30 --g1 12 --roe1 10.85 [--roe1-book 9.2] [--kd1 16] [--ni X | --equity Y] [--pl-base 36.6]   # mudança discreta de estrutura de capital
@@ -313,8 +356,12 @@ aplicam.*
 **2. Valuation de companhia real:** dados ATUAIS, nunca de memória. Fontes: dado licenciado/
 conector → documentos primários (release/ITR/DFP/20-F/deck de RI) → web para preço, consenso
 (t/t+1/t+2, obrigatório — §1) e lacunas, com fonte e data. Aplique os gates 0, 0.5, 1, 2 e 3.
-Leia `aplicacao.md` (pesquisa §1, regras travadas §2, convenção §3, cenários §4, financeiras §9,
-memória de cálculo §11, multi-segmento §12).
+**Antes de escrever uma linha do relatório, leia `aplicacao.md` §5b integralmente** — parede,
+banimento, estrutura fixa e critérios de aceitação; é passo do fluxo, não ponteiro opcional.
+Núcleo de leitura obrigatória: §1 pesquisa, §2 regras travadas, §3 convenção, §4 cenários,
+§5/§5b escrita e entrega, §10 status, §11 cadeias, §6 memória técnica. Os módulos (§7 drivers,
+§8/§8b/§8f degrau e capacidade, §9 financeiras, §12 multi-segmento, §13 fronteira e marca de
+estoque) abrem pelo gate que os dispara — cada gate nomeia o seu.
 
 **3. Engenharia reversa:** entregue o MENU de reconciliação (`aplicacao.md` §4) — os eixos
 univariados aplicáveis com os demais no vetor central, sendo o **custo de capital implícito
@@ -330,7 +377,14 @@ dois passos deixam de ser opcionais — (a) o TETO DO CRESCIMENTO GRATUITO (caso
 `gordon` com rentabilidade terminal → ∞ e gp = g; a distância até o caso-base é o preço da
 hipótese de gratuidade) e (b) a curva `iso` no mesmo alvo (mostra a partir de que g o alvo passa a
 ter solução). O `rev` sugere ambos no próprio output (`sugestao`); a mecânica está em
-`aplicacao.md` §8 (jurisprudência J3).
+`aplicacao.md` §8 (jurisprudência J3). **Leitura do teto, com o qualificador que a torna
+verdadeira:** o teto do crescimento gratuito é limite superior **CONDICIONAL AO g DECLARADO** — não
+é teto sobre todas as hipóteses de taxa, porque um g maior o desloca para cima. Só quando a reversa
+em g TAMBÉM não tem raiz no domínio declarado (RiR ≤ 100%, gp ≤ teto macro) é lícito concluir que
+nenhuma hipótese de TAXA explica o preço; aí o achado é necessariamente sobre o NÍVEL da
+métrica-base, sobre a fronteira do ativo (§13 — valor fora do fluxo: marca de estoque,
+opcionalidade de controle, ativo parado) ou sobre o denominador. **Concluir "o mercado é
+irracional" nesse ponto é erro de leitura**, e a ordem de investigação do teto se aplica inteira.
 
 **4. Consistência Ke↔WACC:** âncora única em Ku elimina circularidade; Ke e WACC viram outputs. Dois
 regimes: `mm` (dívida determinística, shields a Kd) e `ku` (shields a Ku sobre a trajetória EXÓGENA
@@ -351,7 +405,7 @@ alavancagem a mercado deriva. Detalhes em `derivacao.md` §5.
 justificada pela razão econômica em uma frase (com o número) ou por fonte externa citável, nunca
 pela autoridade da regra. Lista de banimento, tabela de tradução e regime da saída do motor:
 `aplicacao.md` §5. **Texto integral desta seção — obrigatório antes de qualquer relatório
-completo: `aplicacao.md` §5b** (regra de substituição, quadro pedagógico, dez bifurcações por
+completo: `aplicacao.md` §5b** (regra de substituição, quadro pedagógico, as onze escolhas por
 extenso, primeira aparição, formato dentro de seção).
 
 **Estrutura fixa, nesta ordem — conclusões na largada:**
@@ -360,7 +414,9 @@ extenso, primeira aparição, formato dentro de seção).
    (data e banda); múltiplos de tela corrente E forward com base declarada; consenso (PT médio,
    nº de analistas) ou lacuna declarada; **4–6 premissas decisivas ABERTAS já aqui**, cada uma com
    número e justificativa própria — **quatro vagas FIXAS, sempre: (i) base de lucro/EBITDA;
-   (ii) rentabilidade marginal, com a derivação em uma linha; (iii) g; (iv) custo de capital.**
+   (ii) rentabilidade marginal, com a derivação em uma linha; (iii) g; (iv) custo de capital — e
+   quando o beta não for observado na sessão, a vaga (iv) declara isso e carrega a banda em beta,
+   porque nesse caso parte da faixa de valor não vem de premissa econômica nenhuma.**
    - **Quadro "como o valor é formado"** (fixo, ≤ meia página, entre Conclusão e Premissas):
      a mecânica em linguagem plana — encargo de reposição (d) → imposto (t) → fração reinvestida
      para crescer (crescimento ÷ retorno do capital novo) → desconto pela margem entre custo de
@@ -378,26 +434,62 @@ extenso, primeira aparição, formato dentro de seção).
    rubricas de tradução, nunca pelos nomes internos; proveniência de tudo (verificado nesta
    sessão / derivado por regra / hipótese de construção / fornecido e revalidado).
 4. **Valuation**: grade canônica (§4) com âncora observável e preço/ação pela ponte explícita;
-   tabela de múltiplos centrada no caso-base reconciliando com a manchete; sensibilidades
+   **decomposição de Miller-Modigliani, obrigatória em toda grade de cenários** — valor dos ativos
+   instalados (lucro operacional após imposto ÷ custo de capital), valor das oportunidades de
+   crescimento (EV − ativos instalados) e peso do valor terminal, com a participação de cada um.
+   Em `convergencia` e `gordon` o primeiro termo é identidade exata; na `book` com CAP finito NÃO é,
+   e sai do motor com `--g 0` (`derivacao.md` §2 e §4). **Condição de validade declarada:** ele só é
+   "ativos instalados" se o `d` for encargo de reposição verdadeiro — a contraprova de caixa do
+   Gate 0 e esta decomposição são o mesmo argumento. A sensibilidade ao horizonte de vantagem deixa
+   de ser opcional quando ±3 anos de CAP movem mais de ~10% do valor. **Peso do terminal acima de
+   ~50% ⟹ declare também o viés de mortalidade não modelado:** nenhuma convenção terminal embute
+   hazard de extinção, o viés é unidirecional (terminal superestimado) e da ordem de −16% a −27%
+   para hazards de 2% a 5% ao ano. O motor emite o alerta.
+   Tabela de múltiplos centrada no caso-base reconciliando com a manchete; sensibilidades
    travadas; cross-check por segundo método declarado; **hipótese terminal re-testada aqui** (uma
-   linha mesmo quando não muda nada — é onde o erro mais caro é pego); **sensibilidade às DEZ
+   linha mesmo quando não muda nada — é onde o erro mais caro é pego); **sensibilidade às ONZE
    escolhas metodológicas** (a base monetária é reportada à parte como invariante de coerência, não
-   como 11ª bifurcação econômica) (lista integral e gatilhos: §5b) — alternativa movendo > ~10% ⟹ a
+   como 12ª bifurcação econômica) (lista integral e gatilhos: §5b) — alternativa movendo > ~10% ⟹ a
    tabela traz as duas com o custo de cada uma; **coerência interna dos cenários**: caso-base =
    escolha central de todas; produto dos extremos = bear/bull rotulados.
 5. **O que está no preço**: menu de reconciliação (§4) COM confronto temporal contra o consenso;
-   **custo de capital implícito SEMPRE** (beta implícito contra a banda observada); fronteiras
+   **nível implícito como ESCADA, com a configuração declarada** — congelada (múltiplo fixo) é
+   LIMITE SUPERIOR; recalculada com o vetor travado, em que só o encargo de reposição responde ao
+   nível, é a leitura CENTRAL e sai do motor; e recalculada com a rentabilidade também derivada do
+   nível (intensidade de capital constante) é o PISO da escada, montada célula a célula. Quanto mais
+   variáveis respondem ao nível, menor o nível exigido — declare qual configuração está reportando.
+   A propriedade de teto vale quando a D&A absoluta não escala com o nível (margem ou preço); se o
+   nível vem de VOLUME, a D&A escala e as leituras convergem. **A leitura recalculada é, por
+   identidade, o break-even da base de lucro** — não a calcule duas vezes; **decomposição do gap contra o preço-alvo do consenso** — a
+   mesma reversa com alvo no preço-alvo médio, dizendo em qual premissa mora a diferença (ou a
+   lacuna declarada quando não houver cobertura); **custo de capital implícito SEMPRE** (beta
+   implícito contra a banda observada, na MESMA unidade da sensibilidade — beta, não pontos-base); fronteiras
    bivariadas depois dos univariados; fecha com o julgamento comparativo — qual reconciliação
    exige a menor violência às âncoras observáveis, e qual observável a testaria. Perto da
    neutralidade a variável implícita é ruído com cara de precisão — reporte a curvatura.
 6. **Riscos + veredicto**: 4–6 que movem a tese, cada um com o observável que o monitora;
-   alavanca dominante; o que a fórmula não captura; a premissa cuja inversão vira a conclusão.
+   **break-even das quatro premissas fixas** — rentabilidade marginal, g e custo de capital saem de
+   `rev --resolver`; a base de lucro sai de `nivel` na leitura recalculada, e é o MESMO número do
+   nível implícito (não o calcule duas vezes). Reporte o valor de break-even e a distância até o
+   adotado;
+   premissa cujo break-even cai DENTRO da banda de sensibilidade já declarada ⟹ o veredicto é
+   frágil naquele eixo e a entrega diz isso; alavanca dominante; o que a fórmula não captura; a
+   premissa cuja inversão vira a conclusão.
 7. **Visão não-consensual** (obrigatória, ≤ 15 linhas): só com fatos já citados e cadeia factual
    explícita; sem nenhuma, declare "sem visão não-consensual nesta rodada" — não invente.
 8. **Metodologia, limitações e disclaimer**: parágrafo citável em linguagem plana referenciando o
    quadro de abertura; quadro de premissas em uma linha cada; disclaimer específico ao caso,
    nunca genérico (pocket valuation e não DCF nem DD; o que não captura; premissas de
    estabilidade e quais o caso viola; direção do erro de cada premissa congelada).
+
+**Duas camadas no entregável (v10.1).** O **corpo do memo** carrega as seções 1, 2, 3, 5, 6, 7 e 8 —
+é o que sustenta o raciocínio em prosa e o que o critério de aceitação (ii) testa. O **anexo
+analítico** carrega as grades que provam o raciocínio: tabela de múltiplos justos, sensibilidades às
+onze escolhas, grade do driver dominante, break-even e fronteiras bivariadas — cada uma com a frase
+de leitura que a acompanha no corpo. Nada é cortado; o que muda é onde mora. Regra da divisão: fica
+no corpo o que o leitor precisa para SEGUIR o argumento; vai ao anexo o que ele precisa para
+CRITICAR. A trava de encerramento continua valendo — faltando espaço, corte prosa do veredicto e do
+disclaimer, nunca premissas, memória de cálculo ou memória técnica.
 
 **Memória técnica = segundo artefato**, sempre fora do relatório (rotulada "uso interno"; a
 versão da skill vai nela, nunca no título do relatório). Captura de aprendizado e oferta de
@@ -407,7 +499,12 @@ aprofundamento são chat-only.
 texto — número sem a conta = incompleto; (ii) só a prosa sustenta o raciocínio da conclusão ao
 detalhe; (iii) zero termos da lista de banimento no corpo (busca literal antes de entregar);
 (iv) as quatro premissas fixas na Conclusão, com número e derivação; (v) toda variável usada tem
-a FUNÇÃO explicada na primeira aparição.
+a FUNÇÃO explicada na primeira aparição; (vii) a decomposição de Miller-Modigliani está reportada —
+ativos instalados, crescimento e peso do terminal — e o `d` que a produz passou pela contraprova de
+caixa, ou o gap entre as rotas está declarado; (viii) o `aplicacao.md` §5b foi lido nesta rodada;
+(vi) todo alerta emitido pelo motor nas rodadas que
+sustentam o caso-base foi lido na ÍNTEGRA e ou incorporado como premissa, ou declarado com a razão
+de não o ter sido — rodada com saída filtrada por campo não conta como rodada.
 
 **Trava de encerramento:** cobertura incompleta não oferece aprofundamento; faltando espaço,
 corte prosa do veredicto e do disclaimer — nunca premissas, memória de cálculo ou memória técnica.
@@ -421,6 +518,18 @@ Os demais:
 - Cadeia §11.1b com gap > 10% entre (d×EBITDA + RiR×NOPAT) e (capex_total + ΔWC) → par d×RiR
   em base errada; RiR canônico < 0 com g > 0 (D&A > capex) → vetor não representável: migrar o
   par para base caixa, nunca ajustar uma metade só
+- **Δreceita ≤ 0 no período do deployment (janela ≥ 12 meses)** → o reinvestimento observado mede
+  DESINVESTIMENTO, não o custo de crescer: proibido como âncora, ao lado de payout ≈ 0 e de payout
+  sobre base ≠ lucro. Rota obrigatória: derivar prospectivamente por intensidade de capital POR
+  PERNA — giro pelo ciclo de caixa observado, fixo pela base de ativos — com o RiR como OUTPUT
+  (`aplicacao.md` §2 e §11.1c). Teste secundário, válido nos dois sinais de giro: `ΔWC/Δreceita`
+  deve ficar próximo de `WC/receita` em razão E em sinal; divergir indica que o deployment
+  observado não está medindo intensidade marginal
+- **Deriva da alavancagem a mercado ≥ ~10 p.p. de D/V ao longo do horizonte** (compare D/V hoje com
+  o D/V implícito no ano n pelos fluxos) → um custo de capital único não corresponde a NENHUM
+  período da trilha consistente: rode `apv` e reporte a faixa `Ke_t`/`WACC_t` ao lado do valor
+  único, com o efeito no valor. Abaixo do gatilho, declare que a deriva é imaterial — nunca o
+  silêncio
 - RiR = g/ROIC > 100% → não autofinanciável; EXIGE funding declarado. Sem funding plausível,
   hipótese FORTE de erro de classificação (degrau lançado como taxa) — a investigar. Na reversa,
   a busca fica restrita a RiR ≤ 100% (`faixa_de_busca`); raiz via `--rir-externo` só se apresenta
@@ -450,12 +559,28 @@ Os demais:
   identificação estrutural pura de ROE₂ marginal) | `iso book --transicao nenhuma` sem `--rent-book`
   conflaciona marginal×médio (o motor avisa); com `--transicao ponte`, `--rent-book` é rejeitado
   porque o book da fase 1 é `--pt-roe1-book` e não existe `ROE2_book` separado nesta versão
-- **Domínio v9.28:** g/gp/gtv ≤ −100% ou custo de capital ≤ −100% → hard error; tax fora de
-  0–100% e d fora de 0–100% → regime anômalo, não bloqueado, mas exige justificativa explícita e
-  reconciliação econômica. Erro de unidade nunca pode virar múltiplo aparentemente plausível.
+- **Alíquota efetiva ≠ marginal em mais de ~5 p.p.** → `t` é parâmetro ÚNICO no motor (explícito e
+  terminal), e diferimentos, incentivos com prazo e prejuízo acumulado são temporários por natureza:
+  ou o caso-base usa a marginal ajustada com a efetiva como sensibilidade, ou a entrega declara por
+  escrito qual benefício é estrutural e por que sobrevive à perpetuidade (`aplicacao.md` §2)
+- **Beta de regressão da própria ação usado como rota central** → é confronto, não âncora: a rota
+  central é o beta bottom-up de pares desalavancados e realavancados ao D/E a mercado
+  (`aplicacao.md` §2). Divergência grande entre os dois é achado, não motivo para trocar de rota
+- **Domínio:** g/gp/gtv ≤ −100% ou custo de capital ≤ −100% → hard error. **d ≥ 100% do EBITDA** →
+  lucro operacional após imposto negativo e múltiplo de EBITDA com o SINAL INVERTIDO: o múltiplo
+  justo não está definido nessa base — normalize a métrica, migre o par (d, RiR) para base caixa ou
+  troque de arquitetura (`aplicacao.md` §13). **d ≥ ~60%** → regime de D&A-overhang, e a conservação
+  deixa de ser opcional. **t fora de 0–100%** → regime anômalo, não bloqueado, com justificativa
+  explícita. O motor emite os três (v10); até a v9.32 a regra existia só na doutrina e um `d` de
+  120% devolvia EV/EBITDA negativo em silêncio. Erro de unidade nunca pode virar múltiplo
+  aparentemente plausível.
 - gp sem `--rf` → não ancorada (avisada); gp > rf nominal (ou > ~3% real) → excesso quantificado
   e tese da exceção por escrito | `--moeda` ausente → aviso | base nominal×real inconsistente →
   ROIC inflado, RiR subestimado, valor inflado (`aplicacao.md` §2)
+- Marca de estoque ≥ ~20% do valor sem fator de tempo, apreciação implícita, T ou gap entre rotas
+  → marca adotada como líquida hoje sem rótulo | custo de capital do ativo herdado do consolidado
+  sem declaração | deságio aplicado sobre agregado LÍQUIDO de passivos → desconta a dívida junto |
+  base de fluxo ancorada ou VALIDADA em métrica que contém realização de estoque → parede violada
 - Segmentos com economia materialmente diferente → blended é erro sistemático (`aplicacao.md`
   §12) | premissas de validade violadas pelo caso (margens, D/E, caixa, RiR, payout constantes;
   crescimento só por novos investimentos) → citar quais
@@ -467,12 +592,17 @@ versão corrente e nada mais; marcador de versão em regra do corpo só quando d
 comportamento novo do antigo for operacionalmente necessário. A prosa integral da seção de
 entrega vive em `aplicacao.md` §5b; o corpo mantém o esqueleto.
 
-- `references/aplicacao.md` — playbook de empresa real: pesquisa §1, regras travadas §2,
-  convenção §3, cenários e confronto temporal §4, escrita e tradução §5 (a autoridade estrutural é o template acima), bloco de inputs §6, multi-driver §7, degrau §8, ponte §8b, financeiras §9, memória de
-  cálculo §11, multi-segmento §12, jurisprudência (apêndice J). Leia SEMPRE antes de valuation
-  real.
+- `references/aplicacao.md` — playbook de empresa real, em duas camadas de leitura.
+  **NÚCLEO, leitura integral em toda rodada:** pesquisa §1, regras travadas §2, convenção §3,
+  cenários e confronto temporal §4, escrita §5 e entrega §5b (a autoridade estrutural), bloco de
+  inputs §6, status das premissas §10, memória de cálculo §11 — incluindo **§11.1c** (RiR por perna
+  de capital), **§11.7** (decomposição de Miller-Modigliani) e **§11.8** (confronto com o caixa
+  operacional publicado).
+  **MÓDULOS, abertos pelo gate que os dispara:** multi-driver §7 (Gate 2), degrau §8, ponte §8b e
+  capacidade §8f (Gate 3), financeiras §9 (Gate 0.5), multi-segmento §12 (teste de materialidade),
+  fronteira de escopo e marca de estoque §13 (Gate 0). Apêndice J é consulta, não leitura corrida.
 - `references/derivacao.md` — matemática, provas, as três convenções de TV §3, APV/recursão Ke_t
-  (agora executável no comando `apv`) §5, limites, §8 teorema da classificação, §8b ponte de
+  (agora executável no comando `apv`) §5, mortalidade não modelada §5b, limites, §8 teorema da classificação, §8b ponte de
   releveraging (derivação, prova do colapso, limite MM). Leia se a teoria for questionada ou
   houver degrau ou mudança de estrutura de capital.
 - `scripts/testes.py` — validação independente: property tests, reconciliação DCF↔EVA e APV,
@@ -482,6 +612,10 @@ entrega vive em `aplicacao.md` §5b; o corpo mantém o esqueleto.
   as duas camadas de consistência do custo de capital (§4), protocolo de validação (Ap. A),
   condições de falseamento (Ap. B) e caso trabalhado de ponta a ponta (Ap. C). Leia quando a
   teoria for questionada ou quando precisar defender uma escolha de convenção por escrito.
+
+- `references/manutencao.md` — manual de adição de conhecimento: como uma regra nova entra no
+  pacote sem virar conselho, duplicata ou seção órfã. Leia ANTES de editar qualquer arquivo desta
+  skill; não é lido durante valuation.
 
 **Excel, quando gerar:** fonte Gadugi, azul = input hardcoded, preto = fórmula, verde = referência
 cruzada, subtotais "(=)" em negrito, aba "Premissas" com as seis colunas. PT-BR, tom direto.

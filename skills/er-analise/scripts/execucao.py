@@ -15,12 +15,15 @@ subcomandos, um para cada momento em que o Analista precisa de código:
 - `montar <raiz>` (M4) compõe `entrega.json` a partir das partes da raiz — `execucao.json`,
   `caso.json`, `resultados.json` (a saída do `er-valuation`), `analise.json`, os fragmentos de
   `evidencia/` juntados num ledger único (D7) e, quando existem, `dados.json` e `confronto.json` — e
-  roda o builder do relatório sobre a raiz, devolvendo o código dele.
+  roda o builder do relatório sobre a raiz, devolvendo o código dele. Antes de juntar, recusa um
+  `resultados.json` de outra versão da metodologia que a do catálogo (migração v10.1: versão única
+  também do lado dos resultados).
 
 E3: este script orquestra, e só. Os comandos da suíte são declaração da metodologia, lida do catálogo; a
 conta é do motor, pelo `er-valuation`; a validação da entrega é do builder, que recusa o que não fecha.
 Nenhuma regra de metodologia nem de contrato é conferida aqui além do que a junção precisa para não
-perder nada em silêncio.
+perder nada em silêncio — nem misturar, em silêncio, resultados de uma versão da metodologia com o
+catálogo de outra.
 """
 
 import argparse
@@ -209,14 +212,42 @@ def juntar_evidencia(raiz: Path) -> dict:
     return ledger
 
 
+def _versao_da_metodologia(documento, onde: str):
+    """A versão da metodologia que `documento` declara em `metodologia.versao` (o catálogo) — ou, com
+    `onde == "resultados"`, em `origem.metodologia.versao` (a saída do `er-valuation`). Ausente, `None`:
+    quem compara é `exigir_a_mesma_metodologia`, e a ausência também é versão diferente."""
+    no = documento.get("origem") if onde == "resultados" and isinstance(documento, dict) else documento
+    metodologia = no.get("metodologia") if isinstance(no, dict) else None
+    return metodologia.get("versao") if isinstance(metodologia, dict) else None
+
+
+def exigir_a_mesma_metodologia(resultados, catalogo: dict | None = None) -> None:
+    """Versão única do lado dos resultados (migração v10.1): o `resultados.json` da raiz tem de ter
+    saído da mesma versão da metodologia que o catálogo desta instalação declara — os números de outra
+    versão não casam com o motor, os rótulos e o mapa de conclusões de valor que o relatório lê. Versão
+    diferente, ou ausente, é `ExecucaoInvalida` que nomeia as duas e o remédio. É a checagem que a
+    junção precisa para não misturar versões em silêncio; o QC do builder não ganha código novo."""
+    catalogo = _ler_json(CATALOGO) if catalogo is None else catalogo
+    do_catalogo = _versao_da_metodologia(catalogo, "catalogo")
+    dos_resultados = _versao_da_metodologia(resultados, "resultados")
+    if dos_resultados != do_catalogo:
+        raise ExecucaoInvalida(
+            f"'resultados.json' foi produzido pela metodologia {dos_resultados!r} "
+            f"('origem.metodologia.versao'), e o catálogo desta instalação é da {do_catalogo!r}: rode "
+            "skills/er-valuation/scripts/avaliar.py de novo sobre o caso ('python skills/er-valuation/"
+            "scripts/avaliar.py <raiz>/caso.json --out <raiz>/resultados.json') antes de montar.")
+
+
 def compor_entrega(raiz: Path) -> dict:
-    """A entrega `entrega/1` das partes da raiz, sem escrever nada."""
+    """A entrega `entrega/1` das partes da raiz, sem escrever nada. Recusa um `resultados.json` de outra
+    versão da metodologia que a do catálogo (`exigir_a_mesma_metodologia`) antes de juntar o resto."""
     raiz = Path(raiz)
     if not raiz.is_dir():
         raise ExecucaoInvalida(f"raiz de execução não é um diretório: '{raiz}'.")
     entrega = {"versao_contrato": VERSAO_DA_ENTREGA, "execucao": _ler_json(raiz / EXECUCAO)}
     for campo, nome in PARTES_OBRIGATORIAS.items():
         entrega[campo] = _ler_json(raiz / nome)
+    exigir_a_mesma_metodologia(entrega["resultados"])
     entrega["ledger"] = juntar_evidencia(raiz)
     for campo, nome in PARTES_OPCIONAIS.items():
         if (raiz / nome).exists():

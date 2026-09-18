@@ -663,3 +663,82 @@ def test_uma_leitura_do_nivel_fora_do_vocabulario_e_motor_falhou_nomeado():
     assert _leitura_chave_do_nivel({"leitura": "acima_do_consenso: texto do motor"}) == "acima_do_consenso"
     with pytest.raises(MotorFalhou):
         _leitura_chave_do_nivel({"leitura": "fantasia_terminal: texto do motor"})
+
+
+# --------------------------------------------------------------------------
+# Migração v10.1, Task 2 (Q2 do grill de 17/09): a leitura RECALCULADA do nível implícito. O
+# `nivel` da v10.1 recalcula o múltiplo a cada nível, com a D&A fixa em moeda e o resto do vetor
+# travado — é a leitura central; a de múltiplo fixo vira o extremo da escada. Só na rota firm com
+# métrica EBITDA: em ×NOPAT a D&A não entra no múltiplo, e em P/L ela não existe.
+# --------------------------------------------------------------------------
+
+from caso import validar  # noqa: E402
+from relatorio_apoio import com_bloco_de_reversa_valido  # noqa: E402
+
+
+def test_a_leitura_central_do_nivel_recalcula_o_multiplo_e_fica_entre_a_base_e_o_limite():
+    caso = _caso()  # firm/EBITDA com reversa (caso_reversa_firm.json)
+    nivel = reverter(caso, "base", 500.0)["nivel_implicito"]
+    rec = nivel["recalculado"]
+    base, limite = caso["metrica_base"]["valor"], nivel["metrica_base_implicita"]
+    central = rec["metrica_base_implicita_recalculada"]
+    # a escada da v10.1: o múltiplo recalculado leva o nível para entre a base e a leitura congelada
+    assert min(base, limite) < central < max(base, limite)
+    # a D&A entrou em moeda, pelo encargo de reposição do cenário sobre a métrica-base
+    da = caso["cenarios"]["base"]["premissas"]["da"]
+    assert rec["d_no_nivel_implicito_%"] == pytest.approx(da * base / central, rel=1e-3)
+
+
+def _firm_por_nopat() -> dict:
+    """A mesma companhia escalada pelo NOPAT coerente (1.000 x 0,80 x 0,75 = 600)."""
+    c = _caso()
+    c["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "periodo": "2025A", "fonte": "fixture sintética"}
+    return c
+
+
+def _equity_com_reversa() -> dict:
+    return com_bloco_de_reversa_valido(carregar(FIXTURES / "caso_minimo_equity.json"))
+
+
+@pytest.mark.parametrize("caso,nd_efetivo", [
+    (_firm_por_nopat, 500.0),
+    (_equity_com_reversa, 0.0),
+], ids=["firm_por_nopat", "equity"])
+def test_sem_a_metrica_ebitda_da_rota_firm_o_nivel_so_tem_a_leitura_congelada(caso, nd_efetivo):
+    """O wrapper só manda ao `nivel` o segundo bloco de flags na rota firm com EBITDA: fora dela o
+    motor devolve a leitura congelada sozinha, sem `recalculado` nem a nota dele."""
+    c = caso()
+    validar(c)
+    nivel = reverter(c, "base", nd_efetivo)["nivel_implicito"]
+    assert nivel["metrica_base_implicita"] > 0
+    assert {"recalculado", "recalculado_nota"} & set(nivel) == set()
+
+
+# Onda da revisão final (I3): duas variantes NÃO degeneradas do cenário de `caso_reversa_firm.json`. A da
+# fixture, sob 'gordon' com a rentabilidade terminal igual ao WACC, é degenerada para este teste: o termo
+# terminal fica independente de `gp`, e um `gp` perdido no caminho até o `nivel` não mudaria número nenhum.
+_VETORES_NAO_DEGENERADOS = [
+    pytest.param({"tv": "gordon", "roic_tv": 15.0, "gp": 3.0, "mid_year": True}, id="gordon_meio_de_periodo"),
+    pytest.param({"tv": "book", "roic_book": 9.0, "roic_tv": None, "gp": None}, id="book_com_roic_book"),
+]
+
+
+@pytest.mark.parametrize("sobreposicoes", _VETORES_NAO_DEGENERADOS)
+def test_a_leitura_central_usa_o_vetor_inteiro_do_cenario(sobreposicoes):
+    """Com a D&A fixa em moeda, o valor no nível M é `múltiplo(d(M)) × M = k × (M − D&A)`: linear em M,
+    com a inclinação k que só o vetor do cenário dá. A leitura central fecha o preço nessa reta e a de
+    múltiplo fixo, na reta do múltiplo de EBITDA do cenário; as duas são o mesmo k, e por isso vale
+    exatamente `limite − base = (central − base) ÷ (1 − da/100)` — se, e só se, o vetor que o wrapper
+    manda ao `nivel` é o do cenário. Uma premissa perdida no caminho (o `gp`, o meio de período, o ROIC
+    médio da convenção book) muda o k da central e quebra a igualdade por dezenas de unidades. A
+    tolerância é o arredondamento de duas casas das duas leituras e de quatro do múltiplo que o motor
+    publica."""
+    c = _caso()
+    c["cenarios"]["base"]["premissas"].update(sobreposicoes)
+    c["reversa"]["eixos"] = ["custo_capital"]  # o eixo obrigatório: o nível não depende dos outros
+    validar(c)
+    nivel = reverter(c, "base", 500.0)["nivel_implicito"]
+    base, limite = c["metrica_base"]["valor"], nivel["metrica_base_implicita"]
+    central = nivel["recalculado"]["metrica_base_implicita_recalculada"]
+    da = c["cenarios"]["base"]["premissas"]["da"]
+    assert limite - base == pytest.approx((central - base) / (1 - da / 100), abs=0.02)

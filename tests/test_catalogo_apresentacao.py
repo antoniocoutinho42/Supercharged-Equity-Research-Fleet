@@ -152,7 +152,7 @@ def test_chaves_de_topo_do_catalogo():
         "leituras_do_nivel", "teto_do_crescimento_gratuito", "teto_da_alavanca",
         "escalas_monetarias", "formacao_do_valor",
         "variaveis_do_triangulo", "anos_base_do_capex", "escolhas_metodologicas",
-        "suite_da_metodologia", "gates", "linguagem_interna",
+        "suite_da_metodologia", "gates", "linguagem_interna", "decomposicao_mm", "nivel_implicito",
     }
 
 
@@ -267,6 +267,16 @@ _NAO_SAO_CONCLUSAO_DE_VALOR: dict[str, tuple[str, ...]] = {
     "driver sobre a métrica-base, e o líquido agregado: diagnóstico precomputado do período-base, que não "
     "move preço nenhum": (
         "drivers.**",),
+    "a participação do crescimento e o peso do terminal na decomposição de Miller-Modigliani de cada "
+    "cenário da rota firm e de cada parte firm de SOTP (v10.1) — partição do valor em fração, não valor": (
+        "cenarios.*.decomposicao_mm.participacao_do_crescimento_%",
+        "cenarios.*.decomposicao_mm.peso_do_terminal_%",
+        "sotp.partes.*.decomposicao_mm.participacao_do_crescimento_%",
+        "sotp.partes.*.decomposicao_mm.peso_do_terminal_%"),
+    "a base de NOPAT da decomposição de cada cenário da rota firm e de cada parte firm de SOTP "
+    "(v10.1) — lucro operacional após imposto: métrica, não valor": (
+        "cenarios.*.decomposicao_mm.NOPAT_base",
+        "sotp.partes.*.decomposicao_mm.NOPAT_base"),
 }
 _ECOA_O_CASO = "o que o caso declara — premissa, preço, métrica, bloco declarado"
 
@@ -799,6 +809,22 @@ def test_toda_leitura_do_nivel_publicada_pelas_variantes_tem_rotulo_no_catalogo(
     assert vistas - {None}, f"nenhuma leitura do nível publicada: {vistas}"
 
 
+def test_a_nota_do_nivel_implicito_existe_em_todo_idioma_e_o_nivel_recalculado_e_publicado():
+    """Migração v10.1 (onda da revisão final, I2): a condição de leitura das duas leituras do nível
+    implícito — a configuração da central, o múltiplo fixo que exagera o degrau, a terceira leitura
+    que o relatório não calcula, a condição de validade e o ponto de equilíbrio — é texto de
+    metodologia, e mora no catálogo como a nota da decomposição. A nota só tem uso com a leitura
+    recalculada publicada, e alguma fixture ou variante a publica — senão a seção ficaria órfã."""
+    secao = CAT["nivel_implicito"]
+    assert set(secao) == {"nota"}, sorted(secao)
+    for idioma in CAT["idiomas"]:
+        assert secao["nota"].get(idioma, "").strip(), idioma
+    com_recalculado = [nome for nome in CASOS_E_VARIANTES
+                       if "recalculado" in ((_caso_e_resultados(nome)[1].get("reversa") or {}).get("nivel_implicito")
+                                            or {})]
+    assert com_recalculado, "nenhuma fixture publica a leitura recalculada — a nota ficaria sem uso"
+
+
 def test_teto_do_crescimento_gratuito_tem_rotulo_e_texto_em_todo_idioma():
     teto = CAT["teto_do_crescimento_gratuito"]
     assert set(teto) == {"rotulo", "texto"}, sorted(teto)
@@ -904,16 +930,16 @@ def test_anos_base_do_capex_do_catalogo_sao_os_do_gate():
 
 
 # --------------------------------------------------------------------------
-# Fatia 5G, Task 1 (D1): as dez escolhas metodológicas do vendor. O relatório mostra
-# cada uma pelo rótulo daqui e pelo gatilho descrito aqui — nunca pela chave crua, e
-# nunca com um gatilho que ele mesmo tenha de saber avaliar. Mesma trava de upgrade
-# dos eixos de reversa e dos anos-base do capex: uma escolha nova no gate sem entrada
-# aqui reprova na integração.
+# Fatia 5G, Task 1 (D1): as onze escolhas metodológicas do vendor (dez até a v9.31; a v10
+# acrescentou o nível da marca de estoque). O relatório mostra cada uma pelo rótulo daqui e
+# pelo gatilho descrito aqui — nunca pela chave crua, e nunca com um gatilho que ele mesmo
+# tenha de saber avaliar. Mesma trava de upgrade dos eixos de reversa e dos anos-base do
+# capex: uma escolha nova no gate sem entrada aqui reprova na integração.
 # --------------------------------------------------------------------------
 
-def test_escolhas_metodologicas_do_catalogo_sao_as_dez_do_gate_com_rotulo_e_gatilho():
+def test_escolhas_metodologicas_do_catalogo_sao_as_onze_do_gate_com_rotulo_e_gatilho():
     assert set(CAT["escolhas_metodologicas"]) == ESCOLHAS_METODOLOGICAS
-    assert len(ESCOLHAS_METODOLOGICAS) == 10, sorted(ESCOLHAS_METODOLOGICAS)
+    assert len(ESCOLHAS_METODOLOGICAS) == 11, sorted(ESCOLHAS_METODOLOGICAS)
     for chave, info in CAT["escolhas_metodologicas"].items():
         assert set(info) == {"rotulo", "gatilho"}, (chave, sorted(info))
         for idioma in CAT["idiomas"]:
@@ -937,6 +963,56 @@ def test_toda_escolha_publicada_pelas_variantes_tem_entrada_no_catalogo():
     assert vistas, "nenhuma escolha publicada — trava vacuamente verde"
     assert com_empilhamento, "nenhum alerta de empilhamento publicado — trava vacuamente verde"
     assert vistas <= set(CAT["escolhas_metodologicas"]), vistas - set(CAT["escolhas_metodologicas"])
+
+
+# --------------------------------------------------------------------------
+# Migração v10.1, Task 2 (Q1 do grill de 17/09): a decomposição de Miller-Modigliani que o
+# `ev` devolve, publicada por cenário da rota firm (e copiada pelas partes firm de SOTP). A
+# tela mostra os campos que o catálogo declara, pelo rótulo e pela unidade daqui — nunca
+# pelos nomes crus do motor nem pela prosa dele, que fica no `resultados.json`.
+# --------------------------------------------------------------------------
+
+def _decomposicoes_publicadas(no, caminho: tuple = ()):
+    """`(caminho, bloco)` de todo `decomposicao_mm` que `no` publica, em qualquer profundidade —
+    cenários e partes de SOTP, sem nomear onde eles moram."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            if chave == "decomposicao_mm" and isinstance(valor, dict):
+                yield caminho + (chave,), valor
+            else:
+                yield from _decomposicoes_publicadas(valor, caminho + (str(chave),))
+    elif isinstance(no, list):
+        for indice, valor in enumerate(no):
+            yield from _decomposicoes_publicadas(valor, caminho + (str(indice),))
+
+
+def test_todo_campo_da_decomposicao_do_catalogo_e_numero_em_toda_decomposicao_publicada():
+    """A forma da seção (a nota e os campos, cada um com rótulo em todo idioma e unidade do
+    vocabulário `unidades`) e a trava de upgrade: todo campo que o catálogo declara é número em
+    todo bloco que as fixtures e as variantes publicam — um motor que o renomeie ou o deixe de
+    emitir reprova AQUI, e não com uma coluna vazia na tela."""
+    secao = CAT["decomposicao_mm"]
+    assert set(secao) == {"nota", "campos"}, sorted(secao)
+    for idioma in CAT["idiomas"]:
+        assert secao["nota"].get(idioma, "").strip(), idioma
+    campos = secao["campos"]
+    assert isinstance(campos, dict) and campos, campos
+    for campo, info in campos.items():
+        assert set(info) == {"rotulo", "unidade"}, (campo, sorted(info))
+        assert info["unidade"] in CAT["unidades"], (campo, info["unidade"])
+        for idioma in CAT["idiomas"]:
+            assert info["rotulo"].get(idioma, "").strip(), (campo, idioma)
+
+    vistas = {"cenarios": 0, "sotp": 0}
+    for nome in CASOS_E_VARIANTES:
+        _caso, resultados = _caso_e_resultados(nome)
+        for caminho, bloco in _decomposicoes_publicadas(resultados):
+            vistas[caminho[0]] += 1
+            for campo in campos:
+                valor = bloco.get(campo)
+                assert isinstance(valor, (int, float)) and not isinstance(valor, bool), (
+                    nome, ".".join(caminho), campo, valor)
+    assert all(vistas.values()), f"trava vacuamente verde: {vistas}"
 
 
 def test_disclosure_da_conservacao_de_capital_nomeia_a_chave_da_integracao_sem_limiar():

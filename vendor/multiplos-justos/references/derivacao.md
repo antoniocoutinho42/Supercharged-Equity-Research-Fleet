@@ -26,6 +26,18 @@ Implementar sempre por SOMA EXPLÍCITA (loop) — elimina a singularidade g=W da
 Casos degenerados: ROIC=W ⟹ múltiplo FWD = 1/W (Miller-Modigliani) — sob `book`, exige o BOOK
 igual a W também (marginal=W com book≠W NÃO dá 1/W; ver §2); o corrente é 1/W × (1+g). Atenção: g=0 NÃO é caso degenerado na convenção `book` com n finito — ver §4.
 
+**Corolário operacional — o valor dos ativos instalados.** Com g = 0 em `convergencia` (e em
+`gordon` com gp = 0), a soma colapsa exatamente:
+Σₜ₌₁ⁿ 1/(1+W)ᵗ + 1/(W(1+W)ⁿ) = [1−(1+W)⁻ⁿ]/W + (1+W)⁻ⁿ/W = **1/W**, para qualquer rentabilidade.
+Logo `EV(g=0) = NOPAT/W` é IDENTIDADE, não aproximação, e isola `d` e `t` como as únicas variáveis
+que a determinam — é o termo de "ativos instalados" da decomposição de Miller-Modigliani (1961), e
+`EV − NOPAT/W` é o valor das oportunidades de crescimento. Duas travas de leitura: (i) na `book` com
+CAP finito a identidade **não** vale (§4, linha g=0), porque o terminal referencia o book — ali o
+piso sai do motor com `--g 0`; (ii) `NOPAT/W` só é "ativos instalados" se o `d` for encargo de
+reposição verdadeiro, isto é, se a reposição sustentar o lucro indefinidamente sem capital novo —
+com `d` subdimensionado o NOPAT está superestimado e o termo inteiro herda o erro. Uso obrigatório
+na entrega e cadeia em `aplicacao.md` §11.7.
+
 ## 3. Valor terminal — as TRÊS convenções
 
 A frase "a vantagem competitiva se exaure no ano n" admite duas matemáticas diferentes, e a
@@ -223,10 +235,27 @@ extrair Ke_t e realimentar o `pe` cenário a cenário; (b) manter Ke fixo e decl
 comparação entre cenários é ceteris paribus em custo de capital. O motor emite a limitação no
 diagnóstico sempre que caixa/E ≠ 0.
 
+## 5b. Mortalidade não modelada — o viés que nenhuma convenção terminal corrige
+
+Nenhuma das três convenções embute hazard de extinção da companhia: `book`, `convergencia` e
+`gordon` descontam fluxos condicionados à sobrevivência. O viés é **unidirecional** — valor terminal
+SUPERESTIMADO — e a ordem de grandeza medida no paper (§3.2 e §7) é **−16% a −27% para hazards de 2%
+a 5% ao ano**. Não há correção dentro do motor comprimido: o hazard entraria como um fator
+`(1−h)^t` sobre cada fluxo, que é equivalente a somar `h` ao custo de capital no explícito mas NÃO
+no terminal de `gordon` (onde ele reduz `gp` e o denominador simultaneamente). Por isso a regra é
+declaratória e condicionada ao peso: quando o terminal responde por mais da metade do valor, a
+entrega declara o viés, a direção e a magnitude. Gatilho executável: o `ev` devolve
+`peso_do_terminal_%` e o diagnóstico dispara acima de 50%.
+
 ## 6. Premissas de validade (citar as violadas no caso concreto)
 
 Modelo econômico: (1) crescimento só por novos investimentos — exclui ganhos de escala e
-expansão de margem; (2) retornos marginais constantes no CAP (giro do NOA constante);
+expansão de margem; (2) retornos marginais constantes no CAP (giro do NOA constante) — **constância
+se refere ao NÍVEL da intensidade ao longo do CAP, não à igualdade entre intensidade MARGINAL e
+MÉDIA**: quando a composição do g separa volume de preço (`aplicacao.md` §2), o capital fixo só é
+cobrado pelo componente de volume e a marginal fica ABAIXO da média por construção — isso é
+decomposição declarada, não violação da premissa, e o mesmo vale para a separação médio×marginal do
+retorno no terminal (§3);
 (3) D/E constante; (4) proporção de caixa constante; (5) Kd constante.
 Fórmula de múltiplos: margens, RiR e payout constantes. RiR fixo + g muito alto pode gerar
 caixa negativo (teste de estresse de consistência do par g–RiR).

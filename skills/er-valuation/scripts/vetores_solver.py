@@ -637,7 +637,16 @@ def _bloco_rampa() -> list[dict]:
     v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "wacc": -150.0, "n": 10},
                              nd_efetivo=400.0, acoes=120.0))
 
-    # K. "wk < 0 ou kappa < 0" — aqui wk < 0.
+    # K. [v10] "giro negativo com |wk| >= kappa" — aqui wk=-25% contra o kappa 20% da base: o
+    # capital incremental total (wk + kappa) fica <= 0 e a intensidade de capital deixa de ser
+    # definida. É a recusa nova da v10; a família antiga ("wk < 0 ou kappa < 0") recusava qualquer
+    # giro negativo.
+    v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "wk": -25.0, "n": 10},
+                             nd_efetivo=400.0, acoes=120.0))
+
+    # K2. [v10] giro negativo AUTOFINANCIADO — wk=-5% com o kappa 20% da base (wk + kappa = 15% >
+    # 0): a v10 CALCULA em vez de recusar. Não é recusa (fica fora da contagem I..M acima); mesma
+    # ponte de K.
     v.append(_problema_rampa({**base, "g1": 6.0, "tv": "book", "wk": -5.0, "n": 10},
                              nd_efetivo=400.0, acoes=120.0))
 
@@ -839,6 +848,28 @@ def _bloco_diag() -> list[dict]:
     v.append(_problema_diag(
         "firm", {**bf, "tv": "gordon", "roic_tv": 20.0, "gp": 4.0, "wacc": 9.0},
         moeda="BRL-real", rf=None))
+
+    # ----- [v10/v10.1] guardas de domínio e terminal dominante. diag_firm recebe da/tax do handler
+    # `ev` e ABRE a lista com as guardas; o peso do terminal vem de `ev_nopat_partes`, sem mid_year,
+    # e entra depois do bloco do gordon, antes da linha do RiR. Conferidos por chamada direta ao
+    # motor v10.1 antes de entrar aqui. -----
+
+    # 15b. d = 65% (>= 60%, < 100%) -> firm_dominio_d_overhang; o NOPAT segue positivo, então a
+    # coerência (identidade 4) ainda ecoa.
+    v.append(_problema_diag("firm", {**bf, "da": 65.0}))
+
+    # 15c. d = 100% -> firm_dominio_d_100, e NÃO a de NOPAT (essa guarda só olha d em [0, 100%)).
+    v.append(_problema_diag("firm", {**bf, "da": 100.0}))
+
+    # 15d. t = 100% -> firm_dominio_nopat: (1-d)(1-t) = 0, com a alíquota ainda DENTRO de [0, 100%].
+    v.append(_problema_diag("firm", {**bf, "tax": 100.0}))
+
+    # 15e. t = 110% -> firm_dominio_nopat E firm_dominio_t (alíquota fora de [0, 100%]), nessa ordem.
+    v.append(_problema_diag("firm", {**bf, "tax": 110.0}))
+
+    # 15f. convergencia com wacc 7% -> firm_terminal_dominante (peso do terminal ~67%); a base `bf`
+    # (book, wacc 9%) fica em ~47%, abaixo do limiar de 50%.
+    v.append(_problema_diag("firm", {**bf, "tv": "convergencia", "wacc": 7.0}))
 
     # ===== rota equity (diag_eq + guardas de Damodaran; coerência NUNCA contribui aqui) =====
 

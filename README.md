@@ -3,7 +3,7 @@
 Plugin de equity research que opera um **analista autônomo e thesis-driven**: descobre as poucas
 perguntas que determinam a tese, pesquisa a evidência onde ela estiver, e converte isso num valuation
 rigoroso, auditável e interativo. A matemática não é dele — vem de uma cópia congelada da metodologia
-`multiplos-justos` v9.31, que o fleet orquestra mas nunca reimplementa.
+`multiplos-justos` v10.1, que o fleet orquestra mas nunca reimplementa.
 
 Desenho completo e **fonte de verdade**:
 [`docs/desenho-arquitetura-v4.md`](docs/desenho-arquitetura-v4.md). Conflito entre este README e
@@ -34,7 +34,7 @@ A separação é a regra: Pesquisa & Evidência encontra; o Analista interpreta 
 ## O vendor congelado
 
 A metodologia vive em [`vendor/multiplos-justos/`](vendor/multiplos-justos/) — cópia **read-only** da
-skill de usuário `multiplos-justos` v9.31, que permanece intocada fora deste repositório. Origem,
+skill de usuário `multiplos-justos` v10.1, que permanece intocada fora deste repositório. Origem,
 data e sha256 por arquivo em
 [`skills/er-multiplos-justos/manifest_vendor.json`](skills/er-multiplos-justos/manifest_vendor.json).
 

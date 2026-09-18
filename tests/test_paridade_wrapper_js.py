@@ -170,6 +170,10 @@ def test_fixture_de_rampa_cobre_o_que_discrimina():
     assert {p["args"]["premissas"]["tv"] for p in probs
             if p["args"].get("rf") is not None and p["args"]["premissas"].get("gp", 0) > 0} >= {
         "gordon", "spread", "ic"}, "faltam as tres convencoes na fronteira de aviso_gp (gordon/spread disparam, ic nao)"
+    # [v10] giro negativo com wk + kappa > 0 e' calculado (problema K2 de _bloco_rampa); com
+    # |wk| >= kappa, recusado (problema K).
+    assert any(p["args"]["premissas"].get("wk", 0) < 0 for p, a in zip(probs, py) if not a["recusado"]), \
+        "giro negativo calculado nunca exercitado"
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +228,8 @@ def test_fixture_de_diagnostico_cobre_os_alertas():
     py = avaliar_python(_problemas({"diag"}))
     disparadas = {diagnosticos.classificar(m) for a in py for m in a["mensagens"]}
     alertas = {c["chave"] for c in CHAVES
-               if c["prefixo"].startswith(("ALERTA", "SUB-ALERTA", "INCOERÊNCIA", "DOMÍNIO"))}
+               if c["prefixo"].startswith(("ALERTA", "SUB-ALERTA", "INCOERÊNCIA", "DOMÍNIO",
+                                           "TERMINAL DOMINANTE"))}
     assert alertas <= disparadas, f"alertas nunca exercitados: {sorted(alertas - disparadas)}"
 
 

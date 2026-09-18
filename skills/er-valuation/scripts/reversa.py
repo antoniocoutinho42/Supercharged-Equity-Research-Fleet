@@ -69,6 +69,10 @@ declara (`reversa.consenso`, o confronto temporal do vendor, `references/aplicac
 que já existem e classifica o prefixo da prosa em `leitura_chave`
 (`LEITURAS_DO_NIVEL`), o mesmo padrão do degrau: chave classificada na integração,
 prosa do motor nunca exibida.
+
+Migração v10.1, Task 2 (Q2 do grill de 17/09): na rota firm com métrica EBITDA, o
+`nivel` recebe também o vetor do cenário e a D&A em moeda, e publica a leitura
+RECALCULADA (`nivel_implicito.recalculado`), a central da escada — ver `nivel_implicito`.
 """
 
 from typing import Any, Callable
@@ -201,11 +205,18 @@ _PREFIXO_DO_INTERVALO = "intervalo_para_alvo_±"
 # `MOTIVOS_DA_LEITURA`.
 LEITURAS_DO_NIVEL: tuple[str, ...] = ("antecipacao_temporal", "acima_do_consenso")
 
-# O subcomando do motor que faz a conta (justos.py, `nivel_implicito`, linhas 957-1000)
-# e os dois pontos do consenso que ele aceita, na ordem em que o caso os declara.
+# O subcomando do motor que faz a conta (justos.py, `nivel_implicito`; desde a v10.1 também
+# `nivel_recalculado`) e os dois pontos do consenso que ele aceita, na ordem em que o caso os
+# declara.
 _SUBCOMANDO_DO_NIVEL = "nivel"
 _PONTOS_DO_CONSENSO: tuple[str, ...] = ("t1", "t2")
 _SEPARADOR_DA_LEITURA = ":"
+
+# v10.1: premissas do cenário que o `nivel` do motor usa na leitura RECALCULADA (vetor travado).
+# `da` NÃO entra: `nivel` não tem `--da`, e o argparse aceitaria `--da` como abreviação de
+# `--da-absoluta` em silêncio — o encargo de reposição entra em moeda, por `--da-absoluta`.
+_PREMISSAS_DA_LEITURA_RECALCULADA: tuple[str, ...] = (
+    "tax", "g", "roic", "wacc", "n", "tv", "roic_tv", "gp", "roic_book", "mid_year")
 
 
 def alvo_de_mercado(caso: Caso, nome_cenario: str, nd_efetivo: float,
@@ -751,7 +762,7 @@ def _leitura_chave_do_nivel(saida: dict) -> str | None:
     return chave
 
 
-def nivel_implicito(caso: Caso, alvo: dict, multiplo_justo: float) -> dict:
+def nivel_implicito(caso: Caso, alvo: dict, multiplo_justo: float, premissas: dict | None = None) -> dict:
     """Reversa em degrau (fatia 5H, Task 1, D2): que NÍVEL da métrica-base o preço
     embute, dadas as taxas do cenário — `métrica_implícita = valor de mercado ÷ múltiplo
     justo` —, confrontado com o consenso de t+1/t+2 que o caso declara.
@@ -764,6 +775,19 @@ def nivel_implicito(caso: Caso, alvo: dict, multiplo_justo: float) -> dict:
     mais `leitura_chave`, a classificação do prefixo da prosa. Mesma disciplina de
     `leitura_do_eixo`: nada do motor é removido, renomeado ou reformatado, e o relatório
     lê a chave, nunca o texto.
+
+    Migração v10.1 (Task 2): com `premissas` — o vetor do cenário, que `reverter` só passa
+    na rota firm com métrica EBITDA —, a chamada leva também o segundo bloco de flags do
+    `nivel` (a D&A absoluta em `--da-absoluta` e `_PREMISSAS_DA_LEITURA_RECALCULADA`), e o
+    motor devolve, ao lado da leitura de múltiplo fixo, a RECALCULADA (`recalculado`, ou
+    `recalculado.sem_solucao`): o múltiplo refeito a cada nível, com a D&A fixa em moeda e o
+    resto do vetor travado. A recalculada é a leitura CENTRAL — e, por identidade, o
+    ponto de equilíbrio da base de lucro contra o preço. A congelada é o extremo da escada:
+    o limite superior quando o nível implícito sobe acima da métrica declarada (a D&A pesa
+    menos, o múltiplo justo sobe e o nível exigido é menor) e, quando ele desce, o extremo
+    inferior — a central fica sempre entre a métrica declarada e a congelada. As razões
+    contra o consenso e a leitura classificada continuam calculadas pelo motor sobre a
+    congelada.
 
     Sem consenso declarado, o motor não emite `razao_vs_consenso_*` nem `leitura`, e
     `leitura_chave` sai `None` — o nível implícito continua publicado, porque o degrau
@@ -782,6 +806,14 @@ def nivel_implicito(caso: Caso, alvo: dict, multiplo_justo: float) -> dict:
         ponto = consenso.get(nome)
         if ponto is not None:
             argumentos[f"consenso-{nome}"] = ponto["valor"]
+    if premissas is not None:
+        # D&A absoluta = encargo de reposição do cenário × métrica-base: álgebra de escala sobre
+        # dois números declarados (a mesma natureza de `alvo_de_mercado`), para o motor
+        # recalcular o múltiplo a cada nível com a D&A fixa em moeda.
+        argumentos["da-absoluta"] = premissas["da"] / 100.0 * caso["metrica_base"]["valor"]
+        for chave in _PREMISSAS_DA_LEITURA_RECALCULADA:
+            if premissas.get(chave) is not None:
+                argumentos[chave] = premissas[chave]
 
     saida = rodar(caso["rota"], argumentos, None, None, subcomando=_SUBCOMANDO_DO_NIVEL)
     if "erro" in saida:
@@ -874,10 +906,15 @@ def reverter(caso: Caso, nome_cenario: str, nd_efetivo: float) -> dict:
     # SEMPRE publicados ao lado do menu de eixos — o que o preço embute em NÍVEL, contra
     # o que ele embute em TAXA. Sem consenso declarado no caso, o bloco sai sem razões e
     # com `leitura_chave` nula (ver `nivel_implicito`).
+    # Migração v10.1 (Task 2): a leitura recalculada só existe na rota firm com métrica
+    # EBITDA — em ×NOPAT a D&A não entra no múltiplo, e em P/L ela não existe.
+    premissas_da_leitura_recalculada = (
+        cenario["premissas"] if rota == "firm" and caso["metrica_base"]["tipo"] == "EBITDA" else None)
     resultado: dict = {
         "alvo": alvo,
         "eixos": eixos,
-        "nivel_implicito": nivel_implicito(caso, alvo, _multiplo_justo_corrente(caso, nome_cenario)),
+        "nivel_implicito": nivel_implicito(caso, alvo, _multiplo_justo_corrente(caso, nome_cenario),
+                                           premissas_da_leitura_recalculada),
     }
 
     if _algum_eixo_primario_sem_raiz(resultado):

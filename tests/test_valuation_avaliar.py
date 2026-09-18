@@ -982,7 +982,7 @@ def test_sem_os_blocos_as_tres_leituras_saem_nulas():
 
 
 # --------------------------------------------------------------------------
-# Fatia 5G, Task 1b: as sobreposições alcançam os alvos que as dez escolhas de fato
+# Fatia 5G, Task 1b: as sobreposições alcançam os alvos que as onze escolhas de fato
 # movem — a base do lucro move a métrica, o caixa em híbrida financeira move uma linha
 # da ponte, e a hipótese terminal troca a convenção. Um alvo por teste, com o oráculo
 # montado a partir da cópia do caso.
@@ -1092,3 +1092,86 @@ def test_um_registro_que_o_motor_nao_fecha_e_recusa_nomeada(monkeypatch, saida_d
     with pytest.raises(MotorFalhou) as erro:
         _drivers_publicados({"drivers": [{"nome": "frete", "base": 40.0, "spot": 52.0, "elast": -0.15}]})
     assert nomeado in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# Migração v10.1, Task 2 (Q1 do grill de 17/09; plano docs/superpowers/plans/2026-09-17-
+# vendor-multiplos-justos-v10-1.md): a decomposição de Miller-Modigliani que o `ev` da v10.1
+# devolve — ativos instalados e valor do crescimento — sai publicada em cada cenário da rota
+# firm, íntegra. O oráculo é o próprio motor, chamado com as premissas e a escala com que
+# `precificar_firm` o chama; as rotas equity e rampa não têm o bloco.
+# --------------------------------------------------------------------------
+
+_CASOS_DA_DECOMPOSICAO = (
+    "caso_minimo_firm.json", "caso_reversa_firm.json", "caso_sotp_segmento.json",
+    "caso_minimo_equity.json", "caso_degrau.json", "caso_rampa.json",
+    # Dois cenários com vetores diferentes: o bloco de cada um é o do SEU vetor.
+    "alternativas",
+    # A mesma companhia escalada pelo NOPAT coerente: o motor roda sem escala.
+    "firm_por_nopat",
+)
+_MONTANTES_DA_DECOMPOSICAO = ("NOPAT_base", "ativos_instalados", "valor_do_crescimento")
+
+
+def _caso_da_decomposicao(nome: str) -> dict:
+    if nome == "alternativas":
+        return caso_da_variante(nome)
+    if nome == "firm_por_nopat":
+        caso = carregar(FIXTURES / "caso_minimo_firm.json")
+        caso["metrica_base"] = {"tipo": "NOPAT", "valor": 600.0, "periodo": "2025A",
+                                "fonte": "derivado do EBITDA da fixture"}
+        return caso
+    return carregar(FIXTURES / nome)
+
+
+def _decomposicao_devolvida_pelo_motor(caso: dict, nome_cenario: str) -> dict:
+    """O `decomposicao_mm` que o motor devolve pela MESMA chamada de `precificar_firm`: com a
+    métrica EBITDA, a escala inteira (`--ebitda`, `--nd`, `--acoes`); com NOPAT, sem escala."""
+    mercado = caso.get("mercado")
+    escala = None
+    if caso["metrica_base"]["tipo"] == "EBITDA":
+        escala = {"ebitda": caso["metrica_base"]["valor"],
+                  "nd": _compor_ponte(caso["ponte"])["nd_efetivo"], "acoes": caso["acoes_diluidas"]}
+    saida = _motor_rodar("firm", caso["cenarios"][nome_cenario]["premissas"], escala, caso["moeda"],
+                         rf=mercado.get("rf") if mercado else None)
+    return saida["decomposicao_mm"]
+
+
+@pytest.mark.parametrize("nome", _CASOS_DA_DECOMPOSICAO)
+def test_todo_cenario_firm_publica_a_decomposicao_do_motor_integra_e_nenhum_outro_a_publica(nome):
+    """O bloco é o do motor, chave a chave — a prosa (`identidade_ativos_instalados`,
+    `trava_de_leitura`) inclusive, que fica no `resultados.json` e nunca chega à tela. Os dois
+    termos em ×NOPAT somam o EV/NOPAT justo do PRÓPRIO cenário, e os montantes em moeda só
+    existem quando o motor recebe o EBITDA."""
+    caso = _caso_da_decomposicao(nome)
+    cenarios = avaliar(caso)["cenarios"]
+    assert cenarios, nome
+    for nome_cenario, cenario in cenarios.items():
+        if caso["rota"] != "firm":
+            assert "decomposicao_mm" not in cenario, (nome, nome_cenario)
+            continue
+        publicado = cenario["decomposicao_mm"]
+        assert publicado == _decomposicao_devolvida_pelo_motor(caso, nome_cenario), (nome, nome_cenario)
+        assert publicado["ativos_instalados_x_NOPAT"] + publicado["valor_do_crescimento_x_NOPAT"] == (
+            pytest.approx(cenario["multiplos"]["EV/NOPAT_curr"], abs=1e-3)), (nome, nome_cenario)
+        com_montantes = caso["metrica_base"]["tipo"] == "EBITDA"
+        assert [campo for campo in _MONTANTES_DA_DECOMPOSICAO if (campo in publicado) is not com_montantes] == [], (
+            nome, nome_cenario, sorted(publicado))
+
+
+def test_um_ev_sem_a_decomposicao_e_motor_falhou_nomeando_o_bloco(monkeypatch):
+    """O `ev` da v10.1 sempre devolve `decomposicao_mm`: a ausência é motor de outra versão ou saída
+    truncada, e sai como `MotorFalhou` que nomeia o bloco e ecoa os diagnósticos do motor — a mesma
+    disciplina de `_exigir_valor` —, nunca um `KeyError` cru nem um cenário publicado sem o bloco.
+    Motor mockado: a saída de um `ev` válido, sem o bloco."""
+    def _ev_sem_decomposicao(rota, premissas, escala, moeda=None, rf=None):
+        return {
+            "EV/NOPAT_curr": 11.151, "EV/NOPAT_fwd": 10.62, "EV/EBITDA_curr": 6.6906, "EV/EBITDA_fwd": 6.372,
+            "EV": 6690.59, "Equity": 6190.59, "Preco_acao": 61.91,
+            "diagnosticos": ["diagnóstico de teste do motor"],
+            "coerencia_vetor": {}, "convencao_temporal": "fim de ano",
+        }
+    monkeypatch.setattr("avaliar.rodar", _ev_sem_decomposicao)
+    with pytest.raises(MotorFalhou, match="decomposicao_mm") as excinfo:
+        avaliar(carregar(FIXTURES / "caso_minimo_firm.json"))
+    assert "diagnóstico de teste do motor" in str(excinfo.value)
