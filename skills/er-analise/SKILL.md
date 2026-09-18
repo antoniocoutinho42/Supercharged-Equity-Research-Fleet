@@ -177,6 +177,10 @@ O Analista também pesquisa — para fechar lacunas, testar hipóteses e procura
 o que acha no próprio fragmento (`evidencia/analista.json`). Toda evidência segue a doutrina do
 `er-evidencia`: a fonte mais autoritativa para cada claim, conflito nunca silenciado, contraprova
 independente para os inputs críticos, consenso buscado quando material, lacuna MATERIAL ou NÃO-MATERIAL.
+Desde a v10.1 da metodologia, o Gate 0 pede evidência que os mandatos cobrem desde o início: as rubricas de
+capex de manutenção e a amortização de arrendamento, para a contraprova de caixa do encargo de reposição; o
+fluxo de caixa operacional publicado, para o confronto do `aplicacao.md` §11.8; a série de três pontos dos
+inputs de balanço; e os betas e a alavancagem dos pares, para o beta bottom-up.
 
 **A junção do ledger.** Cada fragmento é um objeto `ledger/1` com `versao_contrato`, `registros` e
 `lacunas`. O agente entrega sem ligação com o caso; o Analista acrescenta, nos fragmentos, `usado_em` (os
@@ -327,6 +331,18 @@ Com `montar` em 0, antes de encerrar, o Analista revê o que é julgamento edito
    cross-check ou a razão da ausência e o re-teste terminal dizem a mesma coisa.
 7. **O leitor de mercado entende o corpo sem outro documento** — nenhum rótulo interno, e a razão de cada
    escolha numa frase econômica.
+8. **As obrigações de entrega da metodologia v10.1**, que o vendor exige e nenhum código decide (leia
+   `vendor/multiplos-justos/SKILL.md`, "Fluxo por tipo de pedido", e o `aplicacao.md` §5b): a decomposição
+   do valor em ativos instalados e crescimento está na entrega, e o encargo de reposição que a produz passou
+   pela contraprova de caixa (capex de manutenção declarado sobre o EBITDA), ou o gap entre as duas rotas está
+   declarado; o confronto com o caixa operacional publicado (§11.8) está feito, com o gap e o que ele contém;
+   a alíquota do terminal é a marginal, ou a efetiva com o benefício estrutural declarado; o beta é bottom-up,
+   com a regressão como confronto, e o beta construído está declarado na premissa de custo de capital; com o
+   alerta de terminal dominante, a sensibilidade ao horizonte e o viés de mortalidade estão declarados; o
+   nível implícito é lido pela leitura central quando ela está publicada; o reinvestimento é derivado por
+   perna em projeção nominal (giro pelo ciclo de caixa, com o sinal dele; fixo só pela expansão de volume),
+   e receita em queda na janela não ancora o reinvestimento observado; a deriva da alavancagem a mercado no
+   horizonte está declarada — acima de cerca de 10 p.p. de D/V, com o efeito medido pelo `apv` do motor.
 
 ## 9. Regras invioláveis
 

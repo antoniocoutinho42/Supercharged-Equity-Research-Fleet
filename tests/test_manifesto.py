@@ -5,7 +5,7 @@ import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
 
-VERSAO = "4.0.0"
+VERSAO = "4.1.0"
 
 # As cinco skills da §3.2 do desenho e o agente de tipo unico da §3.3. O vendor NAO
 # entra: ele vive em vendor/multiplos-justos/, fora de skills/, de proposito -- a
