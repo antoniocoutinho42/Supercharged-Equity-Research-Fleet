@@ -1,0 +1,52 @@
+name: Publish v6.0.0 once
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'antoniocoutinho42/Supercharged-Equity-Research-Fleet'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f17ca6744b685ef8cb53d50fa6445a2257ff1545
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate plugin
+        run: python scripts/validate-plugin.py
+
+      - name: Run Múltiplos Justos suite
+        env:
+          PYTHONUTF8: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python skills/multiplos-justos/scripts/testes.py --phase model
+          python skills/multiplos-justos/scripts/testes.py --phase cli
+
+      - name: Package clean v6
+        run: |
+          zip -r "equity-research-fleet-v6.0.0.zip" . \
+            -x '.git/*' \
+            -x '.github/*' \
+            -x '**/__pycache__/*'
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v6.0.0 >/dev/null 2>&1 && exit 0
+          gh release create v6.0.0 \
+            "equity-research-fleet-v6.0.0.zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target f17ca6744b685ef8cb53d50fa6445a2257ff1545 \
+            --title "v6.0.0" \
+            --generate-notes
