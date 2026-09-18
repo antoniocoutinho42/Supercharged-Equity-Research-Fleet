@@ -275,7 +275,7 @@
         "upside_titulo": "Leitura condicional do upside sobre o preço de mercado (sem preço-alvo)",
         "multiplo_justo_titulo": "Leitura condicional do múltiplo (sem preço-alvo)",
         "cenarios_titulo": "Leitura condicional dos cenários (sem preço-alvo)",
-        "decomposicao_mm_titulo": "Decomposição do valor, como leitura condicional: ativos instalados e crescimento",
+        "decomposicao_mm_titulo": "Leitura condicional da decomposição do valor em ativos instalados e crescimento (sem preço-alvo)",
         "matriz_titulo": "Leitura condicional da sensibilidade no cenário '{cenario}': {y} × {x} (sem preço-alvo)",
         "multiplo_justo_forward_titulo": "Leitura condicional do múltiplo forward (sem preço-alvo)",
         "formacao_multiplos_titulo": "Leitura condicional dos múltiplos que o cenário publica (sem preço-alvo)",
