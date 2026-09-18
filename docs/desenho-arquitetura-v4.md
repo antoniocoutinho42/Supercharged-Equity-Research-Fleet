@@ -280,7 +280,7 @@ São eixos **separados**. Combinação de escolha metodológica não vira cenár
   é **dinâmico**: a escolha aparece no nível principal quando o gatilho dela disparou (fronteira de
   consolidação com minoritários acima do limiar; leitura de capacidade com o Gate 3 disparado; caixa/E
   em híbrida financeira; ano de capex quando `d` econômico ≠ contábil); as demais ficam em avançado.
-  Nenhuma dogmatização de "as dez" na interface.
+  Nenhuma dogmatização de "as onze" na interface.
 - **Retorno exigido (hurdle)**: preservado, redefinido como reversa — "que valor resulta se eu exigir
   retorno de X%?". Rotulado, secundário, jamais chamado de fair value nem tratado como quarto cenário.
 
