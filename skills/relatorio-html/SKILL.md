@@ -12,6 +12,8 @@ description: >-
 
 Esta skill cuida da **forma**. O conteúdo e o investment judgment pertencem ao `er-analise`; a metodologia pertence a `multiplos-justos`.
 
+Exceção de escopo: o `/anexo-financeiro` usa esta skill para o HTML do anexo sem exigir tese e valuation auditados. O anexo não é initiating coverage e não carrega laboratório.
+
 ## Princípios
 
 - A forma serve ao achado central. Não existe número padrão de abas, capítulos, tabelas ou gráficos.

@@ -9,6 +9,7 @@ Quando material ao caso, o leitor deve conseguir encontrar no relatório ou em a
 - premissas decisivas com derivação compreensível;
 - ligação causal entre drivers do mundo real, economia da companhia e inputs;
 - valor/base case e faixa de cenários coerentes;
+- a ponte entre valor operacional e valor por ação, com os claims de terceiros e a dívida, e o cenário de cada instrumento material quando o gate de research tiver disparado;
 - o que o preço atual embute por reverse valuation, traduzido para observáveis do negócio;
 - sensibilidades e pontos de virada das premissas decisivas;
 - decomposição de Miller-Modigliani entre ativos instalados, crescimento e terminal, quando aplicável;

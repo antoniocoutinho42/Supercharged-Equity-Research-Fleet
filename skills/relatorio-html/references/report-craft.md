@@ -47,11 +47,16 @@ arquivo, não o conteúdo (a régua está em `skills/er-analise/references/initi
 - Não trunque eixo para dramatizar variação pequena. Não use gráfico com dois
   ou três pontos.
 - Elementos úteis, quando couberem: faixa de indicadores no topo, cartões de
-  debate (a tese do mercado, a sua leitura, o que resolve), tabela de decisões
-  do management com leitura e teste, linha do tempo de catalisadores, quadro
-  "precisa acontecer para o retorno ser excepcional" contra "o que leva à
-  decepção", painel de monitoramento com níveis de alerta. São ideias, não
-  lista de presença.
+  debate (a tese do mercado, a sua leitura, o que resolve), cartões de perfil
+  dos decisores, ledger de decisões de alocação com contexto, preço, promessa,
+  resultado e efeito por ação, cascata do valor operacional aos claims e ao
+  valor por ação, sequência de eventos do bear case com gatilhos, linha do
+  tempo de catalisadores, quadro "precisa acontecer para o retorno ser
+  excepcional" contra "o que leva à decepção", painel de monitoramento com
+  níveis de alerta. São ideias, não lista de presença.
+- Anexo financeiro histórico, quando existir: aba final ou arquivo separado
+  com link, com definições e notas de comparabilidade. Ele não entra na
+  narrativa; a narrativa cita dele o que ensina.
 
 ## O laboratório dentro do arquivo
 

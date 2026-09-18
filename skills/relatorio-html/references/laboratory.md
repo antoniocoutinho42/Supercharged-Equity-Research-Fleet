@@ -29,7 +29,7 @@ Cada driver material tem valor base, faixa plausível e fonte. Quando houver sen
 
 ## Reconciliação
 
-JavaScript fica no próprio HTML, sem rede. Quando reproduzir uma conta coberta por `justos.py`, o laboratório deve reconciliar com os outputs canônicos nos presets publicados. O valuation canônico continua sendo o motor; o JavaScript é interface.
+JavaScript fica no próprio HTML, sem rede. Quando reproduzir uma conta coberta por `justos.py`, o laboratório deve reconciliar com os outputs canônicos nos presets publicados. Ajustes materiais calculados fora do motor (excesso transitório, claims, cenários contratuais) também reconciliam com os artefatos canônicos, e o laboratório declara quais componentes recalcula e quais mantém fixos. O valuation canônico continua sendo o motor; o JavaScript é interface.
 
 Os números citados na prosa devem ser exatamente os calculados pelo preset correspondente.
 
