@@ -46,7 +46,15 @@ salvo a limitação que muda a conclusão, dita em uma frase.
 ## O negócio
 
 - Como ganha dinheiro: o que vende, para quem, por que o cliente paga e por
-  que continua pagando. Economia unitária quando houver.
+  que continua pagando. Economia unitária quando houver. A cadeia inteira,
+  explicada: demanda → receita → lucro → retorno sobre capital → valor por
+  ação.
+- Por que os números são o que são: o que especificamente cresceu (preço,
+  volume, mix, unidades, capital novo, aquisição) e por quê; o que moveu a
+  margem e o retorno (custo, escala, utilização, mix, giro, barganha,
+  intensidade competitiva); o que é estrutural e o que é cíclico. "Receita
+  cresceu 8%" não é análise; "volume +5% por X, preço −3% por Y, e X depende
+  de Z" é.
 - A companhia por dentro: cada segmento por receita, lucro, capital empregado,
   retorno e geração de caixa. Onde está o lucro econômico e onde está só o
   volume.
@@ -59,7 +67,10 @@ salvo a limitação que muda a conclusão, dita em uma frase.
 ## Indústria e ciclo
 
 - Estrutura: barreiras, rivalidade, concentração, poder de clientes e
-  fornecedores, substitutos.
+  fornecedores, substitutos, ciclo de capital, curva de custo. A pergunta é
+  sempre o que essa estrutura implica para crescimento, margem, retorno
+  incremental e duração da vantagem. Não descreva o mercado; explique o que
+  ele faz com a economia da companhia.
 - Onde estamos no ciclo, e o que é normal. Em negócio cíclico, a história
   precisa atravessar pelo menos um ciclo inteiro, e a base de lucro usada no
   valuation precisa ser defendida contra o nível corrente.
@@ -90,11 +101,16 @@ salvo a limitação que muda a conclusão, dita em uma frase.
 
 ## Management e alocação de capital
 
-O leitor precisa sair com um veredicto sobre quem manda.
+O leitor precisa sair com um veredicto sobre quem manda, com nome e fatos.
 
-- Decisão a decisão: o que foi feito (aquisições, desinvestimentos, recompras
-  e a que preço, dividendos, capex, alavancagem), a sua leitura, e o teste
-  objetivo que dirá se foi boa.
+- Quem decide: perfis curtos de CEO, CFO, chairman ou controlador quando
+  relevante, e dos executivos responsáveis pelos drivers da tese. Formação,
+  trajetória, tempo de casa, escopo, incentivos e a evidência de competência
+  que o histórico permite afirmar. Nada de adjetivo sem decisão que o sustente.
+- Decisão a decisão: contexto e alternativas, o que foi feito (aquisições,
+  desinvestimentos, recompras e a que preço, dividendos, capex, emissões,
+  alavancagem), capital comprometido, promessa original, resultado, efeito por
+  ação, e a sua leitura separando processo de sorte.
 - Credibilidade: o que prometeram e o que entregaram.
 - Incentivos e governança: remuneração e a que métrica está atrelada,
   estrutura de controle, conselho, sucessão, base acionária, defesas.
@@ -122,6 +138,20 @@ O leitor precisa sair com um veredicto sobre quem manda.
 - O laboratório interativo, com os drivers do negócio (ver
   `skills/multiplos-justos/references/core/routes.md` e a skill `relatorio-html`).
 - O cenário "ótima companhia, investimento ruim", quando couber.
+
+## Onde se perde dinheiro
+
+- O que fica entre o valor operacional e o acionista: dívida com o seu perfil
+  (origem, custo, moeda, vencimentos, covenants, liquidez), claims de
+  terceiros, contratos e instrumentos que sustentam o valor, contingências,
+  garantias e obrigações. Cada item material com efeito por ação e a
+  localização no valuation. Só o que é material entra; a varredura completa
+  fica na memória técnica.
+- Instrumento material (JV, concessão, contrato, subsidiária com sócio):
+  o que pertence economicamente à companhia e o valor nos estados plausíveis,
+  incluindo o encerramento com os direitos residuais.
+- A sequência plausível de eventos que causa perda permanente, com o gatilho
+  observável de cada etapa. Se não houver, diga por que, com a conta feita.
 
 ## Riscos
 
@@ -166,3 +196,9 @@ Releia o relatório como alguém que nunca ouviu falar da companhia:
 9. O relatório me disse o que não sabe?
 10. Se eu trocasse o nome da empresa pelo de um concorrente, o texto
     continuaria fazendo sentido? Se sim, está genérico demais.
+11. Entendi por que receita, margem e retorno evoluíram como evoluíram, e não
+    só que evoluíram?
+12. Sei onde posso perder dinheiro de forma não óbvia (contrato, claim, dívida,
+    contingência), e qual sequência de eventos levaria à perda permanente?
+13. Cada afirmação forte ("management excelente", "não há ruína", "recompra
+    boa") tem a decisão ou a conta que a sustenta?
