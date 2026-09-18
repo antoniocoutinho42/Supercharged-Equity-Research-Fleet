@@ -152,7 +152,7 @@ def test_chaves_de_topo_do_catalogo():
         "leituras_do_nivel", "teto_do_crescimento_gratuito", "teto_da_alavanca",
         "escalas_monetarias", "formacao_do_valor",
         "variaveis_do_triangulo", "anos_base_do_capex", "escolhas_metodologicas",
-        "suite_da_metodologia", "gates", "linguagem_interna", "decomposicao_mm",
+        "suite_da_metodologia", "gates", "linguagem_interna", "decomposicao_mm", "nivel_implicito",
     }
 
 
@@ -807,6 +807,22 @@ def test_toda_leitura_do_nivel_publicada_pelas_variantes_tem_rotulo_no_catalogo(
         assert chave is None or chave in CAT["leituras_do_nivel"], (nome, chave)
         vistas.add(chave)
     assert vistas - {None}, f"nenhuma leitura do nível publicada: {vistas}"
+
+
+def test_a_nota_do_nivel_implicito_existe_em_todo_idioma_e_o_nivel_recalculado_e_publicado():
+    """Migração v10.1 (onda da revisão final, I2): a condição de leitura das duas leituras do nível
+    implícito — a configuração da central, o múltiplo fixo que exagera o degrau, a terceira leitura
+    que o relatório não calcula, a condição de validade e o ponto de equilíbrio — é texto de
+    metodologia, e mora no catálogo como a nota da decomposição. A nota só tem uso com a leitura
+    recalculada publicada, e alguma fixture ou variante a publica — senão a seção ficaria órfã."""
+    secao = CAT["nivel_implicito"]
+    assert set(secao) == {"nota"}, sorted(secao)
+    for idioma in CAT["idiomas"]:
+        assert secao["nota"].get(idioma, "").strip(), idioma
+    com_recalculado = [nome for nome in CASOS_E_VARIANTES
+                       if "recalculado" in ((_caso_e_resultados(nome)[1].get("reversa") or {}).get("nivel_implicito")
+                                            or {})]
+    assert com_recalculado, "nenhuma fixture publica a leitura recalculada — a nota ficaria sem uso"
 
 
 def test_teto_do_crescimento_gratuito_tem_rotulo_e_texto_em_todo_idioma():

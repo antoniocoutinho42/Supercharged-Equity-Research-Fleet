@@ -712,3 +712,33 @@ def test_sem_a_metrica_ebitda_da_rota_firm_o_nivel_so_tem_a_leitura_congelada(ca
     nivel = reverter(c, "base", nd_efetivo)["nivel_implicito"]
     assert nivel["metrica_base_implicita"] > 0
     assert {"recalculado", "recalculado_nota"} & set(nivel) == set()
+
+
+# Onda da revisão final (I3): duas variantes NÃO degeneradas do cenário de `caso_reversa_firm.json`. A da
+# fixture, sob 'gordon' com a rentabilidade terminal igual ao WACC, é degenerada para este teste: o termo
+# terminal fica independente de `gp`, e um `gp` perdido no caminho até o `nivel` não mudaria número nenhum.
+_VETORES_NAO_DEGENERADOS = [
+    pytest.param({"tv": "gordon", "roic_tv": 15.0, "gp": 3.0, "mid_year": True}, id="gordon_meio_de_periodo"),
+    pytest.param({"tv": "book", "roic_book": 9.0, "roic_tv": None, "gp": None}, id="book_com_roic_book"),
+]
+
+
+@pytest.mark.parametrize("sobreposicoes", _VETORES_NAO_DEGENERADOS)
+def test_a_leitura_central_usa_o_vetor_inteiro_do_cenario(sobreposicoes):
+    """Com a D&A fixa em moeda, o valor no nível M é `múltiplo(d(M)) × M = k × (M − D&A)`: linear em M,
+    com a inclinação k que só o vetor do cenário dá. A leitura central fecha o preço nessa reta e a de
+    múltiplo fixo, na reta do múltiplo de EBITDA do cenário; as duas são o mesmo k, e por isso vale
+    exatamente `limite − base = (central − base) ÷ (1 − da/100)` — se, e só se, o vetor que o wrapper
+    manda ao `nivel` é o do cenário. Uma premissa perdida no caminho (o `gp`, o meio de período, o ROIC
+    médio da convenção book) muda o k da central e quebra a igualdade por dezenas de unidades. A
+    tolerância é o arredondamento de duas casas das duas leituras e de quatro do múltiplo que o motor
+    publica."""
+    c = _caso()
+    c["cenarios"]["base"]["premissas"].update(sobreposicoes)
+    c["reversa"]["eixos"] = ["custo_capital"]  # o eixo obrigatório: o nível não depende dos outros
+    validar(c)
+    nivel = reverter(c, "base", 500.0)["nivel_implicito"]
+    base, limite = c["metrica_base"]["valor"], nivel["metrica_base_implicita"]
+    central = nivel["recalculado"]["metrica_base_implicita_recalculada"]
+    da = c["cenarios"]["base"]["premissas"]["da"]
+    assert limite - base == pytest.approx((central - base) / (1 - da / 100), abs=0.02)

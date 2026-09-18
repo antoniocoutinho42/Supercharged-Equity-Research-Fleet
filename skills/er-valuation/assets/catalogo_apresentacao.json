@@ -1135,7 +1135,7 @@
       "pt-BR": "Teto do crescimento gratuito"
     },
     "texto": {
-      "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. Nenhuma hipótese de crescimento pago chega a este múltiplo; a distância entre ele e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
+      "pt-BR": "Caso-limite em que o crescimento não consome capital (reinvestimento terminal tendendo a zero): todo o lucro operacional vira caixa livre e o valor colapsa numa perpetuidade pura. O teto vale para o crescimento declarado — um crescimento maior o desloca para cima —, e só quando nenhuma taxa de crescimento dentro dos limites declarados reproduz o preço é lícito dizer que nenhuma hipótese de taxa o explica; então a explicação está no nível da métrica-base, em valor que fica fora do fluxo de caixa ou no denominador, nunca em irracionalidade do mercado. A distância entre o teto e o múltiplo do caso-base é o preço que o mercado paga pela hipótese de que o crescimento não consome capital."
     }
   },
   "teto_da_alavanca": {
@@ -1423,7 +1423,7 @@
   },
   "decomposicao_mm": {
     "nota": {
-      "pt-BR": "Ativos instalados é o valor sem crescimento nenhum; o valor do crescimento é o restante. A leitura só vale se o encargo de reposição medir a reposição de verdade: com o encargo subdimensionado, o lucro está superestimado e os ativos instalados herdam o erro. Nas convenções de convergência e gordon os ativos instalados são exatamente um sobre o custo de capital; na convenção book dependem do retorno médio do capital existente."
+      "pt-BR": "Ativos instalados é o valor sem crescimento nenhum; o valor do crescimento é o restante. A leitura só vale se o encargo de reposição medir a reposição de verdade: com o encargo subdimensionado, o lucro está superestimado e os ativos instalados herdam o erro. Nas convenções de convergência e gordon os ativos instalados são exatamente um sobre o custo de capital na convenção de fluxo no fim do ano — com a de meio de período, vezes o fator dela —; na convenção book dependem do retorno médio do capital existente."
     },
     "campos": {
       "ativos_instalados_x_NOPAT": {
@@ -1450,6 +1450,11 @@
         },
         "unidade": "pp"
       }
+    }
+  },
+  "nivel_implicito": {
+    "nota": {
+      "pt-BR": "A leitura central mantém fixos o crescimento e o retorno do capital novo, e só o encargo de reposição — a depreciação, fixa em moeda, como fração da métrica — responde ao nível. Manter também o múltiplo fixo exagera o degrau nos dois sentidos: dá o limite superior quando o preço pede nível acima do declarado, e o inferior quando pede abaixo. A escada tem ainda uma terceira leitura, que este relatório não calcula: com o retorno do capital novo também derivado do nível (intensidade de capital constante), o degrau exigido encolhe ainda mais. As leituras valem para nível que vem de margem ou de preço; se ele vem de volume, a depreciação acompanha o nível e as leituras convergem. A leitura central é também o ponto de equilíbrio da base de lucro contra o preço."
     }
   },
   "conclusoes_de_valor": {

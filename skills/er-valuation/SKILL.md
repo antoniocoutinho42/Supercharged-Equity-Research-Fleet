@@ -44,18 +44,22 @@ normaliza saída.
   corrente, conta do subcomando `nivel` do motor), e como esse nível se
   confronta com o consenso de t+1/t+2 que o caso declara. A saída do motor vai
   íntegra — `metrica_base_atual`, `metrica_base_implicita`,
-  `fator_k_implicito`, `degrau_implicito_%`, `razao_vs_consenso_t1`/`_t2` e a
-  prosa `leitura` — mais `leitura_chave`, a classificação do prefixo dessa
-  prosa (`reversa.LEITURAS_DO_NIVEL`: `antecipacao_temporal` até 125% do maior
-  consenso declarado, `acima_do_consenso` acima disso). Sem consenso no caso
-  não há razões nem leitura, e `leitura_chave` sai `null`. O relatório lê a
-  chave e o rótulo do catálogo, nunca a prosa do motor. Desde a v10.1, na rota
-  `firm` com métrica `EBITDA`, a mesma chamada leva o vetor do cenário e a D&A
-  em moeda (`--da-absoluta` = `da` × métrica-base), e o motor publica também a
-  leitura **recalculada** (`recalculado`): o múltiplo refeito a cada nível, com a
-  D&A fixa em moeda e o resto do vetor travado — a leitura central da escada, e o
-  ponto de equilíbrio da base de lucro contra o preço. A de múltiplo fixo vira o
-  extremo da escada.
+  `fator_k_implicito`, `degrau_implicito_%`, `razao_vs_consenso_t1`/`_t2` e as
+  prosas `leitura` e, desde a v10.1, `leitura_congelada` — mais `leitura_chave`,
+  a classificação do prefixo da prosa `leitura` (`reversa.LEITURAS_DO_NIVEL`:
+  `antecipacao_temporal` até 125% do maior consenso declarado,
+  `acima_do_consenso` acima disso). Sem consenso no caso não há razões nem
+  leitura, e `leitura_chave` sai `null`. Desde a v10.1, na rota `firm` com
+  métrica `EBITDA`, a mesma chamada leva o vetor do cenário e a D&A em moeda
+  (`--da-absoluta` = `da` × métrica-base), e o motor publica também a leitura
+  **recalculada**: o bloco `recalculado`, íntegro — os números e a prosa
+  `configuracao_do_triangulo`, ou só a prosa `sem_solucao` —, com a prosa
+  `recalculado_nota` ao lado. É o múltiplo refeito a cada nível, com a D&A fixa
+  em moeda e o resto do vetor travado — a leitura central da escada, e o ponto de
+  equilíbrio da base de lucro contra o preço; a de múltiplo fixo exagera o degrau
+  nos dois sentidos, e é sobre ela que o motor calcula as razões e a leitura do
+  confronto. Toda essa prosa fica no `resultados.json` e nunca chega à tela: o
+  relatório lê os números, a chave e os textos do catálogo e do dicionário.
 - **Grades de sensibilidade** — constrói, célula a célula no motor, as
   grades 1D e 2D de preço por ação que o caso declarar. Cada célula é um
   subprocesso do motor — a soma de células declaradas (`grades_1d` +
@@ -345,7 +349,11 @@ convenção que já mora aqui):
   `{sem_solucao}` quando nenhum nível explica o preço sob o vetor; ao lado, a
   prosa `recalculado_nota`. O wrapper manda ao `nivel` o vetor do cenário e
   `--da-absoluta` = `da` × métrica-base — a D&A em moeda, álgebra de escala sobre
-  dois números declarados, como a do alvo de mercado.
+  dois números declarados, como a do alvo de mercado. Com a D&A fixa em moeda, o
+  valor no nível é linear nele, e a leitura de múltiplo fixo sai da central por
+  `limite − base = (central − base) ÷ (1 − da/100)` quando o vetor é o do cenário:
+  `tests/test_valuation_reversa.py` prende essa igualdade em vetores não
+  degenerados, e um vetor com premissa perdida a quebra.
 - `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
   grade de sensibilidade) — a chave pública de cada mensagem do motor
   (`diagnosticos.classificar`), paralela a `diagnosticos`/
@@ -449,7 +457,10 @@ número); e o rótulo das variáveis do triângulo que não são premissa
 chave da conservação de capital que não fecha; e o rótulo e o gatilho descrito de
 cada escolha metodológica — `escolhas_metodologicas`, as onze do gate; e, da
 decomposição de Miller-Modigliani, a nota de leitura e os campos que a tela mostra,
-cada um com rótulo e unidade — `decomposicao_mm`)
+cada um com rótulo e unidade — `decomposicao_mm`; e a nota de leitura das duas
+leituras do nível implícito — `nivel_implicito`: a configuração da central, o
+múltiplo fixo que exagera o degrau, a terceira leitura da escada que o relatório não
+calcula, a condição de validade e o ponto de equilíbrio)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em

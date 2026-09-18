@@ -1157,3 +1157,21 @@ def test_todo_cenario_firm_publica_a_decomposicao_do_motor_integra_e_nenhum_outr
         com_montantes = caso["metrica_base"]["tipo"] == "EBITDA"
         assert [campo for campo in _MONTANTES_DA_DECOMPOSICAO if (campo in publicado) is not com_montantes] == [], (
             nome, nome_cenario, sorted(publicado))
+
+
+def test_um_ev_sem_a_decomposicao_e_motor_falhou_nomeando_o_bloco(monkeypatch):
+    """O `ev` da v10.1 sempre devolve `decomposicao_mm`: a ausência é motor de outra versão ou saída
+    truncada, e sai como `MotorFalhou` que nomeia o bloco e ecoa os diagnósticos do motor — a mesma
+    disciplina de `_exigir_valor` —, nunca um `KeyError` cru nem um cenário publicado sem o bloco.
+    Motor mockado: a saída de um `ev` válido, sem o bloco."""
+    def _ev_sem_decomposicao(rota, premissas, escala, moeda=None, rf=None):
+        return {
+            "EV/NOPAT_curr": 11.151, "EV/NOPAT_fwd": 10.62, "EV/EBITDA_curr": 6.6906, "EV/EBITDA_fwd": 6.372,
+            "EV": 6690.59, "Equity": 6190.59, "Preco_acao": 61.91,
+            "diagnosticos": ["diagnóstico de teste do motor"],
+            "coerencia_vetor": {}, "convencao_temporal": "fim de ano",
+        }
+    monkeypatch.setattr("avaliar.rodar", _ev_sem_decomposicao)
+    with pytest.raises(MotorFalhou, match="decomposicao_mm") as excinfo:
+        avaliar(carregar(FIXTURES / "caso_minimo_firm.json"))
+    assert "diagnóstico de teste do motor" in str(excinfo.value)
