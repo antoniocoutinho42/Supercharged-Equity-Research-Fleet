@@ -6,6 +6,10 @@ ROOT = Path(__file__).resolve().parents[1]
 required = [
     '.claude-plugin/plugin.json', '.claude-plugin/marketplace.json',
     'commands/analisar.md', 'commands/leitura-de-preco.md', 'commands/revisar-relatorio.md',
+    'commands/anexo-financeiro.md',
+    'skills/er-analise/references/economia-do-negocio.md',
+    'skills/er-analise/references/direitos-obrigacoes-e-perda.md',
+    'skills/er-analise/references/historico-financeiro.md',
     'skills/er-analise/SKILL.md', 'skills/multiplos-justos/SKILL.md', 'skills/relatorio-html/SKILL.md',
     'agents/pesquisador.md', 'agents/operador-mj.md', 'agents/auditor-mj.md',
     'agents/verificador.md', 'agents/revisor-comite.md',
@@ -28,10 +32,13 @@ if not entries or entries[0].get('version') != version:
 er=(ROOT/'skills/er-analise/SKILL.md').read_text(encoding='utf-8').lower()
 if 'não pode ser substituída silenciosamente por comparáveis ou dcf genérico' not in er:
     raise SystemExit('ER skill lost mandatory MJ guardrail')
+for token in ['teste de "entendido"', 'direitos e obrigações econômicas materiais', 'resiliência financeira']:
+    if token not in er:
+        raise SystemExit(f'ER skill lost v6.1 research guardrail: {token}')
 route=(ROOT/'skills/multiplos-justos/references/core/routes.md').read_text(encoding='utf-8').lower()
 for token in ['finite-life / reserve nav','holding / sotp','multi-segment','transition / releveraging']:
     if token not in route:
         raise SystemExit(f'Missing MJ internal route: {token}')
 
 subprocess.run([sys.executable, str(ROOT/'skills/multiplos-justos/scripts/justos.py'), 'selftest'], check=True, cwd=ROOT)
-print(f'OK equity-research-fleet {version}: structure, manifests, MJ guardrails and justos.py selftest')
+print(f'OK equity-research-fleet {version}: structure, manifests, MJ and research guardrails, justos.py selftest')
