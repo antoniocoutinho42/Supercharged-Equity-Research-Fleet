@@ -9,6 +9,8 @@ Envie:
 - caminho do `investment-thesis.md`;
 - memos/fontes que sustentam as premissas materiais;
 - questões ainda abertas que podem mover valor;
+- o bloco "fora da cadeia aparente" do economic map (claims, instrumentos, dívida) e o status dos gates de research;
+- os resultados da conta exploratória, se houver, e as questões que ela tornou decisivas;
 - restrições específicas do pedido do usuário.
 
 Não envie uma lista pronta de inputs como substituto do economic map.
@@ -19,7 +21,8 @@ O operador pode:
 - propor derivação e faixa para premissas;
 - identificar inconsistências econômicas;
 - pedir pesquisa adicional;
-- executar o motor e diagnósticos.
+- executar o motor e diagnósticos;
+- rodar uma conta exploratória rotulada, a pedido, antes do teste de "entendido".
 
 O operador não pode:
 

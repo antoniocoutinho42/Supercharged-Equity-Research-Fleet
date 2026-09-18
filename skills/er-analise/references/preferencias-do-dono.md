@@ -21,7 +21,12 @@ Use quando agregarem à companhia em análise. Não são seções obrigatórias.
 
 - **Preço contra valor:** o veredicto usa a linguagem barato, justo ou caro,
   contra a faixa de valor.
-- **Risco de ruína:** separar o irreversível do reversível, com mitigantes.
+- **Não perder dinheiro vem antes de ganhar muito:** na dúvida entre
+  aprofundar o upside e aprofundar um downside irreversível, aprofunde o
+  downside. Isso não é veto a cíclicas ou alavancadas; é ordem de prioridade
+  da pesquisa.
+- **Risco de ruína:** separar o irreversível do reversível, com mitigantes,
+  e a sequência de eventos que levaria a ela.
 - **Ótica de dono e longa duração:** qualidade do negócio, moat de legado
   contra moat de reinvestimento, retorno do capital incremental, composição de
   valor por ação. Boa empresa não é o mesmo que bom investimento.
@@ -34,6 +39,11 @@ Use quando agregarem à companhia em análise. Não são seções obrigatórias.
 - **Companhia brasileira:** considerar CVM, B3, regras tributárias locais e
   estrutura societária típica (controle, acordo de acionistas, partes
   relacionadas).
+
+## Entrega
+
+- Anexo financeiro histórico: oferecer em uma linha na entrega quando a série
+  tiver sido reconstruída, sem perguntar no meio da análise.
 
 ## Restrição de investimento
 
