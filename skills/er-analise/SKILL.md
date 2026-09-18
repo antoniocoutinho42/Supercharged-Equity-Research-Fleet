@@ -264,13 +264,16 @@ registro é recusada (`suite_da_metodologia_nao_passou`). Rode a suíte em toda 
 persiste significa vendor ou ambiente quebrados: pare e reporte; **o vendor é read-only**, e editar a cópia
 congelada é o que a suíte existe para pegar.
 
-**`montar`** compõe `entrega.json` das partes da raiz e roda o builder, devolvendo o código dele:
+**`montar`** compõe `entrega.json` das partes da raiz e roda o builder, devolvendo o código dele. Antes
+de compor, recusa com código 1 um `resultados.json` de outra versão da metodologia que a do catálogo
+desta instalação (`catalogo.metodologia.versao`), nomeando as duas — rode
+`skills/er-valuation/scripts/avaliar.py` de novo sobre o caso. Os códigos:
 
 | Código | Significado | O que fazer |
 |---|---|---|
 | `0` | emitido: `relatorio.html`, `qc.json`, `ficha-tecnica.json` | triar os achados do `qc.json` e fazer o checklist |
 | `2` | HARD FAIL: só `qc.json`, nada emitido | corrigir na origem e montar de novo |
-| `1` | recusa de forma, ou raiz sem uma parte: nada emitido | ler a mensagem, que nomeia o campo ou o arquivo |
+| `1` | recusa de forma, raiz sem uma parte ou resultados de outra versão da metodologia: nada emitido | ler a mensagem, que nomeia o campo, o arquivo ou as duas versões |
 
 Código diferente de 0 é "nada publicável nesta raiz": um `relatorio.html` só vale se o último `montar`
 devolveu 0.
@@ -332,17 +335,42 @@ Com `montar` em 0, antes de encerrar, o Analista revê o que é julgamento edito
 7. **O leitor de mercado entende o corpo sem outro documento** — nenhum rótulo interno, e a razão de cada
    escolha numa frase econômica.
 8. **As obrigações de entrega da metodologia v10.1**, que o vendor exige e nenhum código decide (leia
-   `vendor/multiplos-justos/SKILL.md`, "Fluxo por tipo de pedido", e o `aplicacao.md` §5b): a decomposição
-   do valor em ativos instalados e crescimento está na entrega, e o encargo de reposição que a produz passou
-   pela contraprova de caixa (capex de manutenção declarado sobre o EBITDA), ou o gap entre as duas rotas está
-   declarado; o confronto com o caixa operacional publicado (§11.8) está feito, com o gap e o que ele contém;
-   a alíquota do terminal é a marginal, ou a efetiva com o benefício estrutural declarado; o beta é bottom-up,
-   com a regressão como confronto, e o beta construído está declarado na premissa de custo de capital; com o
-   alerta de terminal dominante, a sensibilidade ao horizonte e o viés de mortalidade estão declarados; o
-   nível implícito é lido pela leitura central quando ela está publicada; o reinvestimento é derivado por
-   perna em projeção nominal (giro pelo ciclo de caixa, com o sinal dele; fixo só pela expansão de volume),
-   e receita em queda na janela não ancora o reinvestimento observado; a deriva da alavancagem a mercado no
-   horizonte está declarada — acima de cerca de 10 p.p. de D/V, com o efeito medido pelo `apv` do motor.
+   `vendor/multiplos-justos/SKILL.md`, "Fluxo por tipo de pedido", e o `aplicacao.md` §5b):
+   - **decomposição do valor**: a decomposição em ativos instalados e crescimento está na entrega, e o
+     encargo de reposição que a produz passou pela contraprova de caixa (capex de manutenção declarado
+     sobre o EBITDA), ou o gap entre as duas rotas está declarado; nas rotas equity e rampa o motor não
+     emite a decomposição — a limitação está declarada, e a decomposição nunca é calculada à mão;
+   - **conservação de capital**: a verificação do §11.1b do `aplicacao.md` é obrigatória em toda valuation
+     de companhia real desde a v10 — necessária, não suficiente —, e o caso declara o bloco de conservação
+     de capital;
+   - **alertas do motor**: todo alerta das rodadas do caso-base foi lido na íntegra no resultado do motor —
+     a tela mostra só o rótulo — e incorporado como premissa ou declarado com a razão; com o encargo de
+     reposição acima de 60% do EBITDA, a conservação de capital deixa de ser opcional e a base de lucro é
+     confrontada com o nível normalizado; com lucro operacional após imposto não positivo, o cenário não tem
+     múltiplo justo e a fronteira de escopo está declarada; com o alerta de terminal dominante, a
+     sensibilidade ao horizonte e o viés de mortalidade estão declarados;
+   - o confronto com o caixa operacional publicado (§11.8) está feito, com o gap e o que ele contém;
+   - a alíquota do terminal é a marginal, ou a efetiva com o benefício estrutural declarado;
+   - o beta é bottom-up, com a regressão como confronto, e o beta construído está declarado na premissa de
+     custo de capital;
+   - **nível implícito**: lido pela leitura central quando ela está publicada, declarando a configuração
+     (vetor travado: crescimento e retorno do capital novo fixos, e só o encargo de reposição responde ao
+     nível), a terceira leitura da escada — com o retorno também derivado do nível, a intensidade de
+     capital constante; o piso, quando o nível sobe — como não calculada, e a condição de validade (nível
+     que vem de margem ou de preço; se vem de volume, a depreciação escala com o nível e as leituras
+     convergem); o confronto contra o consenso fica ancorado na leitura de múltiplo fixo, sobre a qual o
+     motor calcula as razões e a leitura;
+   - **break-even das quatro premissas fixas**: rentabilidade marginal, crescimento e custo de capital pelos
+     eixos da reversa, e a base de lucro pela leitura central do nível, cada um com a distância até o
+     adotado; o eixo cujo break-even cai dentro da banda de sensibilidade declarada marca o veredicto como
+     frágil naquele eixo, com todas as letras; e a decomposição do gap contra o preço-alvo do consenso —
+     qual variável, sozinha, leva do vetor próprio ao alvo do consenso —, ou a lacuna declarada quando não
+     houver cobertura;
+   - o reinvestimento é derivado por perna em projeção nominal (giro pelo ciclo de caixa, com o sinal dele;
+     fixo só pela expansão de volume), e receita em queda na janela não ancora o reinvestimento observado;
+   - **deriva de D/V**: a deriva da alavancagem a mercado no horizonte está declarada — acima de cerca de
+     10 p.p. de D/V, com o efeito medido pelo `apv` do motor, rodado pela CLI do vendor e citado na prosa
+     como número livre com a proveniência, ou declarada como limitação.
 
 ## 9. Regras invioláveis
 

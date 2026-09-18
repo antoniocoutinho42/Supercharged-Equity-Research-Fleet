@@ -279,7 +279,8 @@ São eixos **separados**. Combinação de escolha metodológica não vira cenár
   razão econômica, e alerta quando várias são empilhadas na mesma direção dentro do caso-base. O painel
   é **dinâmico**: a escolha aparece no nível principal quando o gatilho dela disparou (fronteira de
   consolidação com minoritários acima do limiar; leitura de capacidade com o Gate 3 disparado; caixa/E
-  em híbrida financeira; ano de capex quando `d` econômico ≠ contábil); as demais ficam em avançado.
+  em híbrida financeira; ponto do ciclo dos inputs de capital quando os do ano corrente divergem da média
+  da série de três pontos ou do estado estacionário do guidance); as demais ficam em avançado.
   Nenhuma dogmatização de "as onze" na interface.
 - **Retorno exigido (hurdle)**: preservado, redefinido como reversa — "que valor resulta se eu exigir
   retorno de X%?". Rotulado, secundário, jamais chamado de fair value nem tratado como quarto cenário.
