@@ -885,7 +885,7 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
     upside = valor["preco_acao"] / preco_valor - 1
     diagnosticos_lista = saida_motor["diagnosticos"]
 
-    return {
+    registro = {
         "ancora": cenario["ancora"],
         "triangulo": cenario["triangulo"],
         "premissas": cenario["premissas"],
@@ -903,6 +903,14 @@ def _monta_cenario(cenario: dict, saida_motor: dict, rota: str, valor: dict,
         "coerencia_vetor": saida_motor["coerencia_vetor"],
         "convencao_temporal": saida_motor["convencao_temporal"],
     }
+    # Migração v10.1, Task 2: a decomposição de Miller-Modigliani (ativos instalados e valor
+    # do crescimento, §11.7 do `aplicacao.md`) é o bloco do motor, íntegro, como
+    # `coerencia_vetor` — nenhuma conta aqui, nem nos montantes em moeda, que o motor só
+    # emite quando recebe o EBITDA. Chave EXIGIDA: o `ev` da v10.1 sempre a devolve, e a
+    # ausência é motor errado, que tem de estourar alto em vez de publicar um cenário sem ela.
+    if rota == "firm":
+        registro["decomposicao_mm"] = saida_motor["decomposicao_mm"]
+    return registro
 
 
 # Chaves do motor PROMOVIDAS para dentro do shape do wrapper (`valor`/

@@ -49,7 +49,13 @@ normaliza saída.
   prosa (`reversa.LEITURAS_DO_NIVEL`: `antecipacao_temporal` até 125% do maior
   consenso declarado, `acima_do_consenso` acima disso). Sem consenso no caso
   não há razões nem leitura, e `leitura_chave` sai `null`. O relatório lê a
-  chave e o rótulo do catálogo, nunca a prosa do motor.
+  chave e o rótulo do catálogo, nunca a prosa do motor. Desde a v10.1, na rota
+  `firm` com métrica `EBITDA`, a mesma chamada leva o vetor do cenário e a D&A
+  em moeda (`--da-absoluta` = `da` × métrica-base), e o motor publica também a
+  leitura **recalculada** (`recalculado`): o múltiplo refeito a cada nível, com a
+  D&A fixa em moeda e o resto do vetor travado — a leitura central da escada, e o
+  ponto de equilíbrio da base de lucro contra o preço. A de múltiplo fixo vira o
+  extremo da escada.
 - **Grades de sensibilidade** — constrói, célula a célula no motor, as
   grades 1D e 2D de preço por ação que o caso declarar. Cada célula é um
   subprocesso do motor — a soma de células declaradas (`grades_1d` +
@@ -204,12 +210,12 @@ mais ΔWC) contra os encargos de reposição e de crescimento do vetor de cada
 cenário. Só na rota `firm` com métrica `EBITDA` (fora dela, recusa nomeada: o
 motor só confronta a identidade sobre o EBITDA declarado, e a rota rampa a
 garante por construção); `capex_total.valor` finito e positivo, `dwc.valor`
-finito, as duas fontes textos não vazios, `ano_base` `corrente` ou
-`guidance_longo_prazo` (`caso.ANOS_BASE_DO_CAPEX`), nenhuma outra chave em
-nível nenhum; nulo é ausência.
+finito, as duas fontes textos não vazios, `ano_base` `corrente`,
+`media_serie_tres_pontos` ou `guidance_longo_prazo` (`caso.ANOS_BASE_DO_CAPEX`),
+nenhuma outra chave em nível nenhum; nulo é ausência.
 
 Bloco opcional `escolhas_metodologicas`: a lista das escolhas metodológicas da
-metodologia (as dez de `references/aplicacao.md` §5b, item 4), **declaradas pelo
+metodologia (as onze de `references/aplicacao.md` §5b, item 4), **declaradas pelo
 analista** — o wrapper nunca avalia gatilho, só precifica. Cada entrada traz
 `chave` (uma de `caso.ESCOLHAS_METODOLOGICAS`; fora do vocabulário, recusa com
 sugestão — e repetida, recusa), `no_caso_base` (`central` ou `alternativa`,
@@ -218,7 +224,7 @@ valor, que leva o cenário da manchete ao outro ramo) e, opcional,
 `gatilho_disparou: {observavel}` (texto não vazio). Nenhuma outra chave, em
 nível nenhum; lista vazia e nulo são recusa e ausência, respectivamente.
 
-Os **alvos** de uma sobreposição são os que as dez escolhas de fato movem, e nada
+Os **alvos** de uma sobreposição são os que as onze escolhas de fato movem, e nada
 além deles — um alvo fora do conjunto é recusa nomeada, com sugestão:
 
 - cada **premissa numérica da rota**, com número finito;
@@ -322,6 +328,24 @@ convenção que já mora aqui):
   `ALERTA`, por presença (`avaliar._ALERTAS_DA_CONSERVACAO`). O limiar (10%) é
   do motor; o espelho o reproduz ao vivo (`motor_espelho.js:conservacaoCapital`),
   e a fachada publica a lista, a exibe e a compara.
+- `cenarios.<n>.decomposicao_mm` — só na rota `firm` (v10.1, §11.7 do
+  `aplicacao.md`): a decomposição de Miller-Modigliani que o `ev` devolve, o
+  bloco do motor **íntegro** — ativos instalados e valor do crescimento em
+  múltiplo do NOPAT, a participação do crescimento e o peso do terminal em
+  pontos percentuais, a prosa `identidade_ativos_instalados`/`trava_de_leitura`
+  e, com a métrica `EBITDA`, `NOPAT_base` e os dois montantes em moeda. Nenhuma
+  conta aqui. É precomputado (o espelho não o reproduz), e a tela lê só os campos
+  que o catálogo declara (`decomposicao_mm.campos`), pelo rótulo e pela unidade
+  de lá — nunca a prosa. As rotas `equity` e `rampa` não publicam o bloco.
+- `reversa.nivel_implicito.recalculado` — só na rota `firm` com métrica `EBITDA`
+  (v10.1): a leitura central do nível implícito, o bloco do motor íntegro
+  (`metrica_base_implicita_recalculada`, `fator_k_recalculado`,
+  `degrau_implicito_recalculado_%`, `d_no_nivel_implicito_%`,
+  `multiplo_justo_no_nivel_implicito` e a prosa `configuracao_do_triangulo`), ou
+  `{sem_solucao}` quando nenhum nível explica o preço sob o vetor; ao lado, a
+  prosa `recalculado_nota`. O wrapper manda ao `nivel` o vetor do cenário e
+  `--da-absoluta` = `da` × métrica-base — a D&A em moeda, álgebra de escala sobre
+  dois números declarados, como a do alvo de mercado.
 - `diagnosticos_chaves` (por cenário) / `diagnosticos_unicos_chaves` (por
   grade de sensibilidade) — a chave pública de cada mensagem do motor
   (`diagnosticos.classificar`), paralela a `diagnosticos`/
@@ -423,7 +447,9 @@ número); e o rótulo das variáveis do triângulo que não são premissa
 (`variaveis_do_triangulo`); o rótulo de cada ano-base do capex
 (`anos_base_do_capex`); e, em `disclosures.conservacao_de_capital`, o texto e a
 chave da conservação de capital que não fecha; e o rótulo e o gatilho descrito de
-cada escolha metodológica — `escolhas_metodologicas`, as dez do gate)
+cada escolha metodológica — `escolhas_metodologicas`, as onze do gate; e, da
+decomposição de Miller-Modigliani, a nota de leitura e os campos que a tela mostra,
+cada um com rótulo e unidade — `decomposicao_mm`)
 é publicado à parte,
 como o catálogo de apresentação (A6):
 `skills/er-valuation/assets/catalogo_apresentacao.json`, schema em
@@ -438,8 +464,11 @@ nunca do relatório: `{<unidade>: [<padrão>]}`, cada padrão um caminho de
 e cada unidade do vocabulário `unidades` — a mesma que a grade de sensibilidade
 publica para as suas células. Não é só o preço por ação: o upside (`fração`), o
 múltiplo justo (`múltiplo`) e o valor da firma e do equity (`moeda`) dizem a
-mesma coisa em outra unidade. O preço e o múltiplo de tela, a reversa, a ponte e
-tudo o que o caso declara ficam fora. As travas de
+mesma coisa em outra unidade — e a decomposição de Miller-Modigliani também: os
+ativos instalados e o valor do crescimento somam o múltiplo justo, e os montantes
+somam o EV (a participação do crescimento, o peso do terminal e o NOPAT-base não são
+valor, e ficam fora). O preço e o múltiplo de tela, a reversa — o nível implícito
+recalculado inclusive —, a ponte e tudo o que o caso declara ficam fora. As travas de
 `tests/test_catalogo_apresentacao.py`, sobre as fixtures: toda folha numérica que
 o wrapper publica é conclusão de valor pelo mapa ou tem ali a razão declarada
 para não ser (um número novo sem classificação reprova); nenhum padrão sem folha
@@ -527,6 +556,21 @@ correspondente vive em dois harnesses separados —
 — porque são garantias contra fontes Python diferentes (motor × wrapper). A
 conservação de capital (`conservacaoCapital`) é garantia contra o wrapper: o
 harness roda `avaliar.precificar_firm` com as flags do motor.
+
+**O que a v10.1 mudou no espelho.** O núcleo segue a ordem nova do motor:
+`evNopatPartes` devolve as partes — explícito, terminal e total —, e `evNopat` é o
+total delas; com `mid_year`, cada parte recebe o fator de meio de período antes da
+soma (`expl·f + term·f`, como `ev_nopat_partes`), e a paridade continua exata.
+`diagnosticosFirm` emite as cinco chaves novas de `diag_firm` na posição em que o
+motor as emite: no topo, as guardas de domínio — `firm_dominio_d_100` (encargo de
+reposição ≥ 100% do EBITDA) ou `firm_dominio_d_overhang` (≥ 60%),
+`firm_dominio_nopat` e `firm_dominio_t` —; e `firm_terminal_dominante` (peso do
+terminal acima de 50%, pelas partes sem `mid_year`) depois do bloco do gordon e antes
+da linha do RiR. `rampaBifasica` ganhou a guarda nova da rampa: aceita giro negativo
+enquanto `wk + kappa > 1e-15` e recusa, com a razão do motor, o giro negativo com
+`|wk| ≥ kappa` (capital incremental total ≤ 0) e `kappa < 0`. A decomposição de
+Miller-Modigliani e o nível implícito, congelado e recalculado, não têm espelho: são
+precomputados no build, e a tela os rotula como tal.
 
 **Paridade por caso, no build** (item 6). Os harnesses provam o espelho sobre vetores
 escolhidos; o badge do laboratório confere o caso quando o relatório abre. Entre os dois,

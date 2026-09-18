@@ -2863,7 +2863,9 @@ def _validar_escala_monetaria(caso: Caso) -> None:
 # este módulo só valida a forma.
 # --------------------------------------------------------------------------
 
-ANOS_BASE_DO_CAPEX: frozenset = frozenset({"corrente", "guidance_longo_prazo"})
+# v10 (§1 do `aplicacao.md`): a média da série de três pontos entrou como terceira opção do
+# ponto do ciclo dos inputs de capital.
+ANOS_BASE_DO_CAPEX: frozenset = frozenset({"corrente", "media_serie_tres_pontos", "guidance_longo_prazo"})
 
 _CHAVES_CONSERVACAO_PERMITIDAS: frozenset = frozenset({"capex_total", "dwc"})
 _CHAVES_CAPEX_TOTAL_PERMITIDAS: frozenset = frozenset({"valor", "fonte", "ano_base"})
@@ -2929,7 +2931,8 @@ def _validar_conservacao_de_capital(caso: Caso, rota: str) -> None:
         dica = f" Você quis dizer '{sugestao[0]}'? " if sugestao else " "
         raise CasoInvalido(
             f"'conservacao_de_capital.capex_total.ano_base' fora do vocabulário: '{ano_base}'.{dica}"
-            "O capex do ano-base é o corrente ou o do guidance de longo prazo — declare qual. "
+            "O capex do ano-base é o corrente, a média da série de três pontos ou o do guidance de "
+            "longo prazo — declare qual. "
             f"Anos-base aceitos: {', '.join(sorted(ANOS_BASE_DO_CAPEX))}."
         )
 
@@ -2940,7 +2943,7 @@ def _validar_conservacao_de_capital(caso: Caso, rota: str) -> None:
 # escolhas metodológicas da §5b do vendor, item 4.
 #
 # As escolhas são DECLARADAS pelo analista; o wrapper só precifica. O caso diz, de
-# cada escolha, a chave (o vocabulário abaixo, as dez do vendor), a posição que o
+# cada escolha, a chave (o vocabulário abaixo, as onze do vendor), a posição que o
 # caso-base ocupa nela, as sobreposições que levam o cenário da manchete ao outro
 # ramo e, quando existir, o observável que disparou o gatilho da escolha. Nenhum
 # gatilho é AVALIADO aqui: reconhecer que os minoritários passaram de ~20% do PL, ou
@@ -2956,10 +2959,12 @@ def _validar_conservacao_de_capital(caso: Caso, rota: str) -> None:
 #     há alavanca a modelar nem a excluir, e a escolha seria uma declaração vazia.
 # --------------------------------------------------------------------------
 
-# As DEZ do vendor (`vendor/multiplos-justos/references/aplicacao.md` §5b, item 4).
+# As ONZE do vendor (`vendor/multiplos-justos/references/aplicacao.md` §5b, item 4; a
+# v10 acrescentou o nível da marca de estoque e generalizou a oitava para o ponto do ciclo
+# dos inputs de capital, com a chave de sempre para não quebrar caso existente).
 # A base monetária NÃO entra: é invariante de coerência reportado à parte, nunca uma
-# décima primeira escolha econômica. O catálogo de apresentação rotula exatamente
-# estas dez e descreve o gatilho de cada uma (trava em
+# décima segunda escolha econômica. O catálogo de apresentação rotula exatamente
+# estas onze e descreve o gatilho de cada uma (trava em
 # tests/test_catalogo_apresentacao.py) — o relatório nunca aprende o vocabulário.
 ESCOLHAS_METODOLOGICAS: frozenset = frozenset({
     "base_do_lucro",
@@ -2972,6 +2977,7 @@ ESCOLHAS_METODOLOGICAS: frozenset = frozenset({
     "ano_de_capex_no_par_d_rir",
     "fronteira_de_consolidacao",
     "leitura_de_capacidade",
+    "nivel_da_marca_de_estoque",
 })
 
 # Onde o CASO-BASE está em cada escolha: no ramo central da metodologia, ou no
@@ -2990,7 +2996,7 @@ _CHAVES_DA_ESCOLHA_PERMITIDAS: frozenset = frozenset({
 _CHAVES_DO_GATILHO_PERMITIDAS: frozenset = frozenset({"observavel"})
 
 # Fatia 5G, Task 1b: os alvos que uma sobreposição alcança, além da premissa numérica
-# da rota. As dez escolhas não movem só premissa — a base do lucro move a MÉTRICA, o
+# da rota. As onze escolhas não movem só premissa — a base do lucro move a MÉTRICA, o
 # caixa em híbrida financeira e a fronteira de consolidação movem LINHAS DA PONTE, e a
 # hipótese terminal troca a CONVENÇÃO. A sobreposição é uma sobreposição parcial do
 # próprio caso, e por isso usa a estrutura dele: os dois alvos fora do vetor de
@@ -3030,7 +3036,7 @@ def _valor_numerico_da_sobreposicao(prefixo: str, alvo: str, valor: Any) -> None
 def _validar_sobreposicoes(prefixo: str, sobreposicoes: Any, rota: str) -> None:
     """Valida o mapa de sobreposições de UMA escolha: forma, alvos e valores.
 
-    Os alvos são os que as dez escolhas de fato movem, e nada além deles: cada
+    Os alvos são os que as onze escolhas de fato movem, e nada além deles: cada
     premissa da rota (numérica, ou a convenção terminal, em
     `PREMISSAS_NAO_NUMERICAS_DA_SOBREPOSICAO`), `metrica_base` (só `valor`) e `ponte`
     (as linhas de `CAMPOS_DA_PONTE`, e só nas rotas que declaram o bloco). É uma
