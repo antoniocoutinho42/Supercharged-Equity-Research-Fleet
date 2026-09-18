@@ -61,6 +61,22 @@ Melhor fonte/observável para resolver:
 
 Só estime sem nova pesquisa se a informação for imaterial para a decisão; nesse caso, rotule e mostre que a sensibilidade é pequena.
 
+## Conta exploratória
+
+A pedido do Analista, antes do teste de "entendido", rode com inputs provisórios para mostrar quais premissas movem valor e merecem pesquisa. Rotule tudo como exploratório, não escreva `valuation/valuation-case.md` e não apresente o resultado como valuation. Se salvar, use `valuation/exploratorio.md`.
+
+## Ponte, claims e linha do tempo
+
+- A ponte entre valor operacional e valor por ação reconcilia com o bloco "fora da cadeia aparente" do economic map: cada claim entra na ponte, num cenário, ou é declarado imaterial com a razão e a direção do erro. Instrumento com estados discretos (renova, encerra, runoff) vira cenário com probabilidade em julgamento, não haircut médio. Restrições de funding e obrigações fixas chegam ao modelo.
+- Declare uma linha do tempo única: data-base e preço; data do balanço da ponte, com roll-forward quando houver mais de um trimestre até a data-base; período da base de lucro (ano fechado, doze meses à frente, ano calendário) e o `t` de cada bloco calculado fora do motor. O motor projeta o ano 1 como base vezes (1+g): não passe uma base já à frente como base corrente.
+
+## Diagnósticos, rotas e custo de capital
+
+- Registre em uma linha cada diagnóstico de `references/diagnostics/mandatory.md` que disparou e o tratamento: executado, ou não aplicável com a razão. Diagnóstico exigido e não executado é lacuna declarada, não silêncio.
+- Com segmentos de economia divergente, o teste de `references/special-cases/multi-segment.md` fica explícito no caso. Optar pelo consolidado contra o gatilho exige quantificar a diferença para a soma das partes; "compartilham logística" não é justificativa econômica.
+- Custo de capital segue a rota central da doutrina: beta bottom-up com a cadeia registrada (pares, desalavancagem, realavancagem). Beta afirmado sem cadeia é premissa `assumida`, não `derivada`.
+- Retorno implícito resolvido em custo de capital da firma é retorno da firma. O retorno esperado do acionista exige custo do equity, ou fluxo ao equity com valor de saída coerente; não apresente um pelo outro. A reversa é condicional aos demais inputs: diga em que condições o driver implícito vale.
+
 ## Cálculo
 
 - `justos.py` é autoridade para todo cálculo que cobre.
@@ -85,6 +101,9 @@ O `valuation-case.md` deve deixar claro, sem burocracia:
 - sensibilidades que realmente movem valor;
 - MM e terminal quando aplicáveis;
 - warnings e como foram tratados;
-- lacunas remanescentes e direção do erro.
+- lacunas remanescentes e direção do erro;
+- linha do tempo, tratamento dos claims e registro dos diagnósticos.
+
+Quando o caso for rerodado, substitua as tabelas e os comandos superados; o `valuation-case.md` descreve uma única revisão vigente, e `outputs.json` corresponde a ela.
 
 Entregue ao `auditor-mj`. Não escreva recomendação final nem narrativa do relatório.
