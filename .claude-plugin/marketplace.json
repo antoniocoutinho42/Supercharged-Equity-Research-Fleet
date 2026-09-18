@@ -4,15 +4,15 @@
     "name": "Antonio Coutinho"
   },
   "metadata": {
-    "description": "Marketplace do fleet de equity research v4: analista autônomo thesis-driven com cinco skills e o agente pesquisa-evidência, metodologia congelada multiplos-justos v10.1, dois produtos (Análise e Leitura de preço) e entrega em HTML autocontido de três abas com QC de três níveis",
-    "version": "4.1.0"
+    "description": "Equity Research Fleet v6: Analista-chefe + pesquisa recursiva + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre.",
+    "version": "6.0.0"
   },
   "plugins": [
     {
       "name": "equity-research-fleet",
       "source": "./",
-      "description": "Fleet de equity research v4: analista autônomo thesis-driven com cinco skills e o agente pesquisa-evidência, metodologia congelada multiplos-justos v10.1, dois produtos (Análise e Leitura de preço) e entrega em HTML autocontido de três abas com QC de três níveis",
-      "version": "4.1.0",
+      "description": "Equity Research Fleet v6: Analista-chefe + pesquisa recursiva + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre.",
+      "version": "6.0.0",
       "author": {
         "name": "Antonio Coutinho"
       }

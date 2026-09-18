@@ -1,1 +1,8 @@
-{"name": "equity-research-fleet", "version": "4.1.0", "description": "Fleet de equity research v4: analista autônomo thesis-driven com cinco skills e o agente pesquisa-evidência, metodologia congelada multiplos-justos v10.1, dois produtos (Análise e Leitura de preço) e entrega em HTML autocontido de três abas com QC de três níveis", "author": {"name": "Antonio Coutinho"}}
+{
+  "name": "equity-research-fleet",
+  "version": "6.0.0",
+  "description": "Equity Research Fleet v6: Analista-chefe + pesquisa recursiva + Múltiplos Justos v10.1 modular como framework obrigatório de valuation + operador e auditor MJ independentes + relatório HTML livre.",
+  "author": {
+    "name": "Antonio Coutinho"
+  }
+}

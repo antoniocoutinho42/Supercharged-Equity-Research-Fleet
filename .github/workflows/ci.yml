@@ -5,42 +5,22 @@ on:
   pull_request:
 
 jobs:
-  test:
+  fleet:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Instalar dependências
-        run: pip install pytest pyyaml
-
-      - name: Suíte da metodologia (vendor multiplos-justos v10.1)
+      - name: Estrutura e invariantes do plugin
+        env:
+          PYTHONUTF8: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python scripts/validate-plugin.py
+      - name: Suíte Múltiplos Justos v10.1
         env:
           PYTHONUTF8: "1"
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
-          python vendor/multiplos-justos/scripts/justos.py selftest
-          python vendor/multiplos-justos/scripts/testes.py --phase model
-          python vendor/multiplos-justos/scripts/testes.py --phase cli
-
-      - name: Paridade Python↔JS do espelho
-        env:
-          PYTHONUTF8: "1"
-        run: |
-          node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_paridade.json > /dev/null
-          node skills/er-valuation/assets/motor_espelho.js tests/fixtures/vetores_solver.json > /dev/null
-          python -m pytest tests/test_paridade_js.py tests/test_paridade_solver_js.py tests/test_paridade_wrapper_js.py -q
-
-      - name: pytest
-        run: python -m pytest tests/ -q
-
-      - name: Estrutura do plugin
-        run: |
-          python -c "import json; d=json.load(open('.claude-plugin/plugin.json', encoding='utf-8')); assert all(k in d and d[k] for k in ('name','version','description')), 'campos obrigatorios faltando'; print('plugin.json OK:', d['name'], d['version'])"
+          python skills/multiplos-justos/scripts/testes.py --phase model
+          python skills/multiplos-justos/scripts/testes.py --phase cli
